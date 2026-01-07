@@ -25,3 +25,7 @@
 [0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
 [0m[next][0m [33mwarn[0m - Sending logs to console
 [0m[next][0m  [37m[1m○[22m[39m Compiling instrumentation Node.js ...
+[0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
+[0m[next][0m [33mwarn[0m - Sending logs to console
+[0m[next][0m  [32m[1m✓[22m[39m Ready in 12.4s

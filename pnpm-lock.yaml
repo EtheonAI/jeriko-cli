@@ -205,6 +205,9 @@ importers:
       '@repo/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@repo/email':
+        specifier: workspace:*
+        version: link:../../packages/email
       '@repo/feature-flags':
         specifier: workspace:*
         version: link:../../packages/feature-flags
@@ -217,6 +220,9 @@ importers:
       '@repo/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@repo/rate-limit':
+        specifier: workspace:*
+        version: link:../../packages/rate-limit
       '@repo/security':
         specifier: workspace:*
         version: link:../../packages/security
