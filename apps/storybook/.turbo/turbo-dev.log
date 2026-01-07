@@ -1,0 +1,13 @@
+
+> storybook@0.1.0 dev /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/storybook
+> storybook dev -p 6006
+
+[1mstorybook v9.1.15[22m[0m
+[0m
+[32minfo[0m[35m[0m => Serving static files from [36m/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/node_modules/.pnpm/@chromatic-com+storybook@4.1.1_storybook@9.1.15_@testing-library+dom@10.4.1_bufferutil@_e57e7ad5332301874210cf3de89423cc/node_modules/@chromatic-com/storybook/assets[39m at [36m/addon-visual-tests-assets[39m
+[0m[32minfo[0m[35m[0m => Serving static files from [36m././public[39m at [36m/[39m
+[0m[32minfo[0m[35m[0m => Starting manager..
+[0mNo story files found for the specified pattern: [34mstories/**/*.mdx[39m
+[32minfo[0m[35m[0m => Starting preview..
+[0m[32minfo[0m[35m[0m => Using implicit CSS loaders
+[0m

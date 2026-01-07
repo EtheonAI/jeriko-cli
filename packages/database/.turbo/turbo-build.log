@@ -1,0 +1,10 @@
+
+> @repo/database@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/next-forge-enterprise/packages/database
+> prisma generate --no-hints --schema=./prisma/schema.prisma
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+warn Preview feature "driverAdapters" is deprecated. The functionality can be used without specifying it as a preview feature.
+
+✔ Generated Prisma Client (v6.18.0) to ./generated/client in 104ms
+

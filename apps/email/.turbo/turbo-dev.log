@@ -1,0 +1,12 @@
+
+> email@0.0.0 dev /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/email
+> email dev --port 3003 --dir ../../packages/email/templates
+
+[92m    React Email 4.3.2[39m
+    Running preview at:          http://localhost:3003
+
+[?25l[1G[1G  [36m⠋[39m Getting react-email preview server ready...
+[1G[0K[1A[0K  [36m⠙[39m Getting react-email preview server ready...
+[1G[0K[1A[0K  [36m⠹[39m Getting react-email preview server ready...
+[1G[0K[1A[0K[?25h  [32m✔[39m Ready in 1.5s
+
