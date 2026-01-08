@@ -43,3 +43,1858 @@ https://nextjs.org/docs/messages/module-not-found
 [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
 [33mwarn[0m - Sending Web Vitals to /dev/null
 [33mwarn[0m - Sending logs to console
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ GET / [33m404[39m in 2.3s[2m (compile: -175355µs, proxy.ts: 2.3s, render: 188ms)[22m
+ [37m[1m○[22m[39m Compiling /_not-found/page ...
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] [90mundefined[39m
+flags: Flag "showBetaFeature" is falling back to its defaultValue
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection: Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection:  Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+Error in Pump children function Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m {
+  digest: [32m'1381780790'[39m
+}
+ GET /favicon.ico [33m404[39m in 13.9s[2m (compile: 10.1s, render: 3.8s)[22m
+ [32m[1m✓[22m[39m Compiled in 73ms
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+flags: Flag "showBetaFeature" is falling back to its defaultValue
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection: Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection:  Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ GET /en [32m200[39m in 2.1s[2m (compile: 25ms, proxy.ts: 12ms, render: 2.1s)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+flags: Flag "showBetaFeature" is falling back to its defaultValue
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection: Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m unhandledRejection:  Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+Error in Pump children function Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m {
+  digest: [32m'1381780790'[39m
+}
+Error in Pump children function Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m
+ [31m[1m⨯[22m[39m Error: Functions cannot be passed directly to Client Components unless you explicitly expose it by marking it with "use server". Or maybe you meant to call this function rather than return it.
+  [function translateFn]
+   ^^^^^^^^^^^^^^^^^^^^
+    at Hero (app/[locale]/(home)/components/hero.tsx:19:16)
+[0m [90m 17 |[39m             [33m<[39m[33mFeed[39m queries[33m=[39m{[blog[33m.[39mlatestPostQuery]}[33m>[39m
+ [90m 18 |[39m               {[90m/* biome-ignore lint/suspicious/useAwait: "Server Actions must be async" */[39m}
+[31m[1m>[22m[39m[90m 19 |[39m               {[36masync[39m ([data]) [33m=>[39m {
+ [90m    |[39m                [31m[1m^[22m[39m
+ [90m 20 |[39m                 [32m"use server"[39m[33m;[39m
+ [90m 21 |[39m
+ [90m 22 |[39m                 [36mreturn[39m ([0m {
+  digest: [32m'1381780790'[39m
+}
+ GET /en [32m200[39m in 3.5s[2m (compile: 17ms, proxy.ts: 9ms, render: 3.5s)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en [32m200[39m in 724ms[2m (compile: 49ms, proxy.ts: 21ms, render: 653ms)[22m
+ POST /en [32m200[39m in 798ms[2m (compile: 55ms, proxy.ts: 79ms, render: 664ms)[22m
+ POST /en [32m200[39m in 806ms[2m (compile: 232ms, proxy.ts: 66ms, render: 508ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [37m[1m○[22m[39m Compiling /[locale]/contact ...
+ [31m[1m⨯[22m[39m ./apps/web/app/[locale]/contact/page.tsx:1:1
+Export [32mgetDictionary[39m doesn't exist in target module
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { getDictionary } [36mfrom[39m [32m"@repo/internationalization"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { createMetadata } [36mfrom[39m [32m"@repo/seo/metadata"[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m type { [33mMetadata[39m } [36mfrom[39m [32m"next"[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { [33mContactForm[39m } [36mfrom[39m [32m"./components/contact-form"[39m[33m;[39m[0m
+
+The export [32mgetDictionary[39m was not found in module [1m[31m[project]/packages/internationalization/index.ts [app-rsc] (ecmascript)[39m[22m.
+Did you mean to import [32mcreateTranslator[39m?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ GET /en/contact [31m500[39m in 3.4s[2m (compile: 3.4s, proxy.ts: 7ms, render: 23ms)[22m
+ [31m[1m⨯[22m[39m ./apps/web/app/[locale]/contact/page.tsx:1:1
+Export [32mgetDictionary[39m doesn't exist in target module
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { getDictionary } [36mfrom[39m [32m"@repo/internationalization"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { createMetadata } [36mfrom[39m [32m"@repo/seo/metadata"[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m type { [33mMetadata[39m } [36mfrom[39m [32m"next"[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { [33mContactForm[39m } [36mfrom[39m [32m"./components/contact-form"[39m[33m;[39m[0m
+
+The export [32mgetDictionary[39m was not found in module [1m[31m[project]/packages/internationalization/index.ts [app-rsc] (ecmascript)[39m[22m.
+Did you mean to import [32mcreateTranslator[39m?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ GET /en/contact [31m500[39m in 60ms[2m (compile: 28ms, proxy.ts: 14ms, render: 18ms)[22m
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [31m[1m⨯[22m[39m ./apps/web/app/[locale]/contact/page.tsx:1:1
+Export [32mgetDictionary[39m doesn't exist in target module
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { getDictionary } [36mfrom[39m [32m"@repo/internationalization"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m { createMetadata } [36mfrom[39m [32m"@repo/seo/metadata"[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m type { [33mMetadata[39m } [36mfrom[39m [32m"next"[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { [33mContactForm[39m } [36mfrom[39m [32m"./components/contact-form"[39m[33m;[39m[0m
+
+The export [32mgetDictionary[39m was not found in module [1m[31m[project]/packages/internationalization/index.ts [app-rsc] (ecmascript)[39m[22m.
+Did you mean to import [32mcreateTranslator[39m?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ GET /en/contact [31m500[39m in 170ms[2m (compile: 144ms, proxy.ts: 13ms, render: 13ms)[22m
+ [32m[1m✓[22m[39m Compiled in 86ms
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+ GET /en/contact [32m200[39m in 4.0s[2m (compile: 1770ms, proxy.ts: 10ms, render: 2.2s)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+[Upstash Redis] The 'url' property is missing or undefined in your Redis config.
+[Upstash Redis] The 'token' property is missing or undefined in your Redis config.
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 382ms[2m (compile: 18ms, proxy.ts: 11ms, render: 353ms)[22m
+ POST /en/contact [32m200[39m in 377ms[2m (compile: 20ms, proxy.ts: 11ms, render: 346ms)[22m
+ POST /en/contact [32m200[39m in 280ms[2m (compile: 8ms, proxy.ts: 8ms, render: 264ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [31m[1m⨯[22m[39m Error: metadataBase is not a valid URL: Hi
+    at [3mignore-listed frames[23m {
+  digest: [32m'2982568854'[39m
+}
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+ GET /en/contact [32m200[39m in 877ms[2m (compile: 409ms, proxy.ts: 11ms, render: 457ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [32m[1m✓[22m[39m Compiled in 57ms
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+[Upstash Redis] The 'url' property is missing or undefined in your Redis config.
+[Upstash Redis] The 'token' property is missing or undefined in your Redis config.
+ GET /en/contact [32m200[39m in 1912ms[2m (compile: 455ms, proxy.ts: 13ms, render: 1443ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+Locale selected in request config: en [ [32m'en'[39m, [32m'es'[39m, [32m'de'[39m, [32m'zh'[39m, [32m'fr'[39m, [32m'pt'[39m ] en
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ POST /en/contact [32m200[39m in 1257ms[2m (compile: 9ms, proxy.ts: 26ms, render: 1221ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 414ms[2m (compile: 11ms, proxy.ts: 7ms, render: 396ms)[22m
+ GET /en/contact [32m200[39m in 1761ms[2m (compile: 12ms, proxy.ts: 10ms, render: 1739ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ POST /en/contact [32m200[39m in 483ms[2m (compile: 32ms, proxy.ts: 14ms, render: 437ms)[22m
+ POST /en/contact [32m200[39m in 443ms[2m (compile: 39ms, proxy.ts: 13ms, render: 391ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 125ms[2m (compile: 15ms, proxy.ts: 10ms, render: 99ms)[22m
+ POST /en/contact [32m200[39m in 575ms[2m (compile: 171ms, proxy.ts: 14ms, render: 390ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 481ms[2m (compile: 13ms, proxy.ts: 7ms, render: 461ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 852ms[2m (compile: 13ms, proxy.ts: 11ms, render: 827ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 450ms[2m (compile: 16ms, proxy.ts: 8ms, render: 427ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 301ms[2m (compile: 12ms, proxy.ts: 13ms, render: 276ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [32m[1m✓[22m[39m Compiled in 60ms
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+[Upstash Redis] The 'url' property is missing or undefined in your Redis config.
+[Upstash Redis] The 'token' property is missing or undefined in your Redis config.
+ POST /en/contact [32m200[39m in 1282ms[2m (compile: 394ms, proxy.ts: 13ms, render: 875ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ POST /en/contact [32m200[39m in 313ms[2m (compile: 9ms, proxy.ts: 10ms, render: 293ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 361ms[2m (compile: 11ms, proxy.ts: 7ms, render: 344ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ GET /en/.well-known/appspecific/com.chrome.devtools.json [33m404[39m in 172ms[2m (compile: 61ms, proxy.ts: 9ms, render: 102ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 721ms[2m (compile: 11ms, proxy.ts: 7ms, render: 704ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 457ms[2m (compile: 13ms, proxy.ts: 11ms, render: 433ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost
+ POST /en/contact [32m200[39m in 481ms[2m (compile: 10ms, proxy.ts: 7ms, render: 464ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 565ms[2m (compile: 14ms, proxy.ts: 9ms, render: 543ms)[22m
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.204.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.57.2_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@sentry+node-core@10.22.0_@opentelemetry+api@1.9.0_@opentelemetry+context-async-hooks@2_a8be45d48bd180af839cf378b69f9073/node_modules/@sentry/node-core/build/cjs/sdk
+Package [32mimport-in-the-middle[39m can't be external
+The request [32mimport-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (2.0.0) compared to the package requested from the importing module (1.14.4).
+Make sure to install the same version of the package in both locations.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/plugins/html[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@react-email+render@1.4.0_react-dom@19.2.3_react@19.2.3__react@19.2.3/node_modules/@react-email/render/dist/node
+Package [32mprettier[39m can't be external
+The request [32mprettier/standalone[39m matches [32mserverExternalPackages[39m (or the default list).
+The request could not be resolved by Node.js from the project directory.
+Packages that should be external need to be installed in the project directory, so they can be resolved from the output files.
+Try to install it into the project directory by running [32mnpm install prettier[39m from the project directory.
+
+
+ [33m[1m⚠[22m[39m ./node_modules/.pnpm/@opentelemetry+instrumentation@0.208.0_@opentelemetry+api@1.9.0/node_modules/@opentelemetry/instrumentation/build/esm/platform/node
+Package [32mrequire-in-the-middle[39m can't be external
+The request [32mrequire-in-the-middle[39m matches [32mserverExternalPackages[39m (or the default list).
+The package resolves to a different version when requested from the project directory (7.5.2) compared to the package requested from the importing module (8.0.1).
+Make sure to install the same version of the package in both locations.
+
+
+ POST /en/contact [32m200[39m in 322ms[2m (compile: 17ms, proxy.ts: 16ms, render: 289ms)[22m
+You are rendering the Vercel Toolbar in development, but the configuration is missing.
+Make sure the plugin is added to the Next.js config and the project has been linked using `vercel link`.
+For more details, visit https://vercel.com/docs/workflow-collaboration/vercel-toolbar/in-production-and-localhost/add-to-localhost

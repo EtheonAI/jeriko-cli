@@ -1,4 +1,4 @@
-import { authMiddleware } from "@repo/auth/middleware";
+import { auth } from "@repo/auth";
 import createMiddleware from '@repo/internationalization/middleware';
 import { routing } from '@repo/internationalization/routing';
 import { parseError } from "@repo/observability/error";
@@ -50,17 +50,16 @@ const composedMiddleware = createNEMO(
   }
 );
 
-export default authMiddleware(async (_auth, request, event) => {
+export default auth(async (req) => {
   const headersResponse = securityHeaders();
 
   // Run i18n middleware first
-  const i18nResponse = await i18nMiddleware(request);
+  const i18nResponse = await i18nMiddleware(req);
   if (i18nResponse) return i18nResponse;
 
   // Then run other middleware
   const middlewareResponse = await composedMiddleware(
-    request as unknown as NextRequest,
-    event
+    req as unknown as NextRequest,
   );
 
   return middlewareResponse || headersResponse;

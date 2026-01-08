@@ -10,17 +10,23 @@ import {
   PopoverTrigger,
 } from "@repo/design-system/components/ui/popover";
 import { cn } from "@repo/design-system/lib/utils";
-import type { Dictionary } from "@repo/internationalization";
+import type { getTranslations } from "@repo/internationalization";
 import { format } from "date-fns";
 import { CalendarIcon, Check, MoveRight } from "lucide-react";
 import { useState } from "react";
+import { contact } from "../actions/contact";
 
-type ContactFormProps = {
-  dictionary: Dictionary;
-};
+// type ContactFormProps = {
+//   dictionary: Dictionary;
+// };
 
-export const ContactForm = ({ dictionary }: ContactFormProps) => {
+export const ContactForm = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
+
+  const onSubmitEmail = async () => {
+    const emailSent = await contact("Khaleel Musleh", "khaleelmusleh@gmail.com", "Hi Khaleel, Welcome To Etheon")
+    console.log(emailSent, "HHI I AM EMAIL")
+  }
 
   return (
     <div className="w-full py-20 lg:py-40">
@@ -30,14 +36,14 @@ export const ContactForm = ({ dictionary }: ContactFormProps) => {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <h4 className="max-w-xl text-left font-regular text-3xl tracking-tighter md:text-5xl">
-                  {dictionary.web.contact.meta.title}
+                  Hekki
                 </h4>
                 <p className="max-w-sm text-left text-lg text-muted-foreground leading-relaxed tracking-tight">
-                  {dictionary.web.contact.meta.description}
+                  Welcome
                 </p>
               </div>
             </div>
-            {dictionary.web.contact.hero.benefits.map((benefit, index) => (
+            {/* {dictionary.web.contact.hero.benefits.map((benefit, index) => (
               <div
                 className="flex flex-row items-start gap-6 text-left"
                 key={index}
@@ -50,15 +56,15 @@ export const ContactForm = ({ dictionary }: ContactFormProps) => {
                   </p>
                 </div>
               </div>
-            ))}
+            ))} */}
           </div>
 
           <div className="flex items-center justify-center">
             <div className="flex max-w-sm flex-col gap-4 rounded-md border p-8">
-              <p>{dictionary.web.contact.hero.form.title}</p>
+              <p>I am khaleel</p>
               <div className="grid w-full max-w-sm items-center gap-1">
                 <Label htmlFor="picture">
-                  {dictionary.web.contact.hero.form.date}
+                  Bla
                 </Label>
                 <Popover>
                   <PopoverTrigger asChild>
@@ -73,7 +79,7 @@ export const ContactForm = ({ dictionary }: ContactFormProps) => {
                       {date ? (
                         format(date, "PPP")
                       ) : (
-                        <span>{dictionary.web.contact.hero.form.date}</span>
+                        <span>Date</span>
                       )}
                     </Button>
                   </PopoverTrigger>
@@ -89,25 +95,25 @@ export const ContactForm = ({ dictionary }: ContactFormProps) => {
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
                 <Label htmlFor="firstname">
-                  {dictionary.web.contact.hero.form.firstName}
+                  NAme
                 </Label>
                 <Input id="firstname" type="text" />
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
                 <Label htmlFor="lastname">
-                  {dictionary.web.contact.hero.form.lastName}
+                  Last
                 </Label>
                 <Input id="lastname" type="text" />
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
                 <Label htmlFor="picture">
-                  {dictionary.web.contact.hero.form.resume}
+                  Resume
                 </Label>
                 <Input id="picture" type="file" />
               </div>
 
-              <Button className="w-full gap-4">
-                {dictionary.web.contact.hero.form.cta}{" "}
+              <Button onClick={() => onSubmitEmail()} className="w-full gap-4">
+                CTA
                 <MoveRight className="h-4 w-4" />
               </Button>
             </div>
