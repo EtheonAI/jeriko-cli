@@ -1,107 +1,102 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@next-auth/prisma-adapter"
-import AppleProvider from "next-auth/providers/apple";
-import GoogleProvider from "next-auth/providers/google";
-import FacebookProvider from "next-auth/providers/facebook";
-import EmailProvider from "next-auth/providers/email";
-import { database as db } from "@repo/database";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import NeonAdapter from "@auth/neon-adapter"
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: PrismaAdapter(db as any),
+import { database as db } from "@repo/database";
+import GitHub from "next-auth/providers/github";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+
+
+export const { auth, handlers, signIn, signOut } = NextAuth({
+  // adapter: NeonAdapter(pool),
   session: {
     strategy: "jwt",
   },
   pages: {
     signIn: "/login",
   },
-    providers: [
- AppleProvider({
-    clientId: process.env.APPLE_ID,
-    clientSecret: process.env.APPLE_SECRET
-  }),
-    GoogleProvider({
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET
-  }),
-    FacebookProvider({
-    clientId: process.env.FACEBOOK_CLIENT_ID,
-    clientSecret: process.env.FACEBOOK_CLIENT_SECRET
-  }),
-    EmailProvider({
-    server: process.env.EMAIL_SERVER,
-    from: process.env.EMAIL_FROM,
-      // sendVerificationRequest: async ({ identifier, url, provider }) => {
-      //   const user = await db.user.findUnique({
-      //     where: {
-      //       email: identifier,
-      //     },
-      //     select: {
-      //       emailVerified: true,
-      //     },
-      //   })
+  providers: [
+    GitHub,
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        console.log("Authorize called with:", credentials?.email);
 
-      //   const templateId = user?.emailVerified
-      //     ? env.POSTMARK_SIGN_IN_TEMPLATE
-      //     : env.POSTMARK_ACTIVATION_TEMPLATE
-      //   if (!templateId) {
-      //     throw new Error("Missing template id")
-      //   }
+        if (!credentials?.email || !credentials?.password) {
+          console.log("Missing email or password");
+          return null;
+        }
 
-      //   const result = await postmarkClient.sendEmailWithTemplate({
-      //     TemplateId: parseInt(templateId),
-      //     To: identifier,
-      //     From: provider.from as string,
-      //     TemplateModel: {
-      //       action_url: url,
-      //       product_name: siteConfig.name,
-      //     },
-      //     Headers: [
-      //       {
-      //         // Set this to prevent Gmail from threading emails.
-      //         // See https://stackoverflow.com/questions/23434110/force-emails-not-to-be-grouped-into-conversations/25435722.
-      //         Name: "X-Entity-Ref-ID",
-      //         Value: new Date().getTime() + "",
-      //       },
-      //     ],
-      //   })
+        const email = credentials.email as string;
+        const password = credentials.password as string;
 
-      //   if (result.ErrorCode) {
-      //     throw new Error(result.Message)
-      //   }
-      // },
+        try {
+          let user = await db.user.findUnique({
+            where: { email },
+          });
+
+          console.log("User found:", !!user);
+
+          if (!user) {
+            // Create new user
+            const hashedPassword = await bcrypt.hash(password, 10);
+            user = await db.user.create({
+              data: {
+                email,
+                password: hashedPassword,
+              },
+            });
+            console.log("User created:", user.id);
+          } else {
+            // Verify password
+            if (!user.password) {
+              console.log("User has no password (OAuth user)");
+              return null;
+            }
+
+            const isValid = await bcrypt.compare(password, user.password);
+            console.log("Password valid:", isValid);
+
+            if (!isValid) {
+              return null;
+            }
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+          };
+        } catch (error) {
+          console.error("Authorize error:", error);
+          return null;
+        }
+      },
     }),
   ],
-   callbacks: {
+  callbacks: {
     async session({ token, session }) {
-      if (token) {
-        session.user.id = token.id
-        session.user.name = token.name
-        session.user.email = token.email
-        session.user.image = token.picture
+      if (token && session.user) {
+        session.user.id = token.sub as string;
+        session.user.name = token.name as string;
+        session.user.email = token.email as string;
+        session.user.image = token.picture as string;
       }
-
-      return session
+      return session;
     },
     async jwt({ token, user }) {
-      const dbUser = await db.user.findFirst({
-        where: {
-          email: token.email,
-        },
-      })
-
-      if (!dbUser) {
-        if (user) {
-          token.id = user?.id
-        }
-        return token
+      if (user) {
+        token.sub = user.id;
       }
-
-      return {
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        picture: dbUser.image,
-      }
+      return token;
     },
   },
 });
+
+export { default as authConfig } from "./auth.config";
+export { default as NextAuth } from "next-auth";

@@ -1,5 +1,5 @@
 import "server-only";
-import { auth } from "@repo/auth/server";
+import { auth } from "@repo/auth";
 import { Svix } from "svix";
 import { keys } from "../keys";
 
@@ -11,21 +11,21 @@ export const send = async (eventType: string, payload: object) => {
   }
 
   const svix = new Svix(svixToken);
-  const { orgId } = await auth();
+  const { user } = await auth();
 
-  if (!orgId) {
+  if (!user) {
     return;
   }
 
-  return svix.message.create(orgId, {
+  return svix.message.create(user?.userId, {
     eventType,
     payload: {
       eventType,
       ...payload,
     },
     application: {
-      name: orgId,
-      uid: orgId,
+      name: user?.userId,
+      uid: user?.userId,
     },
   });
 };
@@ -36,16 +36,16 @@ export const getAppPortal = async () => {
   }
 
   const svix = new Svix(svixToken);
-  const { orgId } = await auth();
+  const session = await auth();
 
-  if (!orgId) {
+  if (!user?.userId) {
     return;
   }
 
-  return svix.authentication.appPortalAccess(orgId, {
+  return svix.authentication.appPortalAccess(user.userId, {
     application: {
-      name: orgId,
-      uid: orgId,
+      name: user.userId,
+      uid: user.userId,
     },
   });
 };

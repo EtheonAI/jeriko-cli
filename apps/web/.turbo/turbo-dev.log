@@ -3,12 +3,46 @@
 > next dev -p 3001
 
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
- [31m[1m⨯[22m[39m Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
-Error: Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:
-  - react:      19.2.0
-  - react-dom:  19.2.1
-Learn more: https://react.dev/warnings/version-mismatch
-    at [3mignore-listed frames[23m
-[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-[?25h
-[41m[30m ELIFECYCLE [39m[49m [31mCommand failed with exit code 1.[39m
+   [1m[38;2;173;127;168m▲ Next.js 16.0.0[39m[22m (Turbopack)
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.0.198:3001
+   - Environments: .env.local
+
+ [32m[1m✓[22m[39m Starting...
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+ [37m[1m○[22m[39m Compiling middleware ...
+ [31m[1m⨯[22m[39m ./apps/web/middleware.ts:1:1
+[1m[31mModule not found[39m[22m: Can't resolve [32m'@repo/auth/middleware'[39m
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { authMiddleware } [36mfrom[39m [32m"@repo/auth/middleware"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m createMiddleware [36mfrom[39m [32m'@repo/internationalization/middleware'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { routing } [36mfrom[39m [32m'@repo/internationalization/routing'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { parseError } [36mfrom[39m [32m"@repo/observability/error"[39m[33m;[39m[0m
+
+Import map: aliased to relative '../../packages/auth/middleware' inside of [project]/apps/web
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ [31m[1m⨯[22m[39m ./apps/web/middleware.ts:1:1
+[1m[31mModule not found[39m[22m: Can't resolve [32m'@repo/auth/middleware'[39m
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { authMiddleware } [36mfrom[39m [32m"@repo/auth/middleware"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 2 |[39m [36mimport[39m createMiddleware [36mfrom[39m [32m'@repo/internationalization/middleware'[39m[33m;[39m
+ [90m 3 |[39m [36mimport[39m { routing } [36mfrom[39m [32m'@repo/internationalization/routing'[39m[33m;[39m
+ [90m 4 |[39m [36mimport[39m { parseError } [36mfrom[39m [32m"@repo/observability/error"[39m[33m;[39m[0m
+
+Import map: aliased to relative '../../packages/auth/middleware' inside of [project]/apps/web
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ [33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+ [32m[1m✓[22m[39m Ready in 11.9s
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console

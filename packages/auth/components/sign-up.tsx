@@ -2,7 +2,6 @@ import { signIn } from '../';
 export const SignUp = () => (
   <form
     action={async () => {
-      "use server";
       await signIn();
     }}
   >
