@@ -1,15 +1,12 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import NeonAdapter from "@auth/neon-adapter"
-
 import { database as db } from "@repo/database";
 import GitHub from "next-auth/providers/github";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-
+import { userAuthSchema } from "./lib/validations/auth";
+import { InvalidPasswordError, InvalidCredentialsError } from "./lib/validations/auth-errors";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
-  // adapter: NeonAdapter(pool),
   session: {
     strategy: "jwt",
   },
@@ -17,54 +14,60 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   providers: [
-    GitHub,
+    GitHub({
+      clientId: process.env.GITHUB_ID!,
+      clientSecret: process.env.GITHUB_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        console.log("Authorize called with:", credentials?.email);
-
-        if (!credentials?.email || !credentials?.password) {
-          console.log("Missing email or password");
-          return null;
-        }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
         try {
-          let user = await db.user.findUnique({
-            where: { email },
+          // Validate with Zod
+          const { email, password } = await userAuthSchema.parseAsync(credentials);
+
+          // Find user
+          const user = await db.user.findUnique({
+            where: { email: email.toLowerCase() },
           });
 
-          console.log("User found:", !!user);
-
+          // User doesn't exist - create new user
           if (!user) {
-            // Create new user
             const hashedPassword = await bcrypt.hash(password, 10);
-            user = await db.user.create({
+            const newUser = await db.user.create({
               data: {
-                email,
+                email: email.toLowerCase(),
                 password: hashedPassword,
               },
             });
-            console.log("User created:", user.id);
-          } else {
-            // Verify password
-            if (!user.password) {
-              console.log("User has no password (OAuth user)");
-              return null;
-            }
 
-            const isValid = await bcrypt.compare(password, user.password);
-            console.log("Password valid:", isValid);
+            console.log("✅ User created:", newUser.id);
 
-            if (!isValid) {
-              return null;
-            }
+            return {
+              id: newUser.id,
+              email: newUser.email,
+              name: newUser.name,
+              image: newUser.image,
+            };
           }
+
+          // User exists but no password (OAuth user trying to use credentials)
+          if (!user.password) {
+            console.log("❌ OAuth user trying credentials login");
+            throw new InvalidCredentialsError("This account uses social login");
+          }
+
+          // Verify password
+          const isValid = await bcrypt.compare(password, user.password);
+
+          if (!isValid) {
+            console.log("❌ Invalid password for:", email);
+            throw new InvalidPasswordError("Invalid email or password");
+          }
+
+          console.log("✅ User authenticated:", user.id);
 
           return {
             id: user.id,
@@ -73,8 +76,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             image: user.image,
           };
         } catch (error) {
-          console.error("Authorize error:", error);
-          return null;
+          // Re-throw custom errors
+          if (error instanceof InvalidPasswordError || error instanceof InvalidCredentialsError) {
+            throw error;
+          }
+
+          // Handle other errors
+          console.error("❌ Authorize error:", error);
+          throw new InvalidCredentialsError("Authentication failed");
         }
       },
     }),
@@ -83,16 +92,41 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     async session({ token, session }) {
       if (token && session.user) {
         session.user.id = token.sub as string;
-        session.user.name = token.name as string;
-        session.user.email = token.email as string;
-        session.user.image = token.picture as string;
+        session.user.name = token.name;
+        session.user.email = token.email!;
+        session.user.image = token.picture;
       }
       return session;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account, profile }) {
       if (user) {
         token.sub = user.id;
       }
+
+      // Handle GitHub OAuth
+      if (account?.provider === "github" && profile?.email) {
+        try {
+          let dbUser = await db.user.findUnique({
+            where: { email: profile.email as string },
+          });
+
+          if (!dbUser) {
+            dbUser = await db.user.create({
+              data: {
+                email: profile.email as string,
+                name: (profile.name as string) || null,
+                image: ((profile as any).avatar_url as string) || null,
+              },
+            });
+            console.log("✅ GitHub user created:", dbUser.id);
+          }
+
+          token.sub = dbUser.id;
+        } catch (error) {
+          console.error("❌ GitHub user error:", error);
+        }
+      }
+
       return token;
     },
   },

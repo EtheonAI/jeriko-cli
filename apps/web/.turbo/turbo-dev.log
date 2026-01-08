@@ -9,9 +9,6 @@
    - Environments: .env.local
 
  [32m[1m✓[22m[39m Starting...
-[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
-[33mwarn[0m - Sending Web Vitals to /dev/null
-[33mwarn[0m - Sending logs to console
  [37m[1m○[22m[39m Compiling middleware ...
  [31m[1m⨯[22m[39m ./apps/web/middleware.ts:1:1
 [1m[31mModule not found[39m[22m: Can't resolve [32m'@repo/auth/middleware'[39m
@@ -42,7 +39,7 @@ https://nextjs.org/docs/messages/module-not-found
 
 
  [33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
- [32m[1m✓[22m[39m Ready in 11.9s
+ [32m[1m✓[22m[39m Ready in 10.7s
 [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
 [33mwarn[0m - Sending Web Vitals to /dev/null
 [33mwarn[0m - Sending logs to console
