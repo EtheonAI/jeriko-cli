@@ -3,19 +3,12 @@
 > next dev -p 3001
 
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-   [1m[38;2;173;127;168m▲ Next.js 16.0.0[39m[22m (Turbopack)
-   - Local:        http://localhost:3001
-   - Network:      http://192.168.0.198:3001
-   - Environments: .env.local
-
- [32m[1m✓[22m[39m Starting...
-[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
-[33mwarn[0m - Sending Web Vitals to /dev/null
-[33mwarn[0m - Sending logs to console
- [37m[1m○[22m[39m Compiling instrumentation Node.js ...
- [37m[1m○[22m[39m Compiling middleware ...
- [33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
-[33mwarn[0m - Sending Web Vitals to /dev/null
-[33mwarn[0m - Sending logs to console
- [32m[1m✓[22m[39m Ready in 17.1s
+ [31m[1m⨯[22m[39m Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
+Error: Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:
+  - react:      19.2.0
+  - react-dom:  19.2.1
+Learn more: https://react.dev/warnings/version-mismatch
+    at [3mignore-listed frames[23m
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[?25h
+[41m[30m ELIFECYCLE [39m[49m [31mCommand failed with exit code 1.[39m

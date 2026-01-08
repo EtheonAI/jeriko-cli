@@ -15,17 +15,12 @@
 [0m[stripe][0m Getting ready...
 [0m[stripe][0m Ready! You are using Stripe API Version [2020-08-27]. Your webhook signing secret is whsec_b3b8f174e2e83c39ae43349ecb04006c7eafa1fcc16ed6922b848a758d839a3e (^C to quit)
 [0m[next][0m [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-[0m[next][0m    [1m[38;2;173;127;168m▲ Next.js 16.0.0[39m[22m (Turbopack)
-[0m[next][0m    - Local:        http://localhost:3002
-[0m[next][0m    - Network:      http://192.168.0.198:3002
-[0m[next][0m    - Environments: .env.local
-[0m[next][0m 
-[0m[next][0m  [32m[1m✓[22m[39m Starting...
-[0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
-[0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
-[0m[next][0m [33mwarn[0m - Sending logs to console
-[0m[next][0m  [37m[1m○[22m[39m Compiling instrumentation Node.js ...
-[0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
-[0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
-[0m[next][0m [33mwarn[0m - Sending logs to console
-[0m[next][0m  [32m[1m✓[22m[39m Ready in 12.4s
+[0m[next][0m  [31m[1m⨯[22m[39m Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
+[0m[next][0m Error: Incompatible React versions: The "react" and "react-dom" packages must have the exact same version. Instead got:
+[0m[next][0m   - react:      19.2.0
+[0m[next][0m   - react-dom:  19.2.1
+[0m[next][0m Learn more: https://react.dev/warnings/version-mismatch
+[0m[next][0m     at [3mignore-listed frames[23m
+[0m[stripe][0m 
+[0m[stripe][0m [0mnpm run stripe exited with code 0[0m
+[0m[next][0m [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
