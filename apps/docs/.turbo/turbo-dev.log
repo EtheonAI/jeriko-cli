@@ -2,38 +2,30 @@
 > docs@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/docs
 > mintlify dev --port 3004
 
-(node:46610) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(node:78084) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-[?25l[?25l[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[?25l[?25l[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠋[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠙[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠹[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
-
-[1m[32m⠸[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠼[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠴[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m⠦[39m[22m preparing local preview...
-[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get
-the latest version
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
+
+[1m[32m⠧[39m[22m preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[G[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 
 [1m[32m✓[39m[22m preview ready
 
