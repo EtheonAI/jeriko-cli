@@ -12,9 +12,9 @@
 [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
 [33mwarn[0m - Sending Web Vitals to /dev/null
 [33mwarn[0m - Sending logs to console
- [37m[1m○[22m[39m Compiling middleware ...
  [33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
- [32m[1m✓[22m[39m Ready in 11.1s
 [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
 [33mwarn[0m - Sending Web Vitals to /dev/null
 [33mwarn[0m - Sending logs to console
+ [32m[1m✓[22m[39m Ready in 12.1s
+ [32m[1m✓[22m[39m Compiled in 101ms

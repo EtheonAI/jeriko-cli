@@ -41,7 +41,7 @@
   [32m✔[39m writing files
 [2K[1A[2K[1A[2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
 [2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
-[?25h🪄 Generated basehub types in 3029ms
+[?25h🪄 Generated basehub types in 1968ms
  
 ┌────────────────────────────────────────────────────────────────────────────────────────────┐
 │ 👀 `basehub` experimental --watch mode. Bugs: https://github.com/basehub-ai/basehub/issues │

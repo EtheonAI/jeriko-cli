@@ -3,16 +3,6 @@
 > prisma studio --schema ../../packages/database/prisma/schema.prisma --port 3005
 
 [2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
-[90m[90m┌─[39m[90m[90m────────────────────────────────────────────────────────┐[39m[90m
-[90m│[39m[90m  [0m[34mUpdate available[39m[90m 6.18.0 -> 7.2.0[0m                       [90m│[39m[90m
-[90m│[39m[90m  [0m[0m                                                       [90m│[39m[90m
-[90m│[39m[90m  [0mThis is a major update - please follow the guide at[0m    [90m│[39m[90m
-[90m│[39m[90m  [0mhttps://pris.ly/d/major-version-upgrade[0m                [90m│[39m[90m
-[90m│[39m[90m  [0m[0m                                                       [90m│[39m[90m
-[90m│[39m[90m  [0mRun the following to update[0m                            [90m│[39m[90m
-[90m│[39m[90m  [0m  [1mnpm i --save-dev prisma@latest[22m[0m                       [90m│[39m[90m
-[90m│[39m[90m  [0m  [1mnpm i @prisma/client@latest[22m[0m                          [90m│[39m[90m
-└─────────────────────────────────────────────────────────┘[39m
 Prisma Studio is up on http://localhost:3005
 [2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
 [33mwarn[39m Preview feature "driverAdapters" is deprecated. The functionality can be used without specifying it as a preview feature.
