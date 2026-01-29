@@ -7,8 +7,7 @@
     "start": "next start",
     "analyze": "ANALYZE=true npm run build",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
-    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "lint": "next lint"
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
     "@arcjet/next": "1.0.0-beta.13",
@@ -32,7 +31,7 @@
     "import-in-the-middle": "^2.0.0",
     "lucide-react": "^0.548.0",
     "mdx-bundler": "^10.1.1",
-    "next": "16.0.0",
+    "next": "16.1.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "require-in-the-middle": "7.5.2",

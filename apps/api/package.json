@@ -10,8 +10,7 @@
     "test": "NODE_ENV=test vitest run",
     "stripe": "stripe listen --forward-to localhost:3002/webhooks/payments",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
-    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "lint": "next lint"
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
     "@repo/analytics": "workspace:*",
@@ -23,7 +22,7 @@
     "@repo/payments": "workspace:*",
     "@sentry/nextjs": "^10.22.0",
     "@t3-oss/env-nextjs": "^0.13.8",
-    "next": "16.0.0",
+    "next": "16.1.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "svix": "^1.80.0",

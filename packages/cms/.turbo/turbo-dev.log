@@ -37,11 +37,25 @@
   [33m⠇[39m fetching schema from BaseHub's API
   [2m◼[22m writing files
 [2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
+  [33m⠏[39m fetching schema from BaseHub's API
+  [2m◼[22m writing files
+[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
+  [33m⠋[39m fetching schema from BaseHub's API
+  [2m◼[22m writing files
+[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
+  [33m⠙[39m fetching schema from BaseHub's API
+  [2m◼[22m writing files
+[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
+  [32m✔[39m fetching schema from BaseHub's API
+  [33m❯[39m writing files
+    [33m❯[39m processing schema
+      [33m⠹[39m writing /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
   [32m✔[39m fetching schema from BaseHub's API
   [32m✔[39m writing files
 [2K[1A[2K[1A[2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
 [2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/cms/basehub-types.d.ts`
-[?25h🪄 Generated basehub types in 1968ms
+[?25h🪄 Generated basehub types in 2307ms
  
 ┌────────────────────────────────────────────────────────────────────────────────────────────┐
 │ 👀 `basehub` experimental --watch mode. Bugs: https://github.com/basehub-ai/basehub/issues │
