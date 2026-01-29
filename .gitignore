@@ -1,10 +1,13 @@
-# Next.js
-.next/
-out/
-
-# Turbopack / Next dev cache
-**/.next/**
+# Next.js (all apps)
+**/.next/
+**/out/
 
 # Node
 node_modules/
-EOF
+
+# Turbo
+.turbo/
+
+# Env
+.env
+.env.local
