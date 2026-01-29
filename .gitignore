@@ -1,1 +1,10 @@
-node_modules
+# Next.js
+.next/
+out/
+
+# Turbopack / Next dev cache
+**/.next/**
+
+# Node
+node_modules/
+EOF
