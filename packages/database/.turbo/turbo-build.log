@@ -1,5 +1,5 @@
 
-> @repo/database@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/packages/database
-> prisma generate --no-hints --schema=./prisma/schema.prisma
+> @repo/database@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/database
+> echo 'No build step needed for Drizzle'
 
- ELIFECYCLE  Command failed.
+No build step needed for Drizzle

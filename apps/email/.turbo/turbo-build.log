@@ -1,5 +1,5 @@
 
-> email@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/email
+> email@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/email
 > email build --dir ../../packages/email/templates
 
- ELIFECYCLE  Command failed.
+- Starting build process...

@@ -1,8 +1,8 @@
 
-> api@ test /Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/api
+> api@ test /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
 > NODE_ENV=test vitest run
 
 
-[1m[46m RUN [49m[22m [36mv4.0.3 [39m[90m/Users/khaleelmusleh/Desktop/Projects/Etheon/AI Template/rubic/apps/api[39m
+[1m[46m RUN [49m[22m [36mv4.0.3 [39m[90m/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api[39m
 
  ELIFECYCLE  Test failed. See above for more details.
