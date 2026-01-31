@@ -34,3 +34,21 @@ export {
   fileVersions,
   fileVersionsRelations,
 } from "./files";
+
+// Organization schemas
+export {
+  organizations,
+  organizationsRelations,
+  members,
+  membersRelations,
+  invitations,
+  invitationsRelations,
+  type Organization,
+  type NewOrganization,
+  type Member,
+  type NewMember,
+  type Invitation,
+  type NewInvitation,
+  type MemberRole,
+  type InvitationStatus,
+} from "./organizations";

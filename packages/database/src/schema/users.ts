@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean as pgBoolean } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 
@@ -10,7 +10,7 @@ export const users = pgTable("users", {
   name: text("name"),
   image: text("image"),
   password: text("password"),
-  emailVerified: timestamp("email_verified", { mode: "date" }),
+  emailVerified: pgBoolean("email_verified").default(false).notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .defaultNow()
@@ -31,6 +31,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   authSessions: many(authSessions),
   agentSessions: many(agentSessions),
   files: many(files),
+  members: many(members),
+  invitations: many(invitations),
 }));
 
 // Auth-related tables for Better-Auth
@@ -75,6 +77,7 @@ export const authSessions = pgTable("auth_sessions", {
   expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  activeOrganizationId: text("active_organization_id"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .defaultNow()
@@ -105,3 +108,4 @@ export const verifications = pgTable("verifications", {
 // Forward declarations for relations
 import { agentSessions } from "./sessions";
 import { files } from "./files";
+import { members, invitations } from "./organizations";

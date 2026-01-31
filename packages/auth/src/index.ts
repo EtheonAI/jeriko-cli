@@ -9,8 +9,11 @@ export {
   signOut,
   useSession,
   getSession,
+  organization,
   type Session,
   type User,
+  type Organization,
+  type Member,
 } from "./client";
 
 // Validation schemas

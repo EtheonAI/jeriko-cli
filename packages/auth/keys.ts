@@ -4,11 +4,18 @@ import { z } from "zod";
 export const keys = () =>
   createEnv({
     server: {
-      DATABASE_URL: z.string(),
+      BETTER_AUTH_SECRET: z.string().optional(),
+      GOOGLE_CLIENT_ID: z.string().optional(),
+      GOOGLE_CLIENT_SECRET: z.string().optional(),
+      GITHUB_ID: z.string().optional(),
+      GITHUB_SECRET: z.string().optional(),
     },
-    client: {
-    },
+    client: {},
     runtimeEnv: {
-      DATABASE_URL: process.env.DATABASE_URL,
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+      GITHUB_ID: process.env.GITHUB_ID,
+      GITHUB_SECRET: process.env.GITHUB_SECRET,
     },
   });
