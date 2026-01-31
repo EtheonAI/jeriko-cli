@@ -1,20 +1,17 @@
 // Server-side auth (use in API routes and server components)
-export { auth, type Auth } from "./server";
-
-// Client-side auth (use in client components)
-export {
-  authClient,
-  signIn,
-  signUp,
-  signOut,
-  useSession,
-  getSession,
-  organization,
-  type Session,
-  type User,
-  type Organization,
-  type Member,
-} from "./client";
+export { auth } from "./server";
+export type { Auth, Session as ServerSession, User as ServerUser } from "./server";
 
 // Validation schemas
-export { userAuthSchema } from "./validations/auth";
+export {
+  passwordSchema,
+  emailSchema,
+  signInSchema,
+  signUpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  type SignInInput,
+  type SignUpInput,
+  type ForgotPasswordInput,
+  type ResetPasswordInput,
+} from "./validations/auth";

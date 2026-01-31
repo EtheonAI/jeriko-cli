@@ -3,13 +3,14 @@
 import { createAuthClient } from "better-auth/react";
 import { organizationClient } from "better-auth/client/plugins";
 
-const client = createAuthClient({
+// Auth client configuration
+const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
   plugins: [organizationClient()],
 });
 
-// Export the client
-export const authClient = client;
+// Export client instance
+export { authClient };
 
 // Export auth methods
 export const {
@@ -22,15 +23,16 @@ export const {
   sendVerificationEmail,
   resetPassword,
   $Infer,
-} = client;
+} = authClient;
 
-// Forgot password function - calls the API endpoint directly
+// Forgot password - calls API directly since better-auth client doesn't expose it
 export async function forgetPassword(options: {
   email: string;
   redirectTo?: string;
 }): Promise<{ data: unknown; error: { message: string } | null }> {
+  const baseURL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
   try {
-    const baseURL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const response = await fetch(`${baseURL}/api/auth/forget-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,7 +49,7 @@ export async function forgetPassword(options: {
 
     const data = await response.json().catch(() => ({}));
     return { data, error: null };
-  } catch (err) {
+  } catch {
     return {
       data: null,
       error: { message: "An error occurred. Please try again." },
@@ -55,11 +57,10 @@ export async function forgetPassword(options: {
   }
 }
 
-// Session types
-export type Session = typeof client.$Infer.Session;
+// Type exports
+export type Session = typeof authClient.$Infer.Session;
 export type User = Session["user"];
 
-// Organization types
 export type Organization = {
   id: string;
   name: string;
