@@ -2,16 +2,85 @@
   "name": "@repo/ai",
   "version": "0.0.0",
   "private": true,
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./components/prompt-input": {
+      "types": "./components/prompt-input/index.tsx",
+      "default": "./components/prompt-input/index.tsx"
+    },
+    "./components/message": {
+      "types": "./components/message.tsx",
+      "default": "./components/message.tsx"
+    },
+    "./components/thread": {
+      "types": "./components/thread.tsx",
+      "default": "./components/thread.tsx"
+    },
+    "./hooks": {
+      "types": "./hooks/index.ts",
+      "default": "./hooks/index.ts"
+    },
+    "./hooks/use-chat-stream": {
+      "types": "./hooks/use-chat-stream.ts",
+      "default": "./hooks/use-chat-stream.ts"
+    },
+    "./hooks/use-voice-input": {
+      "types": "./hooks/use-voice-input.ts",
+      "default": "./hooks/use-voice-input.ts"
+    },
+    "./hooks/use-file-upload": {
+      "types": "./hooks/use-file-upload.ts",
+      "default": "./hooks/use-file-upload.ts"
+    },
+    "./providers": {
+      "types": "./providers/index.tsx",
+      "default": "./providers/index.tsx"
+    },
+    "./providers/chat-provider": {
+      "types": "./providers/chat-provider.tsx",
+      "default": "./providers/chat-provider.tsx"
+    },
+    "./lib/types": {
+      "types": "./lib/types/index.ts",
+      "default": "./lib/types/index.ts"
+    },
+    "./lib/models": {
+      "types": "./lib/models.ts",
+      "default": "./lib/models.ts"
+    },
+    "./lib/react": {
+      "types": "./lib/react.ts",
+      "default": "./lib/react.ts"
+    },
+    "./lib/cache": {
+      "types": "./lib/cache.ts",
+      "default": "./lib/cache.ts"
+    },
+    "./lib/streaming": {
+      "types": "./lib/streaming.ts",
+      "default": "./lib/streaming.ts"
+    },
+    "./tools/*": {
+      "types": "./tools/*.ts",
+      "default": "./tools/*.ts"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
     "@repo/auth": "workspace:*",
+    "@repo/design-system": "workspace:*",
     "@ai-sdk/openai": "^2.0.77",
     "@ai-sdk/react": "^3.0.29",
     "@t3-oss/env-nextjs": "^0.13.8",
     "ai": "^6.0.27",
+    "lucide-react": "^0.511.0",
     "react": "19.2.3",
     "react-markdown": "^10.1.0",
     "streamdown": "^1.6.11",
