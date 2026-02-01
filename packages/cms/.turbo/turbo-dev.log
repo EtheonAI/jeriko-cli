@@ -10,31 +10,17 @@
 │ 📦 Output: /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts │
 │ 🔀 Ref: main (basehub branch)                                                                 │
 └───────────────────────────────────────────────────────────────────────────────────────────────┘
-[?25l[2m◼[22m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-[2K[1A[2K[G[33m⠋[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-  [33m⠙[39m fetching schema from BaseHub's API
-  [2m◼[22m writing files
-[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-  [33m⠹[39m fetching schema from BaseHub's API
-  [2m◼[22m writing files
-[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-  [33m⠸[39m fetching schema from BaseHub's API
-  [2m◼[22m writing files
-[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-  [33m⠼[39m fetching schema from BaseHub's API
-  [2m◼[22m writing files
-[2K[1A[2K[1A[2K[1A[2K[G[33m❯[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-  [32m✔[39m fetching schema from BaseHub's API
-  [32m✔[39m writing files
-[2K[1A[2K[1A[2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-[2K[1A[2K[G[32m✔[39m generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-[?25h🪄 Generated basehub types in 1308ms
+❯ generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
+❯ fetching schema from BaseHub's API
+✔ fetching schema from BaseHub's API
+❯ writing files
+❯ processing schema
+❯ writing /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts
+✔ writing /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts
+✔ processing schema
+✔ writing files
+✔ generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
+🪄 Generated basehub types in 1818ms
  
 ┌────────────────────────────────────────────────────────────────────────────────────────────┐
 │ 👀 `basehub` experimental --watch mode. Bugs: https://github.com/basehub-ai/basehub/issues │
-└────────────────────────────────────────────────────────────────────────────────────────────┘
- 
-
-👋 Stopped `basehub` watcher.
-[?25h
