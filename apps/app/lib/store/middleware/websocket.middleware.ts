@@ -6,21 +6,42 @@ import {
   joinRoom,
   leaveRoom,
   setLastError,
+  incrementReconnectAttempts,
 } from "../slices/websocket.slice";
-import { addMessage, updateMessage, appendToMessage } from "../slices/chat.slice";
+import {
+  addMessage,
+  updateMessage,
+  appendToMessage,
+  setStreaming,
+  setCurrentStreamingMessage,
+  addTypingUser,
+  removeTypingUser,
+} from "../slices/chat.slice";
 import { updateAgent, addTask, updateTask } from "../slices/agents.slice";
 import { updateSession, addSession } from "../slices/sessions.slice";
+import { addNotification, markAsRead as markNotificationAsRead } from "../slices/notifications.slice";
 
-// WebSocket event types
+// WebSocket event types from server
 export type WebSocketEvent =
+  | { type: "connection:established"; payload: { socketId: string } }
+  | { type: "connection:error"; payload: { message: string } }
+  | { type: "room:joined"; payload: { roomId: string } }
+  | { type: "room:left"; payload: { roomId: string } }
   | { type: "message:new"; payload: { sessionId: string; message: unknown } }
   | { type: "message:update"; payload: { sessionId: string; messageId: string; content: string } }
   | { type: "message:stream"; payload: { sessionId: string; messageId: string; chunk: string } }
+  | { type: "message:stream:start"; payload: { sessionId: string; messageId: string } }
+  | { type: "message:stream:end"; payload: { sessionId: string; messageId: string } }
   | { type: "agent:update"; payload: { sessionId: string; agentId: string; updates: unknown } }
   | { type: "agent:task:new"; payload: { agentId: string; task: unknown } }
   | { type: "agent:task:update"; payload: { agentId: string; taskId: string; updates: unknown } }
   | { type: "session:update"; payload: { sessionId: string; updates: unknown } }
-  | { type: "session:new"; payload: { session: unknown } };
+  | { type: "session:new"; payload: { session: unknown } }
+  | { type: "notification:new"; payload: { notification: unknown } }
+  | { type: "notification:read"; payload: { notificationId: string } }
+  | { type: "typing:start"; payload: { sessionId: string; userId: string; userName?: string } }
+  | { type: "typing:stop"; payload: { sessionId: string; userId: string } }
+  | { type: "pong"; payload: { timestamp: number } };
 
 // WebSocket middleware actions
 export const WS_CONNECT = "websocket/connect";
@@ -125,6 +146,25 @@ export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) 
 
 function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
   switch (event.type) {
+    // Connection events
+    case "connection:established":
+      dispatch(setSocketId(event.payload.socketId));
+      break;
+
+    case "connection:error":
+      dispatch(setLastError(event.payload.message));
+      break;
+
+    // Room events
+    case "room:joined":
+      dispatch(joinRoom(event.payload.roomId));
+      break;
+
+    case "room:left":
+      dispatch(leaveRoom(event.payload.roomId));
+      break;
+
+    // Message events
     case "message:new":
       dispatch(addMessage(event.payload.message as any));
       break;
@@ -139,6 +179,12 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       );
       break;
 
+    // Streaming events
+    case "message:stream:start":
+      dispatch(setStreaming(true));
+      dispatch(setCurrentStreamingMessage(event.payload.messageId));
+      break;
+
     case "message:stream":
       dispatch(
         appendToMessage({
@@ -149,6 +195,12 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       );
       break;
 
+    case "message:stream:end":
+      dispatch(setStreaming(false));
+      dispatch(setCurrentStreamingMessage(null));
+      break;
+
+    // Agent events
     case "agent:update":
       dispatch(
         updateAgent({
@@ -173,6 +225,7 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       );
       break;
 
+    // Session events
     case "session:update":
       dispatch(
         updateSession({
@@ -184,6 +237,29 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
 
     case "session:new":
       dispatch(addSession(event.payload.session as any));
+      break;
+
+    // Notification events (real-time)
+    case "notification:new":
+      dispatch(addNotification(event.payload.notification as any));
+      break;
+
+    case "notification:read":
+      dispatch(markNotificationAsRead(event.payload.notificationId));
+      break;
+
+    // Typing indicator events
+    case "typing:start":
+      dispatch(addTypingUser(event.payload.userId));
+      break;
+
+    case "typing:stop":
+      dispatch(removeTypingUser(event.payload.userId));
+      break;
+
+    // Heartbeat
+    case "pong":
+      // Heartbeat received, connection is alive
       break;
 
     default:

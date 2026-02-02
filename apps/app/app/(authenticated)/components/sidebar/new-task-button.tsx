@@ -13,7 +13,7 @@ export function NewTaskButton() {
     <Button
       asChild
       className={cn(
-        "h-9 w-full justify-start gap-3 rounded-[10px]",
+        "h-9 w-full justify-start gap-3 rounded-lg",
         "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90",
         !open && "w-9 justify-center px-0"
       )}

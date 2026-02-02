@@ -43,8 +43,8 @@ export function NavSection() {
   const pathname = usePathname();
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="px-3 text-sidebar-foreground/60">
+    <SidebarGroup className="p-0">
+      <SidebarGroupLabel className="px-4 text-sidebar-foreground/60">
         Platform
       </SidebarGroupLabel>
       <SidebarMenu className="px-2 gap-0.5">
@@ -56,11 +56,11 @@ export function NavSection() {
                 asChild
                 tooltip={item.title}
                 isActive={isActive}
-                className="h-9 px-3 gap-3 rounded-[10px]"
+                className="h-9 px-2 gap-3 rounded-lg"
               >
                 <Link href={item.href}>
-                  <item.icon className="h-[18px] w-[18px]" />
-                  <span className="text-[14px]">{item.title}</span>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.title}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

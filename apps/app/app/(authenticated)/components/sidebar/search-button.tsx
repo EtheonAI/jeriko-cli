@@ -17,7 +17,7 @@ export function SearchButton({ onSearch }: SearchButtonProps) {
     <Button
       variant="outline"
       className={cn(
-        "h-9 w-full justify-start gap-3 rounded-[10px]",
+        "h-9 w-full justify-start gap-3 rounded-lg",
         "border-sidebar-border bg-transparent",
         "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40",
         !open && "w-9 justify-center px-0"

@@ -32,7 +32,7 @@ export function SidebarFooter({ user }: SidebarFooterProps) {
   const { openSettings } = useSettings();
 
   return (
-    <SidebarFooterPrimitive className="border-t border-sidebar-border/40 p-3">
+    <SidebarFooterPrimitive className="border-t border-sidebar-border/40 p-2">
       <SidebarMenu>
         <SidebarMenuItem className="flex items-center justify-between">
           <div className="flex items-center gap-0.5">
@@ -44,7 +44,7 @@ export function SidebarFooter({ user }: SidebarFooterProps) {
                   className="h-8 w-8 rounded-md text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
                   onClick={() => openSettings("settings")}
                 >
-                  <Settings2Icon className="h-[18px] w-[18px]" />
+                  <Settings2Icon className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top">Settings</TooltipContent>
@@ -62,7 +62,7 @@ export function SidebarFooter({ user }: SidebarFooterProps) {
                 asChild
               >
                 <a href="/help" target="_blank" rel="noreferrer">
-                  <BookOpenIcon className="h-[18px] w-[18px]" />
+                  <BookOpenIcon className="h-4 w-4" />
                 </a>
               </Button>
             </TooltipTrigger>

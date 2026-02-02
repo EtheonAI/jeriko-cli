@@ -82,11 +82,11 @@ export function ChatItem({ chat }: ChatItemProps) {
     <SidebarMenuItem className="group/item">
       <SidebarMenuButton
         asChild
-        className="h-9 px-3 gap-3 rounded-[10px] pr-10"
+        className="h-9 px-2 pr-9 gap-3 rounded-lg"
       >
         <Link href={`/chat/${chat.id}`}>
-          <Icon className="h-[18px] w-[18px] shrink-0 text-sidebar-foreground/60" />
-          <span className="truncate text-[14px]">{chat.title}</span>
+          <Icon className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
+          <span className="truncate">{chat.title}</span>
         </Link>
       </SidebarMenuButton>
 

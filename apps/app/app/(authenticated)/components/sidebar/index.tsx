@@ -46,8 +46,8 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
   return (
     <>
       <Sidebar variant="inset" collapsible="icon">
-        <SidebarHeader className="p-3 gap-2">
-          <SidebarMenu>
+        <SidebarHeader className="p-2">
+          <SidebarMenu className="gap-1">
             <SidebarMenuItem>
               <NewTaskButton />
             </SidebarMenuItem>
@@ -57,18 +57,18 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent className="flex flex-col">
+        <SidebarContent className="flex flex-col gap-0">
           <NavSection />
 
-          <SidebarSeparator className="mx-3" />
+          <SidebarSeparator className="mx-2" />
 
           {/* Recent Chats Section */}
-          <SidebarGroup className="group-data-[collapsible=icon]:hidden flex-1 min-h-0 flex flex-col">
-            <SidebarGroupLabel className="px-3 text-sidebar-foreground/60">
+          <SidebarGroup className="group-data-[collapsible=icon]:hidden flex-1 min-h-0 flex flex-col p-0">
+            <SidebarGroupLabel className="px-4 text-sidebar-foreground/60">
               Recent
             </SidebarGroupLabel>
-            <SidebarGroupContent className="flex-1 overflow-y-auto">
-              <SidebarMenu className="px-2 gap-0.5">
+            <SidebarGroupContent className="flex-1 overflow-y-auto px-2">
+              <SidebarMenu className="gap-0.5">
                 {recentChats.map((chat) => (
                   <ChatItem key={chat.id} chat={chat} />
                 ))}

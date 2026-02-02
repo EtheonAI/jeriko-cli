@@ -43,6 +43,7 @@
     "zod": "^3.25.28"
   },
   "devDependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
     "@repo/testing": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@testing-library/dom": "^10.4.0",
@@ -51,6 +52,8 @@
     "@types/react": "19.1.5",
     "@types/react-dom": "19.1.5",
     "jsdom": "^26.1.0",
+    "react-redux": "^9.2.0",
+    "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.1.7",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"

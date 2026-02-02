@@ -1,89 +1,89 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { PromptInput } from "@repo/ai/components/prompt-input";
 import type { MessagePart, Attachment } from "@repo/ai/lib/types";
-import { ConnectToolsBanner } from "./prompt-input/connect-tools-banner";
+import { RubicInput, type InputConfig } from "./rubic-input";
 
 type ChatSectionProps = {
-  showConnectBanner?: boolean;
-  showTitle?: boolean;
-  title?: string;
+  showConfigBar?: boolean;
 };
 
-export function ChatSection({
-  showConnectBanner = true,
-  showTitle = true,
-  title = "What can I help with?",
-}: ChatSectionProps) {
+export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [config, setConfig] = useState<InputConfig>({
+    model: "cloud",
+    agent: "agent",
+    performance: "high",
+    autoMode: false,
+  });
 
-  const handleSubmit = async (parts: MessagePart[], attachments?: Attachment[]) => {
-    const textPart = parts.find((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text');
-    const text = textPart?.text ?? '';
+  const handleSubmit = useCallback(
+    async (parts: MessagePart[], attachments?: Attachment[], inputConfig?: InputConfig) => {
+      const textPart = parts.find(
+        (p): p is Extract<MessagePart, { type: "text" }> => p.type === "text"
+      );
+      const text = textPart?.text ?? "";
 
-    if (!text.trim() && (!attachments || attachments.length === 0)) return;
+      if (!text.trim() && (!attachments || attachments.length === 0)) return;
 
-    setIsLoading(true);
+      setIsLoading(true);
 
-    try {
-      const chatId = Math.random().toString(36).substring(2, 15);
+      try {
+        const chatId = Math.random().toString(36).substring(2, 15);
 
-      sessionStorage.setItem(`chat-${chatId}-initial`, JSON.stringify({
-        parts,
-        attachments: attachments?.map(a => ({
-          id: a.id,
-          name: a.name,
-          type: a.type,
-          size: a.size,
-          mimeType: a.mimeType,
-          url: a.url,
-        })) ?? [],
-      }));
+        // Store initial message and config in session storage for the chat page
+        sessionStorage.setItem(
+          `chat-${chatId}-initial`,
+          JSON.stringify({
+            parts,
+            attachments:
+              attachments?.map((a) => ({
+                id: a.id,
+                name: a.name,
+                type: a.type,
+                size: a.size,
+                mimeType: a.mimeType,
+                url: a.url,
+              })) ?? [],
+            config: inputConfig ?? config,
+          })
+        );
 
-      router.push(`/chat/${chatId}`);
-    } catch (error) {
-      console.error("Failed to create chat:", error);
-      setIsLoading(false);
-    }
-  };
+        router.push(`/chat/${chatId}`);
+      } catch (error) {
+        console.error("Failed to create chat:", error);
+        setIsLoading(false);
+      }
+    },
+    [router, config]
+  );
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setIsLoading(false);
-  };
+  }, []);
+
+  const handleConfigChange = useCallback((newConfig: InputConfig) => {
+    setConfig(newConfig);
+  }, []);
+
+  const handleToolSelect = useCallback((tool: string) => {
+    // Handle tool selection - can be extended for specific tool behaviors
+    console.log("Tool selected:", tool);
+  }, []);
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-0">
-      <PromptInput
+    <div className="w-full flex justify-center">
+      <RubicInput
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         loading={isLoading}
-        showTitle={showTitle}
-        title={title}
-        showVoice
-        showAttachments
-        showSuggestions={false}
-        animatedPlaceholders={[
-          'Ask anything...',
-          'Write code for a landing page',
-          'Help me debug this error',
-          'Create a marketing strategy',
-          'Design a database schema',
-          'Analyze my data',
-          'Research a topic',
-          'Plan a project timeline',
-          'Summarize this document',
-          'Generate ideas for...',
-        ]}
+        initialConfig={config}
+        onConfigChange={handleConfigChange}
+        onToolSelect={handleToolSelect}
+        showConfigBar={showConfigBar}
       />
-      {showConnectBanner && !bannerDismissed && (
-        <ConnectToolsBanner
-          onDismiss={() => setBannerDismissed(true)}
-        />
-      )}
     </div>
   );
 }
