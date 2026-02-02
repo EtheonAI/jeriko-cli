@@ -25,7 +25,7 @@ export function SettingsDialog({ user, isPro = false }: SettingsDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeSettings()}>
       <DialogContent
-        className="max-w-[920px] h-[600px] max-h-[95vh] p-0 gap-0 rounded-[20px] overflow-hidden"
+        className="max-w-4xl h-150 max-h-[95vh] p-0 gap-0 rounded-[20px] overflow-hidden"
         showCloseButton={true}
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
