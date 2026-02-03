@@ -23,7 +23,7 @@ const navItems = [
     href: "/files",
   },
   {
-    title: "Connections",
+    title: "Applications",
     icon: Link2Icon,
     href: "/applications",
   },

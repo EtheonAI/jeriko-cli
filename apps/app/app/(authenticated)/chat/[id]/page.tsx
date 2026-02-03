@@ -1,9 +1,9 @@
 import { auth } from "@repo/auth";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Header } from "../../components/header/index";
-import { ChatInputToolbar } from "../../components/chat-input-toolbar";
 import { notFound } from "next/navigation";
+import { Header } from "../../components/header/index";
+import { ChatPageClient } from "./chat-page-client";
 
 type ChatPageProps = {
   params: Promise<{
@@ -26,11 +26,12 @@ export default async function ChatPage({ params }: ChatPageProps) {
     headers: headersList,
   });
 
-  // In production, fetch chat data from database
-  // For now, we'll just display the chat ID
   if (!id) {
     notFound();
   }
+
+  // TODO: In production, fetch initial messages from database
+  // const messages = await fetchMessages(id);
 
   return (
     <>
@@ -43,26 +44,16 @@ export default async function ChatPage({ params }: ChatPageProps) {
           image: session?.user?.image ?? null,
         }}
       />
-      <div className="flex flex-1 flex-col">
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="mx-auto max-w-3xl space-y-4">
-            {/* Chat messages would go here */}
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-sm text-muted-foreground">
-                Chat ID: {id}
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Chat messages will appear here
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 border-t bg-background p-4">
-          <div className="mx-auto max-w-3xl">
-            <ChatInputToolbar />
-          </div>
-        </div>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <ChatPageClient
+          sessionId={id}
+          initialMessages={[]}
+          user={{
+            name: session?.user?.name,
+            email: session?.user?.email ?? "",
+            image: session?.user?.image,
+          }}
+        />
       </div>
     </>
   );

@@ -191,6 +191,17 @@ export const chatSlice = createSlice({
       }
       state.messages[sessionId].push(action.payload);
     },
+
+    // Batch add messages for performance (WebSocket batching)
+    addMessages: (state, action: PayloadAction<Message[]>) => {
+      for (const message of action.payload) {
+        const { sessionId } = message;
+        if (!state.messages[sessionId]) {
+          state.messages[sessionId] = [];
+        }
+        state.messages[sessionId].push(message);
+      }
+    },
     updateMessage: (
       state,
       action: PayloadAction<{
@@ -418,6 +429,7 @@ export const chatSlice = createSlice({
 export const {
   setMessages,
   addMessage,
+  addMessages,
   updateMessage,
   appendToMessage,
   setStreaming,

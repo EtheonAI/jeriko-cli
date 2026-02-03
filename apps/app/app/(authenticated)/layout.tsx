@@ -8,6 +8,7 @@ import { NotificationsProvider } from "./components/notifications-provider";
 import { GlobalSidebar } from "./components/sidebar/index";
 import { SettingsProvider } from "./components/settings/settings-context";
 import { SettingsDialog } from "./components/settings/settings-dialog";
+import { AuthenticatedProviders } from "./providers";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
@@ -37,21 +38,23 @@ const AppLayout = async ({ children }: AppLayoutProperties) => {
   };
 
   return (
-    <NotificationsProvider userId={session.user.id ?? ""}>
-      <SettingsProvider>
-        <SidebarProvider>
-          <GlobalSidebar user={user}>
-            {betaFeature && (
-              <div className="m-4 rounded-full bg-blue-500 p-1.5 text-center text-sm text-white">
-                Beta feature now available
-              </div>
-            )}
-            {children}
-          </GlobalSidebar>
-        </SidebarProvider>
-        <SettingsDialog user={user} isPro={false} />
-      </SettingsProvider>
-    </NotificationsProvider>
+    <AuthenticatedProviders>
+      <NotificationsProvider userId={session.user.id ?? ""}>
+        <SettingsProvider>
+          <SidebarProvider>
+            <GlobalSidebar user={user}>
+              {betaFeature && (
+                <div className="m-4 rounded-full bg-blue-500 p-1.5 text-center text-sm text-white">
+                  Beta feature now available
+                </div>
+              )}
+              {children}
+            </GlobalSidebar>
+          </SidebarProvider>
+          <SettingsDialog user={user} isPro={false} />
+        </SettingsProvider>
+      </NotificationsProvider>
+    </AuthenticatedProviders>
   );
 };
 

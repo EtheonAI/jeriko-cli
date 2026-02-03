@@ -1,4 +1,5 @@
 import { Middleware } from "@reduxjs/toolkit";
+import { throttle } from "lodash-es";
 import type { RootState } from "../index";
 import {
   setConnectionStatus,
@@ -10,16 +11,105 @@ import {
 } from "../slices/websocket.slice";
 import {
   addMessage,
+  addMessages,
   updateMessage,
   appendToMessage,
   setStreaming,
   setCurrentStreamingMessage,
   addTypingUser,
   removeTypingUser,
+  type Message,
 } from "../slices/chat.slice";
 import { updateAgent, addTask, updateTask } from "../slices/agents.slice";
 import { updateSession, addSession } from "../slices/sessions.slice";
 import { addNotification, markAsRead as markNotificationAsRead } from "../slices/notifications.slice";
+
+// ==================== PERFORMANCE OPTIMIZATIONS ====================
+// Throttle and batch WebSocket events to prevent UI flooding
+
+// Message buffer for batching rapid message arrivals
+let messageBuffer: Message[] = [];
+let flushTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// Flush messages in batch every 50ms max
+const flushMessages = (dispatch: any) => {
+  if (messageBuffer.length > 0) {
+    dispatch(addMessages([...messageBuffer]));
+    messageBuffer = [];
+  }
+  flushTimeout = null;
+};
+
+// Schedule a batch flush
+const scheduleFlush = (dispatch: any) => {
+  if (flushTimeout === null) {
+    flushTimeout = setTimeout(() => flushMessages(dispatch), 50);
+  }
+};
+
+// Throttled typing indicator handler - max once per 100ms
+const createThrottledTypingHandler = () => {
+  const typingStates = new Map<string, ReturnType<typeof throttle>>();
+
+  return {
+    handleTypingStart: (dispatch: any, userId: string) => {
+      let handler = typingStates.get(userId);
+      if (!handler) {
+        handler = throttle((d: any, uid: string) => {
+          d(addTypingUser(uid));
+        }, 100);
+        typingStates.set(userId, handler);
+      }
+      handler(dispatch, userId);
+    },
+    handleTypingStop: (dispatch: any, userId: string) => {
+      const handler = typingStates.get(userId);
+      if (handler) {
+        handler.cancel();
+        typingStates.delete(userId);
+      }
+      dispatch(removeTypingUser(userId));
+    },
+    cleanup: () => {
+      typingStates.forEach((handler) => handler.cancel());
+      typingStates.clear();
+    },
+  };
+};
+
+const typingHandler = createThrottledTypingHandler();
+
+// Throttled stream chunk handler - batch chunks every 16ms (~60fps)
+let streamBuffer: { sessionId: string; messageId: string; content: string } | null = null;
+let streamFlushTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const flushStreamBuffer = (dispatch: any) => {
+  if (streamBuffer) {
+    dispatch(appendToMessage(streamBuffer));
+    streamBuffer = null;
+  }
+  streamFlushTimeout = null;
+};
+
+const appendToStreamBuffer = (dispatch: any, sessionId: string, messageId: string, chunk: string) => {
+  if (streamBuffer && streamBuffer.sessionId === sessionId && streamBuffer.messageId === messageId) {
+    // Accumulate chunks for same message
+    streamBuffer.content += chunk;
+  } else {
+    // Flush previous and start new buffer
+    if (streamBuffer) {
+      dispatch(appendToMessage(streamBuffer));
+    }
+    streamBuffer = { sessionId, messageId, content: chunk };
+  }
+
+  // Schedule flush at ~60fps
+  if (streamFlushTimeout === null) {
+    streamFlushTimeout = setTimeout(() => flushStreamBuffer(dispatch), 16);
+  }
+};
+
+// ==================================================================
 
 // WebSocket event types from server
 export type WebSocketEvent =
@@ -164,9 +254,11 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       dispatch(leaveRoom(event.payload.roomId));
       break;
 
-    // Message events
+    // Message events - batched for performance
     case "message:new":
-      dispatch(addMessage(event.payload.message as any));
+      // Add to buffer for batch processing
+      messageBuffer.push(event.payload.message as Message);
+      scheduleFlush(dispatch);
       break;
 
     case "message:update":
@@ -186,16 +278,18 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       break;
 
     case "message:stream":
-      dispatch(
-        appendToMessage({
-          sessionId: event.payload.sessionId,
-          messageId: event.payload.messageId,
-          content: event.payload.chunk,
-        })
+      // Batch stream chunks at ~60fps for smooth rendering
+      appendToStreamBuffer(
+        dispatch,
+        event.payload.sessionId,
+        event.payload.messageId,
+        event.payload.chunk
       );
       break;
 
     case "message:stream:end":
+      // Flush any remaining stream content before ending
+      flushStreamBuffer(dispatch);
       dispatch(setStreaming(false));
       dispatch(setCurrentStreamingMessage(null));
       break;
@@ -248,13 +342,13 @@ function handleWebSocketMessage(dispatch: any, event: WebSocketEvent) {
       dispatch(markNotificationAsRead(event.payload.notificationId));
       break;
 
-    // Typing indicator events
+    // Typing indicator events - throttled to prevent UI flooding
     case "typing:start":
-      dispatch(addTypingUser(event.payload.userId));
+      typingHandler.handleTypingStart(dispatch, event.payload.userId);
       break;
 
     case "typing:stop":
-      dispatch(removeTypingUser(event.payload.userId));
+      typingHandler.handleTypingStop(dispatch, event.payload.userId);
       break;
 
     // Heartbeat

@@ -12,12 +12,20 @@ import type { Attachment, AttachmentGroup, KnowledgeBase } from "../slices/knowl
 import type { ClientConfig } from "../slices/configs.slice";
 
 // Base API slice with RTK Query
+// Performance optimizations:
+// - keepUnusedDataFor: 5 min cache retention
+// - refetchOnFocus: disabled to prevent unnecessary fetches
+// - refetchOnMountOrArgChange: only refetch if >60s old
 export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
     baseUrl: "/api/trpc",
     credentials: "include",
   }),
+  keepUnusedDataFor: 300, // 5 min cache retention
+  refetchOnReconnect: true,
+  refetchOnFocus: false, // Disable - causes unnecessary fetches
+  refetchOnMountOrArgChange: 60, // Only refetch if >60s old
   tagTypes: [
     "Session",
     "Message",

@@ -2,6 +2,30 @@ import withBundleAnalyzer from "@next/bundle-analyzer";
 import type { NextConfig } from "next";
 
 export const config: NextConfig = {
+  // React Compiler for automatic memoization (React 19+)
+  // Automatically memoizes components, reducing unnecessary re-renders
+  reactCompiler: true,
+
+  // Transpile workspace packages and ai package for proper resolution
+  transpilePackages: [
+    "@repo/ai",
+    "@repo/design-system",
+    "@repo/auth",
+    "@repo/database",
+    "@repo/observability",
+    "@repo/analytics",
+    "@repo/feature-flags",
+    "@repo/notifications",
+    "@repo/collaboration",
+    "@repo/security",
+    "@repo/seo",
+    "@repo/webhooks",
+    "ai",
+    "@ai-sdk/openai",
+    "@ai-sdk/anthropic",
+    "@ai-sdk/google",
+  ],
+
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [

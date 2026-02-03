@@ -2,18 +2,30 @@
 > api@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
 > concurrently "npm:next" "npm:stripe"
 
-[next] 
-[next] > next
-[next] > next dev -p 3002
-[next] 
-[stripe] 
-[stripe] > stripe
-[stripe] > stripe listen --forward-to localhost:3002/webhooks/payments
-[stripe] 
-[stripe] Checking for new versions...
-[stripe] 
-[stripe] A newer version of the Stripe CLI is available, please update to: v1.35.0
-[stripe] Getting ready...
-[stripe] Ready! You are using Stripe API Version [2020-08-27]. Your webhook signing secret is whsec_b3b8f174e2e83c39ae43349ecb04006c7eafa1fcc16ed6922b848a758d839a3e (^C to quit)
-[stripe] 
-[stripe] npm run stripe exited with code 0
+[0m[next][0m 
+[0m[next][0m > next
+[0m[next][0m > next dev -p 3002
+[0m[next][0m 
+[0m[stripe][0m 
+[0m[stripe][0m > stripe
+[0m[stripe][0m > stripe listen --forward-to localhost:3002/webhooks/payments
+[0m[stripe][0m 
+[0m[stripe][0m Checking for new versions...
+[0m[stripe][0m 
+[0m[stripe][0m A newer version of the Stripe CLI is available, please update to: v1.35.0
+[0m[stripe][0m Getting ready...
+[0m[stripe][0m Ready! You are using Stripe API Version [2020-08-27]. Your webhook signing secret is whsec_b3b8f174e2e83c39ae43349ecb04006c7eafa1fcc16ed6922b848a758d839a3e (^C to quit)
+[0m[next][0m [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[0m[next][0m [1m[38;2;173;127;168m▲ Next.js 16.1.5[39m[22m (Turbopack)
+[0m[next][0m - Local:         http://localhost:3002
+[0m[next][0m - Network:       http://192.168.0.198:3002
+[0m[next][0m - Environments: .env.local
+[0m[next][0m 
+[0m[next][0m [32m[1m✓[22m[39m Starting...
+[0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
+[0m[next][0m [33mwarn[0m - Sending logs to console
+[0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
+[0m[next][0m [33mwarn[0m - Sending logs to console
+[0m[next][0m [32m[1m✓[22m[39m Ready in 10.1s

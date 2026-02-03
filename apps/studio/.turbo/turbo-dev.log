@@ -2,29 +2,7 @@
 > studio@0.0.0 dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/studio
 > prisma studio --schema ../../packages/database/prisma/schema.prisma --port 3005
 
-Prisma schema loaded from ../../packages/database/prisma/schema.prisma
+[2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
 Prisma Studio is up on http://localhost:3005
-node:events:502
-      throw er; // Unhandled 'error' event
-      ^
-
-Error: listen EADDRINUSE: address already in use :::3005
-    at Server.setupListenHandle [as _listen2] (node:net:1937:16)
-    at listenInCluster (node:net:1994:12)
-    at Server.listen (node:net:2099:7)
-    at XI.start (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/prisma@6.18.0_typescript@5.9.3/node_modules/prisma/build/index.js:4823:14103)
-    at e.parse (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/prisma@6.18.0_typescript@5.9.3/node_modules/prisma/build/index.js:4862:1127)
-    at async e.parse (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/prisma@6.18.0_typescript@5.9.3/node_modules/prisma/build/index.js:4082:1867)
-    at async S4t (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/prisma@6.18.0_typescript@5.9.3/node_modules/prisma/build/index.js:4908:132)
-Emitted 'error' event on Server instance at:
-    at emitErrorNT (node:net:1973:8)
-    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
-  code: 'EADDRINUSE',
-  errno: -48,
-  syscall: 'listen',
-  address: '::',
-  port: 3005
-}
-
-Node.js v22.13.1
- ELIFECYCLE  Command failed with exit code 1.
+[2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
+[33mwarn[39m Preview feature "driverAdapters" is deprecated. The functionality can be used without specifying it as a preview feature.

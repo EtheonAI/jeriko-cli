@@ -64,9 +64,73 @@
       "types": "./lib/streaming.ts",
       "default": "./lib/streaming.ts"
     },
+    "./lib/transport": {
+      "types": "./lib/transport/index.ts",
+      "default": "./lib/transport/index.ts"
+    },
+    "./lib/server": {
+      "types": "./lib/server/index.ts",
+      "default": "./lib/server/index.ts"
+    },
+    "./lib/tools": {
+      "types": "./lib/tools/index.ts",
+      "default": "./lib/tools/index.ts"
+    },
+    "./hooks/use-realtime-chat": {
+      "types": "./hooks/use-realtime-chat.ts",
+      "default": "./hooks/use-realtime-chat.ts"
+    },
+    "./hooks/use-redux-chat": {
+      "types": "./hooks/use-redux-chat.ts",
+      "default": "./hooks/use-redux-chat.ts"
+    },
     "./tools/*": {
       "types": "./tools/*.ts",
       "default": "./tools/*.ts"
+    },
+    "./components": {
+      "types": "./components/index.ts",
+      "default": "./components/index.ts"
+    },
+    "./components/chat": {
+      "types": "./components/chat/index.ts",
+      "default": "./components/chat/index.ts"
+    },
+    "./components/parts": {
+      "types": "./components/parts/index.ts",
+      "default": "./components/parts/index.ts"
+    },
+    "./components/tools": {
+      "types": "./components/tools/index.ts",
+      "default": "./components/tools/index.ts"
+    },
+    "./components/agents": {
+      "types": "./components/agents/index.ts",
+      "default": "./components/agents/index.ts"
+    },
+    "./components/input": {
+      "types": "./components/input/index.ts",
+      "default": "./components/input/index.ts"
+    },
+    "./lib/agents": {
+      "types": "./lib/agents/index.ts",
+      "default": "./lib/agents/index.ts"
+    },
+    "./lib/orchestration": {
+      "types": "./lib/orchestration/index.ts",
+      "default": "./lib/orchestration/index.ts"
+    },
+    "./lib/middleware": {
+      "types": "./lib/middleware/index.ts",
+      "default": "./lib/middleware/index.ts"
+    },
+    "./lib/providers": {
+      "types": "./lib/providers/index.ts",
+      "default": "./lib/providers/index.ts"
+    },
+    "./lib/demo": {
+      "types": "./lib/demo/index.ts",
+      "default": "./lib/demo/index.ts"
     }
   },
   "scripts": {
@@ -76,6 +140,9 @@
   "dependencies": {
     "@repo/auth": "workspace:*",
     "@repo/design-system": "workspace:*",
+    "@tanstack/react-virtual": "^3.13.18",
+    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/google": "^1.2.20",
     "@ai-sdk/openai": "^2.0.77",
     "@ai-sdk/react": "^3.0.29",
     "@t3-oss/env-nextjs": "^0.13.8",

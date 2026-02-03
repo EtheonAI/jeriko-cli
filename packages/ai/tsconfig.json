@@ -4,5 +4,11 @@
     "baseUrl": "."
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "tools/create-document.ts",
+    "tools/request-suggestions.ts",
+    "tools/update-document.ts",
+    "lib/types/index.d.ts"
+  ]
 }

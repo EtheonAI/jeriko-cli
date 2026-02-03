@@ -49,6 +49,7 @@ import agentWorkspaceReducer from "./slices/agentWorkspace.slice";
 import webdevAuthReducer from "./slices/webdevAuth.slice";
 import aiCanvasEditorReducer from "./slices/aiCanvasEditor.slice";
 import bizReducer from "./slices/biz.slice";
+import chatPageReducer from "./slices/chatPage.slice";
 // Middleware
 import { websocketMiddleware } from "./middleware/websocket.middleware";
 
@@ -105,6 +106,7 @@ export const makeStore = () => {
       webdevAuth: webdevAuthReducer,
       aiCanvasEditor: aiCanvasEditorReducer,
       biz: bizReducer,
+      chatPage: chatPageReducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
@@ -179,6 +181,7 @@ export * from "./slices/agentWorkspace.slice";
 export * from "./slices/webdevAuth.slice";
 export * from "./slices/aiCanvasEditor.slice";
 export * from "./slices/biz.slice";
+export * from "./slices/chatPage.slice";
 
 // Re-export API hooks
 export * from "./api/api.slice";
