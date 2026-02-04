@@ -9,6 +9,7 @@ import { scheduledTasksRouter } from "./scheduledTasks.router";
 import { projectsRouter } from "./projects.router";
 import { knowledgeRouter } from "./knowledge.router";
 import { billingRouter } from "./billing.router";
+import { searchRouter } from "./search.router";
 
 /**
  * This is the primary router for your server.
@@ -21,6 +22,7 @@ export const appRouter = createTRPCRouter({
   messages: messagesRouter,
   agents: agentsRouter,
   files: filesRouter,
+  search: searchRouter,
   // Feature routers (Manus-style)
   connectors: connectorsRouter,
   notifications: notificationsRouter,

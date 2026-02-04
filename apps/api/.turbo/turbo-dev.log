@@ -2,14 +2,14 @@
 > api@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
 > concurrently "npm:next" "npm:stripe"
 
-[0m[next][0m 
-[0m[next][0m > next
-[0m[next][0m > next dev -p 3002
-[0m[next][0m 
 [0m[stripe][0m 
 [0m[stripe][0m > stripe
 [0m[stripe][0m > stripe listen --forward-to localhost:3002/webhooks/payments
 [0m[stripe][0m 
+[0m[next][0m 
+[0m[next][0m > next
+[0m[next][0m > next dev -p 3002
+[0m[next][0m 
 [0m[stripe][0m Checking for new versions...
 [0m[stripe][0m 
 [0m[stripe][0m A newer version of the Stripe CLI is available, please update to: v1.35.0
@@ -28,4 +28,4 @@
 [0m[next][0m [33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
 [0m[next][0m [33mwarn[0m - Sending Web Vitals to /dev/null
 [0m[next][0m [33mwarn[0m - Sending logs to console
-[0m[next][0m [32m[1m✓[22m[39m Ready in 10.1s
+[0m[next][0m [32m[1m✓[22m[39m Ready in 6.4s

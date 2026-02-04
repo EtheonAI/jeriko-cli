@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { db, agentSessions, eq, desc } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
+import { syncSessionToSearch, removeSessionFromSearch } from "@repo/search";
 
 export const sessionsRouter = createTRPCRouter({
   // List all sessions for the current user
@@ -51,6 +52,9 @@ export const sessionsRouter = createTRPCRouter({
         })
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncSessionToSearch(session).catch(() => {});
+
       return session;
     }),
 
@@ -84,6 +88,9 @@ export const sessionsRouter = createTRPCRouter({
         .where(eq(agentSessions.id, id))
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncSessionToSearch(session).catch(() => {});
+
       return session;
     }),
 
@@ -103,6 +110,9 @@ export const sessionsRouter = createTRPCRouter({
       }
 
       await db.delete(agentSessions).where(eq(agentSessions.id, input.id));
+
+      // Remove from search index (non-blocking)
+      removeSessionFromSearch(input.id).catch(() => {});
 
       return { success: true };
     }),

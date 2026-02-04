@@ -11,7 +11,8 @@
         "!.next/cache/**",
         "**/generated/**",
         "storybook-static/**",
-        ".react-email/**"
+        ".react-email/**",
+        "dist/**"
       ]
     },
     "test": {
@@ -23,6 +24,11 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "dev:services": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build"]
     },
     "translate": {
       "dependsOn": ["^translate"],

@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: rubic-typesense
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+    command: >
+      --data-dir=/data
+      --api-key=${TYPESENSE_API_KEY:-rubic-local-dev-key}
+      --enable-cors=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  typesense-data:
+    driver: local

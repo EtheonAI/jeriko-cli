@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { db, files, fileVersions, agentSessions, eq, desc } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
+import { syncFileToSearch, removeFileFromSearch } from "@repo/search";
 
 export const filesRouter = createTRPCRouter({
   // List files for the current user (optionally filtered by session)
@@ -106,6 +107,9 @@ export const filesRouter = createTRPCRouter({
         })
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncFileToSearch(file).catch(() => {});
+
       return file;
     }),
 
@@ -138,6 +142,9 @@ export const filesRouter = createTRPCRouter({
         .where(eq(files.id, id))
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncFileToSearch(file).catch(() => {});
+
       return file;
     }),
 
@@ -157,6 +164,9 @@ export const filesRouter = createTRPCRouter({
 
       // Delete the file (versions will cascade)
       await db.delete(files).where(eq(files.id, input.id));
+
+      // Remove from search index (non-blocking)
+      removeFileFromSearch(input.id).catch(() => {});
 
       // TODO: Delete actual file from storage
 

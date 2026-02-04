@@ -5,13 +5,11 @@ import { useSidebar } from "@repo/design-system/components/ui/sidebar";
 import { Kbd } from "@repo/design-system/components/ui/kbd";
 import { cn } from "@repo/design-system/lib/utils";
 import { SearchIcon } from "lucide-react";
+import { useSearch } from "@/lib/hooks/use-search";
 
-type SearchButtonProps = {
-  onSearch?: () => void;
-};
-
-export function SearchButton({ onSearch }: SearchButtonProps) {
+export function SearchButton() {
   const { open } = useSidebar();
+  const { open: openSearch } = useSearch();
 
   return (
     <Button
@@ -22,7 +20,7 @@ export function SearchButton({ onSearch }: SearchButtonProps) {
         "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40",
         !open && "w-9 justify-center px-0"
       )}
-      onClick={onSearch}
+      onClick={openSearch}
     >
       <SearchIcon className="h-4 w-4 shrink-0" />
       {open && (

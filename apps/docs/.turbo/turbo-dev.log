@@ -2,7 +2,7 @@
 > docs@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/docs
 > mintlify dev --port 3004
 
-(node:23519) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(node:66856) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 [?25l[?25l[1m[33mupdate available[39m[22m - run `[1mmintlify update[22m` to get the latest version
 

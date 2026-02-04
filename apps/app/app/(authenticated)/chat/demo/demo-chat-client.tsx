@@ -2,19 +2,12 @@
 
 import * as React from "react";
 import { useState, useCallback } from "react";
-import {
-  ChatContainer,
-  MessageList,
-  ChatComposer,
-  AgentDagPanel,
-  type ChatComposerRef,
-  type AgentData,
-} from "@repo/ai/components";
-import type { UIMessage, UIMessagePart, MessagePart } from "@repo/ai/lib/types";
+import { ChatComposer, type ChatComposerRef, MessageItem } from "@repo/ai/components";
+import type { UIMessage, MessagePart } from "@repo/ai/lib/types";
 import type { ChatAttachment } from "@repo/ai/components/input/chat-composer";
 import { ConnectionStatus } from "../[id]/components/connection-status";
 
-// Demo messages showcasing all features
+// Demo messages
 const DEMO_MESSAGES: UIMessage[] = [
   {
     id: "msg-0",
@@ -101,7 +94,7 @@ const DEMO_MESSAGES: UIMessage[] = [
   {
     id: "msg-1",
     role: "user",
-    parts: [{ type: "text", text: "Help me research the latest AI trends and create a summary report." }],
+    parts: [{ type: "text", text: "Help me research the latest AI trends." }],
     createdAt: new Date(Date.now() - 300000),
   },
   {
@@ -110,12 +103,12 @@ const DEMO_MESSAGES: UIMessage[] = [
     parts: [
       {
         type: "reasoning",
-        text: "The user wants me to research AI trends. I should:\n1. Search the web for recent AI news\n2. Analyze the findings\n3. Create a structured summary\n\nLet me start by searching for the latest AI developments...",
+        text: "The user wants me to research AI trends. I should search the web for recent AI news and analyze the findings.",
         state: "done",
       },
       {
         type: "text",
-        text: "I'll help you research the latest AI trends. Let me search for recent developments and compile a summary for you.",
+        text: "I'll help you research the latest AI trends. Let me search for recent developments.",
         state: "done",
       },
       {
@@ -133,15 +126,8 @@ const DEMO_MESSAGES: UIMessage[] = [
         },
       },
       {
-        type: "source-url",
-        sourceId: "src-1",
-        url: "https://example.com/ai-trends",
-        title: "AI Trends Report 2024",
-      },
-      { type: "step-start" },
-      {
         type: "text",
-        text: "Based on my research, here are the key AI trends:\n\n## 1. Advanced Reasoning Models\nNew models like GPT-5 and Gemini 2.0 show significant improvements in logical reasoning and multi-step problem solving.\n\n## 2. AI Agents\nAutonomous AI agents that can browse the web, write code, and complete complex tasks are becoming mainstream.\n\n## 3. Multimodal AI\nModels that can seamlessly work with text, images, video, and audio are now standard.",
+        text: "Based on my research, here are the key AI trends:\n\n## 1. Advanced Reasoning Models\nNew models show significant improvements in logical reasoning.\n\n## 2. AI Agents\nAutonomous AI agents are becoming mainstream.\n\n## 3. Multimodal AI\nModels that work with text, images, video, and audio are now standard.",
         state: "done",
       },
     ],
@@ -151,7 +137,7 @@ const DEMO_MESSAGES: UIMessage[] = [
   {
     id: "msg-3",
     role: "user",
-    parts: [{ type: "text", text: "Can you write some Python code to analyze sentiment in text?" }],
+    parts: [{ type: "text", text: "Can you write Python code to analyze sentiment?" }],
     createdAt: new Date(Date.now() - 180000),
   },
   {
@@ -160,7 +146,7 @@ const DEMO_MESSAGES: UIMessage[] = [
     parts: [
       {
         type: "text",
-        text: "I'll create a sentiment analysis script for you. Let me write the code:",
+        text: "I'll create a sentiment analysis script for you:",
         state: "done",
       },
       {
@@ -171,182 +157,42 @@ const DEMO_MESSAGES: UIMessage[] = [
         input: {
           language: "python",
           code: `from textblob import TextBlob
-import pandas as pd
 
 def analyze_sentiment(text):
-    """
-    Analyze the sentiment of given text.
-    Returns polarity (-1 to 1) and subjectivity (0 to 1).
-    """
     blob = TextBlob(text)
     return {
-        'text': text[:50] + '...' if len(text) > 50 else text,
-        'polarity': round(blob.sentiment.polarity, 3),
-        'subjectivity': round(blob.sentiment.subjectivity, 3),
-        'sentiment': 'positive' if blob.sentiment.polarity > 0
-                     else 'negative' if blob.sentiment.polarity < 0
-                     else 'neutral'
+        'polarity': blob.sentiment.polarity,
+        'sentiment': 'positive' if blob.sentiment.polarity > 0 else 'negative'
     }
 
-# Example usage
-sample_texts = [
-    "I absolutely love this product! It's amazing!",
-    "This is the worst experience I've ever had.",
-    "The weather today is okay, nothing special."
-]
-
-results = [analyze_sentiment(text) for text in sample_texts]
-df = pd.DataFrame(results)
-print(df.to_string(index=False))`,
+print(analyze_sentiment("I love this!"))`,
         },
         output: {
-          stdout: `                                              text  polarity  subjectivity sentiment
-    I absolutely love this product! It's amazi...     0.625         0.600  positive
-    This is the worst experience I've ever had.    -1.000         1.000  negative
-             The weather today is okay, nothing s...     0.500         1.000  positive`,
+          stdout: "{'polarity': 0.625, 'sentiment': 'positive'}",
           exitCode: 0,
         },
       },
       {
         type: "text",
-        text: "The code above uses TextBlob for sentiment analysis. It returns:\n- **Polarity**: -1 (negative) to 1 (positive)\n- **Subjectivity**: 0 (objective) to 1 (subjective)\n\nYou can install the required packages with: `pip install textblob pandas`",
+        text: "The code uses TextBlob for sentiment analysis. Polarity ranges from -1 (negative) to 1 (positive).",
         state: "done",
       },
     ],
     metadata: { model: "claude-3-opus" },
     createdAt: new Date(Date.now() - 120000),
   },
-  {
-    id: "msg-5",
-    role: "user",
-    parts: [{ type: "text", text: "Run a shell command to check the system info" }],
-    createdAt: new Date(Date.now() - 60000),
-  },
-  {
-    id: "msg-6",
-    role: "assistant",
-    parts: [
-      {
-        type: "text",
-        text: "I'll run a command to get your system information:",
-        state: "done",
-      },
-      {
-        type: "tool-shell_command",
-        toolCallId: "tc-3",
-        title: "Running system info command",
-        state: "approval-requested",
-        input: { command: "uname -a && df -h && free -m" },
-        approval: { id: "approval-1" },
-      },
-    ],
-    metadata: { model: "claude-3-opus" },
-    createdAt: new Date(Date.now() - 30000),
-  },
-  {
-    id: "msg-7",
-    role: "assistant",
-    parts: [
-      {
-        type: "text",
-        text: "Here's a file I found that might be relevant:",
-        state: "done",
-      },
-      {
-        type: "tool-file_read",
-        toolCallId: "tc-4",
-        title: "Reading configuration file",
-        state: "output-available",
-        input: { path: "/etc/config.json" },
-        output: {
-          content: `{
-  "app_name": "Rubic AI",
-  "version": "1.0.0",
-  "features": {
-    "multi_agent": true,
-    "streaming": true,
-    "tool_use": true
-  }
-}`,
-          mimeType: "application/json",
-        },
-      },
-    ],
-    metadata: { model: "claude-3-opus" },
-    createdAt: new Date(Date.now() - 15000),
-  },
 ];
 
-// Demo agents for DAG visualization
-const DEMO_AGENTS: AgentData[] = [
-  {
-    id: "agent-1",
-    type: "orchestrator" as const,
-    name: "Orchestrator",
-    status: "executing" as const,
-    currentTask: "Coordinating agents",
-    progress: 100,
-    tasks: [
-      { id: "t1", title: "Parse user request", description: "Analyze intent", status: "completed" as const },
-      { id: "t2", title: "Assign to agents", description: "Route to specialists", status: "completed" as const },
-      { id: "t3", title: "Aggregate results", description: "Combine outputs", status: "in_progress" as const },
-    ],
-  },
-  {
-    id: "agent-2",
-    type: "researcher" as const,
-    name: "Researcher",
-    status: "executing" as const,
-    currentTask: "Searching web",
-    progress: 75,
-    tasks: [
-      { id: "t4", title: "Web search", description: "Find relevant sources", status: "completed" as const },
-      { id: "t5", title: "Analyze content", description: "Extract key info", status: "in_progress" as const },
-      { id: "t6", title: "Summarize findings", description: "Create summary", status: "pending" as const },
-    ],
-  },
-  {
-    id: "agent-3",
-    type: "coder" as const,
-    name: "Coder",
-    status: "completed" as const,
-    currentTask: null,
-    progress: 100,
-    tasks: [
-      { id: "t7", title: "Write code", description: "Implement solution", status: "completed" as const },
-      { id: "t8", title: "Test code", description: "Verify functionality", status: "completed" as const },
-    ],
-  },
-  {
-    id: "agent-4",
-    type: "browser" as const,
-    name: "Browser",
-    status: "idle" as const,
-    currentTask: null,
-    progress: 0,
-    tasks: [],
-  },
-];
-
-/**
- * DemoChatClient - Demo chat page showcasing all UI components
- */
 export function DemoChatClient() {
   const composerRef = React.useRef<ChatComposerRef>(null);
   const [messages, setMessages] = useState<UIMessage[]>(DEMO_MESSAGES);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
 
-  // Handle send message (demo only - doesn't call API)
   const handleSendMessage = useCallback(
     (parts: MessagePart[], files?: ChatAttachment[]) => {
-      const textPart = parts.find((p) => p.type === "text") as
-        | { type: "text"; text: string }
-        | undefined;
-
+      const textPart = parts.find((p) => p.type === "text") as { type: "text"; text: string } | undefined;
       if (!textPart?.text.trim()) return;
 
-      // Add user message
       const userMessage: UIMessage = {
         id: `msg-${Date.now()}`,
         role: "user",
@@ -355,9 +201,8 @@ export function DemoChatClient() {
       };
 
       setMessages((prev) => [...prev, userMessage]);
-
-      // Simulate assistant response
       setIsStreaming(true);
+
       setTimeout(() => {
         const assistantMessage: UIMessage = {
           id: `msg-${Date.now() + 1}`,
@@ -365,132 +210,89 @@ export function DemoChatClient() {
           parts: [
             {
               type: "text",
-              text: `This is a demo response to: "${textPart.text}"\n\nIn a real implementation, this would connect to your AI backend and stream the response.`,
+              text: `Demo response to: "${textPart.text}"`,
               state: "done",
             },
           ],
-          metadata: { model: "demo-model" },
+          metadata: { model: "demo" },
           createdAt: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
         setIsStreaming(false);
-      }, 1500);
+      }, 1000);
     },
     []
   );
 
-  // Handle tool approval (demo)
-  const handleToolApproval = useCallback(
-    (toolCallId: string, approved: boolean, reason?: string) => {
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.role !== "assistant") return msg;
-          return {
-            ...msg,
-            parts: msg.parts.map((part) => {
-              if (
-                (part.type.startsWith("tool-") || part.type === "dynamic-tool") &&
-                "toolCallId" in part &&
-                part.toolCallId === toolCallId
-              ) {
-                return {
-                  ...part,
-                  state: approved ? "output-available" : "output-denied",
-                  output: approved
-                    ? {
-                        stdout: "Linux demo-host 5.15.0-generic #1 SMP x86_64 GNU/Linux\nFilesystem      Size  Used Avail Use% Mounted on\n/dev/sda1       100G   45G   55G  45% /",
-                        exitCode: 0,
-                      }
-                    : undefined,
-                  approval: { id: (part as any).approval?.id, approved, reason },
-                };
-              }
-              return part;
-            }),
-          };
-        })
-      );
-    },
-    []
-  );
-
-  // Handle message action
-  const handleMessageAction = useCallback(
-    (action: string, messageId: string) => {
-      console.log(`Action: ${action} on message: ${messageId}`);
-    },
-    []
-  );
-
-  // Handle agent select
-  const handleAgentSelect = useCallback((agentId: string) => {
-    setSelectedAgentId((prev) => (prev === agentId ? null : agentId));
+  const handleToolApproval = useCallback((toolCallId: string, approved: boolean) => {
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        parts: msg.parts.map((part) =>
+          "toolCallId" in part && part.toolCallId === toolCallId
+            ? { ...part, state: approved ? "output-available" : "output-denied" }
+            : part
+        ),
+      }))
+    );
   }, []);
 
-  return (
-    <ChatContainer
-      className="h-full"
-      header={
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-medium">Demo Chat</h1>
-            <ConnectionStatus isConnected={true} />
-            <span className="rounded bg-yellow-500/20 px-2 py-0.5 text-xs text-yellow-600">
-              Demo Mode
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Showcasing all UI components
-          </div>
-        </div>
-      }
-      footer={
-        <div className="p-4">
-          {/* Agent DAG */}
-          <div className="mb-4">
-            <AgentDagPanel
-              agents={DEMO_AGENTS}
-              selectedAgentId={selectedAgentId}
-              onAgentSelect={handleAgentSelect}
-              compact
-            />
-          </div>
+  const handleMessageAction = useCallback((action: string, messageId: string) => {
+    console.log(`Action: ${action} on ${messageId}`);
+  }, []);
 
-          {/* Composer */}
-          <div className="mx-auto max-w-3xl">
-            <ChatComposer
-              ref={composerRef}
-              onSubmit={handleSendMessage}
-              onCancel={() => setIsStreaming(false)}
-              isLoading={false}
-              isStreaming={isStreaming}
-              placeholder="Type a message (demo mode)..."
-            />
-          </div>
+  console.log("Rendering with", messages.length, "messages");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", width: "100%", backgroundColor: "var(--background)" }}>
+      {/* Header */}
+      <div style={{ borderBottom: "1px solid var(--border)", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <h1 style={{ fontSize: "16px", fontWeight: 600 }}>Demo Chat</h1>
+          <ConnectionStatus isConnected={true} />
+          <span style={{ background: "rgba(234, 179, 8, 0.2)", color: "#eab308", padding: "4px 12px", borderRadius: "9999px", fontSize: "12px" }}>
+            Demo Mode
+          </span>
         </div>
-      }
-    >
-      <div className="mx-auto max-w-3xl">
-        <MessageList
-          messages={messages}
-          isStreaming={isStreaming}
-          onMessageAction={handleMessageAction}
-          onToolApproval={handleToolApproval}
-          emptyState={
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-2xl">Demo</span>
-              </div>
-              <div>
-                <h2 className="text-lg font-medium">Demo Chat</h2>
-                <p className="text-sm text-muted-foreground">
-                  This showcases all UI components
-                </p>
-              </div>
-            </div>
-          }
-        />
+        <div style={{ fontSize: "14px", color: "var(--muted-foreground)" }}>
+          {messages.length} messages
+        </div>
       </div>
-    </ChatContainer>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+        <div style={{ maxWidth: "768px", margin: "0 auto", padding: "24px 16px" }}>
+          {messages.map((message) => (
+            <div key={message.id} style={{ marginBottom: "16px" }}>
+              <MessageItem
+                message={message}
+                onAction={handleMessageAction}
+                onToolApproval={handleToolApproval}
+              />
+            </div>
+          ))}
+          {isStreaming && (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", color: "var(--muted-foreground)", fontSize: "14px" }}>
+              <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s infinite" }} />
+              Typing...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ borderTop: "1px solid var(--border)", padding: "16px", flexShrink: 0 }}>
+        <div style={{ maxWidth: "768px", margin: "0 auto" }}>
+          <ChatComposer
+            ref={composerRef}
+            onSubmit={handleSendMessage}
+            onCancel={() => setIsStreaming(false)}
+            isLoading={false}
+            isStreaming={isStreaming}
+            placeholder="Type a message (demo mode)..."
+          />
+        </div>
+      </div>
+    </div>
   );
 }

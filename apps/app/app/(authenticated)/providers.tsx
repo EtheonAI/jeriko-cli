@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { StoreProvider } from "../providers";
 import { SocketProvider } from "@/lib/socket/provider";
+import { TRPCProvider } from "@/lib/trpc/provider";
 
 interface AuthenticatedProvidersProps {
   children: ReactNode;
@@ -15,7 +16,9 @@ interface AuthenticatedProvidersProps {
 export function AuthenticatedProviders({ children }: AuthenticatedProvidersProps) {
   return (
     <StoreProvider>
-      <SocketProvider>{children}</SocketProvider>
+      <TRPCProvider>
+        <SocketProvider>{children}</SocketProvider>
+      </TRPCProvider>
     </StoreProvider>
   );
 }

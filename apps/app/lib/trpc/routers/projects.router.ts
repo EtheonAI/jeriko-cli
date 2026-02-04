@@ -16,6 +16,7 @@ import {
 } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
+import { syncProjectToSearch, removeProjectFromSearch } from "@repo/search";
 
 export const projectsRouter = createTRPCRouter({
   // List projects
@@ -163,6 +164,9 @@ export const projectsRouter = createTRPCRouter({
         })
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncProjectToSearch(project).catch(() => {});
+
       return project;
     }),
 
@@ -222,6 +226,9 @@ export const projectsRouter = createTRPCRouter({
         .where(eq(projects.id, id))
         .returning();
 
+      // Sync to search index (non-blocking)
+      syncProjectToSearch(updated).catch(() => {});
+
       return updated;
     }),
 
@@ -247,6 +254,9 @@ export const projectsRouter = createTRPCRouter({
       }
 
       await db.delete(projects).where(eq(projects.id, input.id));
+
+      // Remove from search index (non-blocking)
+      removeProjectFromSearch(input.id).catch(() => {});
 
       return { success: true };
     }),
