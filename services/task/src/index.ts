@@ -7,7 +7,7 @@ import { inngestRoutes } from "./routes/inngest.js";
 const logger = createLogger({ service: "task" });
 
 async function main() {
-  const port = parseInt(getEnv("PORT", "3002"), 10);
+  const port = parseInt(getEnv("PORT", "4002"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
   const app = Fastify({

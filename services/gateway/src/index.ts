@@ -12,7 +12,7 @@ import { websocketRoutes } from "./routes/websocket.js";
 const logger = createLogger({ service: "gateway" });
 
 async function main() {
-  const port = parseInt(getEnv("PORT", "3001"), 10);
+  const port = parseInt(getEnv("PORT", "4001"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
   const app = Fastify({
@@ -56,7 +56,7 @@ async function main() {
   await app.register(websocketRoutes, { prefix: "/v1" });
 
   // Global error handler
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
     logger.error({ err: error, requestId: request.id }, "Request error");
 
     const statusCode = error.statusCode || 500;

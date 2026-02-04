@@ -8,7 +8,7 @@ import { databaseRoutes } from "./routes/database.js";
 const logger = createLogger({ service: "website" });
 
 async function main() {
-  const port = parseInt(getEnv("PORT", "3004"), 10);
+  const port = parseInt(getEnv("PORT", "4004"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
   const app = Fastify({

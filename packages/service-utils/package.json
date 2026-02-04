@@ -35,10 +35,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@paralleldrive/cuid2": "^2.2.2",
     "@repo/database": "workspace:*",
     "ioredis": "^5.4.1",
     "jose": "^6.0.8",
     "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

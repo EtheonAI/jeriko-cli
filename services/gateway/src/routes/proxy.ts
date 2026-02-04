@@ -10,19 +10,19 @@ interface ServiceConfig {
 }
 
 const services: Record<string, ServiceConfig> = {
-  tasks: { url: process.env.TASK_SERVICE_URL || "http://localhost:3002" },
+  tasks: { url: process.env.TASK_SERVICE_URL || "http://localhost:4002" },
   agents: { url: process.env.AGENT_SERVICE_URL || "http://localhost:8000" },
   devices: { url: process.env.DEVICE_SERVICE_URL || "http://localhost:8080" },
-  files: { url: process.env.FILE_SERVICE_URL || "http://localhost:3003" },
-  websites: { url: process.env.WEBSITE_SERVICE_URL || "http://localhost:3004" },
-  billing: { url: process.env.BILLING_SERVICE_URL || "http://localhost:3005" },
-  notifications: { url: process.env.NOTIFICATION_SERVICE_URL || "http://localhost:3006" },
-  webhooks: { url: process.env.WEBHOOK_SERVICE_URL || "http://localhost:3007" },
-  connectors: { url: process.env.CONNECTOR_SERVICE_URL || "http://localhost:3008" },
-  search: { url: process.env.SEARCH_SERVICE_URL || "http://localhost:3009" },
-  projects: { url: process.env.PROJECT_SERVICE_URL || "http://localhost:3010" },
-  knowledge: { url: process.env.KNOWLEDGE_SERVICE_URL || "http://localhost:8001" },
-  sandbox: { url: process.env.SANDBOX_SERVICE_URL || "http://localhost:8081" },
+  files: { url: process.env.FILE_SERVICE_URL || "http://localhost:4005" },
+  websites: { url: process.env.WEBSITE_SERVICE_URL || "http://localhost:4004" },
+  billing: { url: process.env.BILLING_SERVICE_URL || "http://localhost:4008" },
+  notifications: { url: process.env.NOTIFICATION_SERVICE_URL || "http://localhost:4006" },
+  webhooks: { url: process.env.WEBHOOK_SERVICE_URL || "http://localhost:4007" },
+  connectors: { url: process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009" },
+  search: { url: process.env.SEARCH_SERVICE_URL || "http://localhost:4013" },
+  projects: { url: process.env.PROJECT_SERVICE_URL || "http://localhost:4010" },
+  knowledge: { url: process.env.KNOWLEDGE_SERVICE_URL || "http://localhost:4011" },
+  sandbox: { url: process.env.SANDBOX_SERVICE_URL || "http://localhost:4012" },
 };
 
 async function proxyRequest(
@@ -65,7 +65,29 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
 
-    // Require auth for all service requests
+    // Allow unauthenticated health checks
+    if (path === "health") {
+      try {
+        const result = await proxyRequest(
+          serviceConfig.url,
+          "/health",
+          "GET",
+          { "x-request-id": request.id },
+          undefined,
+          5000
+        );
+        return reply.status(result.status).send(result.data);
+      } catch {
+        return reply.status(503).send(
+          errorResponse(
+            { code: "SERVICE_UNAVAILABLE", message: `Service '${service}' is unavailable` },
+            request.id
+          )
+        );
+      }
+    }
+
+    // Require auth for all other service requests
     const auth = requireAuth(request);
 
     // Build headers for downstream service

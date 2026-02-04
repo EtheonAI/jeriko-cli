@@ -10,7 +10,7 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "dev:services": "turbo dev:services",
+    "dev:services": "turbo dev:services --filter='./services/*' --concurrency=15",
     "services:up": "docker compose -f docker-compose.services.yml up -d postgres redis",
     "services:down": "docker compose -f docker-compose.services.yml down",
     "services:logs": "docker compose -f docker-compose.services.yml logs -f",

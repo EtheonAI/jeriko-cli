@@ -14,5 +14,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ["@repo/database"],
+  external: ["@repo/database", "ioredis", "pino", "jose", "zod", "@paralleldrive/cuid2"],
 });
