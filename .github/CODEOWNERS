@@ -1,0 +1,37 @@
+# Default owners for everything in the repo
+* @etheon/core-team
+
+# Infrastructure
+/.github/ @etheon/devops
+/docker-compose*.yml @etheon/devops
+/**/Dockerfile @etheon/devops
+
+# Services
+/services/gateway/ @etheon/backend
+/services/task/ @etheon/backend
+/services/billing/ @etheon/backend @etheon/billing-team
+/services/notification/ @etheon/backend
+/services/webhook/ @etheon/backend
+/services/connector/ @etheon/integrations
+/services/project/ @etheon/backend
+/services/knowledge/ @etheon/ai-team
+/services/sandbox/ @etheon/backend
+/services/search/ @etheon/backend
+/services/file/ @etheon/backend
+/services/website/ @etheon/backend
+
+# Packages
+/packages/database/ @etheon/backend
+/packages/service-utils/ @etheon/backend
+/packages/design-system/ @etheon/frontend
+
+# Apps
+/apps/app/ @etheon/frontend
+/apps/web/ @etheon/frontend
+/apps/api/ @etheon/backend
+/apps/docs/ @etheon/docs
+
+# Security-sensitive files
+/.github/SECURITY.md @etheon/security
+/packages/service-utils/src/auth/ @etheon/security
+/packages/service-utils/src/security/ @etheon/security

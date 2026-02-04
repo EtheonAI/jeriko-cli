@@ -40,6 +40,12 @@ export function TRPCProvider({ children }: TRPCProviderProps) {
         httpBatchLink({
           url: `${getBaseUrl()}/api/trpc`,
           transformer: superjson,
+          fetch(url, options) {
+            return fetch(url, {
+              ...options,
+              credentials: "include",
+            });
+          },
           headers: () => {
             const headers = new Headers();
             headers.set("x-trpc-source", "client");

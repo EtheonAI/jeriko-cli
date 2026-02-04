@@ -4,8 +4,17 @@ import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { useSettings, type SettingsTab } from "./settings-context";
 import { AccountTab } from "./tabs/account-tab";
 import { BillingTab } from "./tabs/billing-tab";
+import { ConnectorsTab } from "./tabs/connectors-tab";
+import { DataControlsTab } from "./tabs/data-controls-tab";
+import { DevicesTab } from "./tabs/devices-tab";
+import { HelpTab } from "./tabs/help-tab";
+import { IntegrationsTab } from "./tabs/integrations-tab";
+import { MailManusTab } from "./tabs/mail-manus-tab";
+import { PersonalizationTab } from "./tabs/personalization-tab";
 import { PlaceholderTab } from "./tabs/placeholder-tab";
+import { ScheduledTasksTab } from "./tabs/scheduled-tasks-tab";
 import { SettingsTab as SettingsTabComponent } from "./tabs/settings-tab";
+import { SkillsTab } from "./tabs/skills-tab";
 import { UsageTab } from "./tabs/usage-tab";
 
 type SettingsContentProps = {
@@ -29,6 +38,11 @@ const tabConfig: Record<
     title: "Scheduled Tasks",
     description: "Automate your recurring tasks",
   },
+  devices: {
+    title: "Devices",
+    description: "Manage your connected devices",
+  },
+  connectors: { title: "Connectors", description: "Connect third-party services" },
   mail: { title: "Mail Manus", description: "Configure email integration" },
   "data-controls": {
     title: "Data Controls",
@@ -39,10 +53,9 @@ const tabConfig: Record<
     description: "Customize your theme and preferences",
   },
   skills: { title: "Skills", description: "Configure AI capabilities" },
-  connectors: { title: "Connectors", description: "Manage API connections" },
   integrations: {
     title: "Integrations",
-    description: "Connect third-party applications",
+    description: "Webhooks and API connections",
   },
   help: { title: "Get Help", description: "Documentation and support" },
 };
@@ -60,13 +73,34 @@ export function SettingsContent({ user, isPro = false }: SettingsContentProps) {
         return <UsageTab isPro={isPro} />;
       case "billing":
         return <BillingTab isPro={isPro} />;
-      default:
+      case "scheduled-tasks":
+        return <ScheduledTasksTab />;
+      case "devices":
+        return <DevicesTab />;
+      case "connectors":
+        return <ConnectorsTab />;
+      case "mail":
+        return <MailManusTab />;
+      case "data-controls":
+        return <DataControlsTab />;
+      case "personalization":
+        return <PersonalizationTab />;
+      case "skills":
+        return <SkillsTab />;
+      case "integrations":
+        return <IntegrationsTab />;
+      case "help":
+        return <HelpTab />;
+      default: {
+        // This default case handles any future tabs not yet implemented
+        const tab = activeTab as keyof typeof tabConfig;
         return (
           <PlaceholderTab
-            title={tabConfig[activeTab].title}
-            description={tabConfig[activeTab].description}
+            title={tabConfig[tab]?.title || "Coming Soon"}
+            description={tabConfig[tab]?.description}
           />
         );
+      }
     }
   };
 

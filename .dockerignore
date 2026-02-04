@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+.next
+**/.next
+.turbo
+**/.turbo
+
+# Development files
+*.log
+*.md
+!README.md
+.env*
+!.env.example
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/coverage
+**/__tests__
+
+# Documentation
+docs
+*.md
+
+# Config files not needed in production
+.editorconfig
+.eslintrc*
+.prettierrc*
+commitlint.config.js
+.husky
+.lintstagedrc*
+vitest.config.ts
+tsconfig*.json
+turbo.json
+
+# Storybook
+.storybook
+storybook-static

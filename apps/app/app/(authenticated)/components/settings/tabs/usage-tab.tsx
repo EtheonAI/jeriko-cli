@@ -5,40 +5,104 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
 import { Progress } from "@repo/design-system/components/ui/progress";
 import { Separator } from "@repo/design-system/components/ui/separator";
-import { CrownIcon, SparklesIcon, TrendingUpIcon } from "lucide-react";
+import { Skeleton } from "@repo/design-system/components/ui/skeleton";
+import { CrownIcon, SparklesIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
+import { trpc } from "@/lib/trpc/client";
+import { useSettings } from "../settings-context";
+import { format } from "date-fns";
+import { ErrorState } from "./error-state";
 
 type UsageTabProps = {
   isPro?: boolean;
-  credits?: {
-    total: number;
-    used: number;
-    free: number;
-    monthly: number;
-    dailyRefresh: number;
-    dailyRefreshMax: number;
-  };
 };
 
-const defaultCredits = {
-  total: 600,
-  used: 234,
-  free: 100,
-  monthly: 500,
-  dailyRefresh: 300,
-  dailyRefreshMax: 300,
-};
+export function UsageTab({ isPro = false }: UsageTabProps) {
+  const { setActiveTab } = useSettings();
 
-const usageHistory = [
-  { date: "Today", tasks: 12, credits: 45 },
-  { date: "Yesterday", tasks: 8, credits: 32 },
-  { date: "Dec 28", tasks: 15, credits: 58 },
-  { date: "Dec 27", tasks: 6, credits: 24 },
-  { date: "Dec 26", tasks: 10, credits: 41 },
-];
+  // Fetch credit balance
+  const { data: creditBalance, isLoading: isLoadingBalance, isError: isBalanceError, refetch: refetchBalance } = trpc.billing.getCreditBalance.useQuery(undefined, { retry: 1 });
 
-export function UsageTab({ isPro = false, credits = defaultCredits }: UsageTabProps) {
-  const remaining = credits.total - credits.used;
-  const usagePercent = (credits.used / credits.total) * 100;
+  // Fetch subscription info
+  const { data: subscription, isLoading: isLoadingSubscription, isError: isSubscriptionError, refetch: refetchSubscription } = trpc.billing.getSubscription.useQuery(undefined, { retry: 1 });
+
+  // Fetch usage summary
+  const { data: usageSummary, isLoading: isLoadingSummary, isError: isSummaryError, refetch: refetchSummary } = trpc.billing.getUsageSummary.useQuery(undefined, { retry: 1 });
+
+  // Fetch recent usage records
+  const { data: usageRecords, isLoading: isLoadingRecords } = trpc.billing.getUsageRecords.useQuery({
+    limit: 10,
+  }, { retry: 1 });
+
+  const isLoading = isLoadingBalance || isLoadingSubscription || isLoadingSummary || isLoadingRecords;
+  const isError = isBalanceError || isSubscriptionError || isSummaryError;
+
+  // Calculate totals
+  const totalCredits = creditBalance?.balance || 0;
+  const periodCredits = creditBalance?.periodCredits || 0;
+  const periodUsed = creditBalance?.periodCreditsUsed || 0;
+  const purchasedCredits = creditBalance?.purchasedCredits || 0;
+
+  const usagePercent = periodCredits > 0 ? (periodUsed / periodCredits) * 100 : 0;
+  const isSubscribed = subscription !== null;
+  const planName = subscription?.plan?.name || "Free";
+
+  // Group usage by date for display
+  const groupedUsage = usageRecords?.reduce((acc, record) => {
+    const date = format(new Date(record.createdAt), "MMM d");
+    if (!acc[date]) {
+      acc[date] = { tasks: 0, credits: 0 };
+    }
+    acc[date].tasks += 1;
+    acc[date].credits += record.credits;
+    return acc;
+  }, {} as Record<string, { tasks: number; credits: number }>) || {};
+
+  const usageHistory = Object.entries(groupedUsage)
+    .slice(0, 5)
+    .map(([date, data]) => ({ date, ...data }));
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Usage</h2>
+          <p className="text-sm text-muted-foreground">
+            Monitor your credit usage and history.
+          </p>
+        </div>
+        <Separator />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
+        <Separator />
+        <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Usage</h2>
+          <p className="text-sm text-muted-foreground">
+            Monitor your credit usage and history.
+          </p>
+        </div>
+        <Separator />
+        <ErrorState
+          title="Failed to load usage data"
+          message="Unable to load your usage information. Please try again."
+          onRetry={() => {
+            refetchBalance();
+            refetchSubscription();
+            refetchSummary();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -58,33 +122,46 @@ export function UsageTab({ isPro = false, credits = defaultCredits }: UsageTabPr
             <SparklesIcon className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{remaining.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{totalCredits.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {credits.used.toLocaleString()} used of {credits.total.toLocaleString()}
+              {periodUsed.toLocaleString()} used of {periodCredits.toLocaleString()} this period
             </p>
             <Progress value={usagePercent} className="mt-2 h-2" />
+            {usagePercent > 80 && (
+              <div className="flex items-center gap-1 mt-2 text-xs text-amber-600">
+                <AlertCircleIcon className="h-3 w-3" />
+                Running low on credits
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Plan</CardTitle>
-            <CrownIcon className={`h-4 w-4 ${isPro ? "text-amber-500" : "text-muted-foreground"}`} />
+            <CrownIcon className={`h-4 w-4 ${isSubscribed ? "text-amber-500" : "text-muted-foreground"}`} />
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold">{isPro ? "Pro" : "Free"}</span>
-              {isPro && (
+              <span className="text-2xl font-bold">{planName}</span>
+              {isSubscribed && (
                 <Badge variant="secondary" className="text-xs">
                   Active
                 </Badge>
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {isPro ? "Unlimited access to all features" : "Limited to basic features"}
+              {isSubscribed
+                ? `Renews ${subscription?.subscription?.currentPeriodEnd ? format(new Date(subscription.subscription.currentPeriodEnd), "MMM d, yyyy") : "soon"}`
+                : "Limited to basic features"
+              }
             </p>
-            {!isPro && (
-              <Button size="sm" className="mt-2">
+            {!isSubscribed && (
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => setActiveTab("billing")}
+              >
                 Upgrade to Pro
               </Button>
             )}
@@ -99,29 +176,50 @@ export function UsageTab({ isPro = false, credits = defaultCredits }: UsageTabPr
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-lg border p-4">
-            <div className="text-sm text-muted-foreground">Free credits</div>
-            <div className="text-xl font-semibold">{credits.free.toLocaleString()}</div>
+            <div className="text-sm text-muted-foreground">Period Credits</div>
+            <div className="text-xl font-semibold">{periodCredits.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Monthly allocation
+            </p>
           </div>
 
-          {isPro && (
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">Monthly credits</div>
-              <div className="text-xl font-semibold">{credits.monthly.toLocaleString()}</div>
-            </div>
-          )}
-
           <div className="rounded-lg border p-4">
-            <div className="text-sm text-muted-foreground">Daily refresh</div>
-            <div className="text-xl font-semibold">
-              {credits.dailyRefresh}/{credits.dailyRefreshMax}
-            </div>
+            <div className="text-sm text-muted-foreground">Period Used</div>
+            <div className="text-xl font-semibold">{periodUsed.toLocaleString()}</div>
             <Progress
-              value={(credits.dailyRefresh / credits.dailyRefreshMax) * 100}
+              value={usagePercent}
               className="mt-2 h-1"
             />
           </div>
+
+          <div className="rounded-lg border p-4">
+            <div className="text-sm text-muted-foreground">Purchased Credits</div>
+            <div className="text-xl font-semibold">{purchasedCredits.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Never expire
+            </p>
+          </div>
         </div>
       </div>
+
+      {usageSummary && usageSummary.byType && Object.keys(usageSummary.byType).length > 0 && (
+        <>
+          <Separator />
+
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Usage by Type</h3>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              {Object.entries(usageSummary.byType).map(([type, credits]) => (
+                <div key={type} className="rounded-lg border p-4">
+                  <div className="text-sm text-muted-foreground capitalize">{type}</div>
+                  <div className="text-xl font-semibold">{(credits as number).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <Separator />
 
@@ -131,26 +229,55 @@ export function UsageTab({ isPro = false, credits = defaultCredits }: UsageTabPr
           <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
         </div>
 
-        <div className="rounded-lg border">
-          <div className="grid grid-cols-3 gap-4 border-b p-3 text-sm font-medium text-muted-foreground">
-            <div>Date</div>
-            <div>Tasks</div>
-            <div>Credits</div>
-          </div>
-          {usageHistory.map((item, index) => (
-            <div
-              key={item.date}
-              className={`grid grid-cols-3 gap-4 p-3 text-sm ${
-                index !== usageHistory.length - 1 ? "border-b" : ""
-              }`}
-            >
-              <div>{item.date}</div>
-              <div>{item.tasks}</div>
-              <div>{item.credits}</div>
+        {usageHistory.length > 0 ? (
+          <div className="rounded-lg border">
+            <div className="grid grid-cols-3 gap-4 border-b p-3 text-sm font-medium text-muted-foreground">
+              <div>Date</div>
+              <div>Tasks</div>
+              <div>Credits</div>
             </div>
-          ))}
-        </div>
+            {usageHistory.map((item, index) => (
+              <div
+                key={item.date}
+                className={`grid grid-cols-3 gap-4 p-3 text-sm ${
+                  index !== usageHistory.length - 1 ? "border-b" : ""
+                }`}
+              >
+                <div>{item.date}</div>
+                <div>{item.tasks}</div>
+                <div>{item.credits}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              No usage recorded yet. Start using Rubic to see your usage history.
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Auto top-up settings */}
+      {creditBalance?.autoTopupEnabled && (
+        <>
+          <Separator />
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Auto Top-up</h3>
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Auto top-up enabled</p>
+                  <p className="text-xs text-muted-foreground">
+                    Credits will be purchased automatically when balance falls below {"autoTopupThreshold" in creditBalance ? creditBalance.autoTopupThreshold || 100 : 100}
+                  </p>
+                </div>
+                <Badge variant="secondary">Active</Badge>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

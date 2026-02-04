@@ -27,12 +27,55 @@
     "./auth": {
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.js"
+    },
+    "./validation": {
+      "types": "./dist/validation/index.d.ts",
+      "import": "./dist/validation/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors/index.d.ts",
+      "import": "./dist/errors/index.js"
+    },
+    "./metrics": {
+      "types": "./dist/metrics/index.d.ts",
+      "import": "./dist/metrics/index.js"
+    },
+    "./security": {
+      "types": "./dist/security/index.d.ts",
+      "import": "./dist/security/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "import": "./dist/health/index.js"
+    },
+    "./swagger": {
+      "types": "./dist/swagger/index.d.ts",
+      "import": "./dist/swagger/index.js"
+    },
+    "./compression": {
+      "types": "./dist/compression/index.d.ts",
+      "import": "./dist/compression/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./rate-limit": {
+      "types": "./dist/rate-limit/index.d.ts",
+      "import": "./dist/rate-limit/index.js"
+    },
+    "./cors": {
+      "types": "./dist/cors/index.d.ts",
+      "import": "./dist/cors/index.js"
     }
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
@@ -46,7 +89,10 @@
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.13.4",
+    "@vitest/coverage-v8": "^4.0.3",
+    "fastify": "^5.2.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.3"
   }
 }

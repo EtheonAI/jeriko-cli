@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Label } from "@repo/design-system/components/ui/label";
 import {
   Select,
@@ -10,9 +11,13 @@ import {
 } from "@repo/design-system/components/ui/select";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Switch } from "@repo/design-system/components/ui/switch";
+import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { useTheme } from "next-themes";
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { MonitorIcon, MoonIcon, SunIcon, Loader2Icon } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
+import { trpc } from "@/lib/trpc/client";
+import { toast } from "sonner";
+import { ErrorState } from "./error-state";
 
 const languages = [
   { value: "en", label: "English" },
@@ -32,6 +37,117 @@ const themes = [
 
 export function SettingsTab() {
   const { theme, setTheme } = useTheme();
+  const [language, setLanguage] = useState("en");
+
+  // Fetch notification preferences
+  const { data: preferences, isLoading, isError, error, refetch } = trpc.notifications.getPreferences.useQuery(
+    undefined,
+    {
+      retry: 1,
+      retryDelay: 1000,
+    }
+  );
+
+  // Update preferences mutation
+  const utils = trpc.useUtils();
+  const updatePreferences = trpc.notifications.updatePreferences.useMutation({
+    onSuccess: () => {
+      utils.notifications.getPreferences.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update preferences");
+    },
+  });
+
+  // Local state for switches (optimistic updates)
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [inAppEnabled, setInAppEnabled] = useState(true);
+  const [inAppSound, setInAppSound] = useState(true);
+
+  // Sync local state with server data
+  useEffect(() => {
+    if (preferences) {
+      setEmailEnabled(preferences.emailEnabled ?? true);
+      setPushEnabled(preferences.pushEnabled ?? true);
+      setInAppEnabled(preferences.inAppEnabled ?? true);
+      setInAppSound(preferences.inAppSound ?? true);
+    }
+  }, [preferences]);
+
+  const handleToggle = (
+    field: "emailEnabled" | "pushEnabled" | "inAppEnabled" | "inAppSound",
+    value: boolean,
+    setState: (value: boolean) => void
+  ) => {
+    // Optimistic update
+    setState(value);
+
+    // Update server
+    updatePreferences.mutate(
+      { [field]: value },
+      {
+        onError: () => {
+          // Revert on error
+          setState(!value);
+        },
+      }
+    );
+  };
+
+  const handleLanguageChange = (value: string) => {
+    setLanguage(value);
+    // Store language preference in localStorage for now
+    // In production, this should be stored in the database
+    localStorage.setItem("preferred-language", value);
+    toast.success("Language preference saved");
+  };
+
+  // Load language from localStorage on mount
+  useEffect(() => {
+    const savedLanguage = localStorage.getItem("preferred-language");
+    if (savedLanguage) {
+      setLanguage(savedLanguage);
+    }
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Settings</h2>
+          <p className="text-sm text-muted-foreground">
+            Customize your experience and preferences.
+          </p>
+        </div>
+        <Separator />
+        <Skeleton className="h-20" />
+        <Separator />
+        <Skeleton className="h-32" />
+        <Separator />
+        <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Settings</h2>
+          <p className="text-sm text-muted-foreground">
+            Customize your experience and preferences.
+          </p>
+        </div>
+        <Separator />
+        <ErrorState
+          title="Failed to load preferences"
+          message={error?.message || "Unable to load your notification preferences. Please try again."}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -50,7 +166,7 @@ export function SettingsTab() {
           Select your preferred language for the interface.
         </p>
 
-        <Select defaultValue="en">
+        <Select value={language} onValueChange={handleLanguageChange}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Select language" />
           </SelectTrigger>
@@ -107,7 +223,7 @@ export function SettingsTab() {
       <Separator />
 
       <div className="space-y-4">
-        <h3 className="text-sm font-medium">Communication</h3>
+        <h3 className="text-sm font-medium">Notifications</h3>
         <p className="text-sm text-muted-foreground">
           Manage your notification and communication preferences.
         </p>
@@ -120,7 +236,18 @@ export function SettingsTab() {
                 Receive email updates about your tasks
               </p>
             </div>
-            <Switch id="email-notifications" defaultChecked />
+            <div className="flex items-center gap-2">
+              {updatePreferences.isPending && (
+                <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Switch
+                id="email-notifications"
+                checked={emailEnabled}
+                onCheckedChange={(checked) =>
+                  handleToggle("emailEnabled", checked, setEmailEnabled)
+                }
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
@@ -130,19 +257,91 @@ export function SettingsTab() {
                 Get notified in your browser
               </p>
             </div>
-            <Switch id="push-notifications" defaultChecked />
+            <div className="flex items-center gap-2">
+              {updatePreferences.isPending && (
+                <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Switch
+                id="push-notifications"
+                checked={pushEnabled}
+                onCheckedChange={(checked) =>
+                  handleToggle("pushEnabled", checked, setPushEnabled)
+                }
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="marketing">Marketing emails</Label>
+              <Label htmlFor="in-app-notifications">In-app notifications</Label>
               <p className="text-xs text-muted-foreground">
-                Receive updates about new features and promotions
+                Show notifications within the app
               </p>
             </div>
-            <Switch id="marketing" />
+            <div className="flex items-center gap-2">
+              {updatePreferences.isPending && (
+                <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Switch
+                id="in-app-notifications"
+                checked={inAppEnabled}
+                onCheckedChange={(checked) =>
+                  handleToggle("inAppEnabled", checked, setInAppEnabled)
+                }
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="notification-sound">Notification sound</Label>
+              <p className="text-xs text-muted-foreground">
+                Play a sound for new notifications
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {updatePreferences.isPending && (
+                <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Switch
+                id="notification-sound"
+                checked={inAppSound}
+                onCheckedChange={(checked) =>
+                  handleToggle("inAppSound", checked, setInAppSound)
+                }
+              />
+            </div>
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">Email Digest</h3>
+        <p className="text-sm text-muted-foreground">
+          How often would you like to receive email summaries?
+        </p>
+
+        <Select
+          defaultValue={preferences?.emailDigest || "daily"}
+          onValueChange={(value) => {
+            updatePreferences.mutate({
+              emailDigest: value as "instant" | "hourly" | "daily" | "weekly" | "never",
+            });
+          }}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Select frequency" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="instant">Instant</SelectItem>
+            <SelectItem value="hourly">Hourly</SelectItem>
+            <SelectItem value="daily">Daily</SelectItem>
+            <SelectItem value="weekly">Weekly</SelectItem>
+            <SelectItem value="never">Never</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

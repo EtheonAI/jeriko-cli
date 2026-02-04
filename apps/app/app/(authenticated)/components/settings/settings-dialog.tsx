@@ -25,19 +25,22 @@ export function SettingsDialog({ user, isPro = false }: SettingsDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeSettings()}>
       <DialogContent
-        className="max-w-4xl h-150 max-h-[95vh] p-0 gap-0 rounded-[20px] overflow-hidden"
+        className="max-w-4xl h-[600px] max-h-[90vh] p-0 gap-0 rounded-[20px] overflow-hidden"
         showCloseButton={true}
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <div className="flex h-full">
-          <div className="w-[221px] border-r bg-muted/30 shrink-0">
+          {/* Navigation Sidebar */}
+          <div className="w-[220px] border-r bg-muted/30 shrink-0 flex flex-col">
             <div className="p-4 pb-2">
               <h2 className="font-semibold text-lg">Settings</h2>
             </div>
-            <ScrollArea className="h-[calc(600px-60px)]">
+            <ScrollArea className="flex-1">
               <SettingsNav />
             </ScrollArea>
           </div>
+
+          {/* Content Area */}
           <div className="flex-1 overflow-hidden">
             <SettingsContent user={user} isPro={isPro} />
           </div>

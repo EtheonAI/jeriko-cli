@@ -1,10 +1,28 @@
 "use client";
 
+import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
 import { Separator } from "@repo/design-system/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@repo/design-system/components/ui/alert-dialog";
 import { UserAvatar } from "../../shared/user-avatar";
+import { trpc } from "@/lib/trpc/client";
+import { toast } from "sonner";
+import { Loader2Icon, CheckIcon, XIcon } from "lucide-react";
 
 type AccountTabProps = {
   user?: {
@@ -14,7 +32,125 @@ type AccountTabProps = {
   };
 };
 
+const profileSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+});
+
+const passwordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(1, "Please confirm your password"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type ProfileFormData = z.infer<typeof profileSchema>;
+type PasswordFormData = z.infer<typeof passwordSchema>;
+
 export function AccountTab({ user }: AccountTabProps) {
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // tRPC queries and mutations
+  const utils = trpc.useUtils();
+
+  const updateProfileMutation = trpc.user.updateProfile.useMutation({
+    onSuccess: () => {
+      toast.success("Profile updated successfully");
+      utils.user.getProfile.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update profile");
+    },
+  });
+
+  const changePasswordMutation = trpc.user.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password changed successfully");
+      passwordForm.reset();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to change password");
+    },
+  });
+
+  const deleteAccountMutation = trpc.user.deleteAccount.useMutation({
+    onSuccess: () => {
+      toast.success("Account deleted");
+      // Redirect to home or login page
+      window.location.href = "/";
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete account");
+      setIsDeleting(false);
+    },
+  });
+
+  // Profile form
+  const profileForm = useForm<ProfileFormData>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      name: user?.name || "",
+    },
+  });
+
+  // Password form
+  const passwordForm = useForm<PasswordFormData>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
+
+  const onProfileSubmit = (data: ProfileFormData) => {
+    updateProfileMutation.mutate({ name: data.name });
+  };
+
+  const onPasswordSubmit = (data: PasswordFormData) => {
+    changePasswordMutation.mutate({
+      currentPassword: data.currentPassword,
+      newPassword: data.newPassword,
+    });
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be less than 2MB");
+      return;
+    }
+
+    if (!["image/jpeg", "image/png", "image/gif"].includes(file.type)) {
+      toast.error("Only JPG, PNG, or GIF images are allowed");
+      return;
+    }
+
+    // Convert to base64 or upload to storage
+    // For now, we'll use a data URL (in production, upload to S3/R2)
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      updateProfileMutation.mutate({ image: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteAccount = () => {
+    if (deleteConfirmation !== "DELETE") {
+      toast.error("Please type DELETE to confirm");
+      return;
+    }
+    setIsDeleting(true);
+    deleteAccountMutation.mutate({ confirmation: "DELETE" });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -26,7 +162,8 @@ export function AccountTab({ user }: AccountTabProps) {
 
       <Separator />
 
-      <div className="space-y-4">
+      {/* Profile Section */}
+      <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
         <h3 className="text-sm font-medium">Profile</h3>
 
         <div className="flex items-center gap-4">
@@ -35,7 +172,23 @@ export function AccountTab({ user }: AccountTabProps) {
             size="lg"
           />
           <div className="space-y-1">
-            <Button variant="outline" size="sm">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={updateProfileMutation.isPending}
+            >
+              {updateProfileMutation.isPending ? (
+                <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
               Change avatar
             </Button>
             <p className="text-xs text-muted-foreground">
@@ -49,9 +202,14 @@ export function AccountTab({ user }: AccountTabProps) {
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
-              defaultValue={user?.name || ""}
+              {...profileForm.register("name")}
               placeholder="Enter your name"
             />
+            {profileForm.formState.errors.name && (
+              <p className="text-xs text-destructive">
+                {profileForm.formState.errors.name.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -67,12 +225,24 @@ export function AccountTab({ user }: AccountTabProps) {
               Email cannot be changed.
             </p>
           </div>
+
+          <Button
+            type="submit"
+            disabled={updateProfileMutation.isPending || !profileForm.formState.isDirty}
+            className="w-fit"
+          >
+            {updateProfileMutation.isPending ? (
+              <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Save changes
+          </Button>
         </div>
-      </div>
+      </form>
 
       <Separator />
 
-      <div className="space-y-4">
+      {/* Password Section */}
+      <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
         <h3 className="text-sm font-medium">Password</h3>
         <p className="text-sm text-muted-foreground">
           Update your password to keep your account secure.
@@ -84,8 +254,14 @@ export function AccountTab({ user }: AccountTabProps) {
             <Input
               id="current-password"
               type="password"
+              {...passwordForm.register("currentPassword")}
               placeholder="Enter current password"
             />
+            {passwordForm.formState.errors.currentPassword && (
+              <p className="text-xs text-destructive">
+                {passwordForm.formState.errors.currentPassword.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -93,8 +269,14 @@ export function AccountTab({ user }: AccountTabProps) {
             <Input
               id="new-password"
               type="password"
+              {...passwordForm.register("newPassword")}
               placeholder="Enter new password"
             />
+            {passwordForm.formState.errors.newPassword && (
+              <p className="text-xs text-destructive">
+                {passwordForm.formState.errors.newPassword.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -102,24 +284,81 @@ export function AccountTab({ user }: AccountTabProps) {
             <Input
               id="confirm-password"
               type="password"
+              {...passwordForm.register("confirmPassword")}
               placeholder="Confirm new password"
             />
+            {passwordForm.formState.errors.confirmPassword && (
+              <p className="text-xs text-destructive">
+                {passwordForm.formState.errors.confirmPassword.message}
+              </p>
+            )}
           </div>
 
-          <Button className="w-fit">Update password</Button>
+          <Button
+            type="submit"
+            className="w-fit"
+            disabled={changePasswordMutation.isPending}
+          >
+            {changePasswordMutation.isPending ? (
+              <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
+            Update password
+          </Button>
         </div>
-      </div>
+      </form>
 
       <Separator />
 
+      {/* Danger Zone */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-destructive">Danger zone</h3>
         <p className="text-sm text-muted-foreground">
           Permanently delete your account and all associated data.
         </p>
-        <Button variant="destructive" size="sm">
-          Delete account
-        </Button>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm">
+              Delete account
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete your
+                account and remove all your data from our servers.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <Label htmlFor="delete-confirm" className="text-sm">
+                Type <span className="font-mono font-bold">DELETE</span> to confirm
+              </Label>
+              <Input
+                id="delete-confirm"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                placeholder="DELETE"
+                className="mt-2"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteConfirmation("")}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmation !== "DELETE" || isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Delete account
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
