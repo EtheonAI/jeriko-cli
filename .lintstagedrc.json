@@ -1,5 +1,5 @@
 {
-  "*.{ts,tsx,js,jsx,mjs,cjs}": ["npx ultracite@latest check --"],
+  "*.{ts,tsx,js,jsx,mjs,cjs}": ["npx ultracite@latest check"],
   "*.{json,md,yml,yaml}": ["prettier --write"],
   "*.go": ["gofmt -w"]
 }
