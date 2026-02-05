@@ -1,247 +1,529 @@
-# Chat Page - Build Instructions
+# Chat System - Complete Build Instructions
 
 ## Current State
 
-The chat page has working AI streaming infrastructure. The key pieces are:
+### Working Infrastructure
 
-### Working Components
+1. **API Route** (`apps/app/app/api/chat/route.ts`, 51 lines) — Accepts POST with messages, calls `streamText()`, returns text stream. System prompt: "You are Rubic, a helpful AI assistant."
 
-1. **API Route** (`apps/app/app/api/chat/route.ts`, 51 lines)
+2. **Chat Page Client** (`apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx`, 327 lines) — Uses `useRealTimeChat` hook, integrates Redux, WebSocket room management, renders ChatContainer + MessageList + ChatComposer + AgentDagPanel.
 
-   - Accepts POST with `messages: UIMessage[]`
-   - Sanitizes messages via `sanitizeMessages()` from `@repo/ai`
-   - Converts to model messages via `aiConvertToModelMessages()`
-   - Calls `streamText()` with `models.chat` (configured in `packages/ai/lib/models.ts`)
-   - Returns `result.toTextStreamResponse()`
-   - System prompt: "You are Rubic, a helpful AI assistant."
+3. **Chat Slice** (`apps/app/lib/store/slices/chat.slice.ts`, 475 lines) — Full state: messages, streaming, taskMode, inputMode, files, dataVisualization, typingUsers.
 
-2. **Chat Page Client** (`apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx`, 327 lines)
+4. **WebSocket Provider** (`apps/app/lib/socket/provider.tsx`, 295 lines) — Handles message:new, message:stream, agent:created, agent:update, agent:task:new, session:new, file:new events.
 
-   - Uses `useRealTimeChat` hook from `@repo/ai/hooks`
-   - Integrates Redux via `useAppDispatch`/`useAppSelector` for state sync
-   - Uses `useSocket()` for WebSocket room join/leave per session
-   - Renders `ChatContainer`, `MessageList`, `ChatComposer`, `AgentDagPanel` from `@repo/ai/components`
-   - Handles file attachments (`LocalAttachment` with `File` reference)
-   - Handles tool approval via `addToolApprovalResponse()`
-   - Has sources panel sidebar (`./components/sources-panel.tsx`)
-   - Syncs messages back to Redux on `onFinish`
+5. **Messages Router** (`apps/app/lib/trpc/routers/messages.router.ts`, 103 lines) — list, send (has TODO for AI trigger), add.
 
-3. **Chat Slice** (`apps/app/lib/store/slices/chat.slice.ts`, 475 lines)
+6. **AI Components** (`packages/ai/components/`) — Chat container, message list, message items, streaming indicator, chat composer, agent DAG panel, tool card, tool registry, 10+ tool renderers.
 
-   - `ChatState` includes: `messages` (Record<sessionId, Message[]>), `isStreaming`, `taskMode` (standard/adaptive/agent), `inputMode` (text/voice), `files` (ChatFile[]), `chatExtData`, `dataVisualization`, `playbookInfo`, `imageStyleList`, `typingUsers`
-   - Reducers: `setMessages`, `addMessage`, `addMessages`, `updateMessage`, `appendToMessage`, `setStreaming`, file management (`addChatFile`, `updateChatFile`, `removeChatFile`), `setTaskMode`, `setInputMode`, `setDataVisualization`
+7. **Agent Service** (`services/agent/src/`, Python FastAPI) — Basic LLM streaming for Anthropic/OpenAI. **No tool loop, no conversation history, no tool execution.**
 
-4. **WebSocket Provider** (`apps/app/lib/socket/provider.tsx`, 295 lines)
+8. **Socket Events** (`apps/app/lib/socket/events.ts`, 168 lines) — Comprehensive event types for messages, agents, sessions, files, devices, notifications.
 
-   - Listens for: `message:new`, `message:update`, `message:stream`, `agent:created`, `agent:update`, `agent:task:new`, `agent:task:update`, `session:new`, `session:update`, `file:new`, `file:deleted`
-   - Dispatches to Redux slices: `chat.slice`, `agents.slice`, `sessions.slice`, `files.slice`
+### What's Broken / Missing
 
-5. **Messages Router** (`apps/app/lib/trpc/routers/messages.router.ts`, 103 lines)
-
-   - `list`: Fetches messages for a session (verifies ownership)
-   - `send`: Creates user message in DB (has TODO for AI trigger)
-   - `add`: Creates any role message (user/assistant/system/tool)
-
-6. **AI Package Components** (`packages/ai/components/`)
-   - Chat: `chat-container.tsx`, `message-list.tsx`, `message-item.tsx`, `assistant-message.tsx`, `user-message.tsx`, `streaming-indicator.tsx`, `scroll-to-bottom.tsx`
-   - Input: `chat-composer.tsx`, `input-actions.tsx`, `attachment-dropzone.tsx`
-   - Agents: `agent-dag-panel.tsx`, `agent-node.tsx`, `agent-connector.tsx`, `agent-status-badge.tsx`, `agent-task-list.tsx`
-   - Tools: `tool-card.tsx`, `tool-registry.tsx`, `tool-states.tsx`
-   - Tool Renderers: `code-block.tsx`, `terminal-output.tsx`, `file-preview.tsx`, `web-search.tsx`, `approval-card.tsx`, `progress-tracker.tsx`, `plan-tool.tsx`, `progress-tool.tsx`, `generic-tool.tsx`
-   - Parts: `text-part.tsx`, `reasoning-part.tsx`, `file-part.tsx`, `tool-part.tsx`, `source-part.tsx`
-
-### Database Schema
-
-Messages table at `packages/database/src/schema/sessions.ts`:
-
-- `messages` table: id, sessionId, role (user/assistant/system/tool), content, metadata (jsonb), createdAt
-- `agentSessions` table: id, userId, title, status, modelId, systemPrompt, etc.
+- Messages NOT persisted to DB (lost on refresh)
+- No credit deduction after responses
+- Agent service has no tool loop (can't use tools)
+- No E2B sandbox integration for code execution
+- No browser use integration
+- No document rendering (PDF, Word, Excel)
+- No progress/planning UI during task execution
+- No Rubic Computer sidebar panel
+- Toolbar actions are decorative
 
 ---
 
 ## What Needs Building
 
-### 1. Agent Orchestration Visualization (DAG View)
+### 1. Message Persistence (CRITICAL — P0)
 
-The `AgentDagPanel` component exists at `packages/ai/components/agents/agent-dag-panel.tsx` but needs real integration with the orchestration system.
+**Current:** Messages stream but are never saved to DB.
+**Target:** Every message (user + assistant) persisted in `messages` table.
 
-**Build:**
+**Implementation:**
 
-- Real-time DAG visualization showing agent hierarchy: Orchestrator -> Researcher, Coder, Browser agents
-- Each agent node shows: name, status (idle/thinking/working/complete/error), current task, progress percentage
-- Connections between nodes animate when data flows between agents
-- Clicking an agent node expands to show its task list and output
-- Wire to `agents.slice.ts` (`apps/app/lib/store/slices/agents.slice.ts`) which tracks agents per session
+In `chat-page-client.tsx`, in the `onFinish` callback:
 
-**Files to modify:**
+```typescript
+const addMessage = api.messages.add.useMutation();
 
-- `packages/ai/components/agents/agent-dag-panel.tsx` - Enhance with real data flow visualization
-- `packages/ai/components/agents/agent-node.tsx` - Add expanded state, task preview
-- `packages/ai/components/agents/agent-connector.tsx` - Animate data flow
-- `apps/app/lib/store/slices/agents.slice.ts` - Ensure all agent states tracked
+// After AI response completes:
+onFinish: async (message) => {
+  // Persist the assistant message
+  await addMessage.mutateAsync({
+    sessionId,
+    role: "assistant",
+    content: message.content,
+    metadata: {
+      model: selectedModel,
+      tokenCount: message.usage?.totalTokens,
+      toolCalls: message.toolCalls,
+    },
+  });
+},
+```
 
-### 2. Tool Call Rendering (Rich UI)
+On page load, fetch existing messages:
 
-Tool renderers exist at `packages/ai/components/tools/renderers/` but need completion and additional types.
-
-**Existing renderers to enhance:**
-
-- `code-block.tsx` - Add syntax highlighting via Shiki or Prism, copy button, language badge, line numbers
-- `terminal-output.tsx` - Add ANSI color support, scrollable output, collapsible long output
-- `file-preview.tsx` - Add image thumbnails, PDF preview, download button
-- `web-search.tsx` - Show search results with favicons, snippets, source links
-- `approval-card.tsx` - Tool approval/rejection with reason input
-- `progress-tracker.tsx` - Multi-step progress with status per step
-
-**New renderers to create in `packages/ai/components/tools/renderers/`:**
-
-- `data-table.tsx` - Render tabular data with sorting, filtering, pagination
-- `chart-renderer.tsx` - Render charts (bar, line, pie) via Recharts or Chart.js
-- `website-preview.tsx` - Sandboxed iframe preview of generated websites
-- `image-gallery.tsx` - Grid of generated/found images with lightbox
-- `file-card.tsx` - Card showing file metadata, type icon, quick actions
-- `diff-view.tsx` - Side-by-side or unified diff view for code changes
-- `map-view.tsx` - Render location data on a map (if relevant tool)
-
-**Register in** `packages/ai/components/tools/tool-registry.tsx`
-
-### 3. File Attachment Upload + Preview
-
-The `ChatComposer` at `packages/ai/components/input/chat-composer.tsx` accepts attachments. The `attachment-dropzone.tsx` exists.
-
-**Build:**
-
-- Drag-and-drop zone over entire chat area (not just input)
-- Upload progress indicator per file
-- Preview thumbnails: images inline, PDFs as icon+name, code files show first few lines
-- Paste images from clipboard
-- Size limit enforcement (show error for files > 100MB per `services/file/src/index.ts` limit config)
-- Wire upload to file service: `POST /upload` at `services/file/src/index.ts` (needs S3 implementation first)
-- After upload, attach file reference to message via `files.router.ts` `create` mutation
+```typescript
+const { data: existingMessages } = api.messages.list.useQuery({ sessionId });
+// Pass as initialMessages to useRealTimeChat
+```
 
 **Files to modify:**
 
-- `packages/ai/components/input/chat-composer.tsx`
-- `packages/ai/components/input/attachment-dropzone.tsx`
-- `apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx` - `handleFileSelect` callback
-- `apps/app/lib/store/slices/chat.slice.ts` - `ChatFile` type and `addChatFile`/`updateChatFile` actions
+- `apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx`
+- `apps/app/app/(authenticated)/chat/[id]/page.tsx` — Server-side fetch
+- `apps/app/lib/trpc/routers/messages.router.ts` — Add `bulkAdd` mutation
 
-### 4. Message Persistence
+### 2. Credit Deduction (CRITICAL — P0)
 
-Currently messages stream via the API route but are NOT saved to the database.
+After each AI response, calculate and deduct credits.
 
-**Build:**
+```typescript
+// In onFinish callback after message persistence
+const deductCredits = api.billing.recordUsage.useMutation();
 
-- After each completed assistant response (in `onFinish` callback of `useRealTimeChat`), persist both the user message and assistant response via `messages.router.ts` `add` mutation
-- On page load, fetch existing messages via `messages.router.ts` `list` query and pass as `initialMessages`
-- Add optimistic updates: show message immediately in UI, persist in background
-- Handle message metadata: model used, token count, agent type, tool calls
+await deductCredits.mutateAsync({
+  type: "chat",
+  amount: calculateCreditCost(message.usage),
+  description: `Chat response (${selectedModel})`,
+  metadata: { sessionId, model: selectedModel },
+});
+```
 
-**Files to modify:**
+Credit costs (from VISION.md):
 
-- `apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx` - Add tRPC calls in `onFinish`
-- `apps/app/app/(authenticated)/chat/[id]/page.tsx` - Server-side fetch of initial messages
-- `apps/app/lib/trpc/routers/messages.router.ts` - Add `bulkAdd` mutation for batch persistence
-- `apps/app/app/api/chat/route.ts` - Include metadata in stream (model, tokens)
+- Chat message: 1 credit
+- Agent task: 5-50 credits (based on complexity)
+- Code execution: 2 credits
+- Image generation: 5 credits
 
-### 5. Credit Deduction After Responses
+### 3. Tool System — Agent Service Tool Loop (CRITICAL — P0)
 
-The billing system exists (`apps/app/lib/trpc/routers/billing.router.ts`, 534 lines) with credit balance and usage records.
+The agent service (`services/agent/src/routes/completion.py`) needs a full tool loop:
 
-**Build:**
+```python
+# Pseudocode for tool loop
+while True:
+    response = await llm.chat(messages, tools=available_tools)
 
-- After each AI response completes, calculate credit cost based on tokens used
-- Deduct from `creditBalances` table via new `billing.router.ts` mutation `deductCredits`
-- Show remaining credits in chat header (already have `credits-button.tsx` and `credits-dropdown.tsx` at `apps/app/app/(authenticated)/components/header/`)
-- Block sending if zero credits (show upgrade prompt)
-- Real-time credit balance update via WebSocket after deduction
+    if response.stop_reason == "tool_use":
+        tool_results = []
+        for tool_call in response.tool_calls:
+            result = await execute_tool(tool_call)
+            tool_results.append(result)
+            # Stream tool call + result to frontend via SSE
+            yield f"data: {json.dumps({'type': 'tool_call', 'tool': tool_call, 'result': result})}\n\n"
 
-**Files to modify:**
+        messages.append(assistant_message)
+        messages.append(tool_result_messages)
+        continue  # Loop back to LLM with tool results
 
-- `apps/app/lib/trpc/routers/billing.router.ts` - Add `deductCredits` and `recordUsage` mutations
-- `apps/app/app/api/chat/route.ts` - Calculate token cost after stream completes
-- `apps/app/app/(authenticated)/components/header/credits-button.tsx` - Live credit display
-- `apps/app/lib/store/slices/billing.slice.ts` - Track credit balance in Redux
+    else:  # stop_reason == "end_turn"
+        yield f"data: {json.dumps({'type': 'text', 'content': response.text})}\n\n"
+        break
+```
 
-### 6. Multi-Model Selector
+**Available tools to implement:**
 
-Models are configured in `packages/ai/lib/models.ts`. The provider system is comprehensive (`packages/ai/lib/providers/`).
+| Tool               | Service                | Purpose                        |
+| ------------------ | ---------------------- | ------------------------------ |
+| `web_search`       | Serper/Tavily API      | Search the web                 |
+| `code_execution`   | E2B Sandbox            | Run code in sandboxed env      |
+| `browser_use`      | Playwright/Browserbase | Browse websites                |
+| `file_create`      | File Service           | Create files (PDF, docx, etc.) |
+| `file_read`        | File Service           | Read uploaded files            |
+| `composio_action`  | Connector Service      | Execute Composio app actions   |
+| `device_command`   | Device Service         | Control devices                |
+| `data_analysis`    | Python/E2B             | Analyze data, create charts    |
+| `image_generation` | DALL-E API             | Generate images                |
+| `create_document`  | File Service           | Create Word/PDF/Excel docs     |
 
-**Build:**
+### 4. Chat Tool Rendering (P0)
 
-- Dropdown in chat composer to select model (Claude, GPT-4, Gemini, etc.)
-- Show model capabilities, pricing per 1K tokens, context window
-- Pass selected model to `/api/chat` route
-- Update route to use dynamic model: `models[selectedModel]` instead of hardcoded `models.chat`
-- Store user's preferred model in preferences
+When the agent uses a tool, the frontend must render it properly.
 
-**Files to modify:**
+**Tool renderers exist at** `packages/ai/components/tools/renderers/`:
 
-- `packages/ai/components/input/chat-composer.tsx` - Add model selector dropdown
-- `apps/app/app/api/chat/route.ts` - Accept `model` parameter, use `getModel()` from `packages/ai/lib/providers`
-- `packages/ai/lib/models.ts` - Expose available models list
-- `apps/app/lib/store/slices/chat.slice.ts` - Add `selectedModel` state
+- `code-block.tsx` — Syntax highlighted code
+- `terminal-output.tsx` — Terminal with ANSI colors
+- `file-preview.tsx` — File preview card
+- `web-search.tsx` — Search results with links
+- `approval-card.tsx` — Tool approval/rejection
+- `progress-tracker.tsx` — Multi-step progress
+- `plan-tool.tsx` — Planning steps
+- `progress-tool.tsx` — Progress indicator
+- `generic-tool.tsx` — Fallback
 
-### 7. Conversation Branching
+**New renderers to create:**
 
-**Build:**
+#### Document Renderer (`document-renderer.tsx`)
 
-- Allow editing a previous user message to create a branch
-- Show branch indicator on messages with multiple versions
-- Branch navigation (previous/next version arrows)
-- Store branches as separate message chains in the same session
-- UI: slight indent or visual indicator for branched conversations
+For AI-generated documents (PDF, Word, Excel, Markdown):
 
-**Files to modify:**
+```tsx
+<DocumentRenderer
+  type="pdf" // or "docx", "xlsx", "md", "mdx", "code"
+  content={documentContent}
+  fileName="report.pdf"
+  onDownload={() => downloadFile(url)}
+  onOpenInViewer={() => openViewer(url)}
+/>
+```
 
-- `apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx` - `handleMessageAction` for "edit"
-- `packages/ai/components/chat/message-item.tsx` - Add branch navigation UI
-- `apps/app/lib/trpc/routers/messages.router.ts` - Add `branch` mutation, `parentMessageId` field
-- `packages/database/src/schema/sessions.ts` - Add `parentMessageId` column to messages table
+- PDF: Embed `react-pdf` viewer
+- Word/Excel: Show preview with download button
+- Markdown/MDX: Render with `react-markdown` + syntax highlighting
+- Code: Monaco editor read-only view
 
-### 8. Export Chat
+#### Website Preview (`website-preview.tsx`)
 
-**Build:**
+For AI-generated websites:
 
-- "Export" button in chat header
-- Export as Markdown: format all messages with role headers, code blocks, tool outputs
-- Export as PDF: use a library like `@react-pdf/renderer` or `html2pdf.js`
-- Export as JSON: raw message data
-- Include attachments and tool outputs in export
+```tsx
+<WebsitePreview
+  url={previewUrl} // E2B sandbox URL
+  screenshot={screenshotUrl}
+  code={sourceCode}
+  onOpenFull={() => openRubicComputer(url)}
+/>
+```
 
-**Files to create:**
+- Sandboxed iframe with zoom controls
+- Toggle between preview and code view
 
-- `apps/app/app/(authenticated)/chat/[id]/components/export-chat.tsx`
-- `apps/app/lib/utils/export-chat.ts` - Export formatting utilities
+#### Data Visualization (`chart-renderer.tsx`)
+
+For data analysis results:
+
+```tsx
+<ChartRenderer
+  type="bar" // or "line", "pie", "scatter", "table"
+  data={chartData}
+  options={chartOptions}
+/>
+```
+
+Use Recharts (already common in Next.js).
+
+#### Browser Use Viewer (`browser-viewer.tsx`)
+
+For browser automation results:
+
+```tsx
+<BrowserViewer
+  screenshots={screenshots} // Array of step screenshots
+  currentUrl={currentUrl}
+  steps={executionSteps}
+/>
+```
+
+Show step-by-step browser screenshots with action descriptions.
+
+### 5. Rubic Computer Panel (P1) — Manus-style Sidebar
+
+When the AI performs complex tasks (code execution, website building, browser use), open a **Rubic Computer** panel that takes ~half the screen.
+
+**Layout:**
+
+```
+┌──────────────────────┬──────────────────────┐
+│                      │                      │
+│   Chat Messages      │   Rubic Computer     │
+│                      │                      │
+│   [Message list]     │   [Tab: Browser]     │
+│                      │   [Tab: Terminal]    │
+│                      │   [Tab: Preview]     │
+│                      │   [Tab: Files]       │
+│                      │                      │
+│   [Prompt input]     │   [Status bar]       │
+└──────────────────────┴──────────────────────┘
+```
+
+**Tabs:**
+
+1. **Browser** — Live browser view from browser-use (Playwright screenshots or live stream)
+2. **Terminal** — Live terminal output from E2B sandbox (xterm.js)
+3. **Preview** — Website preview iframe from E2B
+4. **Files** — File tree showing generated files
+
+**Implementation:**
+
+```typescript
+// In chat-page-client.tsx
+const [computerOpen, setComputerOpen] = useState(false);
+const [computerTab, setComputerTab] = useState<"browser" | "terminal" | "preview" | "files">(
+  "terminal"
+);
+
+// Open computer when agent starts executing tools
+useEffect(() => {
+  if (agentStatus === "executing" && !computerOpen) {
+    setComputerOpen(true);
+  }
+}, [agentStatus]);
+```
+
+Use `react-resizable-panels` for the split layout.
+
+**Create:** `apps/app/app/(authenticated)/chat/[id]/components/rubic-computer.tsx`
+
+### 6. Progress & Planning UI (P1)
+
+When the AI plans and executes tasks, show progress in the chat.
+
+**Planning Phase:**
+
+```
+┌─────────────────────────────────────┐
+│ 📋 Planning: Build landing page     │
+│                                     │
+│ ✅ 1. Research design trends        │
+│ ⏳ 2. Create HTML/CSS structure     │
+│ ○  3. Add responsive design         │
+│ ○  4. Deploy to preview             │
+│                                     │
+│ Step 2 of 4 • ~2 min remaining      │
+└─────────────────────────────────────┘
+```
+
+Use existing `plan-tool.tsx` and `progress-tracker.tsx` renderers. Enhance with:
+
+- Animated step transitions
+- Time estimates
+- Expandable step details
+- Error recovery (retry failed steps)
+
+**WebSocket events used:**
+
+- `agent:task:new` — New step added
+- `agent:task:update` — Step status changed
+- `agent:update` — Overall progress percentage
+
+### 7. Task Segmentation (P1)
+
+Different task types should have different handling:
+
+| Task Type            | Trigger Keywords              | Agent Behavior        | UI                         |
+| -------------------- | ----------------------------- | --------------------- | -------------------------- |
+| **Search**           | "search", "find", "look up"   | Web search tool       | Search results cards       |
+| **Building**         | "build", "create website"     | E2B + code gen        | Rubic Computer (preview)   |
+| **Analyzing**        | "analyze", "chart", "data"    | Code execution        | Charts + data tables       |
+| **Scheduling**       | "schedule", "remind", "every" | Inngest task creation | Schedule confirmation card |
+| **Commanding**       | "turn on", "set temperature"  | Device commands       | Device control card        |
+| **Code Execution**   | "run", "execute", "code"      | E2B sandbox           | Terminal output            |
+| **Website Showcase** | "show website", "preview"     | Browser screenshot    | Website preview panel      |
+| **File Rendering**   | "create PDF", "generate doc"  | File service          | Document viewer            |
+
+**Auto-detect task type from user message:**
+
+```typescript
+function detectTaskType(message: string): TaskType {
+  const lower = message.toLowerCase();
+  if (/search|find|look up|what is|who is/.test(lower)) return "search";
+  if (/build|create.*website|landing page|web app/.test(lower)) return "building";
+  if (/analyze|chart|graph|data|spreadsheet/.test(lower)) return "analyzing";
+  if (/schedule|remind|every day|recurring|cron/.test(lower)) return "scheduling";
+  if (/turn on|turn off|set.*temperature|device/.test(lower)) return "commanding";
+  if (/run.*code|execute|python|javascript/.test(lower)) return "code_execution";
+  if (/show.*website|preview|screenshot/.test(lower)) return "website_showcase";
+  if (/create.*pdf|generate.*document|word|excel/.test(lower)) return "file_rendering";
+  return "general";
+}
+```
+
+Pass task type to agent service so it knows which tools to prioritize.
+
+### 8. E2B Sandbox Integration (P1)
+
+For code execution, use E2B sandbox service.
+
+**Flow:**
+
+1. Agent decides to execute code
+2. Agent calls `code_execution` tool with code + language
+3. Backend sends to sandbox service: `POST /sandboxes/:id/execute`
+4. Sandbox service runs code in E2B
+5. Results streamed back via WebSocket
+6. Frontend renders in Terminal tab of Rubic Computer
+
+**Frontend terminal** (in Rubic Computer):
+
+```typescript
+import { Terminal } from "xterm";
+import { FitAddon } from "xterm-addon-fit";
+
+// Connect terminal to WebSocket for live output
+socket.on("sandbox:output", (data) => {
+  terminal.write(data.output);
+});
+```
+
+### 9. Browser Use Integration (P1)
+
+For browsing the web in real-time.
+
+**Flow:**
+
+1. Agent decides to browse a URL
+2. Agent calls `browser_use` tool
+3. Backend uses Playwright (or Browserbase) to navigate
+4. Screenshots sent via WebSocket
+5. Frontend shows screenshots in Browser tab of Rubic Computer
+
+**Browser panel:**
+
+```tsx
+<div className="flex flex-col h-full">
+  <div className="flex items-center gap-2 px-3 py-2 border-b">
+    <div className="flex-1 rounded bg-muted px-3 py-1 text-sm">{currentUrl}</div>
+  </div>
+  <div className="flex-1 overflow-auto">
+    <img src={latestScreenshot} alt="Browser view" className="w-full" />
+  </div>
+  <div className="flex items-center gap-2 px-3 py-2 border-t text-xs text-muted-foreground">
+    Step {currentStep} of {totalSteps} • {stepDescription}
+  </div>
+</div>
+```
+
+### 10. File Rendering in Chat (P1)
+
+When AI generates files, render them inline:
+
+**PDF:** Use `react-pdf` for inline viewing
+
+```tsx
+import { Document, Page } from "react-pdf";
+<Document file={pdfUrl}>
+  <Page pageNumber={1} />
+</Document>;
+```
+
+**Word (.docx):** Use `mammoth` to convert to HTML, render inline
+
+```typescript
+import mammoth from "mammoth";
+const result = await mammoth.convertToHtml({ arrayBuffer });
+```
+
+**Excel (.xlsx):** Use `xlsx` to parse, render as data table
+
+```typescript
+import * as XLSX from "xlsx";
+const workbook = XLSX.read(data);
+const sheet = workbook.Sheets[workbook.SheetNames[0]];
+const jsonData = XLSX.utils.sheet_to_json(sheet);
+```
+
+**Markdown/MDX:** Use `react-markdown` with `rehype-highlight`
+
+**Code files:** Monaco editor in read-only mode with proper language detection
 
 ---
 
-## Reference
-
-- Manus chat UI specification: `docs/features_manus_reverse_engineering/Manus_Application_Feature_Specification.md`
-- AI package exports: `packages/ai/index.ts` - Full list of available agents, tools, middleware, providers, orchestration utilities
-- Agent types: `packages/ai/lib/agents/types.ts`
-- Orchestration: `packages/ai/lib/orchestration/` (DAGExecutor, TaskPlanner, ParallelRunner)
-- Design system components: `packages/design-system/`
-
-## Architecture Pattern
+## Architecture
 
 ```
-User Input -> ChatComposer -> handleSendMessage()
-  -> useRealTimeChat.sendMessage() -> POST /api/chat
-  -> streamText() -> toTextStreamResponse()
-  -> Client receives stream -> Updates UIMessages
-  -> onFinish -> Sync to Redux + Persist to DB via tRPC
-  -> WebSocket broadcasts to other clients in room
+User sends message
+  └── Dashboard: Create session → redirect → /chat/[id]?q=message
+  └── Chat page: sendMessage() via useRealTimeChat
+
+useRealTimeChat → POST /api/chat
+  └── Vercel AI SDK streamText()
+  └── Agent service (Python) receives request
+      └── LLM generates response
+      └── If tool_use → execute tool → loop back to LLM
+      └── Stream chunks via SSE to frontend
+  └── Frontend renders streamed content
+  └── Tool calls rendered by tool-registry.tsx
+
+onFinish callback:
+  └── Persist messages to DB (messages.router.ts)
+  └── Deduct credits (billing.router.ts)
+  └── Sync to Redux state
+  └── WebSocket broadcasts to other clients
+
+WebSocket events:
+  └── message:stream → Live streaming chunks
+  └── agent:update → Agent status/progress
+  └── agent:task:new → New planning step
+  └── agent:task:update → Step completion
+  └── file:new → Generated file available
+  └── device:command:update → Device response
 ```
+
+---
+
+## Key File Paths
+
+| Purpose            | Path                                                          |
+| ------------------ | ------------------------------------------------------------- |
+| Chat API route     | `apps/app/app/api/chat/route.ts`                              |
+| Chat page          | `apps/app/app/(authenticated)/chat/[id]/page.tsx`             |
+| Chat page client   | `apps/app/app/(authenticated)/chat/[id]/chat-page-client.tsx` |
+| Chat slice         | `apps/app/lib/store/slices/chat.slice.ts`                     |
+| Messages router    | `apps/app/lib/trpc/routers/messages.router.ts`                |
+| Sessions router    | `apps/app/lib/trpc/routers/sessions.router.ts`                |
+| Billing router     | `apps/app/lib/trpc/routers/billing.router.ts`                 |
+| WebSocket provider | `apps/app/lib/socket/provider.tsx`                            |
+| Socket events      | `apps/app/lib/socket/events.ts`                               |
+| AI components      | `packages/ai/components/`                                     |
+| Tool renderers     | `packages/ai/components/tools/renderers/`                     |
+| Tool registry      | `packages/ai/components/tools/tool-registry.tsx`              |
+| Agent DAG          | `packages/ai/components/agents/agent-dag-panel.tsx`           |
+| Chat composer      | `packages/ai/components/input/chat-composer.tsx`              |
+| Agent service      | `services/agent/src/routes/completion.py`                     |
+| Sandbox service    | `services/sandbox/src/index.ts`                               |
+| Gateway            | `services/gateway/src/index.ts`                               |
+| Gateway proxy      | `services/gateway/src/routes/proxy.ts`                        |
+
+---
+
+## Components to Create
+
+| Component               | Purpose                       | Path                                                           |
+| ----------------------- | ----------------------------- | -------------------------------------------------------------- |
+| `rubic-computer.tsx`    | Split-screen computer panel   | `chat/[id]/components/rubic-computer.tsx`                      |
+| `browser-panel.tsx`     | Browser screenshots viewer    | `chat/[id]/components/browser-panel.tsx`                       |
+| `terminal-panel.tsx`    | Live terminal via xterm.js    | `chat/[id]/components/terminal-panel.tsx`                      |
+| `preview-panel.tsx`     | Website preview iframe        | `chat/[id]/components/preview-panel.tsx`                       |
+| `files-panel.tsx`       | File tree for generated files | `chat/[id]/components/files-panel.tsx`                         |
+| `document-renderer.tsx` | PDF/Word/Excel inline viewer  | `packages/ai/components/tools/renderers/document-renderer.tsx` |
+| `website-preview.tsx`   | Website preview card          | `packages/ai/components/tools/renderers/website-preview.tsx`   |
+| `chart-renderer.tsx`    | Data visualization            | `packages/ai/components/tools/renderers/chart-renderer.tsx`    |
+| `browser-viewer.tsx`    | Browser use step viewer       | `packages/ai/components/tools/renderers/browser-viewer.tsx`    |
+| `task-progress.tsx`     | Enhanced task progress        | `packages/ai/components/tools/renderers/task-progress.tsx`     |
+
+---
+
+## Testing
+
+1. **Message persistence**: Send message → refresh page → messages still there
+2. **Credit deduction**: Send message → credit balance decreases
+3. **Tool rendering**: Agent uses web_search → search results rendered inline
+4. **Code execution**: Agent writes code → terminal output shown
+5. **Document generation**: "Create a PDF report" → PDF viewer rendered
+6. **Planning UI**: Complex task → planning steps shown with progress
+7. **Rubic Computer**: Code execution → splits screen → terminal visible
+8. **Browser use**: "Go to example.com" → browser screenshots shown
+9. **File creation**: Agent creates file → file card shown → downloadable
+10. **Task segmentation**: Different prompts trigger different tool sets
 
 ## Priority Order
 
-1. Message persistence (critical - data is lost on page refresh)
-2. Credit deduction (critical - no billing without this)
-3. Multi-model selector (high - users need model choice)
-4. File attachment upload (high - core feature)
-5. Tool call rendering enhancements (medium - existing renderers work)
-6. Agent orchestration visualization (medium - needs backend agent system)
-7. Conversation branching (low - complex, nice-to-have)
-8. Export chat (low - nice-to-have)
+1. **P0**: Message persistence (data lost on refresh)
+2. **P0**: Credit deduction (no billing without this)
+3. **P0**: Agent service tool loop (no tools without this)
+4. **P0**: Tool rendering in chat (existing renderers + wiring)
+5. **P1**: Document renderer (PDF, Word, Excel, Markdown)
+6. **P1**: Rubic Computer panel (split-screen)
+7. **P1**: Progress/planning UI
+8. **P1**: Task segmentation
+9. **P1**: E2B sandbox integration
+10. **P1**: Browser use integration
+11. **P2**: Multi-model selector
+12. **P2**: Conversation branching
+13. **P2**: Export chat

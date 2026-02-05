@@ -48,6 +48,7 @@ export const filesRelations = relations(files, ({ one, many }) => ({
     references: [agentSessions.id],
   }),
   versions: many(fileVersions),
+  shares: many(fileShares),
 }));
 
 // File versions for version control
@@ -69,5 +70,37 @@ export const fileVersionsRelations = relations(fileVersions, ({ one }) => ({
   file: one(files, {
     fields: [fileVersions.fileId],
     references: [files.id],
+  }),
+}));
+
+// File shares for sharing files via link
+export const fileShares = pgTable("file_shares", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  fileId: text("file_id")
+    .notNull()
+    .references(() => files.id, { onDelete: "cascade" }),
+  sharedByUserId: text("shared_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  shareToken: text("share_token").notNull().unique(),
+  accessLevel: text("access_level", {
+    enum: ["viewer", "editor"],
+  })
+    .notNull()
+    .default("viewer"),
+  expiresAt: timestamp("expires_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const fileSharesRelations = relations(fileShares, ({ one }) => ({
+  file: one(files, {
+    fields: [fileShares.fileId],
+    references: [files.id],
+  }),
+  sharedBy: one(users, {
+    fields: [fileShares.sharedByUserId],
+    references: [users.id],
   }),
 }));

@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
-import {
-  Popover,
-  PopoverTrigger,
-} from "@repo/design-system/components/ui/popover";
+import { Popover, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { SparklesIcon } from "lucide-react";
+import { trpc } from "@/lib/trpc/client";
 import { CreditsDropdown } from "./credits-dropdown";
 
 type CreditsButtonProps = {
@@ -20,8 +18,8 @@ type CreditsButtonProps = {
 };
 
 export function CreditsButton({
-  credits = 0,
-  isPro = false,
+  credits: creditsProp = 0,
+  isPro: isProProp = false,
   expirationDate,
   freeCredits,
   monthlyCredits,
@@ -29,6 +27,18 @@ export function CreditsButton({
   dailyRefreshMax,
 }: CreditsButtonProps) {
   const [mounted, setMounted] = useState(false);
+
+  // Fetch real credit balance and subscription from tRPC
+  const { data: creditBalance } = trpc.billing.getCreditBalance.useQuery(undefined, {
+    enabled: mounted,
+  });
+  const { data: subscription } = trpc.billing.getSubscription.useQuery(undefined, {
+    enabled: mounted,
+  });
+
+  // Use fetched data, fall back to props
+  const credits = creditBalance?.balance ?? creditsProp;
+  const isPro = subscription ? subscription.plan?.type !== "free" : isProProp;
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -38,14 +48,9 @@ export function CreditsButton({
   // Render placeholder during SSR to avoid hydration mismatch
   if (!mounted) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-1.5 rounded-full px-3"
-        disabled
-      >
+      <Button variant="outline" size="sm" className="gap-1.5 rounded-full px-3" disabled>
         <SparklesIcon className="h-4 w-4 text-amber-500" />
-        <span className="font-medium">{credits}</span>
+        <span className="font-medium">--</span>
       </Button>
     );
   }
@@ -53,11 +58,7 @@ export function CreditsButton({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 rounded-full px-3"
-        >
+        <Button variant="outline" size="sm" className="gap-1.5 rounded-full px-3">
           <SparklesIcon className="h-4 w-4 text-amber-500" />
           <span className="font-medium">{credits.toLocaleString()}</span>
         </Button>

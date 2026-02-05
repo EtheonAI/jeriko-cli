@@ -1,168 +1,209 @@
 # Backend Master Instructions
 
-> **13 microservices** | Gateway (Fastify), Agent (Python/FastAPI), rest (Fastify Node.js)
+> **VERIFIED against actual codebase — Feb 2026 audit**
+>
+> 14 microservices | Gateway (Fastify), Agent (Python/FastAPI), 12 Node.js/Fastify services
 
 ## Architecture
 
 ```
 Client (Next.js) ──→ tRPC (direct DB) ──→ PostgreSQL
                  ──→ Gateway (:4001) ──→ Services ──→ PostgreSQL
+                 ──→ /api/chat/route.ts ──→ Vercel AI SDK ──→ LLM providers
                  ──→ WebSocket (Socket.io) ──→ Redis Pub/Sub
 ```
 
-**Two API paths:**
+**Three API paths:**
 
-1. **tRPC** (apps/app/lib/trpc/) - Direct DB access for frontend CRUD (billing, sessions, messages, search, etc.)
-2. **Gateway** (services/gateway/) - Proxies to backend services for compute-heavy work (agent, task, device, sandbox)
+1. **tRPC** (`apps/app/lib/trpc/`) — 16 routers, 160+ procedures, ALL have real Drizzle queries. Frontend CRUD for billing, sessions, messages, files, connectors, search, etc.
+2. **Gateway** (`services/gateway/`) — Auth proxy + WebSocket + SSE + Redis pub/sub. Routes to backend services for compute-heavy work.
+3. **Chat Route** (`apps/app/app/api/chat/route.ts`) — 222 lines. Direct LLM streaming via Vercel AI SDK. Persists messages, upserts sessions, auto-generates titles, RAG integration.
 
-## Service Status Matrix
+## Service Status Matrix (VERIFIED)
 
-| Service          | Port | Language        | Status  | Key Gap                          |
-| ---------------- | ---- | --------------- | ------- | -------------------------------- |
-| **gateway**      | 4001 | Node.js/Fastify | PARTIAL | Working proxy + WebSocket + auth |
-| **agent**        | 8000 | Python/FastAPI  | PARTIAL | LLM calls work, tools are stubs  |
-| **task**         | 4002 | Node.js/Fastify | PARTIAL | Inngest works, no DB persistence |
-| **billing**      | 4008 | Node.js/Fastify | STUB    | All 8 endpoints are TODO         |
-| **connector**    | 4009 | Node.js/Fastify | STUB    | No Composio integration          |
-| **file**         | 4005 | Node.js/Fastify | STUB    | Multipart registered, no S3      |
-| **device**       | 8080 | Go (planned)    | EMPTY   | No implementation                |
-| **sandbox**      | 4012 | Node.js/Fastify | STUB    | No E2B integration               |
-| **website**      | 4004 | Node.js/Fastify | STUB    | No builder logic                 |
-| **knowledge**    | 4011 | Node.js/Fastify | STUB    | No embeddings/vector             |
-| **notification** | 4006 | Node.js/Fastify | STUB    | No Knock integration             |
-| **search**       | 4013 | Node.js/Fastify | STUB    | No Typesense integration         |
-| **webhook**      | 4007 | Node.js/Fastify | STUB    | Signature stub only              |
-| **project**      | 4010 | Node.js/Fastify | STUB    | All endpoints TODO               |
+| Service          | Port | Language        | LOC  | Status              | What Works                                                                                                            | What's Missing                                                                           |
+| ---------------- | ---- | --------------- | ---- | ------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **gateway**      | 4001 | Node.js/Fastify | 554  | **COMPLETE**        | Auth, proxy, WebSocket, SSE, Redis pub/sub                                                                            | Tiered rate limiting, analytics                                                          |
+| **agent**        | 8000 | Python/FastAPI  | 817  | **PARTIAL**         | LLM streaming (Anthropic+OpenAI), tool registry, E2B sandbox execution, browse_url, device forwarding, Composio hooks | **NO agentic tool loop**, tools not passed to LLM, no conversation history, 3 tool stubs |
+| **task**         | 4002 | Node.js/Fastify | 585  | **COMPLETE**        | Inngest functions (execute-task, scheduled-task, approval-workflow), REST CRUD, DB queries                            | Enhanced Inngest steps (prepare-context, process-result)                                 |
+| **billing**      | 4008 | Node.js/Fastify | 343  | **MOSTLY COMPLETE** | All DB queries work, subscription/credit models                                                                       | 4 Stripe API calls (checkout, portal, payment method)                                    |
+| **connector**    | 4009 | Node.js/Fastify | 800  | **COMPLETE**        | Composio SDK, OAuth start/callback, catalog sync, integration CRUD, tool listing                                      | —                                                                                        |
+| **file**         | 4005 | Node.js/Fastify | 492  | **COMPLETE**        | S3 upload (100MB), presigned download, versioning, bulk upload, webhooks, pagination                                  | —                                                                                        |
+| **device**       | 4001 | Node.js/Fastify | 792  | **COMPLETE**        | CRUD, commands, heartbeat, WebSocket, safety validation, tool execution bridge                                        | Smart home (Home Assistant)                                                              |
+| **sandbox**      | 4012 | Node.js/Fastify | 682  | **COMPLETE**        | E2B create/connect, code execution, shell commands, file read/write/list, lifecycle management                        | —                                                                                        |
+| **knowledge**    | 4011 | Node.js/Fastify | 515  | **COMPLETE**        | RAG pipeline, text extraction, chunking, embeddings (OpenAI), vector search, group CRUD                               | —                                                                                        |
+| **notification** | 4006 | Node.js/Fastify | 364  | **COMPLETE**        | Knock email, Web Push, in-app, quiet hours, preferences                                                               | —                                                                                        |
+| **search**       | 4013 | Node.js/Fastify | 775  | **COMPLETE**        | Typesense integration + DB ILIKE fallback, autocomplete, multi-collection search                                      | —                                                                                        |
+| **webhook**      | 4007 | Node.js/Fastify | 289  | **COMPLETE**        | Event dispatch, HMAC signatures, delivery tracking, retries                                                           | —                                                                                        |
+| **project**      | 4010 | Node.js/Fastify | 313  | **COMPLETE**        | CRUD, members, sessions, files, permissions                                                                           | —                                                                                        |
+| **website**      | 4004 | Node.js/Fastify | 1285 | **MOSTLY COMPLETE** | Templates, file CRUD, preview simulation, TiDB provisioning                                                           | AI code generation, real deployment                                                      |
 
-## THE Critical Gap: Services Don't Use Database
+**Total backend LOC: ~8,565 lines of working code**
 
-The #1 problem: `packages/database/` has 15+ comprehensive Drizzle schemas, but **zero services import or use them**. Every service has `// TODO: Insert into database when schema is ready` comments.
+---
 
-### How to Fix (for each service):
+## THE Critical Gap: Agent Tool Loop
+
+The #1 problem is NOT that services are stubs (they aren't). The problem is the **agent service doesn't have a tool loop**.
+
+### What Works Now (Chat E2E)
+
+```
+Dashboard → create session ID → sessionStorage → navigate /chat/[id]
+Chat page → useRealTimeChat hook → POST /api/chat/route.ts (222 lines)
+→ Authenticates → Upserts session → Persists user message
+→ RAG: queries knowledge service → injects context
+→ streamText() via Vercel AI SDK → streams response
+→ onFinish: persists assistant message, auto-generates title
+```
+
+**This works for simple Q&A but has NO tool execution.**
+
+### What Needs to Happen
+
+```
+POST /api/chat/route.ts (or POST /v1/complete on agent service)
+→ Assemble tools (core ~12 + dynamic Composio + device)
+→ agent_loop: Stream LLM response
+  → If LLM returns tool_use blocks:
+    → Execute each tool (sandbox, serper, E2B, device, Composio)
+    → Feed results back to LLM
+    → Loop until LLM returns text-only (no more tools)
+→ Stream all text + tool activity to client via SSE
+→ Persist final response + tool calls to DB
+→ Deduct credits
+```
+
+**See:** `.claude/backend/agent/INSTRUCTIONS.md` (1174 lines) — Full architecture spec.
+
+---
+
+## Service Architecture Details
+
+### Node.js Services — Common Pattern
+
+All 12 Node.js services follow the same structure:
 
 ```typescript
-// Step 1: Add @repo/database to service's package.json
-// Step 2: Import in route handler
-import { db, tableName, eq, and, desc } from "@repo/database";
+import Fastify from "fastify";
+import { createLogger, getEnv } from "@repo/service-utils";
 
-// Step 3: Replace TODO with query
-// BEFORE:
-fastify.get("/items", async () => {
-  return { data: [], meta: { total: 0 } }; // TODO: Fetch from database
-});
-
-// AFTER:
-fastify.get("/items", async (request) => {
-  const items = await db
-    .select()
-    .from(tableName)
-    .where(eq(tableName.userId, request.userId))
-    .orderBy(desc(tableName.createdAt));
-  return { data: items, meta: { total: items.length } };
-});
+const app = Fastify({ logger: false, requestIdHeader: "x-request-id" });
+// Health check, CORS, request logging hooks
+// Route modules registered via app.register()
+// Graceful shutdown on SIGINT/SIGTERM
+// Auth via x-user-id header from gateway
+// Database via dynamic import of @repo/database
 ```
 
-## Gateway Service (PARTIAL - `services/gateway/`)
+**ESM Import Pattern (critical):**
 
-### What works:
-
-- `src/index.ts` (116 lines) - Fastify with CORS, Helmet, rate limiting, WebSocket
-- `src/plugins/auth.ts` - JWT/API key authentication
-- `src/routes/proxy.ts` - Generic proxy to all downstream services
-- `src/routes/websocket.ts` - WebSocket with Redis pub/sub, room management, SSE
-- `src/routes/health.ts` - Health + readiness checks with Redis test
-
-### What needs work:
-
-- Service discovery uses env vars with localhost fallbacks (fine for dev, needs config for prod)
-
-## Agent Service (PARTIAL - `services/agent/`)
-
-### What works:
-
-- `src/main.py` (97 lines) - FastAPI with CORS, logging
-- `src/routes/completion.py` (225 lines) - Both streaming and non-streaming LLM calls
-  - Anthropic Claude: `stream_anthropic()` with `client.messages.stream()`
-  - OpenAI GPT: `stream_openai()` with `client.chat.completions.create(stream=True)`
-  - SSE format output
-- `src/routes/tools.py` (302 lines) - 9 tools defined (mostly stubs)
-
-### What needs work:
-
-- `tools.py`: Most tools return placeholder data. Need real implementations:
-  - `web_search` → integrate Serper/Tavily/Composio
-  - `execute_code` → call sandbox service (E2B)
-  - `create_document` → call file service
-  - `generate_image` → call DALL-E/Stable Diffusion
-- Multi-turn conversation support (currently single prompt)
-- Tool loop (call tool → get result → continue reasoning)
-- Composio tool registration
-- Credit tracking per API call
-
-## Task Service (PARTIAL - `services/task/`)
-
-### What works:
-
-- `src/routes/inngest.ts` (159 lines) - Three Inngest functions:
-  1. `execute-task` - Calls agent service, 3 retries
-  2. `scheduled-task` - Triggers task execution on schedule
-  3. `approval-workflow` - Wait for approval with 24h timeout
-- `src/routes/tasks.ts` (197 lines) - REST endpoints with Zod validation
-
-### What needs work:
-
-- `tasks.ts`: All CRUD uses in-memory objects, needs Drizzle queries to `agentSessions` + `agentTasks` tables
-- `inngest.ts` Step 1 "prepare-context": Load user preferences, conversation history, available tools
-- `inngest.ts` Step 3 "process-result": Save result to `messages` table, update task status, deduct credits
-- Publish WebSocket events after task completion
-- Scheduled task CRON support (integrate with `scheduledTasks` table)
-
-## Stub Services Pattern
-
-All stub services (`services/{billing,connector,file,knowledge,notification,project,sandbox,search,webhook}/src/index.ts`) follow the same pattern:
-
-1. Fastify server with CORS
-2. Route definitions with correct HTTP methods and paths
-3. Request/response shapes defined
-4. All implementations are `// TODO` with hardcoded/empty responses
-
-**To implement each one:** See individual instruction files in `backend/{service}/INSTRUCTIONS.md`
-
-## Standard Response Format
-
-All services should return:
-
-```json
-{
-  "data": { ... },
-  "meta": {
-    "requestId": "uuid",
-    "timestamp": "ISO-8601"
-  },
-  "error": null
-}
+```typescript
+import * as database from "@repo/database/service-index";
+import { eq, and, desc } from "drizzle-orm";
 ```
 
-Error format:
+### Agent Service — Python/FastAPI
 
-```json
-{
-  "data": null,
-  "meta": { "requestId": "uuid", "timestamp": "ISO-8601" },
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Resource not found"
-  }
-}
+```python
+# FastAPI with structlog, CORS, request logging
+# Streaming via SSE (data: {json}\n\n)
+# Anthropic + OpenAI support
+# httpx for inter-service calls
+# e2b + e2b-code-interpreter for sandbox
 ```
 
-## Docker Compose
+### Gateway — Routing Table
 
-- `docker-compose.services.yml` - Development (all services + PostgreSQL + Redis)
-- `docker-compose.prod.yml` - Production configuration
-- `docker-compose.typesense.yml` - Typesense search infrastructure
+| Path Prefix                          | Target Service | Port |
+| ------------------------------------ | -------------- | ---- |
+| `/v1/complete`, `/v1/tools`          | Agent          | 8000 |
+| `/v1/tasks`, `/v1/inngest`           | Task           | 4002 |
+| `/v1/devices`                        | Device         | 4001 |
+| `/v1/files`, `/upload`               | File           | 4005 |
+| `/v1/sandboxes`                      | Sandbox        | 4012 |
+| `/v1/connectors`, `/v1/integrations` | Connector      | 4009 |
+| `/v1/knowledge`                      | Knowledge      | 4011 |
+| `/v1/notifications`                  | Notification   | 4006 |
+| `/v1/webhooks`                       | Webhook        | 4007 |
+| `/v1/projects`                       | Project        | 4010 |
+| `/v1/search`                         | Search         | 4013 |
+| `/v1/websites`                       | Website        | 4004 |
+| `/billing`                           | Billing        | 4008 |
+
+---
+
+## What ACTUALLY Needs Building
+
+### P0 — Make Agent Work
+
+1. **Agent tool loop** — The core agentic loop that passes tools to LLM, executes tool_use blocks, feeds results back. See `agent/INSTRUCTIONS.md` for full spec.
+2. **Wire web_search** — Integrate Serper API (currently returns empty results)
+3. **Wire generate_image** — Integrate DALL-E 3 (currently hardcoded failure)
+4. **Wire create_document** — PDF/Word generation (currently hardcoded failure)
+5. **Connect chat route to agent service** — Either enhance `/api/chat/route.ts` with Vercel AI SDK tools, OR route through Python agent service
+
+### P0 — Stripe (4 TODOs)
+
+6. **Billing service** — `stripe.checkout.sessions.create()` for subscriptions and credits
+7. **Billing service** — `stripe.billingPortal.sessions.create()` for portal URL
+8. **Billing service** — `stripe.paymentMethods.detach()` for removing payment methods
+9. **Stripe webhook handler** — Verify signatures + process events
+
+### P1 — Smart Home
+
+10. **Device service** — Home Assistant hub routes (`services/device/src/routes/hubs.ts`)
+11. **Device service** — HA entity discovery, state, commands via REST API
+
+### P2 — Website Builder
+
+12. **Website service** — Replace in-memory Map with database queries
+13. **Website service** — AI code generation via agent service
+14. **Website service** — Real deployment (Vercel API)
+
+---
+
+## Inter-Service Communication
+
+```
+agent → sandbox (code execution, file operations)
+agent → connector (Composio tool execution)
+agent → device (device commands)
+agent → knowledge (RAG queries)
+agent → billing (credit deduction)
+agent → gateway (WebSocket for user notifications)
+task → agent (execute-task Inngest function)
+task → billing (credit checks)
+gateway → all services (authenticated proxy)
+file → search (index on upload)
+connector → search (index on sync)
+project → search (index on create)
+webhook → all services (event dispatch)
+notification → gateway (WebSocket for real-time delivery)
+```
+
+---
+
+## Docker & Infrastructure
+
+- `docker-compose.services.yml` — Development (all services + PostgreSQL + Redis)
+- `docker-compose.prod.yml` — Production configuration
+- `docker-compose.typesense.yml` — Typesense search
 - Each service has its own `Dockerfile` with multi-stage builds
+- See `services/.env.example` (95 variables) for all configuration
 
-## Environment Variables
+---
 
-See `services/.env.example` (95 variables) for all service configuration.
+## Instruction File Index
+
+| File                                         | Covers                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `backend/agent/INSTRUCTIONS.md`              | Agent tool loop, context engineering, tools, skills, model routing |
+| `backend/task/INSTRUCTIONS.md`               | Task service, Inngest functions, scheduled tasks                   |
+| `backend/billing/INSTRUCTIONS.md`            | Billing service, Stripe integration, credits                       |
+| `backend/gateway/INSTRUCTIONS.md`            | Gateway proxy, WebSocket, SSE, rate limiting                       |
+| `backend/connector/INSTRUCTIONS.md`          | Connector service, Composio, OAuth                                 |
+| `backend/device/INSTRUCTIONS.md`             | Device service, commands, WebSocket, Home Assistant                |
+| `backend/file/INSTRUCTIONS.md`               | File service, S3 upload, versioning                                |
+| `backend/sandbox/INSTRUCTIONS.md`            | Sandbox service, E2B, code execution                               |
+| `backend/remaining-services/INSTRUCTIONS.md` | Knowledge, notification, search, webhook, project, website         |

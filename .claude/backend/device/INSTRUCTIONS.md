@@ -1,58 +1,66 @@
 # Device Service Instructions
 
+> **VERIFIED against actual codebase -- Feb 2026 audit**
+
 ## Overview
 
 The device service (`services/device/`) manages remote device connections, command execution, and real-time device control. It enables the agent to interact with user devices -- browsing the web, running terminal commands, reading/writing files, and controlling smart home devices.
 
-**Port:** 8080 (configurable)
-**Framework:** Currently Go (chi router) -- may be rebuilt in Node.js/Fastify for consistency
-**Status:** Has a working Go skeleton with chi router, MQTT client, WebSocket hub, and device handler. The handlers have defined route signatures but the actual implementations are minimal.
+**Port:** 4001 (configurable via `PORT` env)
+**Framework:** Node.js / Fastify (with `@fastify/websocket`)
+**Status:** FULLY IMPLEMENTED -- 792 LOC across 6 files, with real Drizzle queries, WebSocket support, and complete CRUD
 
 ---
 
-## Current File Structure (Go)
+## Current State (Fully Implemented)
+
+### File Structure
 
 ```
-services/device/
-  go.mod                                    # Go module definition
-  Dockerfile                                # Go build Dockerfile
-  cmd/server/
-    main.go                                 # 139 lines - chi router, MQTT, WebSocket hub, routes
-  internal/
-    config/
-      config.go                             # Environment-based configuration
-    models/
-      device.go                             # Device data models
-    handlers/
-      device.go                             # HTTP handlers (RegisterDevice, ExecuteCommand, etc.)
-    mqtt/
-      client.go                             # MQTT client for IoT devices
-    websocket/
-      hub.go                                # WebSocket connection hub (broadcast, rooms)
-      client.go                             # Individual WebSocket client connection
+services/device/src/
+  index.ts                  # 76 lines  - Main entry, registers 4 route modules + WebSocket + stale device checker
+  routes/
+    devices.ts              # 219 lines - Full CRUD with Drizzle, ownership verification, connection tracking
+    commands.ts             # 283 lines - Command execution, safety validation (validateCommand),
+                            #             approval workflow, WebSocket delivery, retry logic, tool execution bridge
+    heartbeat.ts            #            - Keep-alive endpoint, background stale device checker
+    websocket.ts            #            - Real-time bidirectional communication, connection tracking by deviceId
 ```
 
-### Go Routes Defined (from `cmd/server/main.go`)
+### What's Working
 
-```go
-r.Route("/v1", func(r chi.Router) {
-    r.Post("/devices", deviceHandler.RegisterDevice)
-    r.Get("/devices", deviceHandler.ListDevices)
-    r.Get("/devices/{id}", deviceHandler.GetDevice)
-    r.Delete("/devices/{id}", deviceHandler.UnregisterDevice)
-    r.Post("/devices/{id}/command", deviceHandler.ExecuteCommand)
-    r.Get("/devices/{id}/stream", deviceHandler.StreamDevice)
-    r.Post("/tools/execute", deviceHandler.ExecuteTool)
-    r.Get("/ws", deviceHandler.HandleWebSocket)
-})
-```
+- **Device CRUD** -- Register, list, get, update, and delete devices with full Drizzle ORM queries against the `devices` table
+- **Ownership verification** -- All operations verify `userId` matches the device owner
+- **Command execution pipeline** -- Queue commands, validate safety via `validateCommand()`, deliver over WebSocket, handle retries
+- **Approval workflow** -- High-risk commands go through approval before execution
+- **WebSocket** -- Real-time bidirectional connection tracking by `deviceId`, used for command delivery and device state updates
+- **Heartbeat** -- Keep-alive endpoint plus a background stale device checker that marks unresponsive devices as offline
+- **Tool execution bridge** -- `POST /v1/tools/execute` bridges agent service tool calls to device commands
+- **Connection tracking** -- Tracks active WebSocket connections per device, updates `connectionId` and `status` in the database
 
-### Go Infrastructure Already Built
+### Frontend Client (Fully Implemented)
 
-- **MQTT Client** (`internal/mqtt/client.go`) - Initialized on startup, used for IoT device communication
-- **WebSocket Hub** (`internal/websocket/hub.go`) - Go-based WebSocket hub with `Run()` goroutine for managing connections and broadcasting
-- **Structured Logging** - Uses `zerolog` for JSON logging
-- **Graceful Shutdown** - Handles SIGINT/SIGTERM, cleans up MQTT and WebSocket
+**File:** `apps/app/app/(authenticated)/devices/devices-page-client.tsx` (412 lines)
+
+- Device grid display with status badges (online/offline/busy/error)
+- Register device dialog
+- Delete device functionality
+- Installation instructions for connecting new devices
+- Refresh / polling
+
+**tRPC calls used:**
+
+- `devices.list.useQuery` -- Fetch all user devices
+- `devices.register.useMutation` -- Register a new device
+- `devices.unregister.useMutation` -- Remove a device
+
+### tRPC Router
+
+**File:** `apps/app/lib/trpc/routers/devices.router.ts` (178 lines)
+
+7 procedures that proxy requests to the device service at `http://localhost:4001/v1/...`:
+
+- `list`, `get`, `register`, `update`, `unregister`, `executeCommand`, `executeTool`
 
 ---
 
@@ -102,339 +110,93 @@ Command queue for devices.
 
 ---
 
-## Recommendation: Rebuild vs Keep Go
+## What Needs Building
 
-**Keep Go if:**
+The core device service is complete. The remaining work is **Smart Home Hub Integration**.
 
-- Performance is critical (many concurrent device connections)
-- You want to leverage Go's goroutine model for WebSocket management
-- The MQTT client integration is important for IoT devices
+### 1. Home Assistant Integration (via REST API)
 
-**Rebuild in Node.js/Fastify if:**
+Home Assistant exposes a REST API that we should integrate for smart home device control. This requires new routes in the device service and corresponding database support.
 
-- You want consistency with all other services (shared `@repo/service-utils`, `@repo/database`)
-- You want to use Drizzle ORM for database queries
-- The development team is more productive in TypeScript
-- You want to share the same auth pattern (`x-user-id` header extraction)
+#### Hub Management (CRUD)
 
-**Recommendation:** Rebuild in Node.js/Fastify for now, following the same patterns as other services. The Go service can be reintroduced later as a high-performance replacement once the feature set is stable.
-
----
-
-## What Needs to Be Built
-
-### 1. Service Bootstrap (Node.js Version)
-
-If rebuilding in Node.js, create `services/device/src/index.ts` following the same pattern as other services:
+Users need to register their Home Assistant instances as "hubs" within Rubic:
 
 ```typescript
-import Fastify from "fastify";
-import websocket from "@fastify/websocket";
-import { createLogger, getEnv } from "@repo/service-utils";
-import { deviceRoutes } from "./routes/devices.js";
-import { commandRoutes } from "./routes/commands.js";
-import { toolRoutes } from "./routes/tools.js";
-import { wsRoutes } from "./routes/websocket.js";
+// POST /v1/hubs - Register a Home Assistant instance
+// GET /v1/hubs - List user's registered hubs
+// GET /v1/hubs/:id - Get hub details + connection status
+// PUT /v1/hubs/:id - Update hub config (URL, token)
+// DELETE /v1/hubs/:id - Remove hub
 
-const app = Fastify({ ... });
-await app.register(websocket);
-await app.register(deviceRoutes);
-await app.register(commandRoutes);
-await app.register(toolRoutes);
-await app.register(wsRoutes);
+// Each hub stores:
+// - Home Assistant URL (e.g., http://homeassistant.local:8123)
+// - Long-lived access token
+// - Connection status (connected / unreachable / auth_failed)
+// - Last sync timestamp
 ```
 
-### 2. Device Registration and Heartbeat
+#### Entity Discovery
+
+Fetch all entities from Home Assistant and cache them locally:
 
 ```typescript
-// POST /devices - Register a device
-app.post("/devices", async (request, reply) => {
-  const userId = request.headers["x-user-id"] as string;
-  const { name, type, capabilities, config } = request.body;
+// POST /v1/hubs/:id/sync - Trigger entity sync from HA
+// GET /v1/hubs/:id/entities - List all discovered entities (lights, switches, sensors, etc.)
+// GET /v1/hubs/:id/entities/:entityId - Get entity state + attributes
 
-  const [device] = await db
-    .insert(devices)
-    .values({
-      userId,
-      name,
-      type: type || "browser",
-      status: "offline",
-      capabilities: capabilities || [],
-      config: config || {},
-    })
-    .returning();
-
-  return reply.status(201).send(device);
-});
-
-// POST /devices/:id/heartbeat - Keep device alive
-app.post("/devices/:id/heartbeat", async (request, reply) => {
-  const { id } = request.params;
-  const { status, metadata } = request.body;
-
-  await db
-    .update(devices)
-    .set({
-      status: status || "online",
-      lastHeartbeat: new Date(),
-      ipAddress: request.ip,
-    })
-    .where(eq(devices.id, id));
-
-  return { ok: true };
-});
+// HA REST API: GET /api/states
+// Returns all entity states. Cache in DB, refresh on sync.
 ```
 
-### 3. Command Execution Pipeline
+#### Command Execution (Services)
 
-The agent service calls `POST /v1/devices/:id/command` to send commands to devices.
+Call Home Assistant services to control devices:
 
 ```typescript
-// POST /devices/:id/command - Queue a command
-app.post("/devices/:id/command", async (request, reply) => {
-  const userId = request.headers["x-user-id"] as string;
-  const { id } = request.params;
-  const { type, payload, requiresApproval } = request.body;
+// POST /v1/hubs/:id/command - Execute a HA service call
+// Body: { entity_id: "light.living_room", service: "light/turn_on", data: { brightness: 200 } }
 
-  // 1. Verify device belongs to user
-  const [device] = await db
-    .select()
-    .from(devices)
-    .where(and(eq(devices.id, id), eq(devices.userId, userId)))
-    .limit(1);
-
-  if (!device) return reply.status(404).send({ error: "Device not found" });
-  if (device.status !== "online") return reply.status(409).send({ error: "Device offline" });
-
-  // 2. Check command whitelist (security)
-  if (!isCommandAllowed(type, payload, device.capabilities)) {
-    return reply.status(403).send({ error: "Command not allowed" });
-  }
-
-  // 3. If requires approval, return 202 and create approval request
-  if (requiresApproval || isHighRiskCommand(type, payload)) {
-    const [command] = await db
-      .insert(deviceCommands)
-      .values({
-        deviceId: id,
-        type,
-        payload,
-        status: "pending",
-      })
-      .returning();
-
-    // Emit approval-required event
-    await publish(`user:${userId}`, {
-      type: "approval:required",
-      data: { commandId: command.id, deviceId: id, type, payload },
-    });
-
-    return reply.status(202).send({
-      commandId: command.id,
-      requiresApproval: true,
-      approval_id: command.id,
-    });
-  }
-
-  // 4. Create command record
-  const [command] = await db
-    .insert(deviceCommands)
-    .values({
-      deviceId: id,
-      type,
-      payload,
-      status: "pending",
-    })
-    .returning();
-
-  // 5. Send to device via WebSocket
-  const sent = sendToDevice(id, {
-    type: "command",
-    commandId: command.id,
-    command: { type, payload },
-  });
-
-  if (!sent) {
-    // Device not connected via WebSocket, try MQTT
-    // If using MQTT: mqttClient.publish(`device/${id}/commands`, JSON.stringify({...}))
-    await db
-      .update(deviceCommands)
-      .set({ status: "failed", error: "Device not reachable" })
-      .where(eq(deviceCommands.id, command.id));
-    return reply.status(503).send({ error: "Device not reachable" });
-  }
-
-  // 6. Wait for result (with timeout)
-  const result = await waitForCommandResult(command.id, 30000);
-
-  return result;
-});
+// Maps to HA REST API: POST /api/services/<domain>/<service>
+// e.g., POST /api/services/light/turn_on { entity_id: "light.living_room", brightness: 200 }
 ```
 
-### 4. Tool Execution (Agent Service Bridge)
-
-The agent service calls `POST /v1/tools/execute` for device-related tools:
+#### Areas and Scenes
 
 ```typescript
-// POST /tools/execute - Execute a tool on a device
-app.post("/tools/execute", async (request, reply) => {
-  const userId = request.headers["x-user-id"] as string;
-  const { tool_name, arguments: args, device_id } = request.body;
-
-  switch (tool_name) {
-    case "terminal_command":
-      return executeTerminalCommand(device_id, args.command, args.working_directory, userId);
-
-    case "file_read":
-      return executeFileRead(device_id, args.path, userId);
-
-    case "file_write":
-      return executeFileWrite(device_id, args.path, args.content, userId);
-
-    default:
-      return reply.status(400).send({ error: `Unknown tool: ${tool_name}` });
-  }
-});
+// GET /v1/hubs/:id/areas - List HA areas (rooms)
+// GET /v1/hubs/:id/scenes - List HA scenes
+// POST /v1/hubs/:id/scenes/:sceneId/activate - Activate a scene
 ```
 
-### 5. WebSocket for Real-Time Device State
+#### Implementation Notes
 
-```typescript
-// GET /ws - WebSocket connection for devices
-app.get("/ws", { websocket: true }, async (socket, request) => {
-  const deviceId = (request.query as { deviceId?: string }).deviceId;
-  const userId = request.headers["x-user-id"] as string;
+- **Auth:** Each hub stores a long-lived HA access token per user. The token is passed as `Authorization: Bearer <token>` to HA's REST API.
+- **Caching:** Entity states should be cached in Redis with a short TTL (30-60 seconds). Full entity list should be stored in DB and refreshed on manual sync or periodically.
+- **Error handling:** HA instances may be on local networks and unreachable from the cloud. Handle timeouts gracefully and report connection status back to the user.
+- **Security:** Never expose HA tokens to the frontend. All HA communication goes through the device service.
 
-  // Register device connection
-  registerDeviceConnection(deviceId, socket);
+### 2. SmartThings via Composio
 
-  // Update device status
-  await db
-    .update(devices)
-    .set({
-      status: "online",
-      connectionId: socket.id,
-      lastHeartbeat: new Date(),
-      ipAddress: request.ip,
-      userAgent: request.headers["user-agent"],
-    })
-    .where(eq(devices.id, deviceId));
+For Samsung SmartThings integration, use Composio as the bridge rather than building a direct integration:
 
-  socket.on("message", async (data) => {
-    const message = JSON.parse(data.toString());
+- Composio provides a SmartThings connector with OAuth handling
+- The agent service can call SmartThings actions through Composio's tool execution
+- This avoids building and maintaining another smart home protocol adapter
+- Implementation depends on Composio integration being complete (see P0 priorities)
 
-    switch (message.type) {
-      case "command_result":
-        // Device is reporting back a command result
-        await db
-          .update(deviceCommands)
-          .set({
-            status: message.success ? "completed" : "failed",
-            result: message.result,
-            error: message.error,
-            completedAt: new Date(),
-          })
-          .where(eq(deviceCommands.id, message.commandId));
+### 3. WebSocket Events for Real-Time Device State on Frontend
 
-        // Notify waiting command handlers
-        resolveCommandResult(message.commandId, message);
-        break;
+The WebSocket infrastructure exists in the service but the frontend does not yet subscribe to real-time device state updates. What's needed:
 
-      case "heartbeat":
-        await db.update(devices).set({ lastHeartbeat: new Date() }).where(eq(devices.id, deviceId));
-        break;
-
-      case "status":
-        await db
-          .update(devices)
-          .set({
-            status: message.status,
-            ...(message.currentUrl ? { currentUrl: message.currentUrl } : {}),
-          })
-          .where(eq(devices.id, deviceId));
-        break;
-    }
-  });
-
-  socket.on("close", async () => {
-    unregisterDeviceConnection(deviceId);
-    await db
-      .update(devices)
-      .set({ status: "offline", connectionId: null })
-      .where(eq(devices.id, deviceId));
-  });
-});
-```
-
-### 6. Command Whitelisting (Security)
-
-```typescript
-const ALLOWED_COMMANDS: Record<string, string[]> = {
-  browser: ["navigate", "click", "type", "screenshot", "scroll", "select", "wait"],
-  terminal: ["execute"], // Commands are further filtered by a deny-list
-  filesystem: ["read", "write", "list", "delete", "mkdir"],
-};
-
-const TERMINAL_DENY_LIST = [
-  "rm -rf /",
-  "mkfs",
-  "dd if=",
-  ":(){ :|:& };:",
-  "chmod -R 777 /",
-  "curl | sh",
-  "wget | sh",
-];
-
-function isCommandAllowed(
-  type: string,
-  payload: Record<string, unknown>,
-  capabilities: string[]
-): boolean {
-  // 1. Check if the device has the required capability
-  const category = getCommandCategory(type);
-  if (!capabilities.includes(category)) return false;
-
-  // 2. For terminal commands, check deny list
-  if (type === "execute" && payload.command) {
-    const cmd = (payload.command as string).toLowerCase();
-    return !TERMINAL_DENY_LIST.some((denied) => cmd.includes(denied));
-  }
-
-  // 3. Check if command type is in allowed list
-  return ALLOWED_COMMANDS[category]?.includes(type) ?? false;
-}
-
-function isHighRiskCommand(type: string, payload: Record<string, unknown>): boolean {
-  // Commands that modify the system require approval
-  const highRisk = ["execute", "write", "delete", "install"];
-  return highRisk.includes(type);
-}
-```
-
-### 7. Home Assistant Integration (Future)
-
-For smart home device control, integrate with Home Assistant via its REST API:
-
-```typescript
-// Future: Home Assistant MCP server integration
-app.post("/devices/:id/ha/command", async (request, reply) => {
-  const { entity_id, service, data } = request.body;
-
-  const haUrl = process.env.HOME_ASSISTANT_URL;
-  const haToken = process.env.HOME_ASSISTANT_TOKEN;
-
-  const response = await fetch(`${haUrl}/api/services/${service}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${haToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ entity_id, ...data }),
-  });
-
-  return response.json();
-});
-```
+- **Socket.io events** from the device service to the frontend (via the gateway or directly):
+  - `device:status_changed` -- When a device goes online/offline/busy/error
+  - `device:command_result` -- When a command completes or fails
+  - `device:heartbeat` -- Periodic liveness confirmation
+- **Frontend integration** in `devices-page-client.tsx`:
+  - Subscribe to device status events on mount
+  - Update device grid in real-time without polling
+  - Show command execution progress / results live
 
 ---
 
@@ -442,10 +204,7 @@ app.post("/devices/:id/ha/command", async (request, reply) => {
 
 | Variable               | Default                    | Description                            |
 | ---------------------- | -------------------------- | -------------------------------------- |
-| `PORT`                 | `8080`                     | Device service port                    |
-| `MQTT_BROKER_URL`      | None                       | MQTT broker URL for IoT devices        |
-| `MQTT_USERNAME`        | None                       | MQTT credentials                       |
-| `MQTT_PASSWORD`        | None                       | MQTT credentials                       |
+| `PORT`                 | `4001`                     | Device service port                    |
 | `HOME_ASSISTANT_URL`   | None                       | Home Assistant REST API URL            |
 | `HOME_ASSISTANT_TOKEN` | None                       | Home Assistant long-lived access token |
 | `DATABASE_URL`         | (from @repo/database)      | PostgreSQL connection                  |
@@ -457,10 +216,12 @@ app.post("/devices/:id/ha/command", async (request, reply) => {
 
 The device service is called by:
 
-- **Agent service** - `POST /v1/tools/execute` for terminal, file read/write tools
-- **Task service** - `POST /v1/devices/:id/command` for approved device commands
-- **Gateway** - Proxies client requests for device management
+- **Agent service** -- `POST /v1/tools/execute` for terminal, file read/write tools
+- **Task service** -- `POST /v1/devices/:id/command` for approved device commands
+- **Gateway** -- Proxies client requests for device management
+- **tRPC router** -- Frontend calls proxy through the tRPC devices router (7 procedures)
 
 The device service calls:
 
-- **Redis pub/sub** - Publishes events on `user:<userId>` channel for approval requests and device status updates
+- **Redis pub/sub** -- Publishes events on `user:<userId>` channel for approval requests and device status updates
+- **Home Assistant REST API** (once hub integration is built) -- For smart home entity discovery and control

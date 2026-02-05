@@ -1,193 +1,83 @@
 # Task Service Instructions
 
+> VERIFIED against actual codebase -- Feb 2026 audit
+
 ## Overview
 
 The task service (`services/task/`) manages task lifecycle and orchestrates work between the user, the agent service, and background processing via Inngest. It is responsible for creating tasks, dispatching them to the agent, persisting results, and handling scheduled/recurring tasks.
 
 **Port:** 4002 (configurable via `PORT` env var)
 **Framework:** Node.js / Fastify + Inngest
-**Status:** Inngest functions are defined with real step structure. REST endpoints exist but are in-memory only. THE #1 PROBLEM: No database queries anywhere.
+**Total LOC:** 585 (index.ts: 61, tasks.ts: 366, inngest.ts: 158)
 
 ---
 
-## Current File Structure
+## Current State (IMPLEMENTED)
+
+### File Structure
 
 ```
 services/task/src/
-  index.ts              # 61 lines - Fastify bootstrap, registers task and inngest routes
+  index.ts              # 61 lines - Fastify bootstrap, registers task and inngest routes, CORS, graceful shutdown
   routes/
-    tasks.ts            # 197 lines - REST CRUD for tasks (all in-memory, every query is a TODO)
-    inngest.ts          # 159 lines - 3 Inngest functions: execute-task, scheduled-task, approval-workflow
+    tasks.ts            # 366 lines - REST CRUD for tasks with REAL Drizzle DB queries
+    inngest.ts          # 158 lines - 3 Inngest functions: execute-task, scheduled-task, approval-workflow
 ```
 
----
+### REST Endpoints (`src/routes/tasks.ts`) -- All Wired to Database
 
-## How the Task Service Works Today
+All endpoints use real Drizzle ORM queries against `agents` and `agentTasks` tables. Imports `db, eq, desc, and, agentSessions, agents, agentTasks, sql` from `@repo/database`.
 
-### REST Endpoints (`src/routes/tasks.ts`)
+| Method                     | Path        | Status                                                                                                                                                              | Description |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `POST /tasks`              | IMPLEMENTED | Creates agent (if none exists for session) via `db.insert(agents)`, inserts `agentTasks`, publishes `task:created` via Redis, dispatches webhook event, returns 201 |
+| `GET /tasks`               | IMPLEMENTED | Queries `agentTasks` with optional `sessionId` and `status` filters. Looks up agents by session, uses `IN` clause for agent IDs, supports cursor pagination         |
+| `GET /tasks/:id`           | IMPLEMENTED | Queries `agentTasks` by ID, returns 404 if not found                                                                                                                |
+| `PUT /tasks/:id`           | IMPLEMENTED | Updates `agentTasks` (title, status), dispatches webhook events on completion/failure                                                                               |
+| `DELETE /tasks/:id`        | IMPLEMENTED | Hard-deletes from `agentTasks` via `db.delete()`, returns 404 if not found                                                                                          |
+| `POST /tasks/:id/continue` | IMPLEMENTED | Publishes `task:continue` event via Redis pub/sub with message body                                                                                                 |
+| `POST /tasks/:id/cancel`   | IMPLEMENTED | Updates task status to `cancelled` in DB via `db.update()`, then publishes `task:cancelled` via Redis                                                               |
 
-| Method                     | Path    | Status                                                                                               | Description |
-| -------------------------- | ------- | ---------------------------------------------------------------------------------------------------- | ----------- |
-| `POST /tasks`              | PARTIAL | Creates task object in memory, publishes `task:created` via Redis, returns 201. Does NOT save to DB. |
-| `GET /tasks`               | STUB    | Returns empty array. Should query `agentTasks` table.                                                |
-| `GET /tasks/:id`           | STUB    | Returns 404. Should query by ID.                                                                     |
-| `PUT /tasks/:id`           | STUB    | Returns 404. Should update task.                                                                     |
-| `DELETE /tasks/:id`        | STUB    | Returns 404. Should soft-delete or hard-delete.                                                      |
-| `POST /tasks/:id/continue` | PARTIAL | Publishes `task:continue` event via Redis pub/sub. No DB write.                                      |
-| `POST /tasks/:id/cancel`   | PARTIAL | Publishes `task:cancelled` event via Redis pub/sub. No DB write.                                     |
+All endpoints include:
 
-The `CreateTaskSchema` validates incoming requests with zod:
+- `getUserId()` helper that extracts `x-user-id` header (throws 401 if missing)
+- Zod validation schemas (`CreateTaskSchema`, `UpdateTaskSchema`, `ListTasksSchema`)
+- Proper error handling with `errorResponse` / `successResponse` wrappers
+- Structured logging via `createLogger`
+- Webhook dispatch via `dispatchWebhookEvent` from `@repo/service-utils`
 
-```typescript
-const CreateTaskSchema = z.object({
-  sessionId: z.string(),
-  title: z.string().optional(),
-  prompt: z.string().min(1),
-  priority: TaskPrioritySchema.optional().default("normal"),
-  targetDeviceId: z.string().optional(),
-  targetPlatform: z.string().optional(),
-  requiredCapabilities: z.array(z.string()).optional().default([]),
-  metadata: z.record(z.unknown()).optional().default({}),
-});
-```
+### Inngest Functions (`src/routes/inngest.ts`) -- Structure Working
 
-The service already imports from `@repo/database` (line 3: `import { db, eq, desc, and } from "@repo/database"`) and `@repo/service-utils` (line 8: `publish`), but never uses `db`.
+Three Inngest functions are defined and the handler is mounted at `POST/GET/PUT /inngest/` via the `serve()` function from `inngest/fastify`.
 
-### Inngest Functions (`src/routes/inngest.ts`)
+**1. `execute-task`** (event: `task/execute`, retries: 3)
 
-Three Inngest functions are defined:
-
-**1. `execute-task`** (event: `task/execute`)
-
-- Step 1: `prepare-context` - Placeholder. Should load user context, tools, preferences from DB.
-- Step 2: `call-agent` - WORKING. Calls `POST {AGENT_SERVICE_URL}/v1/complete` with prompt, userId, taskId. Uses `stream: false`.
-- Step 3: `process-result` - Placeholder. Should save result to DB, update task status, deduct credits.
-- Retries: 3
+- Step 1: `prepare-context` -- Placeholder. Logs "Context prepared" and returns `{ ready: true }`. Does NOT load user preferences, conversation history, or tools yet.
+- Step 2: `call-agent` -- WORKING. Calls `POST {AGENT_SERVICE_URL}/v1/complete` with prompt, userId (x-user-id header), taskId (x-task-id header). Uses `stream: false`.
+- Step 3: `process-result` -- Placeholder. Logs the result and returns `{ success: true }`. Does NOT save to messages table, update task status, or deduct credits yet.
 
 **2. `scheduled-task`** (event: `task/scheduled`)
 
-- Simply re-emits a `task/execute` event with the same data
-- Should be enhanced to handle CRON scheduling
+- WORKING but minimal: re-emits a `task/execute` event via `step.sendEvent()` with the same event data
+- Does NOT support CRON expressions, recurring scheduling, or execution records
 
 **3. `approval-workflow`** (event: `task/approval-required`)
 
-- Waits for `task/approved` event (matched by `data.taskId`)
-- Timeout: 24 hours
-- On approval, forwards the command to the device service
-- On rejection or timeout, returns appropriate status
-- Can be cancelled via `task/cancelled` event
-
-The Inngest handler is mounted at `POST/GET/PUT /inngest/` via the `serve()` function from `inngest/fastify`.
+- WORKING. Full implementation with:
+  - `cancelOn` configured to listen for `task/cancelled` event matched by `data.taskId`
+  - `step.waitForEvent("wait-for-approval")` waits for `task/approved`, matched by `data.taskId`, timeout 24h
+  - Returns `{ status: "timeout" }` if no approval received
+  - Returns `{ status: "rejected" }` if `approval.data.approved` is false
+  - On approval, calls device service `POST /v1/devices/{deviceId}/command` if `deviceId` is present
+  - Returns `{ status: "approved", executed: true }` on success
 
 ---
 
-## What Needs to Be Built
+## What Needs Building
 
-### 1. Wire REST Endpoints to Database (CRITICAL)
+### 1. Enhanced Inngest Step 1: Prepare Context
 
-Every REST endpoint in `src/routes/tasks.ts` needs to be connected to the Drizzle ORM tables.
-
-**Target tables** (from `packages/database/src/schema/`):
-
-- `agentSessions` (`sessions.ts`) - The parent session containing messages and agents
-- `agents` (`agents.ts`) - Individual agent instances within a session
-- `agentTasks` (`agents.ts`) - Tasks assigned to agents
-- `messages` (`sessions.ts`) - Conversation messages
-
-**POST /tasks - Create Task:**
-
-```typescript
-// 1. Find or create the session
-let session = await db
-  .select()
-  .from(agentSessions)
-  .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.userId, userId)))
-  .limit(1)
-  .then((r) => r[0]);
-
-if (!session) {
-  [session] = await db
-    .insert(agentSessions)
-    .values({
-      id: input.sessionId,
-      userId,
-      title: input.title || "New Task",
-      status: "active",
-    })
-    .returning();
-}
-
-// 2. Create an agent for this session (if none exists)
-let [agent] = await db.select().from(agents).where(eq(agents.sessionId, input.sessionId)).limit(1);
-
-if (!agent) {
-  [agent] = await db
-    .insert(agents)
-    .values({
-      sessionId: input.sessionId,
-      type: "orchestrator",
-      name: "Rubic Agent",
-      status: "idle",
-    })
-    .returning();
-}
-
-// 3. Create the agent task
-const [task] = await db
-  .insert(agentTasks)
-  .values({
-    agentId: agent.id,
-    title: input.title || input.prompt.slice(0, 100),
-    description: input.prompt,
-    status: "pending",
-    priority: input.priority === "high" ? 1 : input.priority === "low" ? -1 : 0,
-  })
-  .returning();
-
-// 4. Save the user message
-await db.insert(messages).values({
-  sessionId: input.sessionId,
-  role: "user",
-  content: input.prompt,
-});
-
-// 5. Trigger Inngest execution
-await inngest.send({
-  name: "task/execute",
-  data: {
-    taskId: task.id,
-    agentId: agent.id,
-    sessionId: input.sessionId,
-    userId,
-    prompt: input.prompt,
-    targetDeviceId: input.targetDeviceId,
-  },
-});
-```
-
-**GET /tasks - List Tasks:**
-
-```typescript
-const conditions = [eq(agents.sessionId, query.sessionId)]; // if sessionId provided
-// Join agentTasks with agents to filter by userId through session
-const tasks = await db
-  .select({
-    task: agentTasks,
-    agent: agents,
-  })
-  .from(agentTasks)
-  .innerJoin(agents, eq(agentTasks.agentId, agents.id))
-  .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
-  .where(eq(agentSessions.userId, userId))
-  .orderBy(desc(agentTasks.createdAt))
-  .limit(query.limit);
-```
-
-**GET /tasks/:id, PUT /tasks/:id, DELETE /tasks/:id** - Similar patterns using `agentTasks` table.
-
-### 2. Enhance Inngest Step 1: Prepare Context
-
-At `src/routes/inngest.ts` line 28, the `prepare-context` step is a placeholder.
+At `src/routes/inngest.ts` line 28, the `prepare-context` step is a placeholder that needs to be fleshed out.
 
 **What it should do:**
 
@@ -226,9 +116,11 @@ await step.run("prepare-context", async () => {
 });
 ```
 
-### 3. Enhance Inngest Step 3: Process Result
+Note: The `call-agent` step (Step 2) would need to pass this context to the agent service request body.
 
-At `src/routes/inngest.ts` line 63, the `process-result` step is a placeholder.
+### 2. Enhanced Inngest Step 3: Process Result
+
+At `src/routes/inngest.ts` line 63, the `process-result` step is a placeholder that needs to be fleshed out.
 
 **What it should do:**
 
@@ -292,7 +184,6 @@ await step.run("process-result", async () => {
     .from(messages)
     .where(eq(messages.sessionId, sessionId));
   if (messageCount[0].count <= 2) {
-    // Generate a title from the conversation
     const title = agentResult.content.slice(0, 80);
     await db.update(agentSessions).set({ title }).where(eq(agentSessions.id, sessionId));
   }
@@ -301,7 +192,7 @@ await step.run("process-result", async () => {
 });
 ```
 
-### 4. Scheduled Task CRON Support
+### 3. Scheduled Task CRON Support
 
 The `scheduled-task` function at line 74 simply re-emits a `task/execute` event. It needs to:
 
@@ -345,7 +236,7 @@ const scheduledTask = inngest.createFunction(
     });
 
     // Execute the task
-    const result = await step.run("execute", async () => {
+    await step.run("execute", async () => {
       await step.sendEvent("trigger", {
         name: "task/execute",
         data: {
@@ -391,19 +282,16 @@ const scheduledTask = inngest.createFunction(
 );
 ```
 
-### 5. Task Cancellation and Retry Logic
+### 4. WebSocket Events After Task Completion
 
-**Cancellation:**
+The REST endpoints already publish events via Redis pub/sub (`task:created`, `task:continue`, `task:cancelled`), but the Inngest functions do not yet publish WebSocket events for:
 
-- `POST /tasks/:id/cancel` should update the task status in DB to `cancelled`
-- Send `task/cancelled` Inngest event to cancel the `approval-workflow` function
-- If the agent is mid-execution, the agent service needs a cancellation endpoint
+- `agent:status` (thinking, executing, idle) during task execution
+- `task:completed` after successful execution
+- `task:failed` after max retries exhausted
+- `task:progress` for intermediate updates during long-running tasks
 
-**Retry:**
-
-- On `execute-task` failure, Inngest handles retries (configured as `retries: 3`)
-- The error should be logged in the `agentTasks.result` field
-- After max retries, update task status to `failed` and notify user via WebSocket
+These should be added to the `prepare-context` and `process-result` steps as described above.
 
 ---
 
@@ -445,5 +333,5 @@ The task service calls:
 
 - **Agent service** - `POST /v1/complete` for LLM completions (during Inngest execution)
 - **Device service** - For approved device commands (during approval workflow)
-- **Billing service** - For credit deduction after task completion
+- **Billing service** - For credit deduction after task completion (needs implementation in process-result step)
 - **Redis pub/sub** - Publishes events on `user:<userId>` channel for real-time updates

@@ -2,15 +2,12 @@
 > email@0.0.0 dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/email
 > email dev --port 3003 --dir ../../packages/email/templates
 
-file:///Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/react-email@4.3.2_bufferutil@4.0.9/node_modules/react-email/dist/index.js:20
-import { styleText } from "node:util";
-         ^^^^^^^^^
-SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'
-    at ModuleJob._instantiate (node:internal/modules/esm/module_job:132:21)
-    at async ModuleJob.run (node:internal/modules/esm/module_job:214:5)
-    at async ModuleLoader.import (node:internal/modules/esm/loader:329:24)
-    at async loadESM (node:internal/process/esm_loader:34:7)
-    at async handleMainPromise (node:internal/modules/run_main:113:12)
+    React Email 4.3.2
+    Running preview at:          http://localhost:3003
 
-Node.js v20.10.0
- ELIFECYCLE  Command failed with exit code 1.
+- Getting react-email preview server ready...
+
+  [32m✔[39m Ready in 1.5s
+
+
+shutting down dev server

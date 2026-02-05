@@ -11,9 +11,10 @@
   "dependencies": {
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
+    "fastify-raw-body": "^5.0.0",
     "fastify": "^5.2.2",
     "fastify-plugin": "^5.0.1",
-    "stripe": "^17.7.0"
+    "stripe": "^19.1.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

@@ -13,6 +13,7 @@ import { mailRouter } from "./mail.router";
 import { searchRouter } from "./search.router";
 import { userRouter } from "./user.router";
 import { devicesRouter } from "./devices.router";
+import { smartHomeRouter } from "./smartHome.router";
 import { webhooksRouter } from "./webhooks.router";
 import { websiteBuilderRouter } from "./websiteBuilder.router";
 
@@ -40,6 +41,8 @@ export const appRouter = createTRPCRouter({
   user: userRouter,
   // Device management
   devices: devicesRouter,
+  // Smart Home
+  smartHome: smartHomeRouter,
   // Integrations
   webhooks: webhooksRouter,
   // Website Builder

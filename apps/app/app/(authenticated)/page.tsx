@@ -12,9 +12,7 @@ const title = "Rubic";
 const description = "AI-powered productivity platform.";
 
 const CollaborationProvider = dynamic(() =>
-  import("./components/collaboration-provider").then(
-    (mod) => mod.CollaborationProvider
-  )
+  import("./components/collaboration-provider").then((mod) => mod.CollaborationProvider)
 );
 
 export const metadata: Metadata = {
@@ -36,7 +34,7 @@ const App = async () => {
 
   return (
     <>
-      <Header title="Rubic" version="1.0" user={user} credits={600} isPro={false}>
+      <Header title="Rubic" version="1.0" user={user}>
         {env.LIVEBLOCKS_SECRET && (
           <CollaborationProvider orgId={session?.user?.id ?? ""}>
             <AvatarStack />
@@ -48,9 +46,7 @@ const App = async () => {
         <div className="flex flex-col items-center gap-6 w-full max-w-xl -mt-16">
           {/* Hero text */}
           <div className="text-center space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              What can I do for you?
-            </h1>
+            <h1 className="text-2xl font-semibold tracking-tight">What can I do for you?</h1>
             <p className="text-muted-foreground text-sm">
               Your AI assistant for research, coding, design, and more
             </p>

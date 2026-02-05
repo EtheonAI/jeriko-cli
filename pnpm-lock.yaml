@@ -1418,9 +1418,12 @@ importers:
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
+      fastify-raw-body:
+        specifier: ^5.0.0
+        version: 5.0.0
       stripe:
-        specifier: ^17.7.0
-        version: 17.7.0
+        specifier: ^19.1.0
+        version: 19.1.0(@types/node@22.15.21)
     devDependencies:
       "@repo/typescript-config":
         specifier: workspace:*
@@ -1526,6 +1529,9 @@ importers:
       "@repo/storage":
         specifier: workspace:*
         version: link:../../packages/storage
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(@cloudflare/workers-types@4.20250525.0)(@neondatabase/serverless@0.10.4)(@opentelemetry/api@1.9.0)(@prisma/client@6.18.0(prisma@6.18.0(typescript@5.9.3))(typescript@5.9.3))(@types/pg@8.15.6)(@types/react@19.2.2)(kysely@0.28.10)(prisma@6.18.0(typescript@5.9.3))(react@19.2.3)
       fastify:
         specifier: ^5.2.2
         version: 5.7.4
@@ -16161,6 +16167,13 @@ packages:
       {
         integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==,
       }
+
+  fastify-raw-body@5.0.0:
+    resolution:
+      {
+        integrity: sha512-2qfoaQ3BQDhZ1gtbkKZd6n0kKxJISJGM6u/skD9ljdWItAscjXrtZ1lnjr7PavmXX9j4EyCPmBDiIsLn07d5vA==,
+      }
+    engines: { node: ">= 10" }
 
   fastify@5.7.4:
     resolution:
@@ -36667,6 +36680,12 @@ snapshots:
 
   fastify-plugin@5.1.0: {}
 
+  fastify-raw-body@5.0.0:
+    dependencies:
+      fastify-plugin: 5.1.0
+      raw-body: 3.0.0
+      secure-json-parse: 2.7.0
+
   fastify@5.7.4:
     dependencies:
       "@fastify/ajv-compiler": 4.0.5
@@ -41817,6 +41836,12 @@ snapshots:
     dependencies:
       "@types/node": 24.9.1
       qs: 6.14.0
+
+  stripe@19.1.0(@types/node@22.15.21):
+    dependencies:
+      qs: 6.14.0
+    optionalDependencies:
+      "@types/node": 22.15.21
 
   stripe@19.1.0(@types/node@24.10.1):
     dependencies:

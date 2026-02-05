@@ -24,7 +24,14 @@ export {
 } from "./agents";
 
 // File schemas
-export { files, filesRelations, fileVersions, fileVersionsRelations } from "./files";
+export {
+  files,
+  filesRelations,
+  fileVersions,
+  fileVersionsRelations,
+  fileShares,
+  fileSharesRelations,
+} from "./files";
 
 // Organization schemas
 export {
@@ -186,6 +193,8 @@ export {
 
 // Device schemas
 export {
+  deviceDefinitions,
+  deviceCategories,
   devices,
   devicesRelations,
   deviceSessions,
@@ -194,6 +203,9 @@ export {
   deviceCommandsRelations,
   deviceTypes,
   deviceStatuses,
+  type DeviceCategory,
+  type DeviceDefinition,
+  type NewDeviceDefinition,
   type DeviceType,
   type DeviceStatus,
   type Device,
@@ -203,6 +215,21 @@ export {
   type DeviceCommand,
   type NewDeviceCommand,
 } from "./devices";
+
+// Smart Home schemas
+export {
+  smartHomeHubs,
+  smartHomeHubsRelations,
+  smartHomeEntities,
+  smartHomeEntitiesRelations,
+  type SmartHomeHubType,
+  type SmartHomeHubStatus,
+  type SmartHomeEntityDomain,
+  type SmartHomeHub,
+  type NewSmartHomeHub,
+  type SmartHomeEntity,
+  type NewSmartHomeEntity,
+} from "./smartHome";
 
 // Sandbox schemas
 export {
@@ -282,7 +309,7 @@ export {
   deploymentPlatforms,
   deploymentStatuses,
   type BuilderFramework,
-  type ProjectStatus,
+  type BuilderProjectStatus,
   type DeploymentPlatform,
   type DeploymentStatus,
   type WebsiteProject,

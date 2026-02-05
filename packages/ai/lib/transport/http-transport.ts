@@ -5,9 +5,9 @@
  * Used as fallback when WebSocket is not available.
  */
 
-import type { UIMessage } from '../types/ui-message';
-import type { UIMessageStreamChunk } from '../types/stream-chunks';
-import { parseSSEChunk, parseAISDKDataStream } from '../types/stream-chunks';
+import type { UIMessage } from "../types/ui-message";
+import type { UIMessageStreamChunk } from "../types/stream-chunks";
+import { parseSSEChunk, parseAISDKDataStream } from "../types/stream-chunks";
 
 // ============================================================================
 // Types
@@ -38,7 +38,7 @@ export interface HTTPChatOptions {
   abortSignal?: AbortSignal;
 
   /** Request trigger */
-  trigger?: 'submit-message' | 'resume-stream' | 'regenerate-message';
+  trigger?: "submit-message" | "resume-stream" | "regenerate-message";
 
   /** Message ID for regeneration */
   messageId?: string;
@@ -64,8 +64,8 @@ export class HTTPChatTransport {
     this.options = {
       api: options.api,
       headers: options.headers ?? {},
-      credentials: options.credentials ?? 'same-origin',
-      timeout: options.timeout ?? 60000,
+      credentials: options.credentials ?? "same-origin",
+      timeout: options.timeout ?? 120000,
     };
   }
 
@@ -88,9 +88,9 @@ export class HTTPChatTransport {
 
     try {
       const response = await fetch(this.options.api, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...this.options.headers,
           ...headers,
         },
@@ -113,7 +113,7 @@ export class HTTPChatTransport {
       }
 
       if (!response.body) {
-        throw new Error('No response body');
+        throw new Error("No response body");
       }
 
       // Transform the SSE stream into UIMessageStreamChunk stream
@@ -135,9 +135,9 @@ export class HTTPChatTransport {
   }): Promise<ReadableStream<UIMessageStreamChunk> | null> {
     try {
       const response = await fetch(`${this.options.api}/reconnect`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...this.options.headers,
           ...options.headers,
         },
@@ -176,9 +176,9 @@ export class HTTPChatTransport {
   ): ReadableStream<UIMessageStreamChunk> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
     let hasStarted = false;
-    let textId = 'text-0';
+    let textId = "text-0";
 
     return new ReadableStream<UIMessageStreamChunk>({
       async pull(controller) {
@@ -188,7 +188,7 @@ export class HTTPChatTransport {
           if (done) {
             // Process any remaining buffer
             if (buffer.trim()) {
-              const lines = buffer.split('\n');
+              const lines = buffer.split("\n");
               for (const line of lines) {
                 if (!line.trim()) continue;
                 const chunk = parseAISDKDataStream(line) || parseSSEChunk(line);
@@ -204,8 +204,8 @@ export class HTTPChatTransport {
           buffer += decoder.decode(value, { stream: true });
 
           // Process complete lines (AI SDK uses newline-delimited format)
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
           for (const line of lines) {
             if (!line.trim()) continue;
@@ -220,24 +220,24 @@ export class HTTPChatTransport {
 
             if (chunk) {
               // Send start event on first text
-              if (!hasStarted && chunk.type === 'text-delta') {
+              if (!hasStarted && chunk.type === "text-delta") {
                 hasStarted = true;
-                controller.enqueue({ type: 'start' });
-                controller.enqueue({ type: 'text-start', id: textId });
+                controller.enqueue({ type: "start" });
+                controller.enqueue({ type: "text-start", id: textId });
               }
 
               controller.enqueue(chunk);
 
               // Check for error chunk
-              if (chunk.type === 'error') {
+              if (chunk.type === "error") {
                 controller.close();
                 reader.cancel();
                 return;
               }
 
               // On finish, close text part if we had text
-              if (chunk.type === 'finish' && hasStarted) {
-                controller.enqueue({ type: 'text-end', id: textId });
+              if (chunk.type === "finish" && hasStarted) {
+                controller.enqueue({ type: "text-end", id: textId });
               }
             }
           }
@@ -270,9 +270,13 @@ function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
       break;
     }
 
-    signal.addEventListener('abort', () => {
-      controller.abort(signal.reason);
-    }, { once: true });
+    signal.addEventListener(
+      "abort",
+      () => {
+        controller.abort(signal.reason);
+      },
+      { once: true }
+    );
   }
 
   return controller.signal;
@@ -293,7 +297,7 @@ export function createHTTPTransport(options: HTTPTransportOptions): HTTPChatTran
  * Default HTTP transport options
  */
 export const defaultHTTPOptions: HTTPTransportOptions = {
-  api: '/api/chat',
-  credentials: 'same-origin',
-  timeout: 60000,
+  api: "/api/chat",
+  credentials: "same-origin",
+  timeout: 120000,
 };

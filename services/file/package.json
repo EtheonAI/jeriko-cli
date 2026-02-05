@@ -13,6 +13,7 @@
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
     "@repo/storage": "workspace:*",
+    "drizzle-orm": "^0.38.3",
     "fastify": "^5.2.2"
   },
   "devDependencies": {

@@ -2,4 +2,29 @@
 > api@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
 > concurrently "npm:next" "npm:stripe"
 
- ELIFECYCLE  Command failed.
+[stripe] 
+[stripe] > stripe
+[stripe] > stripe listen --forward-to localhost:3002/webhooks/payments
+[stripe] 
+[next] 
+[next] > next
+[next] > next dev -p 3002
+[next] 
+[stripe] Checking for new versions...
+[stripe] 
+[stripe] A newer version of the Stripe CLI is available, please update to: v1.35.0
+[stripe] Getting ready...
+[stripe] Ready! You are using Stripe API Version [2020-08-27]. Your webhook signing secret is whsec_b3b8f174e2e83c39ae43349ecb04006c7eafa1fcc16ed6922b848a758d839a3e (^C to quit)
+[next] ⨯ Failed to start server
+[next] Error: listen EADDRINUSE: address already in use :::3002
+[next]     at <unknown> (Error: listen EADDRINUSE: address already in use :::3002)
+[next]     at new Promise (<anonymous>) {
+[next]   code: 'EADDRINUSE',
+[next]   errno: -48,
+[next]   syscall: 'listen',
+[next]   address: '::',
+[next]   port: 3002
+[next] }
+[next] [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[stripe] 
+[stripe] npm run stripe exited with code 0

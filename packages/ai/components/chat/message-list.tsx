@@ -119,9 +119,7 @@ export function MessageList({
   // Empty state
   if (messages.length === 0 && emptyState) {
     return (
-      <div className={cn("flex h-full items-center justify-center", className)}>
-        {emptyState}
-      </div>
+      <div className={cn("flex h-full items-center justify-center", className)}>{emptyState}</div>
     );
   }
 
@@ -176,8 +174,8 @@ export function MessageList({
           })}
         </div>
 
-        {/* Typing indicator */}
-        {(showTypingIndicator || typingUsers.length > 0) && (
+        {/* Typing/streaming indicator */}
+        {(isStreaming || showTypingIndicator || typingUsers.length > 0) && (
           <div className="px-4 py-2">
             <StreamingIndicator
               isActive={isStreaming || typingUsers.length > 0}
@@ -189,10 +187,7 @@ export function MessageList({
 
       {/* Scroll to bottom button */}
       {!isAtBottom && (
-        <ScrollToBottom
-          onClick={() => scrollToBottom("smooth")}
-          hasNewMessages={hasNewMessages}
-        />
+        <ScrollToBottom onClick={() => scrollToBottom("smooth")} hasNewMessages={hasNewMessages} />
       )}
     </div>
   );

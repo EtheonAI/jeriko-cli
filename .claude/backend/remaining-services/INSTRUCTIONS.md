@@ -1,29 +1,54 @@
 # Remaining Services Instructions
 
-This file covers the 6 remaining backend services that are all pure stubs. Each section provides the current state, database tables, and what needs to be built.
+> **VERIFIED against actual codebase -- Feb 2026 audit**
+>
+> All 6 services below are **fully implemented** with real Drizzle DB queries, proper error handling, structured logging, and graceful shutdown. None of them are stubs.
 
 ---
 
 ## 1. Knowledge Service
 
-**Location:** `services/knowledge/src/index.ts` (156 lines)
+**Location:** `services/knowledge/src/` (4 files, 699 LOC total)
 **Port:** 4011
 **Purpose:** Document upload, text extraction, chunking, embedding generation, and vector similarity search (RAG).
 
-### Current Endpoints (All Stubs)
+### Current State -- FULLY IMPLEMENTED
 
-| Method                        | Path                                | Returns |
-| ----------------------------- | ----------------------------------- | ------- |
-| `GET /users/:userId/groups`   | `{ groups: [] }`                    |
-| `POST /groups`                | Random group ID                     |
-| `GET /groups/:id`             | `{ status: "not_found" }`           |
-| `DELETE /groups/:id`          | `{ deleted: true }`                 |
-| `POST /groups/:groupId/items` | Random item ID, status "processing" |
-| `GET /items/:id`              | `{ status: "not_found" }`           |
-| `DELETE /items/:id`           | `{ deleted: true }`                 |
-| `POST /query`                 | `{ results: [], query }`            |
-| `GET /items/:id/chunks`       | `{ chunks: [] }`                    |
-| `POST /items/:id/reprocess`   | `{ status: "reprocessing" }`        |
+| File             | LOC | What It Does                                                             |
+| ---------------- | --- | ------------------------------------------------------------------------ |
+| `index.ts`       | 515 | All endpoints with real DB queries + full `processItem()` pipeline       |
+| `lib/chunk.ts`   | 80  | Sentence-boundary-aware text chunking with configurable overlap          |
+| `lib/embed.ts`   | 51  | OpenAI `text-embedding-3-small` batched embedding generation             |
+| `lib/extract.ts` | 53  | Text extraction: HTML-to-markdown (Turndown), PDF (pdf-parse), URL fetch |
+
+**Implemented Endpoints (all with real DB queries):**
+
+| Method                        | Path                                                                                | Implementation |
+| ----------------------------- | ----------------------------------------------------------------------------------- | -------------- |
+| `GET /users/:userId/groups`   | Drizzle select from `knowledgeGroups` filtered by userId, ordered by sortOrder      |
+| `POST /groups`                | Drizzle insert into `knowledgeGroups` with createId()                               |
+| `GET /groups/:id`             | Drizzle select + item count subquery                                                |
+| `DELETE /groups/:id`          | Drizzle delete with returning, 404 if not found                                     |
+| `POST /groups/:groupId/items` | Insert item as "processing", kicks off async `processItem()` pipeline               |
+| `GET /groups/:groupId/items`  | Drizzle select from `knowledgeItems` filtered by groupId                            |
+| `GET /items/:id`              | Drizzle select by ID                                                                |
+| `DELETE /items/:id`           | Drizzle delete (chunks cascade via FK)                                              |
+| `POST /query`                 | Generates query embedding, runs pgvector cosine similarity `<=>` search via raw SQL |
+| `GET /items/:id/chunks`       | Drizzle select from `knowledgeChunks` ordered by chunkIndex                         |
+| `POST /items/:id/process`     | Kicks off background processing for an existing item                                |
+| `POST /items/:id/reprocess`   | Deletes old chunks, re-extracts, re-chunks, re-embeds                               |
+
+**Full RAG pipeline in `processItem()`:**
+
+1. Extract text (from content, URL via Turndown, or PDF)
+2. Update item content if extracted from URL
+3. Chunk text (1000 char max, 200 char overlap, sentence boundary aware)
+4. Generate embeddings via OpenAI `text-embedding-3-small` (batches of 2048)
+5. Insert chunks with embedding vectors into `knowledge_chunks`
+6. Update item status to "ready" with metadata (wordCount, chunkCount)
+7. On failure: marks item status as "failed" with `processingError`
+
+**Uses dynamic `await import()` for `@repo/database/service-index`** to work around ESM + pnpm workspace resolution issues.
 
 ### Database Tables (from `packages/database/src/schema/knowledge.ts`)
 
@@ -50,169 +75,65 @@ This file covers the 6 remaining backend services that are all pure stubs. Each 
 - `content` - Chunk text
 - `chunkIndex` - Position in document
 - `startOffset`, `endOffset`, `pageNumber`
-- `embeddingId` - Reference to vector store
+- `embedding` - pgvector column for cosine similarity search
+- `embeddingModel` - Model used (currently "text-embedding-3-small")
 - `metadata` (JSONB: heading, section)
 
-**`session_attachments`** - Files attached to chat sessions.
+### What Needs Building
 
-- `sessionId`, `userId`, `knowledgeItemId` (optional link to existing item)
-- `name`, `mimeType`, `fileSize`, `storageKey`
-- `status` - "uploading" | "processing" | "ready" | "failed"
+Nothing major. The full RAG pipeline is working end-to-end. Minor improvements could include:
 
-### What to Build
-
-**Step 1: Document Processing Pipeline**
-
-When a knowledge item is created (`POST /groups/:groupId/items`):
-
-```typescript
-// 1. Save item to DB with status "processing"
-const [item] = await db
-  .insert(knowledgeItems)
-  .values({
-    userId,
-    groupId,
-    type,
-    name: title,
-    content: content || null,
-    sourceUrl,
-    status: "processing",
-  })
-  .returning();
-
-// 2. If type is "url", fetch the URL content
-if (type === "url" && sourceUrl) {
-  const response = await fetch(sourceUrl);
-  const html = await response.text();
-  // Use turndown or similar to convert HTML to markdown
-  content = convertHtmlToMarkdown(html);
-}
-
-// 3. If type is "file", extract text from the uploaded file
-if (type === "file" && fileId) {
-  // Call file service to download
-  // Use pdf-parse (PDF), mammoth (DOCX), etc. for text extraction
-  content = await extractText(fileId, mimeType);
-}
-
-// 4. Update item with extracted content
-await db
-  .update(knowledgeItems)
-  .set({ content, contentPreview: content.slice(0, 500) })
-  .where(eq(knowledgeItems.id, item.id));
-
-// 5. Chunk the content
-const chunks = chunkText(content, { maxChunkSize: 1000, overlap: 200 });
-
-// 6. Generate embeddings for each chunk
-const embeddings = await generateEmbeddings(chunks.map((c) => c.text));
-
-// 7. Save chunks and embeddings
-for (let i = 0; i < chunks.length; i++) {
-  await db.insert(knowledgeChunks).values({
-    itemId: item.id,
-    content: chunks[i].text,
-    chunkIndex: i,
-    startOffset: chunks[i].startOffset,
-    endOffset: chunks[i].endOffset,
-    embeddingId: embeddings[i].id, // Store in vector DB (pgvector or Pinecone)
-  });
-}
-
-// 8. Update item status to "ready"
-await db
-  .update(knowledgeItems)
-  .set({
-    status: "ready",
-    embeddingModel: "text-embedding-3-small",
-  })
-  .where(eq(knowledgeItems.id, item.id));
-```
-
-**Step 2: Embedding Generation**
-
-```typescript
-import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-async function generateEmbeddings(texts: string[]): Promise<{ id: string; vector: number[] }[]> {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: texts,
-  });
-
-  return response.data.map((item, i) => ({
-    id: createId(),
-    vector: item.embedding,
-  }));
-}
-```
-
-**Step 3: Vector Similarity Search (`POST /query`)**
-
-```typescript
-app.post("/query", async (request, reply) => {
-  const { query, groupIds, userId, limit = 5 } = request.body;
-
-  // 1. Generate embedding for the query
-  const [queryEmbedding] = await generateEmbeddings([query]);
-
-  // 2. Search vector store for similar chunks
-  // If using pgvector:
-  //   SELECT * FROM knowledge_chunks
-  //   ORDER BY embedding <=> $queryVector
-  //   LIMIT $limit;
-  //
-  // If using Pinecone/Weaviate:
-  //   const results = await vectorClient.query({ vector: queryEmbedding.vector, topK: limit });
-
-  // 3. Load full chunk content and parent item info
-  // 4. Return ranked results with scores
-
-  return {
-    query,
-    results: results.map((r) => ({
-      chunkId: r.id,
-      content: r.content,
-      itemId: r.itemId,
-      itemName: r.itemName,
-      score: r.score,
-    })),
-  };
-});
-```
-
-**Step 4: RAG Context Injection**
-
-The agent service should call `POST /query` before making LLM calls to inject relevant knowledge context into the system prompt or user message.
+- File upload support (currently text and URL only; `extractFromPdf` exists but no file upload endpoint)
+- Configurable embedding models (currently hardcoded to `text-embedding-3-small`)
 
 ### Environment Variables
 
-| Variable         | Default               | Description                              |
-| ---------------- | --------------------- | ---------------------------------------- |
-| `PORT`           | `4011`                | Knowledge service port                   |
-| `OPENAI_API_KEY` | None                  | For text-embedding-3-small               |
-| `VECTOR_DB_URL`  | None                  | pgvector connection or Pinecone endpoint |
-| `DATABASE_URL`   | (from @repo/database) | PostgreSQL connection                    |
+| Variable         | Default               | Description                                      |
+| ---------------- | --------------------- | ------------------------------------------------ |
+| `PORT`           | `4011`                | Knowledge service port                           |
+| `OPENAI_API_KEY` | None                  | For text-embedding-3-small                       |
+| `DATABASE_URL`   | (from @repo/database) | PostgreSQL connection (needs pgvector extension) |
 
 ---
 
 ## 2. Notification Service
 
-**Location:** `services/notification/src/index.ts` (117 lines)
+**Location:** `services/notification/src/` (3 files, 584 LOC total)
 **Port:** 4006
-**Purpose:** Send notifications via push, email, and in-app. Manage notification preferences.
+**Purpose:** Send notifications via push, email, and in-app. Manage notification preferences and quiet hours.
 
-### Current Endpoints (All Stubs)
+### Current State -- FULLY IMPLEMENTED
 
-| Method                             | Path                    | Returns |
-| ---------------------------------- | ----------------------- | ------- |
-| `POST /send`                       | Random notification ID  |
-| `GET /users/:userId/notifications` | `{ notifications: [] }` |
-| `PATCH /notifications/:id/read`    | `{ read: true }`        |
-| `POST /push/subscribe`             | `{ subscribed: true }`  |
-| `GET /users/:userId/preferences`   | `{ preferences: {} }`   |
-| `PUT /users/:userId/preferences`   | `{ updated: true }`     |
+| File              | LOC | What It Does                                                         |
+| ----------------- | --- | -------------------------------------------------------------------- |
+| `index.ts`        | 364 | All endpoints with real DB queries, Knock email, WebSocket publish   |
+| `lib/channels.ts` | 110 | Channel preference resolution, per-type overrides, quiet hours logic |
+| `lib/push.ts`     | 110 | VAPID web push via `web-push`, stale subscription cleanup            |
+
+**Implemented Endpoints (all with real DB queries):**
+
+| Method                             | Path                                                                                                                       | Implementation |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `POST /send`                       | Fetches user prefs, applies quiet hours, saves to DB, delivers via in-app (WebSocket `publish`), web push, and Knock email |
+| `GET /users/:userId/notifications` | Cursor-based pagination, ordered by createdAt desc                                                                         |
+| `PATCH /notifications/:id/read`    | Updates `isRead`/`readAt`, publishes `notification:read` via WebSocket                                                     |
+| `POST /push/subscribe`             | Inserts push subscription (endpoint, p256dh, auth) into DB                                                                 |
+| `GET /users/:userId/preferences`   | Drizzle select from `notificationPreferences`                                                                              |
+| `PUT /users/:userId/preferences`   | Upsert pattern: update if exists, insert if not                                                                            |
+
+**Channel delivery pipeline in `POST /send`:**
+
+1. Fetch user notification preferences
+2. Determine active channels via `getActiveChannels()` (respects per-type overrides in `typeSettings`)
+3. Apply quiet hours via `applyQuietHours()` (suppresses push/inApp for non-urgent during quiet hours, supports overnight ranges like 22:00-07:00)
+4. Save notification to DB
+5. In-app: Publish via Redis/WebSocket (`publish()` from `@repo/service-utils`)
+6. Push: Send to all user subscriptions via `web-push`, auto-removes stale subscriptions (410/404), updates `lastUsedAt`
+7. Email: Triggers Knock workflow for instant digest; other digest frequencies handled by Knock
+
+**Knock integration:** Conditionally initialized -- logs warning if `KNOCK_SECRET_API_KEY` not set, email delivery gracefully disabled.
+
+**Direct imports from `@repo/database`** (not dynamic import like knowledge service).
 
 ### Database Tables (from `packages/database/src/schema/notifications.ts`)
 
@@ -240,293 +161,116 @@ The agent service should call `POST /query` before making LLM calls to inject re
 
 - `userId`, `endpoint`, `p256dh`, `auth`, `userAgent`, `lastUsedAt`
 
-### What to Build
+### What Needs Building
 
-**Integration with `@repo/notifications` (Knock):**
-
-The `packages/notifications/` package wraps Knock. If Knock is configured:
-
-```typescript
-import { Knock } from "@knocklabs/node";
-const knock = new Knock(process.env.KNOCK_SECRET_API_KEY!);
-```
-
-**POST /send - Create and Deliver Notification:**
-
-```typescript
-app.post("/send", async (request, reply) => {
-  const { userId, type, title, message, data, priority, actionUrl } = request.body;
-
-  // 1. Check user preferences
-  const [prefs] = await db
-    .select()
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, userId))
-    .limit(1);
-
-  // Check quiet hours
-  if (prefs?.quietHoursEnabled && isQuietHours(prefs)) {
-    // Queue for later delivery or skip non-urgent
-    if (priority !== "urgent") {
-      // Queue notification for after quiet hours
-    }
-  }
-
-  // 2. Save to database
-  const [notification] = await db
-    .insert(notifications)
-    .values({
-      userId,
-      type,
-      title,
-      message,
-      priority: priority || "normal",
-      actionUrl,
-      metadata: data,
-    })
-    .returning();
-
-  // 3. Deliver via configured channels
-  const channels = getActiveChannels(prefs, type);
-
-  if (channels.inApp) {
-    // Publish to WebSocket for real-time in-app notification
-    await publish(`user:${userId}`, {
-      type: "notification",
-      data: notification,
-    });
-  }
-
-  if (channels.push) {
-    // Send web push notification
-    const subscriptions = await db
-      .select()
-      .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.userId, userId));
-    for (const sub of subscriptions) {
-      await sendWebPush(sub, { title, body: message, data: { url: actionUrl } });
-    }
-  }
-
-  if (channels.email && prefs?.emailDigest === "instant") {
-    // Send email immediately (or use Knock workflow)
-    await knock.workflows.trigger("notification", {
-      recipients: [userId],
-      data: { title, message, actionUrl, type },
-    });
-  }
-
-  return { id: notification.id, status: "sent", channels };
-});
-```
-
-**GET /users/:userId/notifications - List with Pagination:**
-
-```typescript
-app.get("/users/:userId/notifications", async (request, reply) => {
-  const { userId } = request.params;
-  const { limit = 50, cursor, unreadOnly } = request.query;
-
-  const conditions = [eq(notifications.userId, userId)];
-  if (unreadOnly === "true") conditions.push(eq(notifications.isRead, false));
-  if (cursor) conditions.push(lte(notifications.createdAt, new Date(cursor)));
-
-  const items = await db
-    .select()
-    .from(notifications)
-    .where(and(...conditions))
-    .orderBy(desc(notifications.createdAt))
-    .limit(parseInt(limit as string));
-
-  const unreadCount = await db
-    .select({ count: sql`count(*)` })
-    .from(notifications)
-    .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
-
-  return {
-    notifications: items,
-    unreadCount: unreadCount[0]?.count || 0,
-    cursor: items.length ? items[items.length - 1].createdAt.toISOString() : null,
-  };
-});
-```
+Nothing major. The notification pipeline is fully working with all three channels (in-app, push, email).
 
 ### Environment Variables
 
-| Variable               | Default               | Description                |
-| ---------------------- | --------------------- | -------------------------- |
-| `PORT`                 | `4006`                | Notification service port  |
-| `KNOCK_SECRET_API_KEY` | None                  | Knock API key              |
-| `VAPID_PUBLIC_KEY`     | None                  | Web push VAPID public key  |
-| `VAPID_PRIVATE_KEY`    | None                  | Web push VAPID private key |
-| `DATABASE_URL`         | (from @repo/database) | PostgreSQL connection      |
+| Variable               | Default                    | Description                                           |
+| ---------------------- | -------------------------- | ----------------------------------------------------- |
+| `PORT`                 | `4006`                     | Notification service port                             |
+| `KNOCK_SECRET_API_KEY` | None                       | Knock API key (optional -- email disabled without it) |
+| `VAPID_PUBLIC_KEY`     | None                       | Web push VAPID public key                             |
+| `VAPID_PRIVATE_KEY`    | None                       | Web push VAPID private key                            |
+| `VAPID_SUBJECT`        | `mailto:support@rubic.dev` | VAPID subject                                         |
+| `DATABASE_URL`         | (from @repo/database)      | PostgreSQL connection                                 |
 
 ---
 
 ## 3. Search Service
 
-**Location:** `services/search/src/index.ts` (186 lines)
+**Location:** `services/search/src/index.ts` (775 LOC, single file)
 **Port:** 4013
-**Purpose:** Full-text search across sessions, messages, files, projects, and knowledge items. Uses Typesense.
+**Purpose:** Full-text search across sessions, messages, files, projects, and knowledge items. Typesense integration with DB ILIKE fallback.
 
-### Current Endpoints (All Stubs)
+### Current State -- FULLY IMPLEMENTED
 
-| Method                             | Path                        | Returns |
-| ---------------------------------- | --------------------------- | ------- |
-| `POST /search`                     | `{ results: [], total: 0 }` |
-| `POST /search/projects`            | `{ results: [], total: 0 }` |
-| `POST /search/sessions`            | `{ results: [], total: 0 }` |
-| `POST /search/messages`            | `{ results: [], total: 0 }` |
-| `POST /search/files`               | `{ results: [], total: 0 }` |
-| `POST /search/semantic`            | `{ results: [], total: 0 }` |
-| `GET /suggest`                     | `{ suggestions: [] }`       |
-| `POST /internal/index`             | `{ indexed: true }`         |
-| `DELETE /internal/index/:type/:id` | `{ removed: true }`         |
+**Implemented Endpoints (all with real DB queries + Typesense when available):**
 
-### What to Build
+| Method                             | Path                                                                                                                                    | Implementation |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `POST /search`                     | Universal multi-collection search across projects, sessions, files, knowledge, messages. Tries Typesense first, falls back to DB ILIKE. |
+| `POST /search/projects`            | Typesense `name,description` search with DB ILIKE fallback                                                                              |
+| `POST /search/sessions`            | Typesense `title` search with DB ILIKE fallback                                                                                         |
+| `POST /search/messages`            | DB ILIKE only (no Typesense collection for messages yet)                                                                                |
+| `POST /search/files`               | Typesense `name,path` search with mimeType filter, DB ILIKE fallback                                                                    |
+| `POST /search/semantic`            | Placeholder -- returns empty (TODO: vector embedding search)                                                                            |
+| `GET /suggest`                     | Autocomplete across projects, sessions, files via Typesense with DB fallback                                                            |
+| `POST /internal/index`             | Upserts document into Typesense collection (no-op if Typesense unavailable)                                                             |
+| `DELETE /internal/index/:type/:id` | Removes document from Typesense collection                                                                                              |
 
-**Integration with `@repo/search` (Typesense):**
+**Architecture:**
 
-```typescript
-import Typesense from "typesense";
+- Creates a Typesense client directly (cannot use `@repo/search` due to server-only/Next.js deps)
+- `isTypesenseAvailable()` health check before every Typesense operation
+- Graceful fallback: If Typesense is down or fails, seamlessly falls back to PostgreSQL `ILIKE` queries
+- Typesense collections: `files`, `sessions`, `tasks`, `projects`, `actions`
+- DB tables queried in fallback: `projects`, `agentSessions`, `messages`, `files`, `knowledgeItems`
+- Unified result format: `{ type, id, title, preview, score }`
+- `mapHits()` helper normalizes Typesense hits with highlight snippets
 
-const typesense = new Typesense.Client({
-  nodes: [{ host: process.env.TYPESENSE_HOST!, port: 443, protocol: "https" }],
-  apiKey: process.env.TYPESENSE_API_KEY!,
-});
-```
+**Direct imports from `@repo/database`** including `ilike` and `or` operators.
 
-**Step 1: Define Collections**
+### What Needs Building
 
-Create these Typesense collections on service startup:
-
-```typescript
-const collections = [
-  {
-    name: "sessions",
-    fields: [
-      { name: "title", type: "string" },
-      { name: "userId", type: "string", facet: true },
-      { name: "status", type: "string", facet: true },
-      { name: "createdAt", type: "int64" },
-    ],
-  },
-  {
-    name: "messages",
-    fields: [
-      { name: "content", type: "string" },
-      { name: "sessionId", type: "string", facet: true },
-      { name: "userId", type: "string", facet: true },
-      { name: "role", type: "string", facet: true },
-      { name: "createdAt", type: "int64" },
-    ],
-  },
-  {
-    name: "files",
-    fields: [
-      { name: "name", type: "string" },
-      { name: "mimeType", type: "string", facet: true },
-      { name: "userId", type: "string", facet: true },
-      { name: "sessionId", type: "string", optional: true },
-      { name: "createdAt", type: "int64" },
-    ],
-  },
-  {
-    name: "projects",
-    fields: [
-      { name: "name", type: "string" },
-      { name: "description", type: "string", optional: true },
-      { name: "userId", type: "string", facet: true },
-      { name: "status", type: "string", facet: true },
-      { name: "createdAt", type: "int64" },
-    ],
-  },
-];
-```
-
-**Step 2: Indexing on Create/Update**
-
-Other services call `POST /internal/index` when entities are created or updated:
-
-```typescript
-app.post("/internal/index", async (request, reply) => {
-  const { type, id, data } = request.body;
-
-  await typesense
-    .collections(type)
-    .documents()
-    .upsert({
-      id,
-      ...data,
-      createdAt: data.createdAt ? new Date(data.createdAt).getTime() : Date.now(),
-    });
-
-  return { indexed: true };
-});
-```
-
-**Step 3: Universal Search**
-
-```typescript
-app.post("/search", async (request, reply) => {
-  const { query, types, userId, limit = 20, offset = 0 } = request.body;
-  const searchTypes = types || ["projects", "sessions", "files", "messages"];
-
-  const results = await Promise.all(
-    searchTypes.map((type) =>
-      typesense
-        .collections(type)
-        .documents()
-        .search({
-          q: query,
-          query_by: type === "messages" ? "content" : "name,description",
-          filter_by: `userId:=${userId}`,
-          limit,
-          offset,
-        })
-        .then((r) => ({ type, hits: r.hits, found: r.found }))
-    )
-  );
-
-  return {
-    query,
-    results: results.flatMap(
-      (r) => r.hits?.map((h) => ({ type: r.type, ...h.document, score: h.text_match })) || []
-    ),
-    total: results.reduce((sum, r) => sum + (r.found || 0), 0),
-  };
-});
-```
+- **Typesense needs to be running** for full search functionality (DB ILIKE fallback works but is slower and less relevant)
+- **Semantic search** (`POST /search/semantic`): Currently a TODO placeholder, needs embedding generation + vector store query
+- **Messages Typesense collection**: Messages only search via DB ILIKE, no Typesense collection defined yet
 
 ### Environment Variables
 
-| Variable            | Default               | Description           |
-| ------------------- | --------------------- | --------------------- |
-| `PORT`              | `4013`                | Search service port   |
-| `TYPESENSE_HOST`    | None                  | Typesense host        |
-| `TYPESENSE_API_KEY` | None                  | Typesense API key     |
-| `DATABASE_URL`      | (from @repo/database) | PostgreSQL connection |
+| Variable             | Default               | Description           |
+| -------------------- | --------------------- | --------------------- |
+| `PORT`               | `4013`                | Search service port   |
+| `TYPESENSE_HOST`     | `localhost`           | Typesense host        |
+| `TYPESENSE_PORT`     | `8108`                | Typesense port        |
+| `TYPESENSE_PROTOCOL` | `http`                | Typesense protocol    |
+| `TYPESENSE_API_KEY`  | (empty)               | Typesense API key     |
+| `DATABASE_URL`       | (from @repo/database) | PostgreSQL connection |
 
 ---
 
 ## 4. Webhook Service
 
-**Location:** `services/webhook/src/index.ts` (151 lines)
+**Location:** `services/webhook/src/` (3 files, 560 LOC total)
 **Port:** 4007
-**Purpose:** Manage outgoing webhooks. When events happen in Rubic, deliver payloads to registered webhook URLs.
+**Purpose:** Manage outgoing webhooks. When events happen in Rubic, deliver payloads to registered webhook URLs with HMAC signatures.
 
-### Current Endpoints (All Stubs)
+### Current State -- FULLY IMPLEMENTED
 
-| Method                         | Path                      | Returns |
-| ------------------------------ | ------------------------- | ------- |
-| `POST /webhooks`               | Random webhook ID         |
-| `GET /webhooks`                | `{ webhooks: [] }`        |
-| `GET /webhooks/:id`            | `{ status: "not_found" }` |
-| `PATCH /webhooks/:id`          | Updated fields            |
-| `DELETE /webhooks/:id`         | `{ deleted: true }`       |
-| `GET /webhooks/:id/deliveries` | `{ deliveries: [] }`      |
-| `POST /deliveries/:id/retry`   | `{ retrying: true }`      |
-| `POST /internal/dispatch`      | Random event ID           |
+| File               | LOC | What It Does                                                                                                                 |
+| ------------------ | --- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`         | 289 | All endpoints with real DB queries, event dispatch with delivery queueing                                                    |
+| `lib/deliver.ts`   | 211 | HMAC-SHA256 signature generation, HTTP delivery with timeout, success/failure tracking, exponential backoff retry scheduling |
+| `lib/processor.ts` | 60  | Background polling processor for pending/retrying deliveries (5s interval, batch of 10)                                      |
+
+**Implemented Endpoints (all with real DB queries):**
+
+| Method                         | Path                                                                                                                      | Implementation |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `POST /webhooks`               | Creates webhook with auto-generated secret, inserts into DB                                                               |
+| `GET /webhooks`                | Lists webhooks for user (from `x-user-id` header)                                                                         |
+| `GET /webhooks/:id`            | Drizzle select by ID                                                                                                      |
+| `PATCH /webhooks/:id`          | Drizzle update with returning                                                                                             |
+| `DELETE /webhooks/:id`         | Drizzle delete with returning                                                                                             |
+| `GET /webhooks/:id/deliveries` | Lists last 50 deliveries for a webhook, ordered by createdAt desc                                                         |
+| `POST /deliveries/:id/retry`   | Resets delivery to "pending" with `nextRetryAt = now`                                                                     |
+| `POST /internal/dispatch`      | Saves event, finds matching webhooks via JSONB `@>` operator, creates delivery records, fires immediate delivery attempts |
+
+**Full delivery pipeline:**
+
+1. `POST /internal/dispatch` saves event to `webhook_events`, finds active webhooks matching `eventType` via JSONB containment
+2. Creates `webhook_deliveries` records with status "pending"
+3. Fire-and-forget immediate delivery via `processDelivery()`
+4. `deliverWebhook()` sends HTTP POST with headers: `X-Webhook-Id`, `X-Webhook-Delivery`, `X-Webhook-Event`, `X-Webhook-Timestamp`, `X-Webhook-Signature`
+5. Signature: HMAC-SHA256 of `{timestamp}.{body}` using webhook secret, formatted as `v1={hex}`
+6. On success: updates delivery status to "delivered", increments webhook `totalDeliveries`/`successfulDeliveries`
+7. On failure with retries remaining: sets status to "retrying" with exponential backoff (`retryDelayMs * 2^retryCount`)
+8. On failure with retries exhausted: sets status to "failed", increments `failedDeliveries`
+9. Background `processor.ts` polls every 5s for pending/retrying deliveries and processes them
+
+**`startProcessor()` is called on server startup; `stopProcessor()` on graceful shutdown.**
 
 ### Database Tables (from `packages/database/src/schema/webhooks.ts`)
 
@@ -535,7 +279,7 @@ app.post("/search", async (request, reply) => {
 - `userId`, `organizationId`, `name`, `description`
 - `url` - Target URL
 - `secret` - HMAC secret for signing
-- `events` (JSONB) - Array of subscribed event types (e.g., "agent.session.completed")
+- `events` (JSONB) - Array of subscribed event types
 - `status` - "active" | "inactive" | "suspended"
 - `headers` (JSONB) - Custom headers to include
 - `maxRetries`, `retryDelayMs`, `timeoutMs`, `rateLimitPerMinute`
@@ -550,176 +294,51 @@ app.post("/search", async (request, reply) => {
 - `error`, `retryCount`, `nextRetryAt`
 - `attemptedAt`, `completedAt`, `durationMs`
 
-**`webhook_events`** - Events queue waiting to be dispatched.
+**`webhook_events`** - Events queue.
 
 - `eventType`, `resourceType`, `resourceId`, `payload`
 - `userId`, `organizationId`
 - `processed`, `processedAt`
 
-**Supported event types** (defined in schema):
+### What Needs Building
 
-```
-agent.session.created, agent.session.completed,
-agent.task.created, agent.task.completed, agent.task.failed,
-project.created, project.updated, project.deleted,
-file.uploaded, file.processed,
-connector.synced, connector.error,
-billing.subscription.created, billing.subscription.updated,
-billing.payment.succeeded, billing.payment.failed
-```
-
-### What to Build
-
-**Integration with `@repo/webhooks` (Svix):**
-
-If using Svix for webhook delivery:
-
-```typescript
-import { Svix } from "svix";
-const svix = new Svix(process.env.SVIX_API_KEY!);
-```
-
-**POST /internal/dispatch - Process Event:**
-
-This internal endpoint is called by other services when events occur:
-
-```typescript
-app.post("/internal/dispatch", async (request, reply) => {
-  const { eventType, resourceType, resourceId, payload, userId, organizationId } = request.body;
-
-  // 1. Save event to queue
-  const [event] = await db
-    .insert(webhookEvents)
-    .values({
-      eventType,
-      resourceType,
-      resourceId,
-      payload,
-      userId,
-      organizationId,
-    })
-    .returning();
-
-  // 2. Find matching webhooks
-  const matchingWebhooks = await db
-    .select()
-    .from(webhooks)
-    .where(
-      and(
-        eq(webhooks.status, "active"),
-        userId ? eq(webhooks.userId, userId) : undefined,
-        // Filter by event type - need to check JSONB array contains
-        sql`${webhooks.events}::jsonb @> ${JSON.stringify([eventType])}::jsonb`
-      )
-    );
-
-  // 3. Create delivery records and send
-  for (const webhook of matchingWebhooks) {
-    const deliveryId = createId();
-    const body = JSON.stringify({
-      event: eventType,
-      data: payload,
-      timestamp: new Date().toISOString(),
-    });
-    const signature = generateHmacSignature(body, webhook.secret);
-
-    await db.insert(webhookDeliveries).values({
-      id: deliveryId,
-      webhookId: webhook.id,
-      eventType,
-      eventId: event.id,
-      payload,
-      status: "pending",
-      signature,
-    });
-
-    // Deliver async
-    deliverWebhook(webhook, deliveryId, body, signature).catch(() => {});
-  }
-
-  // 4. Mark event as processed
-  await db
-    .update(webhookEvents)
-    .set({ processed: true, processedAt: new Date() })
-    .where(eq(webhookEvents.id, event.id));
-
-  return { eventId: event.id, webhooksNotified: matchingWebhooks.length };
-});
-```
-
-**Delivery with retry:**
-
-```typescript
-async function deliverWebhook(webhook: Webhook, deliveryId: string, body: string, signature: string) {
-  const startTime = Date.now();
-  try {
-    const response = await fetch(webhook.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Webhook-Signature": signature,
-        "X-Webhook-Id": deliveryId,
-        ...webhook.headers,
-      },
-      body,
-      signal: AbortSignal.timeout(webhook.timeoutMs),
-    });
-
-    const durationMs = Date.now() - startTime;
-    const responseBody = await response.text();
-
-    await db.update(webhookDeliveries).set({
-      status: response.ok ? "delivered" : "failed",
-      responseStatus: response.status,
-      responseBody: responseBody.slice(0, 5000),
-      completedAt: new Date(),
-      durationMs,
-    }).where(eq(webhookDeliveries.id, deliveryId));
-
-    if (!response.ok && /* retryCount < maxRetries */) {
-      // Schedule retry with exponential backoff
-    }
-  } catch (err) {
-    await db.update(webhookDeliveries).set({
-      status: "failed",
-      error: (err as Error).message,
-      completedAt: new Date(),
-      durationMs: Date.now() - startTime,
-    }).where(eq(webhookDeliveries.id, deliveryId));
-  }
-}
-```
+Nothing major. The webhook delivery pipeline is fully working with retry logic and background processing.
 
 ### Environment Variables
 
-| Variable       | Default               | Description             |
-| -------------- | --------------------- | ----------------------- |
-| `PORT`         | `4007`                | Webhook service port    |
-| `SVIX_API_KEY` | None                  | Svix API key (optional) |
-| `DATABASE_URL` | (from @repo/database) | PostgreSQL connection   |
+| Variable       | Default               | Description           |
+| -------------- | --------------------- | --------------------- |
+| `PORT`         | `4007`                | Webhook service port  |
+| `DATABASE_URL` | (from @repo/database) | PostgreSQL connection |
 
 ---
 
 ## 5. Project Service
 
-**Location:** `services/project/src/index.ts` (149 lines)
+**Location:** `services/project/src/index.ts` (313 LOC, single file)
 **Port:** 4010
 **Purpose:** Project management -- grouping sessions, managing team members, and organizing work.
 
-### Current Endpoints (All Stubs)
+### Current State -- FULLY IMPLEMENTED
 
-| Method                                 | Path                      | Returns |
-| -------------------------------------- | ------------------------- | ------- |
-| `GET /users/:userId/projects`          | `{ projects: [] }`        |
-| `POST /projects`                       | Random project ID         |
-| `GET /projects/:id`                    | `{ status: "not_found" }` |
-| `PATCH /projects/:id`                  | Updated fields            |
-| `DELETE /projects/:id`                 | `{ deleted: true }`       |
-| `GET /projects/:id/members`            | `{ members: [] }`         |
-| `POST /projects/:id/members`           | `{ added: true }`         |
-| `DELETE /projects/:id/members/:userId` | `{ removed: true }`       |
-| `GET /projects/:id/sessions`           | `{ sessions: [] }`        |
-| `GET /projects/:id/files`              | `{ files: [] }`           |
+**Implemented Endpoints (all with real DB queries):**
+
+| Method                                 | Path                                                                                     | Implementation |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- | -------------- |
+| `GET /users/:userId/projects`          | Cursor-based pagination, ordered by createdAt desc                                       |
+| `POST /projects`                       | Drizzle insert + dispatches `project.created` webhook event via `dispatchWebhookEvent()` |
+| `GET /projects/:id`                    | Drizzle select by ID                                                                     |
+| `PATCH /projects/:id`                  | Drizzle update + dispatches `project.updated` webhook event                              |
+| `DELETE /projects/:id`                 | Drizzle delete + dispatches `project.deleted` webhook event                              |
+| `GET /projects/:id/members`            | Drizzle select from `projectMembers`                                                     |
+| `POST /projects/:id/members`           | Drizzle insert with role (owner/admin/editor/viewer)                                     |
+| `DELETE /projects/:id/members/:userId` | Drizzle delete by projectId + userId                                                     |
+| `GET /projects/:id/sessions`           | Drizzle select from `projectSessions` ordered by createdAt                               |
+| `GET /projects/:id/files`              | Gets session IDs for project, then queries `files` table with `IN` clause                |
+
+**Webhook integration:** Uses `dispatchWebhookEvent()` from `@repo/service-utils` on create, update, and delete -- wired to the webhook service.
+
+**Direct imports from `@repo/database`** including `projects`, `projectMembers`, `projectSessions`, `files`.
 
 ### Database Tables (from `packages/database/src/schema/projects.ts`)
 
@@ -753,83 +372,65 @@ async function deliverWebhook(webhook: Webhook, deliveryId: string, body: string
 
 - `groupId`, `projectId`, `sortOrder`
 
-### What to Build
+### What Needs Building
 
-Wire each endpoint to the corresponding Drizzle table. The queries are straightforward CRUD. Key patterns:
-
-```typescript
-// POST /projects
-const [project] = await db
-  .insert(projects)
-  .values({
-    userId,
-    name,
-    description,
-    organizationId,
-    visibility: visibility || "private",
-    status: "active",
-  })
-  .returning();
-
-// Also add creator as owner member
-await db.insert(projectMembers).values({
-  projectId: project.id,
-  userId,
-  role: "owner",
-});
-
-// GET /projects/:id/sessions - Get sessions linked to project
-const sessions = await db
-  .select({
-    link: projectSessions,
-    session: agentSessions,
-  })
-  .from(projectSessions)
-  .innerJoin(agentSessions, eq(projectSessions.sessionId, agentSessions.id))
-  .where(eq(projectSessions.projectId, id))
-  .orderBy(projectSessions.sortOrder);
-```
-
-On create/update, call the search service to index: `POST /internal/index` with `{ type: "projects", id, data }`.
+Nothing major. All CRUD, members, sessions, and files endpoints are fully wired to the database.
 
 ### Environment Variables
 
-| Variable             | Default                 | Description                 |
-| -------------------- | ----------------------- | --------------------------- |
-| `PORT`               | `4010`                  | Project service port        |
-| `DATABASE_URL`       | (from @repo/database)   | PostgreSQL connection       |
-| `SEARCH_SERVICE_URL` | `http://localhost:4013` | Search service for indexing |
+| Variable              | Default                    | Description                        |
+| --------------------- | -------------------------- | ---------------------------------- |
+| `PORT`                | `4010`                     | Project service port               |
+| `DATABASE_URL`        | (from @repo/database)      | PostgreSQL connection              |
+| `WEBHOOK_SERVICE_URL` | (from @repo/service-utils) | Webhook service for event dispatch |
 
 ---
 
 ## 6. Website Service
 
-**Location:** `services/website/src/` (4 files)
+**Location:** `services/website/src/` (4 files, 1285 LOC total)
 **Port:** 4004
-**Purpose:** AI-powered website generation, file management, preview via E2B/WebContainer, deployment, and database provisioning.
+**Purpose:** AI-powered website generation, file management, preview, deployment, and database provisioning.
 
-### Current File Structure
+### Current State -- FULLY IMPLEMENTED (with simulated external integrations)
 
-```
-services/website/src/
-  index.ts                  # 64 lines - Fastify bootstrap with CORS
-  routes/
-    websites.ts             # 372 lines - Website CRUD, file management, AI code generation
-    deploy.ts               # 180 lines - Preview, deploy, custom domain
-    database.ts             # 187 lines - TiDB database provisioning
-```
+| File                 | LOC | What It Does                                                                                                                                    |
+| -------------------- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`           | 63  | Fastify bootstrap with CORS, registers 3 route modules                                                                                          |
+| `routes/websites.ts` | 574 | Website CRUD, file CRUD (stored in `website_pages` DB table), Next.js template initialization, Zod validation                                   |
+| `routes/deploy.ts`   | 301 | Preview (simulation), deploy (tracked via `websiteCrawlJobs` in DB), deployment listing, custom domain configuration                            |
+| `routes/database.ts` | 347 | TiDB database provisioning (simulation stored in website metadata), database info/delete, branch creation, SQL execution with keyword deny-list |
 
-### Current Status
+**All website data is stored in the database** (using `websites` and `websitePages` tables via Drizzle). No in-memory `Map` storage.
 
-This is the most feature-rich stub. Has working:
+**Implemented Endpoints:**
 
-- Website CRUD with in-memory `Map<string, Website>` storage
-- File tree management (create, read, update, list files)
-- Next.js template initialization (package.json, page.tsx, layout.tsx, globals.css, tailwind.config.ts)
-- Deployment simulation with status progression (queued -> building -> ready)
-- TiDB database provisioning simulation
-- Database branch creation for preview deployments
-- SQL execution with keyword deny-list (DROP DATABASE, GRANT, etc.)
+| Method                                        | Path                                                                                     | Implementation |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------- |
+| `POST /websites`                              | Creates website in DB, initializes Next.js template pages in `websitePages` table        |
+| `GET /websites`                               | Lists user's websites from DB                                                            |
+| `GET /websites/:id`                           | Gets website + file listing from DB                                                      |
+| `PUT /websites/:id`                           | Updates website metadata in DB                                                           |
+| `DELETE /websites/:id`                        | Deletes website from DB (ownership check)                                                |
+| `POST /websites/:id/generate`                 | AI code generation endpoint -- validates website exists, **TODO: call Agent Service**    |
+| `GET /websites/:id/files/*`                   | Reads file content from `websitePages` table                                             |
+| `PUT /websites/:id/files/*`                   | Upserts file content in `websitePages` table                                             |
+| `GET /websites/:id/files`                     | Lists all files for a website                                                            |
+| `POST /websites/:id/preview`                  | Returns "starting" status (simulation)                                                   |
+| `GET /websites/:id/preview/status`            | Returns simulated preview URL                                                            |
+| `POST /websites/:id/deploy`                   | Creates deployment record in `websiteCrawlJobs`, returns queued status                   |
+| `GET /websites/:id/deployments/:deploymentId` | Gets deployment status from DB                                                           |
+| `GET /websites/:id/deployments`               | Lists all deployments from DB                                                            |
+| `POST /websites/:id/domain`                   | Stores custom domain in DB, returns DNS record instructions                              |
+| `POST /websites/:id/database`                 | Stores provisioning info in website metadata JSONB                                       |
+| `GET /websites/:id/database`                  | Reads database info from website metadata                                                |
+| `DELETE /websites/:id/database`               | Removes database info from metadata                                                      |
+| `POST /websites/:id/database/branch`          | Branch creation simulation                                                               |
+| `POST /websites/:id/database/execute`         | SQL execution with forbidden keyword deny-list (DROP DATABASE, DROP USER, GRANT, REVOKE) |
+
+**Template initialization:** `getTemplatePages("nextjs")` generates package.json, app/page.tsx, app/layout.tsx, app/globals.css, tailwind.config.ts -- all stored in `websitePages` DB table.
+
+**Uses `successResponse`/`errorResponse` from `@repo/service-utils`** with proper error codes. Zod schema validation on inputs.
 
 ### Database Tables (from `packages/database/src/schema/websites.ts`)
 
@@ -837,43 +438,29 @@ This is the most feature-rich stub. Has working:
 
 - `userId`, `organizationId`, `projectId`
 - `name`, `url`, `domain`
+- `description`
 - `status` - "pending" | "crawling" | "completed" | "failed" | "paused"
-- `config` (JSONB: maxDepth, maxPages, includePatterns, excludePatterns, crawlDelay)
-- `crawlFrequency` - "once" | "daily" | "weekly" | "monthly"
+- `config` (JSONB) - Used for website settings
+- `metadata` (JSONB) - Used for framework, templateId, database provisioning info (databaseId, databaseProvider, databaseStatus, etc.)
 
-**`website_pages`** - Individual crawled pages.
+**`website_pages`** - Website files (repurposed from crawled pages schema).
 
 - `websiteId`, `url`, `path`, `title`
-- `rawHtml`, `textContent`, `markdown`
-- `links`, `images`, `headings` (JSONB arrays)
-- `statusCode`, `contentType`, `depth`
-- `contentHash`, `lastChangedAt`
+- `textContent` - File content
+- `depth`
 
-**`website_crawl_jobs`** - Crawl job records.
+**`website_crawl_jobs`** - Deployment tracking (repurposed from crawl jobs schema).
 
-- `websiteId`, `status`, progress counters
-- `startedAt`, `completedAt`
+- `websiteId`, `status`, `config` (JSONB: platform, deployedBy)
+- `createdAt`
 
-Note: The schema is more oriented toward web crawling/scraping. For the website builder feature, you may need additional tables or repurpose these tables for storing generated website files and deployments.
+### What Needs Building
 
-### What to Build
-
-1. **Replace in-memory Map with database** - Move website data from the `Map` to the database
-2. **AI Code Generation** - Wire `POST /websites/:id/generate` to the agent service:
-   ```typescript
-   const response = await fetch(`${AGENT_SERVICE_URL}/v1/complete`, {
-     method: "POST",
-     headers: { "Content-Type": "application/json", "x-user-id": userId },
-     body: JSON.stringify({
-       prompt: `Generate code for: ${input.prompt}`,
-       system_prompt: "You are a frontend developer. Generate React/Next.js code...",
-       stream: true,
-     }),
-   });
-   ```
-3. **E2B Preview** - Call sandbox service to create a sandbox, write website files, run `npm install && npm run dev`, return the preview URL
-4. **TiDB Database** - Replace simulation with real TiDB Serverless API calls
-5. **Deployment** - Integrate with Vercel API (`@vercel/client`) or Netlify API for production deployments
+1. **AI Code Generation** -- `POST /websites/:id/generate` validates the website exists but returns a placeholder. Needs to call the Agent Service for actual code generation.
+2. **Real Preview** -- `POST /websites/:id/preview` returns a simulation. Needs E2B sandbox or WebContainer integration to spin up a real dev server.
+3. **Real Deployment** -- `POST /websites/:id/deploy` creates a DB record but does not actually deploy. Needs Vercel API (`@vercel/client`) or Netlify API integration.
+4. **Real TiDB Provisioning** -- Database provisioning stores metadata but does not call the TiDB Serverless API. Branch creation and SQL execution are simulations.
+5. **Custom domain verification** -- `POST /websites/:id/domain` stores the domain but does not verify DNS records or configure the hosting platform.
 
 ### Environment Variables
 
@@ -890,51 +477,20 @@ Note: The schema is more oriented toward web crawling/scraping. For the website 
 
 ## Common Patterns Across All Services
 
-Every service in the Rubic backend follows the same structure:
+Every service follows the same Fastify structure:
 
-```typescript
-import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
+- Uses `createLogger` from `@repo/service-utils` for structured logging
+- Uses `getEnv` for environment variable access with defaults
+- Uses `createId` from `@repo/service-utils` for generating IDs
+- Generates request IDs via `crypto.randomUUID()`
+- Listens on `0.0.0.0` for Docker compatibility
+- Has graceful shutdown handling (`SIGINT`, `SIGTERM`)
+- Expects `x-user-id` and `x-request-id` headers from the gateway
+- Uses `@repo/database` for Drizzle ORM queries (all services are fully wired)
+- Request/response logging via `onRequest` and `onResponse` hooks
+- Proper error handling with try/catch and 404/500 responses
 
-const logger = createLogger({ service: "SERVICE_NAME" });
+**Import patterns vary:**
 
-async function main() {
-  const port = parseInt(getEnv("PORT", "DEFAULT_PORT"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
-
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
-  });
-
-  // Health check
-  app.get("/health", async () => ({ status: "ok", service: "SERVICE_NAME" }));
-
-  // Request logging hooks
-  app.addHook("onRequest", async (request) => { ... });
-  app.addHook("onResponse", async (request, reply) => { ... });
-
-  // Routes...
-
-  await app.listen({ port, host });
-
-  // Graceful shutdown
-  for (const signal of ["SIGINT", "SIGTERM"]) {
-    process.on(signal, async () => { await app.close(); process.exit(0); });
-  }
-}
-
-main();
-```
-
-All services:
-
-- Use `createLogger` from `@repo/service-utils` for structured logging
-- Use `getEnv` for environment variable access
-- Generate request IDs via `crypto.randomUUID()`
-- Listen on `0.0.0.0` for Docker compatibility
-- Have graceful shutdown handling
-- Expect `x-user-id` and `x-request-id` headers from the gateway
-- Use `@repo/database` for Drizzle ORM (once wired)
-- Follow the `successResponse` / `errorResponse` patterns from `@repo/service-utils`
+- Knowledge service uses **dynamic `await import()`** for `@repo/database/service-index` (ESM + pnpm workaround)
+- All other services use **direct static imports** from `@repo/database`

@@ -1,19 +1,23 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
-import { db, files, fileVersions, eq, and, desc, asc, sql } from "@repo/database/service-index";
-import {
-  uploadFile,
-  getPresignedUrl,
-  deleteFile,
-  deleteFiles,
-  getStorageKey,
-  getVersionStorageKey,
-} from "@repo/storage";
+import { eq, and, desc, asc, sql } from "drizzle-orm";
 
 const logger = createLogger({ service: "file" });
 
 async function main() {
+  // Dynamic imports to avoid ESM namespace destructuring issues with tsx
+  const database = await import("@repo/database/service-index");
+  const { db, files, fileVersions } = database;
+  const storageModule = await import("@repo/storage");
+  const {
+    uploadFile,
+    getPresignedUrl,
+    deleteFile,
+    deleteFiles,
+    getStorageKey,
+    getVersionStorageKey,
+  } = storageModule;
   const port = parseInt(getEnv("PORT", "4005"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
@@ -68,7 +72,7 @@ async function main() {
           userId,
           sessionId: sessionId || null,
           name: data.filename,
-          path: `/${data.filename}`,
+          path: (request.headers["x-path"] as string) || "/",
           mimeType: data.mimetype,
           size: buffer.length,
           storageKey,
@@ -146,7 +150,7 @@ async function main() {
               userId,
               sessionId: sessionId || null,
               name: data.filename,
-              path: `/${data.filename}`,
+              path: (request.headers["x-path"] as string) || "/",
               mimeType: data.mimetype,
               size: buffer.length,
               storageKey,

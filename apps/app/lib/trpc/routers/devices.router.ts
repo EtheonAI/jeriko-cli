@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { TRPCError } from "@trpc/server";
+import { db, deviceDefinitions, eq } from "@repo/database";
 
 // Device service URL - proxied through gateway
 const DEVICE_SERVICE_URL = process.env.DEVICE_SERVICE_URL || "http://localhost:4001/v1/devices";
@@ -42,6 +43,17 @@ async function fetchDeviceService<T>(
 }
 
 export const devicesRouter = createTRPCRouter({
+  // List all available device definitions (catalog)
+  listDefinitions: protectedProcedure.query(async () => {
+    const definitions = await db
+      .select()
+      .from(deviceDefinitions)
+      .where(eq(deviceDefinitions.isEnabled, true))
+      .orderBy(deviceDefinitions.category, deviceDefinitions.name);
+
+    return definitions;
+  }),
+
   // List user's devices
   list: protectedProcedure.query(async ({ ctx }) => {
     try {

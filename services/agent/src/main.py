@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
+from .db import close_db, init_db
 from .routes import completion, tools, health
 
 # Configure structured logging
@@ -89,8 +90,13 @@ app.include_router(tools.router, prefix="/v1")
 @app.on_event("startup")
 async def startup():
     logger.info("agent_service_starting", environment=settings.environment)
+    try:
+        await init_db()
+    except Exception as e:
+        logger.warning("db_init_skipped", error=str(e), note="Agent will work without DB features")
 
 
 @app.on_event("shutdown")
 async def shutdown():
     logger.info("agent_service_stopping")
+    await close_db()

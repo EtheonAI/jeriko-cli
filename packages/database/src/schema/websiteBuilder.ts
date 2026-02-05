@@ -9,7 +9,7 @@ export type BuilderFramework = (typeof builderFrameworks)[number];
 
 // Project status enum values
 export const projectStatuses = ["idle", "building", "deployed", "failed"] as const;
-export type ProjectStatus = (typeof projectStatuses)[number];
+export type BuilderProjectStatus = (typeof projectStatuses)[number];
 
 // Deployment platform enum values
 export const deploymentPlatforms = ["vercel", "netlify"] as const;
@@ -37,7 +37,7 @@ export const websiteProjects = pgTable("website_projects", {
   name: text("name").notNull(),
   description: text("description"),
   framework: text("framework").$type<BuilderFramework>().notNull().default("nextjs"),
-  status: text("status").$type<ProjectStatus>().notNull().default("idle"),
+  status: text("status").$type<BuilderProjectStatus>().notNull().default("idle"),
 
   // URLs
   previewUrl: text("preview_url"),

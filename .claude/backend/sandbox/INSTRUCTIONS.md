@@ -1,12 +1,14 @@
 # Sandbox Service Instructions
 
+> **VERIFIED against actual codebase -- Feb 2026 audit**
+
 ## Overview
 
-The sandbox service (`services/sandbox/`) provides isolated code execution environments using E2B (e2b.dev). It creates sandboxes, executes code, runs shell commands, and manages files within sandboxed environments. This is the backbone for the `execute_code` tool in the agent service and the website preview functionality.
+The sandbox service (`services/sandbox/`) provides isolated code execution environments using E2B (e2b.dev). It creates sandboxes, executes code (Python, JS, Bash), runs shell commands, and manages files within sandboxed environments. This is the backbone for the `execute_code` tool in the agent service and the website preview functionality.
 
 **Port:** 4012 (configurable via `PORT` env var)
 **Framework:** Node.js / Fastify
-**Status:** 190 lines with 10 endpoints, all stubs returning placeholder data. No E2B integration.
+**Status:** 682 LOC, fully implemented with real E2B integration. All endpoints are live and wired to the database.
 
 ---
 
@@ -14,26 +16,63 @@ The sandbox service (`services/sandbox/`) provides isolated code execution envir
 
 ```
 services/sandbox/src/
-  index.ts              # 190 lines - 10 endpoints, all TODO stubs
+  index.ts              # 682 lines - all endpoints implemented with E2B SDK + Drizzle DB
 ```
 
 ---
 
-## Current Endpoints (All Stubs)
+## Current State (Fully Implemented)
 
-| Method                          | Path | Status                             | Returns |
-| ------------------------------- | ---- | ---------------------------------- | ------- |
-| `POST /sandboxes`               | STUB | Returns UUID + `"creating"` status |
-| `GET /sandboxes/:id`            | STUB | Returns `{ status: "not_found" }`  |
-| `GET /users/:userId/sandboxes`  | STUB | Returns `{ sandboxes: [] }`        |
-| `POST /sandboxes/:id/execute`   | STUB | Returns UUID + `"running"` status  |
-| `GET /executions/:id`           | STUB | Returns empty stdout/stderr        |
-| `POST /sandboxes/:id/shell`     | STUB | Returns empty stdout/stderr        |
-| `POST /sandboxes/:id/files`     | STUB | Returns `{ written: true }`        |
-| `GET /sandboxes/:id/files`      | STUB | Returns `{ content: "" }`          |
-| `GET /sandboxes/:id/files/list` | STUB | Returns `{ files: [] }`            |
-| `POST /sandboxes/:id/stop`      | STUB | Returns `{ status: "stopped" }`    |
-| `DELETE /sandboxes/:id`         | STUB | Returns `{ deleted: true }`        |
+Everything below is live and working in `services/sandbox/src/index.ts`.
+
+### E2B SDK Integration
+
+- Imports `Sandbox` from `@e2b/code-interpreter`
+- Uses `E2B_API_KEY` from env for all SDK calls
+- `E2BSandbox.create()`, `.connect()`, `.runCode()`, `.commands.run()`, `.files.*`, `.kill()`
+
+### In-Memory Sandbox Registry
+
+- `sandboxMap: Map<string, E2BSandbox>` keyed by DB sandbox ID
+- `getE2BSandbox()` helper: checks map first, falls back to DB lookup + `E2BSandbox.connect()` for reconnection
+- Graceful shutdown handler kills all active E2B sandboxes on SIGINT/SIGTERM
+
+### Implemented Endpoints
+
+| Method                          | Path | Status                                                            | Description |
+| ------------------------------- | ---- | ----------------------------------------------------------------- | ----------- |
+| `GET /health`                   | LIVE | Health check                                                      |
+| `POST /sandboxes`               | LIVE | Creates E2B sandbox, stores in DB, caches instance                |
+| `GET /sandboxes/:id`            | LIVE | Fetches sandbox record from DB                                    |
+| `GET /users/:userId/sandboxes`  | LIVE | Lists user's sandboxes ordered by createdAt desc                  |
+| `POST /sandboxes/:id/execute`   | LIVE | Executes code via `e2bSandbox.runCode()`, records execution in DB |
+| `GET /executions/:id`           | LIVE | Fetches execution result from DB                                  |
+| `POST /sandboxes/:id/shell`     | LIVE | Runs shell command via `e2bSandbox.commands.run()`, records in DB |
+| `POST /sandboxes/:id/files`     | LIVE | Writes file via `e2bSandbox.files.write()`, tracks in DB          |
+| `GET /sandboxes/:id/files`      | LIVE | Reads file via `e2bSandbox.files.read()`, falls back to DB        |
+| `GET /sandboxes/:id/files/list` | LIVE | Lists files via `e2bSandbox.files.list()`, falls back to DB       |
+| `POST /sandboxes/:id/stop`      | LIVE | Kills E2B sandbox, updates DB status to "stopped"                 |
+| `DELETE /sandboxes/:id`         | LIVE | Kills E2B sandbox, deletes DB record                              |
+
+### Key Implementation Details
+
+- **Reconnection:** If an E2B sandbox is not in the in-memory map, `getE2BSandbox()` looks up the `e2bSandboxId` from DB and reconnects via `E2BSandbox.connect()`.
+- **Execution history:** Every code execution and shell command creates a `sandbox_executions` record with status, stdout, stderr, exitCode, executionTimeMs.
+- **File fallback:** File read and list endpoints fall back to DB records if the E2B sandbox is unreachable.
+- **Timeout handling:** Execute endpoint detects timeout errors and returns HTTP 408 with `status: "timeout"`.
+- **Error propagation:** Structured error responses with E2B error name/value/traceback for code execution failures.
+- **Request logging:** Fastify hooks log every incoming request and response with requestId, method, URL, statusCode, and responseTime.
+- **Graceful shutdown:** SIGINT/SIGTERM handlers kill all active E2B sandboxes via `Promise.allSettled`, then close the Fastify server.
+
+### Agent Service Integration (Working)
+
+The agent service (`services/agent/src/routes/tools.py`) already calls the sandbox service for the `execute_code` tool:
+
+1. Agent receives tool_use block: `{ name: "execute_code", input: { code: "...", language: "python" } }`
+2. `execute_code()` in tools.py calls `POST /sandboxes` to create a sandbox (or reuses an existing `sandbox_id`)
+3. Calls `POST /sandboxes/:id/execute` with code, language, and timeout
+4. Returns stdout/stderr/exitCode/sandbox_id back to the LLM as a tool_result
+5. Sandbox ID is preserved so iterative coding reuses the same sandbox
 
 ---
 
@@ -58,6 +97,7 @@ Sandbox instance records.
 - `workingDirectory` - Default `/home/user`
 - `startedAt`, `lastActivityAt`, `expiresAt`
 - `cpuUsage`, `memoryUsage` - Resource metrics
+- `metadata` (JSONB) - Arbitrary metadata
 
 ### `sandbox_executions`
 
@@ -88,482 +128,89 @@ Files tracked within sandboxes.
 
 ---
 
-## What Needs to Be Built
+## What Needs Building
 
-### 1. E2B Client Setup
+The following features are NOT yet implemented in the sandbox service.
 
-```typescript
-import { Sandbox } from "e2b";
+### 1. Port Exposure Endpoint
 
-// E2B API key from environment
-const E2B_API_KEY = process.env.E2B_API_KEY!;
+The `sandboxes` table already has `hostname` and `ports` fields, and E2B supports `sandbox.getHost(port)`. What is missing is an explicit endpoint for the frontend to request port exposure for website previews.
+
+```
+POST /sandboxes/:id/ports
+Body: { port: 3000 }
+Response: { url: "https://<e2b-host>:3000", port: 3000 }
 ```
 
-The E2B SDK manages sandbox lifecycle. Key methods:
+This is needed for the website builder preview pane (iframe pointing at sandbox URL).
 
-- `Sandbox.create()` - Create a new sandbox
-- `sandbox.runCode()` - Execute code
-- `sandbox.commands.run()` - Run shell commands
-- `sandbox.files.write()` - Write files
-- `sandbox.files.read()` - Read files
-- `sandbox.files.list()` - List files
-- `sandbox.close()` - Stop sandbox
-- `sandbox.kill()` - Force stop sandbox
+### 2. Browser Integration (Playwright Screenshots)
 
-### 2. In-Memory Sandbox Registry
+For the "browser" sandbox type, add Playwright-based endpoints to take screenshots and interact with web pages inside the sandbox:
 
-Keep track of active E2B sandbox instances for quick access:
-
-```typescript
-// Map of our sandbox ID -> E2B Sandbox instance
-const activeSandboxes = new Map<
-  string,
-  {
-    sandbox: Sandbox;
-    userId: string;
-    createdAt: Date;
-    lastActivityAt: Date;
-  }
->();
-
-// Cleanup inactive sandboxes every 5 minutes
-setInterval(
-  async () => {
-    const now = Date.now();
-    for (const [id, entry] of activeSandboxes) {
-      const inactiveMs = now - entry.lastActivityAt.getTime();
-      if (inactiveMs > 30 * 60 * 1000) {
-        // 30 minutes inactive
-        try {
-          await entry.sandbox.close();
-          activeSandboxes.delete(id);
-          await db.update(sandboxes).set({ status: "stopped" }).where(eq(sandboxes.id, id));
-        } catch (err) {
-          logger.warn({ err, sandboxId: id }, "Failed to cleanup sandbox");
-        }
-      }
-    }
-  },
-  5 * 60 * 1000
-);
+```
+POST /sandboxes/:id/browser/navigate  - Navigate to URL
+POST /sandboxes/:id/browser/screenshot - Take screenshot
+POST /sandboxes/:id/browser/click      - Click element
+POST /sandboxes/:id/browser/type       - Type into element
 ```
 
-### 3. POST /sandboxes - Create Sandbox
+This requires installing Playwright in the E2B sandbox template and running headless Chromium.
 
-```typescript
-app.post("/sandboxes", async (request, reply) => {
-  const userId = request.headers["x-user-id"] as string;
-  if (!userId) return reply.status(401).send({ error: "Unauthorized" });
+### 3. Streaming Output (Real-Time stdout/stderr)
 
-  const {
-    projectId,
-    template,
-    config: sandboxConfig,
-  } = request.body as {
-    projectId?: string;
-    template?: string;
-    config?: { timeout?: number; memory?: number; env?: Record<string, string> };
-  };
+Currently, code execution and shell commands are synchronous (the HTTP response waits for completion). For long-running tasks, add WebSocket-based streaming:
 
-  const sandboxId = createId();
+- Subscribe to `sandbox:output` events for real-time stdout/stderr
+- Use E2B's `onStdout`/`onStderr` callbacks during `runCode()` and `commands.run()`
+- Emit events via the WebSocket gateway service
+- Frontend terminal panel can display output as it streams
 
-  // 1. Save to database first
-  const [record] = await db
-    .insert(sandboxes)
-    .values({
-      id: sandboxId,
-      userId,
-      projectId,
-      templateId: template || "base",
-      name: `Sandbox ${sandboxId.slice(0, 8)}`,
-      type: "code",
-      status: "creating",
-      config: sandboxConfig || {},
-      workingDirectory: "/home/user",
-    })
-    .returning();
+### 4. Resource Monitoring
 
-  // 2. Create E2B sandbox (async)
-  try {
-    const e2bSandbox = await Sandbox.create({
-      template: template || "base", // E2B template ID
-      apiKey: E2B_API_KEY,
-      timeout: sandboxConfig?.timeout || 300000, // 5 minutes default
-      envs: sandboxConfig?.env || {},
-    });
+The `sandboxes` table has `cpuUsage` and `memoryUsage` columns, but nothing populates them. Add:
 
-    // 3. Update database with E2B details
-    await db
-      .update(sandboxes)
-      .set({
-        e2bSandboxId: e2bSandbox.sandboxId,
-        status: "running",
-        hostname: e2bSandbox.getHost(3000), // Get hostname for port 3000
-        startedAt: new Date(),
-        lastActivityAt: new Date(),
-        expiresAt: new Date(Date.now() + (sandboxConfig?.timeout || 300000)),
-      })
-      .where(eq(sandboxes.id, sandboxId));
-
-    // 4. Add to active registry
-    activeSandboxes.set(sandboxId, {
-      sandbox: e2bSandbox,
-      userId,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-    });
-
-    return reply.status(201).send({
-      id: sandboxId,
-      e2bSandboxId: e2bSandbox.sandboxId,
-      status: "running",
-      hostname: e2bSandbox.getHost(3000),
-    });
-  } catch (err) {
-    await db
-      .update(sandboxes)
-      .set({
-        status: "error",
-        metadata: { error: (err as Error).message },
-      })
-      .where(eq(sandboxes.id, sandboxId));
-
-    logger.error({ err, sandboxId }, "Failed to create E2B sandbox");
-    return reply.status(500).send({ error: "Failed to create sandbox" });
-  }
-});
+```
+GET /sandboxes/:id/metrics
+Response: { cpu: 45, memoryMb: 128, diskMb: 50 }
 ```
 
-### 4. POST /sandboxes/:id/execute - Execute Code
+Periodically poll E2B for resource usage and update the DB, or expose a one-shot endpoint that checks on demand.
 
-```typescript
-app.post("/sandboxes/:id/execute", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const { code, language, timeout } = request.body as {
-    code: string;
-    language?: string;
-    timeout?: number;
-  };
+### 5. Sandbox Templates
 
-  const entry = activeSandboxes.get(id);
-  if (!entry) {
-    // Try to reconnect to E2B sandbox
-    const [record] = await db.select().from(sandboxes).where(eq(sandboxes.id, id)).limit(1);
-    if (!record || !record.e2bSandboxId) {
-      return reply.status(404).send({ error: "Sandbox not found" });
-    }
+Currently the service passes `template` through to E2B but does not manage custom templates. Add:
 
-    // Reconnect
-    try {
-      const reconnected = await Sandbox.connect(record.e2bSandboxId, { apiKey: E2B_API_KEY });
-      activeSandboxes.set(id, {
-        sandbox: reconnected,
-        userId: record.userId,
-        createdAt: record.createdAt,
-        lastActivityAt: new Date(),
-      });
-    } catch {
-      return reply.status(410).send({ error: "Sandbox expired" });
-    }
-  }
+- Custom E2B template definitions (pre-installed packages, system dependencies)
+- Template registry endpoint: `GET /templates`, `POST /templates`
+- Common templates: "python-data-science" (numpy, pandas, matplotlib), "node-web" (node + npm), "full-stack" (node + python + postgres)
 
-  const sandbox = activeSandboxes.get(id)!;
-  sandbox.lastActivityAt = new Date();
+### 6. Inactive Sandbox Cleanup
 
-  const executionId = createId();
-  const startedAt = new Date();
+The in-memory map tracks sandboxes but there is no automatic cleanup of idle sandboxes. The old instructions described a 30-minute inactive cleanup interval. Add:
 
-  // Save execution record
-  await db.insert(sandboxExecutions).values({
-    id: executionId,
-    sandboxId: id,
-    type: "code",
-    language: language || "python",
-    code,
-    status: "running",
-    startedAt,
-    timeoutMs: timeout || 30000,
-  });
-
-  try {
-    // Execute code in E2B sandbox
-    const result = await sandbox.sandbox.runCode(code, {
-      language: language || "python",
-      timeout: timeout || 30000,
-    });
-
-    const completedAt = new Date();
-    const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-
-    // Update execution record
-    await db
-      .update(sandboxExecutions)
-      .set({
-        status: "completed",
-        stdout: result.logs.stdout.join("\n"),
-        stderr: result.logs.stderr.join("\n"),
-        exitCode: result.exitCode,
-        result: result.results?.length ? result.results[0] : null,
-        completedAt,
-        executionTimeMs,
-      })
-      .where(eq(sandboxExecutions.id, executionId));
-
-    // Update sandbox activity
-    await db.update(sandboxes).set({ lastActivityAt: new Date() }).where(eq(sandboxes.id, id));
-
-    return {
-      id: executionId,
-      status: "completed",
-      stdout: result.logs.stdout.join("\n"),
-      stderr: result.logs.stderr.join("\n"),
-      exitCode: result.exitCode,
-      result: result.results?.length ? result.results[0] : null,
-      executionTimeMs,
-    };
-  } catch (err) {
-    await db
-      .update(sandboxExecutions)
-      .set({
-        status: "failed",
-        error: (err as Error).message,
-        completedAt: new Date(),
-      })
-      .where(eq(sandboxExecutions.id, executionId));
-
-    return reply.status(500).send({
-      id: executionId,
-      status: "failed",
-      error: (err as Error).message,
-    });
-  }
-});
-```
-
-### 5. POST /sandboxes/:id/shell - Run Shell Command
-
-```typescript
-app.post("/sandboxes/:id/shell", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const { command, timeout } = request.body as { command: string; timeout?: number };
-
-  const entry = activeSandboxes.get(id);
-  if (!entry) return reply.status(404).send({ error: "Sandbox not found or inactive" });
-
-  entry.lastActivityAt = new Date();
-
-  const executionId = createId();
-  await db.insert(sandboxExecutions).values({
-    id: executionId,
-    sandboxId: id,
-    type: "command",
-    language: "bash",
-    code: command,
-    status: "running",
-    startedAt: new Date(),
-  });
-
-  try {
-    const result = await entry.sandbox.commands.run(command, {
-      timeout: timeout || 30000,
-    });
-
-    await db
-      .update(sandboxExecutions)
-      .set({
-        status: "completed",
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        completedAt: new Date(),
-      })
-      .where(eq(sandboxExecutions.id, executionId));
-
-    return {
-      id: executionId,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    };
-  } catch (err) {
-    await db
-      .update(sandboxExecutions)
-      .set({
-        status: "failed",
-        error: (err as Error).message,
-        completedAt: new Date(),
-      })
-      .where(eq(sandboxExecutions.id, executionId));
-
-    return reply.status(500).send({ error: (err as Error).message });
-  }
-});
-```
-
-### 6. File Operations in Sandbox
-
-```typescript
-// POST /sandboxes/:id/files - Write file to sandbox
-app.post("/sandboxes/:id/files", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const { path, content } = request.body as { path: string; content: string };
-
-  const entry = activeSandboxes.get(id);
-  if (!entry) return reply.status(404).send({ error: "Sandbox not found" });
-
-  await entry.sandbox.files.write(path, content);
-
-  // Track in database
-  const existing = await db
-    .select()
-    .from(sandboxFiles)
-    .where(and(eq(sandboxFiles.sandboxId, id), eq(sandboxFiles.path, path)))
-    .limit(1);
-
-  if (existing.length) {
-    await db
-      .update(sandboxFiles)
-      .set({
-        content: content.length < 100000 ? content : null, // Only store small files inline
-        size: content.length,
-        version: sql`${sandboxFiles.version} + 1`,
-      })
-      .where(eq(sandboxFiles.id, existing[0].id));
-  } else {
-    await db.insert(sandboxFiles).values({
-      sandboxId: id,
-      path,
-      name: path.split("/").pop() || path,
-      content: content.length < 100000 ? content : null,
-      size: content.length,
-    });
-  }
-
-  return { path, written: true };
-});
-
-// GET /sandboxes/:id/files - Read file from sandbox
-app.get("/sandboxes/:id/files", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const { path } = request.query as { path: string };
-
-  const entry = activeSandboxes.get(id);
-  if (!entry) return reply.status(404).send({ error: "Sandbox not found" });
-
-  const content = await entry.sandbox.files.read(path);
-
-  return { path, content };
-});
-
-// GET /sandboxes/:id/files/list - List files
-app.get("/sandboxes/:id/files/list", async (request, reply) => {
-  const { id } = request.params as { id: string };
-  const { path } = request.query as { path?: string };
-
-  const entry = activeSandboxes.get(id);
-  if (!entry) return reply.status(404).send({ error: "Sandbox not found" });
-
-  const files = await entry.sandbox.files.list(path || "/home/user");
-
-  return { files };
-});
-```
-
-### 7. Sandbox Lifecycle Management
-
-```typescript
-// POST /sandboxes/:id/stop - Stop sandbox (keeps state)
-app.post("/sandboxes/:id/stop", async (request, reply) => {
-  const { id } = request.params as { id: string };
-
-  const entry = activeSandboxes.get(id);
-  if (entry) {
-    await entry.sandbox.close();
-    activeSandboxes.delete(id);
-  }
-
-  await db.update(sandboxes).set({ status: "stopped" }).where(eq(sandboxes.id, id));
-
-  return { id, status: "stopped" };
-});
-
-// DELETE /sandboxes/:id - Delete sandbox permanently
-app.delete("/sandboxes/:id", async (request, reply) => {
-  const { id } = request.params as { id: string };
-
-  const entry = activeSandboxes.get(id);
-  if (entry) {
-    try {
-      await entry.sandbox.kill();
-    } catch {}
-    activeSandboxes.delete(id);
-  }
-
-  // Delete from DB (cascade deletes executions and files)
-  await db.delete(sandboxes).where(eq(sandboxes.id, id));
-
-  return { deleted: true };
-});
-```
-
-### 8. GET /sandboxes/:id - Get Sandbox Info
-
-```typescript
-app.get("/sandboxes/:id", async (request, reply) => {
-  const { id } = request.params as { id: string };
-
-  const [record] = await db.select().from(sandboxes).where(eq(sandboxes.id, id)).limit(1);
-
-  if (!record) return reply.status(404).send({ error: "Sandbox not found" });
-
-  // Check if still active in memory
-  const isActive = activeSandboxes.has(id);
-
-  return {
-    ...record,
-    isActive,
-    // Include recent executions
-    recentExecutions: await db
-      .select()
-      .from(sandboxExecutions)
-      .where(eq(sandboxExecutions.sandboxId, id))
-      .orderBy(desc(sandboxExecutions.createdAt))
-      .limit(10),
-  };
-});
-```
+- Periodic cleanup (every 5 minutes) that checks `lastActivityAt`
+- Kill sandboxes inactive for more than 30 minutes
+- Update DB status to "terminated"
+- This prevents E2B billing for abandoned sandboxes
 
 ---
-
-## Integration with Agent Service
-
-The agent service calls the sandbox service when the `execute_code` tool is invoked:
-
-1. Agent receives tool_use block: `{ name: "execute_code", input: { code: "...", language: "python" } }`
-2. Agent service calls `POST /sandboxes` to create a sandbox (or reuses existing one for the session)
-3. Agent service calls `POST /sandboxes/:id/execute` with the code
-4. Result (stdout/stderr/exitCode) is passed back to the LLM as a tool_result
-5. Sandbox is kept alive for the duration of the agent session for iterative coding
-
-The session-to-sandbox mapping should use the `agentSessionId` field in the `sandboxes` table.
 
 ## Frontend Integration
 
 The frontend should display a terminal panel and preview pane for sandbox interactions:
 
-- **Terminal panel:** Shows sandbox stdout/stderr in real-time. Subscribe to WebSocket events of type `sandbox:output`.
-- **Preview pane:** For web applications, show the sandbox URL (`hostname` field) in an iframe. The E2B sandbox exposes ports that map to URLs.
+- **Terminal panel:** Shows sandbox stdout/stderr. Currently works via polling execution results. Streaming (item 3 above) would enable real-time display.
+- **Preview pane:** For web applications, show the sandbox URL (`hostname` field) in an iframe. Requires port exposure endpoint (item 1 above).
 - **File tree:** Show sandbox files using `GET /sandboxes/:id/files/list`.
 
 ---
 
 ## Environment Variables
 
-| Variable                   | Default               | Description                       |
-| -------------------------- | --------------------- | --------------------------------- |
-| `PORT`                     | `4012`                | Sandbox service port              |
-| `E2B_API_KEY`              | None                  | E2B API key (required)            |
-| `DATABASE_URL`             | (from @repo/database) | PostgreSQL connection             |
-| `SANDBOX_DEFAULT_TIMEOUT`  | `300000`              | Default sandbox timeout (5 min)   |
-| `SANDBOX_MAX_TIMEOUT`      | `3600000`             | Max sandbox timeout (1 hour)      |
-| `SANDBOX_CLEANUP_INTERVAL` | `300000`              | Inactive sandbox cleanup interval |
+| Variable       | Default               | Description                                 |
+| -------------- | --------------------- | ------------------------------------------- |
+| `PORT`         | `4012`                | Sandbox service port                        |
+| `HOST`         | `0.0.0.0`             | Sandbox service host                        |
+| `E2B_API_KEY`  | None                  | E2B API key (required for sandbox creation) |
+| `DATABASE_URL` | (from @repo/database) | PostgreSQL connection                       |

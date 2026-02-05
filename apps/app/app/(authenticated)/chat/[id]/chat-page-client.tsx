@@ -5,29 +5,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
 import {
   setMessages as setReduxMessages,
-  addMessage,
   setStreaming,
-  setCurrentStreamingMessage,
-  setInputValue,
   type Message,
 } from "@/lib/store/slices/chat.slice";
 import { setSelectedAgent, type Agent, type AgentTask } from "@/lib/store/slices/agents.slice";
 import { useSocket } from "@/lib/socket/provider";
-import {
-  ChatContainer,
-  MessageList,
-  ChatComposer,
-  AgentDagPanel,
-  type ChatComposerRef,
-} from "@repo/ai/components";
+import { ChatContainer, MessageList, AgentDagPanel } from "@repo/ai/components";
 import { useRealTimeChat } from "@repo/ai/hooks";
-import type { UIMessage, MessagePart } from "@repo/ai/lib/types";
-import type { ChatAttachment } from "@repo/ai/components/input/chat-composer";
-
-// Extended attachment with file reference for local use
-interface LocalAttachment extends ChatAttachment {
-  file?: File;
-}
+import type { UIMessage, MessagePart, Attachment } from "@repo/ai/lib/types";
+import {
+  UnifiedPrompt,
+  type UnifiedPromptRef,
+  type SubmitOptions,
+} from "@/app/(authenticated)/components/unified-prompt";
 import { SourcesPanel } from "./components/sources-panel";
 import { ConnectionStatus } from "./components/connection-status";
 
@@ -46,7 +36,10 @@ interface ChatPageClientProps {
  */
 export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPageClientProps) {
   const dispatch = useAppDispatch();
-  const composerRef = React.useRef<ChatComposerRef>(null);
+  const composerRef = React.useRef<UnifiedPromptRef>(null);
+
+  // Model state - read from sessionStorage initial if available
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
 
   // Redux state
   const reduxMessages = useAppSelector((state) => state.chat.messages[sessionId] ?? []);
@@ -61,7 +54,6 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
   // Local UI state
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarType, setSidebarType] = useState<"sources" | "agents" | null>(null);
-  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
 
   // Convert redux messages to UIMessage format
   const initialUIMessages = useMemo<UIMessage[]>(() => {
@@ -124,12 +116,21 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     sessionStorage.removeItem(key);
 
     try {
-      const { parts } = JSON.parse(stored) as { parts: MessagePart[] };
+      const { parts, model } = JSON.parse(stored) as {
+        parts: MessagePart[];
+        model?: string;
+      };
+
+      // Carry over model selection from dashboard
+      if (model) {
+        setSelectedModel(model);
+      }
+
       const textPart = parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
       if (textPart?.text) {
         // Small delay to let the hook initialize
         setTimeout(() => {
-          sendMessage({ text: textPart.text });
+          sendMessage({ text: textPart.text, body: { model } });
         }, 100);
       }
     } catch {
@@ -154,39 +155,24 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     dispatch(setStreaming(status === "streaming"));
   }, [status, dispatch]);
 
-  // Handle send message
+  // Handle send message from UnifiedPrompt
   const handleSendMessage = useCallback(
-    (parts: MessagePart[], files?: ChatAttachment[]) => {
-      const textPart = parts.find((p) => p.type === "text") as
-        | { type: "text"; text: string }
-        | undefined;
+    (input: string, attachments: Attachment[], options: SubmitOptions) => {
+      const fileArray = attachments.filter((a) => a.file).map((a) => a.file!);
 
-      // Convert to LocalAttachment to access file property
-      const localFiles = files as LocalAttachment[] | undefined;
-      const fileArray = localFiles?.filter((f) => f.file).map((f) => f.file!);
+      // Update model if changed
+      if (options.model) {
+        setSelectedModel(options.model);
+      }
 
       sendMessage({
-        text: textPart?.text,
-        files: fileArray,
+        text: input,
+        files: fileArray.length > 0 ? fileArray : undefined,
+        body: { model: options.model },
       });
-
-      // Clear attachments
-      setAttachments([]);
     },
     [sendMessage]
   );
-
-  // Handle file selection
-  const handleFileSelect = useCallback((files: FileList) => {
-    const newAttachments: LocalAttachment[] = Array.from(files).map((file, i) => ({
-      id: `file-${Date.now()}-${i}`,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      file,
-    }));
-    setAttachments((prev) => [...prev, ...newAttachments]);
-  }, []);
 
   // Handle message action
   const handleMessageAction = useCallback(
@@ -304,15 +290,13 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
 
           {/* Composer */}
           <div className="mx-auto max-w-3xl">
-            <ChatComposer
+            <UnifiedPrompt
               ref={composerRef}
               onSubmit={handleSendMessage}
               onCancel={stop}
-              isLoading={status === "submitted"}
+              disabled={status === "submitted"}
               isStreaming={status === "streaming"}
-              attachments={attachments}
-              onAttachmentsChange={setAttachments}
-              onFileSelect={handleFileSelect}
+              initialModel={selectedModel}
               placeholder="Ask anything..."
             />
           </div>
@@ -326,10 +310,10 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
       sidebarOpen={sidebarOpen}
       sidebarPosition="right"
     >
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto h-full max-w-3xl">
         <MessageList
           messages={messages}
-          isStreaming={status === "streaming"}
+          isStreaming={status === "streaming" || status === "submitted"}
           onMessageAction={handleMessageAction}
           onToolApproval={handleToolApproval}
           emptyState={

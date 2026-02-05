@@ -2,228 +2,456 @@
 
 ## Current State
 
-### Frontend Page
+### What's ALREADY Working (Full Stack)
 
-`apps/app/app/(authenticated)/devices/page.tsx` (122 lines) - Server component with hardcoded mock data. Shows:
+#### Device Service (`services/device/src/index.ts`, 76 lines + route modules) - FULLY IMPLEMENTED
 
-- A single "Chrome on macOS" device card with "Active now" and "This device" badge
-- "Access Rubic on more devices" empty state with dashed border
-- Uses Card/Badge components from `@repo/design-system`
-- Simple `DeviceCard` component with props: name, type (desktop/mobile/tablet), lastActive, isCurrent
-- Icons: MonitorIcon, SmartphoneIcon, TabletIcon from lucide-react
+**Main entry** registers 4 route modules + WebSocket support + stale device checker:
 
-No backend connection whatsoever. All data is static.
+**Device Routes** (`services/device/src/routes/devices.ts`, 219 lines):
 
-### tRPC Router
+- `POST /v1/devices` - Register new device (validates body, creates DB record)
+- `GET /v1/devices` - List user's devices with live connection status
+- `GET /v1/devices/:id` - Get single device with connection info
+- `PATCH /v1/devices/:id` - Update device (name, capabilities, metadata)
+- `DELETE /v1/devices/:id` - Delete device + close WebSocket connections + cleanup sessions
+- Real Drizzle queries, ownership verification, connection tracking
 
-`apps/app/lib/trpc/routers/devices.router.ts` (174 lines) - Proxies all requests to a device microservice:
+**Command Routes** (`services/device/src/routes/commands.ts`, 283 lines):
 
-- Uses `fetchDeviceService<T>(endpoint, options, userId)` helper with `DEVICE_SERVICE_URL` (default: `http://localhost:4001/v1/devices`)
-- `list` - GET `/` returns `{ devices: Device[] }`, falls back to empty array if service unavailable
+- `POST /v1/devices/:id/command` - Send command to device
+  - Safety validation (`validateCommand` function)
+  - Approval workflow for dangerous commands
+  - WebSocket delivery to connected device
+  - Command status tracking (pending/executing/completed/failed)
+  - Retry logic support
+- `GET /v1/devices/:id/commands` - List command history
+- `POST /v1/tools/execute` - Tool execution bridge for AI agents
+
+**Heartbeat Routes** (`services/device/src/routes/heartbeat.ts`):
+
+- Keep-alive endpoint for connected devices
+- Background stale device checker (marks devices offline when heartbeat stops)
+
+**WebSocket Routes** (`services/device/src/routes/websocket.ts`):
+
+- Real-time bidirectional communication with devices
+- Connection tracking by deviceId
+- Command delivery via WebSocket
+
+#### Frontend Client Component (`apps/app/app/(authenticated)/devices/devices-page-client.tsx`, 412 lines) - ALREADY EXISTS
+
+**Features implemented:**
+
+- Device grid display with type-specific icons (browser/desktop/mobile/server)
+- Status badges (online = green, offline = gray, busy = yellow, error = red)
+- Register device dialog (name, type dropdown, platform input)
+- Last heartbeat display (relative time via date-fns)
+- Capabilities badges
+- Delete device with confirmation dialog
+- Installation instructions (macOS/Linux/Windows CLI commands)
+- Loading/error states with retry
+- Refresh button
+
+**tRPC Integration:**
+
+- `devices.list.useQuery()` - Fetches device list
+- `devices.register.useMutation()` - Registers new device
+- `devices.unregister.useMutation()` - Deletes device
+
+#### tRPC Router (`apps/app/lib/trpc/routers/devices.router.ts`, 178 lines)
+
+Proxies all requests to device microservice:
+
+- `list` - GET `/` with fallback to empty array
 - `get` - GET `/:id`
 - `register` - POST `/` with { name, type, platform, capabilities, metadata }
-- `update` - PATCH `/:id` with { name, capabilities, metadata }
+- `update` - PATCH `/:id`
 - `unregister` - DELETE `/:id`
-- `sendCommand` - POST `/:id/command` with { type, payload } -> returns CommandResult
-- `getStatus` - GET `/:id` then extracts { isOnline, status, lastHeartbeat }
+- `sendCommand` - POST `/:id/command` with { type, payload }
+- `getStatus` - GET `/:id` status extraction
 
-**Device type:** `{ id, userId, name, type (browser/desktop/mobile/server), status (online/offline/busy/error), platform, connectionId, lastHeartbeat, ipAddress, userAgent, capabilities, config, metadata, createdAt, updatedAt }`
-
-**CommandResult type:** `{ id, status (pending/executing/completed/failed), result, error }`
-
-### Database Schema
-
-`packages/database/src/schema/devices.ts` (150 lines):
+#### Database Schema (`packages/database/src/schema/devices.ts`, 150 lines)
 
 **devices table:**
 
 - `id`, `userId`, `organizationId`, `name`, `type` (browser/desktop/mobile/server), `status` (online/offline/busy/error)
-- Connection: `connectionId` (WebSocket/MQTT), `lastHeartbeat`, `ipAddress`, `userAgent`
-- Capabilities: `capabilities` (jsonb string[]), `config` (jsonb object)
-- Browser-specific: `browserType`, `browserVersion`, `viewport` (jsonb { width, height })
-- `metadata` (jsonb), `createdAt`, `updatedAt`
+- Connection: `connectionId`, `lastHeartbeat`, `ipAddress`, `userAgent`
+- Capabilities: `capabilities` (jsonb[]), `config` (jsonb)
+- Browser: `browserType`, `browserVersion`, `viewport` (jsonb { width, height })
+- `metadata`, `createdAt`, `updatedAt`
 
 **deviceSessions table:**
 
-- `id`, `deviceId`, `agentSessionId` (link to agent session), `userId`
-- `status` (active/paused/ended), `startedAt`, `endedAt`, `lastActivityAt`
-- `currentUrl`, `currentTitle`, `screenshot` (base64 or URL)
-- `metadata`, `createdAt`, `updatedAt`
+- `id`, `deviceId`, `agentSessionId`, `userId`, `status` (active/paused/ended)
+- `startedAt`, `endedAt`, `lastActivityAt`, `currentUrl`, `currentTitle`, `screenshot`
 
 **deviceCommands table:**
 
-- `id`, `deviceId`, `sessionId`
-- Command: `type` (navigate/click/type/screenshot/etc), `payload` (jsonb)
-- Execution: `status` (pending/executing/completed/failed), `result` (jsonb), `error`
-- Timing: `queuedAt`, `startedAt`, `completedAt`
-- Retry: `retryCount`, `maxRetries` (default 3)
+- `id`, `deviceId`, `sessionId`, `type`, `payload` (jsonb)
+- `status` (pending/executing/completed/failed), `result` (jsonb), `error`
+- `queuedAt`, `startedAt`, `completedAt`, `retryCount`, `maxRetries`
 
-Relations: devices -> user, sessions, commands. deviceSessions -> device, user, commands.
+#### Redux Slice (`apps/app/lib/store/slices/devices.slice.ts`)
+
+- `devices[]`, `selectedDeviceId`, `isLoading`, `error`
+- Actions: `setDevices`, `addDevice`, `updateDeviceStatus`
+
+### What's Working Summary
+
+| Layer            | Status   | Notes                                         |
+| ---------------- | -------- | --------------------------------------------- |
+| DB Schema        | Complete | 3 tables with relations                       |
+| Device Service   | Complete | 4 route modules, WebSocket, safety validation |
+| tRPC Router      | Complete | 7 procedures proxying to service              |
+| Client Component | Complete | 412 lines, CRUD, status display               |
+| Redux Slice      | Basic    | Needs expansion for real-time state           |
 
 ---
 
 ## What Needs Building
 
-### 1. Smart Home Hub Management
+### 1. Smart Home Hub Integration
 
-The devices page should evolve from a simple "logged in devices" view to a full smart home dashboard.
+The current devices page manages "Rubic devices" (browser agents, desktop agents). Extend it to support **smart home devices** via Home Assistant and SmartThings.
 
-**Hub Integration:**
+#### Home Assistant Integration
 
-- Home Assistant: Connect via REST API or WebSocket to Home Assistant instance
-- SmartThings: Connect via SmartThings API with OAuth
-- Hub configuration panel: enter HA URL, access token, or SmartThings OAuth flow
+**Create:** `services/device/src/routes/hubs.ts`
 
-**Add to `apps/app/lib/trpc/routers/devices.router.ts`:**
+```typescript
+// Hub registration
+POST /v1/hubs
+  body: { type: "home_assistant", config: { url: string, accessToken: string } }
+  // Validates connection, stores encrypted config
+
+// List hubs
+GET /v1/hubs
+  // Returns registered hubs with connection status
+
+// Discover devices from hub
+POST /v1/hubs/:id/discover
+  // Calls Home Assistant REST API: GET /api/states
+  // Returns list of discoverable entities
+
+// Get HA entity state
+GET /v1/hubs/:id/entities/:entityId
+  // Proxies to: GET /api/states/<entity_id>
+
+// Set HA entity state (control device)
+POST /v1/hubs/:id/entities/:entityId/command
+  // Proxies to: POST /api/services/<domain>/<service>
+  // e.g., POST /api/services/light/turn_on { entity_id: "light.living_room" }
+
+// List rooms/areas
+GET /v1/hubs/:id/areas
+  // GET /api/config/area_registry/list
+
+// List scenes
+GET /v1/hubs/:id/scenes
+  // GET /api/states filtered by domain "scene"
+
+// Activate scene
+POST /v1/hubs/:id/scenes/:sceneId/activate
+  // POST /api/services/scene/turn_on
+```
+
+**Home Assistant API**: Uses long-lived access tokens or OAuth. REST API at `{HA_URL}/api/`.
+
+#### SmartThings Integration
+
+Similar pattern but using SmartThings API with OAuth via Composio:
+
+```typescript
+// Check if SmartThings connector is connected
+const hasSmartThings = connectors?.some(
+  (c) => c.type === "smartthings" && c.status === "connected"
+);
+// Use Composio tools for SmartThings actions
+```
+
+#### tRPC Router Additions
+
+Add to `apps/app/lib/trpc/routers/devices.router.ts`:
 
 ```typescript
 // New procedures:
-registerHub; // { type: "home_assistant" | "smartthings", config: { url, token } }
-listHubs; // List connected hubs
-discoverDevices; // Trigger device discovery from hub
-getDeviceState; // Get current state of a device
-setDeviceState; // Send command to change device state
-listRooms; // List rooms/areas from hub
-listScenes; // List available scenes
-activateScene; // Trigger a scene
+registerHub; // POST /v1/hubs
+listHubs; // GET /v1/hubs
+discoverDevices; // POST /v1/hubs/:id/discover
+getEntityState; // GET /v1/hubs/:id/entities/:entityId
+controlEntity; // POST /v1/hubs/:id/entities/:entityId/command
+listAreas; // GET /v1/hubs/:id/areas
+listScenes; // GET /v1/hubs/:id/scenes
+activateScene; // POST /v1/hubs/:id/scenes/:sceneId/activate
 ```
 
-### 2. Device Discovery & Registration
+### 2. Enhanced Device Dashboard UI
 
-**Build:**
+The existing `devices-page-client.tsx` (412 lines) works for basic device management. Enhance it with:
 
-- "Discover Devices" button that queries connected hubs for new devices
-- Discovery results shown in a modal with checkboxes to select which to import
-- Auto-categorize devices by type (light, climate, sensor, media, security, switch)
-- Store discovered devices in `devices` table with hub metadata
+#### Tab Layout
 
-### 3. Device Dashboard Cards
+```
+[My Devices (3)] [Smart Home (12)] [Hubs (1)]
+```
 
-Replace the simple DeviceCard with type-specific controls.
+- **My Devices**: Current grid of Rubic agents (browser/desktop/mobile/server)
+- **Smart Home**: Grid of HA/SmartThings devices with type-specific controls
+- **Hubs**: Hub management (add/remove hubs, connection status)
 
-**Create:** `apps/app/app/(authenticated)/devices/components/`
+#### Smart Home Device Cards
 
-#### Light Controls (`light-device-card.tsx`)
+**Create type-specific control components** in `apps/app/app/(authenticated)/devices/components/`:
+
+##### Light Controls (`light-device-card.tsx`)
 
 - On/off toggle switch
 - Brightness slider (0-100%)
-- Color picker (for color-capable lights)
-- Color temperature slider (warm to cool)
-- Show current state: "On at 75%, Warm White"
+- Color picker wheel (for RGB-capable lights)
+- Color temperature slider (warm 2000K to cool 6500K)
+- Current state: "On at 75%, Warm White"
 
-#### Climate Controls (`climate-device-card.tsx`)
+##### Climate Controls (`climate-device-card.tsx`)
 
-- Current temperature display (large number)
-- Target temperature +/- buttons
+- Current temperature (large display)
+- Target temperature with +/- buttons
 - Mode selector: Heat / Cool / Auto / Off
 - Fan speed: Low / Medium / High / Auto
 - Humidity reading if available
 
-#### Sensor Cards (`sensor-device-card.tsx`)
+##### Sensor Cards (`sensor-device-card.tsx`)
 
-- Large reading display (temperature, humidity, motion, etc.)
-- Historical graph (last 24h sparkline)
-- Alert thresholds configuration
+- Large reading display (temperature, humidity, motion, door/window)
+- Historical sparkline graph (last 24h)
+- Alert threshold configuration
 - Last updated timestamp
 
-#### Media Controls (`media-device-card.tsx`)
+##### Media Controls (`media-device-card.tsx`)
 
-- Now playing: title, artist, album art
-- Play/Pause/Skip/Previous buttons
+- Now playing info (title, artist, album art)
+- Playback controls (Play/Pause/Skip/Previous)
 - Volume slider
-- Source selector (Spotify, TV, etc.)
+- Source selector dropdown
 
-#### Security Controls (`security-device-card.tsx`)
+##### Security Controls (`security-device-card.tsx`)
 
-- Lock/Unlock toggle with confirmation
-- Camera feed thumbnail (if camera)
-- Armed/Disarmed status for alarm
-- Activity log (last 10 events)
+- Lock/Unlock toggle with confirmation dialog
+- Camera feed thumbnail (if camera entity)
+- Armed/Disarmed status for alarm panels
+- Recent activity log
 
-#### Switch/Plug Controls (`switch-device-card.tsx`)
+##### Switch/Plug Controls (`switch-device-card.tsx`)
 
-- On/Off toggle
+- Simple On/Off toggle
 - Power consumption reading (if smart plug)
-- Schedule: auto on/off times
+- Schedule settings (auto on/off times)
 
-### 4. Room Organization
+### 3. Room Organization
 
-**Build:**
+**Build:** Room/area grouping using Home Assistant areas.
 
-- Room/area grouping of devices
-- Drag-and-drop devices between rooms
-- Room header with aggregate status ("Living Room - 3 on, 2 off")
-- Room view with floor plan layout (stretch goal)
+```tsx
+// Grouped display:
+<div>
+  {areas.map(area => (
+    <div key={area.id}>
+      <h3>{area.name} — {onCount} on, {offCount} off</h3>
+      <div className="grid grid-cols-3 gap-4">
+        {devicesInArea.map(device => <DeviceCard key={device.id} device={device} />)}
+      </div>
+    </div>
+  ))}
+  <div>
+    <h3>Unassigned</h3>
+    {unassignedDevices.map(...)}
+  </div>
+</div>
+```
+
 - Collapse/expand rooms
+- Device count per room
+- Aggregate status ("Living Room - 3 on, 2 off")
 
-**Add to database:** Consider adding a `deviceRooms` table or use the `metadata` field on devices to store room assignment.
+### 4. Scenes & Quick Actions
 
-### 5. Scenes & Automations Builder
+**Create:** `apps/app/app/(authenticated)/devices/components/scenes-panel.tsx`
 
-**Build:**
+- List scenes from Home Assistant
+- One-click activation
+- Scene cards with icon + name + description
+- "Good Morning", "Movie Night", "Away Mode" etc.
+- Create new scene: select devices → set states → save
 
-- Scene creation: select devices, set desired states, save as named scene
-- Scene activation: one-click to apply all device states
-- Automation builder: IF (trigger) THEN (action)
-  - Triggers: time-based, device state change, sunrise/sunset, presence
-  - Actions: set device state, activate scene, send notification
-- Automation list with enable/disable toggles
+### 5. Real-Time Device State via WebSocket
 
-### 6. Real-Time Device State via WebSocket
-
-The WebSocket provider (`apps/app/lib/socket/provider.tsx`) already handles device-like events. Add device-specific events.
+The WebSocket provider already handles device events. Expand:
 
 **Add to `apps/app/lib/socket/events.ts`:**
 
 ```typescript
-// New server-to-client events:
-"device:state:update"; // { deviceId, state: Record<string, unknown> }
+// Smart home specific events:
+"device:state:update"; // { deviceId, entityId, state, attributes }
 "device:online"; // { deviceId }
 "device:offline"; // { deviceId }
-"device:command:result"; // { deviceId, commandId, result }
+"device:command:result"; // { deviceId, commandId, status, result }
+"hub:state:change"; // { hubId, entityId, newState }
 ```
 
-**Add to WebSocket provider** new listeners that dispatch to a device state slice.
+**In WebSocket provider**, add listeners that update device state in Redux:
 
-### 7. Home Assistant MCP Integration
+```typescript
+socket.on("device:state:update", (data) => {
+  dispatch(updateDeviceState(data));
+});
+socket.on("hub:state:change", (data) => {
+  dispatch(updateEntityState(data));
+});
+```
 
-For AI agent integration with smart home devices.
+### 6. Device Command History
 
-**Build:**
+**Create:** `apps/app/app/(authenticated)/devices/components/command-history.tsx`
 
-- MCP (Model Context Protocol) server that wraps Home Assistant API
-- Register HA tools in the AI agent tool registry at `packages/ai/lib/tools/`
-- Tools: `get_device_state`, `set_device_state`, `list_devices`, `activate_scene`, `get_sensor_reading`
-- Allow chat-based device control: "Turn off the living room lights"
+- Table view of commands sent to a device
+- Columns: Time, Type, Payload, Status, Result
+- Status badges: pending (gray), executing (yellow), completed (green), failed (red)
+- Filter by command type
+- Use `devices.sendCommand` / device service `GET /v1/devices/:id/commands`
+
+### 7. Home Assistant MCP Tools for AI
+
+Register HA tools in the AI agent tool registry so the AI can control devices via chat:
+
+**Tools to register:**
+
+```typescript
+const haTools = [
+  {
+    name: "get_device_state",
+    description: "Get the current state of a smart home device",
+    parameters: { entity_id: "string" },
+  },
+  {
+    name: "control_device",
+    description: "Control a smart home device (turn on/off, set brightness, etc.)",
+    parameters: { entity_id: "string", service: "string", data: "object" },
+  },
+  {
+    name: "list_devices",
+    description: "List all smart home devices",
+    parameters: { domain: "string (optional)" },
+  },
+  {
+    name: "activate_scene",
+    description: "Activate a smart home scene",
+    parameters: { scene_id: "string" },
+  },
+  {
+    name: "get_sensor_reading",
+    description: "Get sensor readings (temperature, humidity, etc.)",
+    parameters: { entity_id: "string" },
+  },
+];
+```
+
+This enables chat commands like:
+
+- "Turn off the living room lights"
+- "Set the thermostat to 72 degrees"
+- "What's the temperature in the bedroom?"
+- "Activate movie night scene"
+
+**Route through:** Device service `POST /v1/tools/execute` endpoint (already exists in commands.ts).
+
+### 8. Hub Configuration Panel
+
+**Create:** `apps/app/app/(authenticated)/devices/components/hub-config-panel.tsx`
+
+**For Home Assistant:**
+
+- Input: Home Assistant URL (e.g., `http://homeassistant.local:8123`)
+- Input: Long-lived access token (with link to HA docs on how to create)
+- Test connection button
+- Device discovery button
+- Entity filter (which entity types to show)
+- Auto-sync interval
+
+**For SmartThings:**
+
+- OAuth connection via Composio (same pattern as Applications page)
+- Location selector (if multiple SmartThings locations)
+- Device filter
+
+---
+
+## Components to Create/Modify
+
+In `apps/app/app/(authenticated)/devices/components/`:
+
+| Component                  | Purpose                                            |
+| -------------------------- | -------------------------------------------------- |
+| `light-device-card.tsx`    | Light controls (toggle, brightness, color)         |
+| `climate-device-card.tsx`  | Thermostat controls (temp, mode, fan)              |
+| `sensor-device-card.tsx`   | Sensor display (reading, sparkline, alerts)        |
+| `media-device-card.tsx`    | Media controls (playback, volume, source)          |
+| `security-device-card.tsx` | Lock/camera/alarm controls                         |
+| `switch-device-card.tsx`   | Simple on/off toggle + power reading               |
+| `hub-config-panel.tsx`     | Hub registration and configuration                 |
+| `scenes-panel.tsx`         | Scene list with activation buttons                 |
+| `command-history.tsx`      | Command log table                                  |
+| `device-type-card.tsx`     | Router component that renders correct card by type |
+| `room-group.tsx`           | Room header + collapsible device grid              |
+
+**Modify:** `devices-page-client.tsx` - Add tabs (My Devices / Smart Home / Hubs), integrate hub features
 
 ---
 
 ## Key File Paths
 
-| Purpose              | Path                                                                    |
-| -------------------- | ----------------------------------------------------------------------- |
-| Devices page         | `apps/app/app/(authenticated)/devices/page.tsx`                         |
-| Devices router       | `apps/app/lib/trpc/routers/devices.router.ts`                           |
-| Devices schema       | `packages/database/src/schema/devices.ts`                               |
-| Settings devices tab | `apps/app/app/(authenticated)/components/settings/tabs/devices-tab.tsx` |
-| WebSocket provider   | `apps/app/lib/socket/provider.tsx`                                      |
-| WebSocket events     | `apps/app/lib/socket/events.ts`                                         |
-| AI tools directory   | `packages/ai/tools/`                                                    |
-| Device service       | `services/` (needs new device service or extend existing)               |
+| Purpose                    | Path                                                                    |
+| -------------------------- | ----------------------------------------------------------------------- |
+| Devices page (server)      | `apps/app/app/(authenticated)/devices/page.tsx`                         |
+| Devices page client        | `apps/app/app/(authenticated)/devices/devices-page-client.tsx`          |
+| Device components (CREATE) | `apps/app/app/(authenticated)/devices/components/`                      |
+| Devices router             | `apps/app/lib/trpc/routers/devices.router.ts`                           |
+| Devices schema             | `packages/database/src/schema/devices.ts`                               |
+| Devices slice              | `apps/app/lib/store/slices/devices.slice.ts`                            |
+| Device service (main)      | `services/device/src/index.ts`                                          |
+| Device routes              | `services/device/src/routes/devices.ts`                                 |
+| Command routes             | `services/device/src/routes/commands.ts`                                |
+| Heartbeat routes           | `services/device/src/routes/heartbeat.ts`                               |
+| WebSocket routes           | `services/device/src/routes/websocket.ts`                               |
+| Hub routes (CREATE)        | `services/device/src/routes/hubs.ts`                                    |
+| Settings devices tab       | `apps/app/app/(authenticated)/components/settings/tabs/devices-tab.tsx` |
+| WebSocket provider         | `apps/app/lib/socket/provider.tsx`                                      |
+| WebSocket events           | `apps/app/lib/socket/events.ts`                                         |
+| AI tools directory         | `packages/ai/tools/`                                                    |
 
-## Reference
+---
 
-- Manus device specification: `docs/features_manus_reverse_engineering/Manus_Application_Feature_Specification.md` (Section 8)
-- Device service URL: `DEVICE_SERVICE_URL` env var (default `http://localhost:4001/v1/devices`)
+## Important Notes
+
+1. **Device service is FULLY IMPLEMENTED** - CRUD, commands, heartbeat, WebSocket all working with real DB queries. Do NOT rewrite.
+2. **Client component exists** (412 lines) - Has device grid, registration dialog, deletion, installation instructions. EXTEND, don't replace.
+3. **Command safety validation** exists in the service - `validateCommand` function checks for dangerous operations. Approval workflow built in.
+4. **Tool execution bridge** exists - `POST /v1/tools/execute` in commands.ts bridges AI agent tool calls to device commands.
+5. **WebSocket real-time** already set up in device service. Frontend needs to listen for device state events.
+6. **Stale device checker** runs as background job in service, automatically marks devices offline.
+7. **Home Assistant is additive** - All HA features are NEW routes in the device service, not modifications to existing routes.
+8. **SmartThings via Composio** - Use the existing Composio integration pattern from the connector service.
 
 ## Priority Order
 
-1. Convert page from static to client component with real data from `devices.router.ts`
-2. Device registration flow (manual add)
-3. Type-specific device control cards
-4. Room organization
-5. Real-time state updates via WebSocket
-6. Hub integration (Home Assistant first)
-7. Device discovery
-8. Scenes & automations builder
-9. MCP integration for AI control
+1. Add smart home device type cards (light, climate, sensor, media, security, switch)
+2. Tab layout in devices-page-client.tsx (My Devices / Smart Home / Hubs)
+3. Hub configuration panel (Home Assistant URL + token)
+4. Hub routes in device service (`services/device/src/routes/hubs.ts`)
+5. Device discovery from Home Assistant
+6. Room organization / area grouping
+7. Real-time state updates via WebSocket
+8. Scenes panel with one-click activation
+9. Command history view
+10. Home Assistant MCP tools for AI agent
+11. SmartThings integration via Composio
+12. Automations builder (IF trigger THEN action)

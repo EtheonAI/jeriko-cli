@@ -10,6 +10,9 @@ import { FilePreview } from "./renderers/file-preview";
 import { GenericTool } from "./renderers/generic-tool";
 import { PlanTool } from "./renderers/plan-tool";
 import { ProgressTool } from "./renderers/progress-tool";
+import { BrowserViewer } from "./renderers/browser-viewer";
+import { ImageResult } from "./renderers/image-result";
+import { DeployResult } from "./renderers/deploy-result";
 
 export interface ToolRendererProps<TInput = unknown, TOutput = unknown> {
   toolName: string;
@@ -52,6 +55,7 @@ const defaultRenderers: Record<string, ToolRenderer> = {
 
   // Shell/Terminal
   shell_command: TerminalOutput as ToolRenderer,
+  shell_exec: TerminalOutput as ToolRenderer,
   execute_shell: TerminalOutput as ToolRenderer,
   run_command: TerminalOutput as ToolRenderer,
   terminal: TerminalOutput as ToolRenderer,
@@ -61,11 +65,25 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   // File operations
   file_read: FilePreview as ToolRenderer,
   file_write: FilePreview as ToolRenderer,
+  file_str_replace: FilePreview as ToolRenderer,
   read_file: FilePreview as ToolRenderer,
   write_file: FilePreview as ToolRenderer,
   create_file: FilePreview as ToolRenderer,
   edit_file: FilePreview as ToolRenderer,
   file_preview: FilePreview as ToolRenderer,
+
+  // Code execution (alias for sandbox code_execute)
+  code_execute: CodeBlock as ToolRenderer,
+
+  // Browser (navigation + screenshots)
+  browser_navigate: BrowserViewer as ToolRenderer,
+  browser_screenshot: BrowserViewer as ToolRenderer,
+
+  // Image generation
+  generate_image: ImageResult as ToolRenderer,
+
+  // Deployment
+  deploy_expose_port: DeployResult as ToolRenderer,
 
   // Planning & Progress
   plan: PlanTool as ToolRenderer,
@@ -74,6 +92,9 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   progress: ProgressTool as ToolRenderer,
   track_progress: ProgressTool as ToolRenderer,
   update_progress: ProgressTool as ToolRenderer,
+
+  // Communication (user notifications shown as progress)
+  message_notify_user: ProgressTool as ToolRenderer,
 
   // Fallback
   "*": GenericTool,
@@ -87,14 +108,8 @@ interface ToolRegistryProviderProps {
 /**
  * ToolRegistryProvider - Provides tool renderer mapping
  */
-export function ToolRegistry({
-  children,
-  customRenderers = {},
-}: ToolRegistryProviderProps) {
-  const renderers = useMemo(
-    () => ({ ...defaultRenderers, ...customRenderers }),
-    [customRenderers]
-  );
+export function ToolRegistry({ children, customRenderers = {} }: ToolRegistryProviderProps) {
+  const renderers = useMemo(() => ({ ...defaultRenderers, ...customRenderers }), [customRenderers]);
 
   const getRenderer = (toolName: string): ToolRenderer => {
     return renderers[toolName] ?? renderers["*"] ?? GenericTool;
@@ -105,9 +120,7 @@ export function ToolRegistry({
   };
 
   return (
-    <ToolRegistryContext.Provider
-      value={{ renderers, getRenderer, registerRenderer }}
-    >
+    <ToolRegistryContext.Provider value={{ renderers, getRenderer, registerRenderer }}>
       {children}
     </ToolRegistryContext.Provider>
   );

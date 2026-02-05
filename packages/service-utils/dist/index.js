@@ -1,21 +1,9 @@
 // src/types/index.ts
 import { z } from "zod";
-var TaskStatusSchema = z.enum([
-  "pending",
-  "running",
-  "paused",
-  "completed",
-  "failed",
-  "cancelled"
-]);
+var TaskStatusSchema = z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]);
 var TaskPrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
 var DeviceTypeSchema = z.enum(["pc", "iot", "mobile", "browser"]);
-var DeviceStatusSchema = z.enum([
-  "online",
-  "offline",
-  "busy",
-  "error"
-]);
+var DeviceStatusSchema = z.enum(["online", "offline", "busy", "error"]);
 var DeviceCapabilitySchema = z.enum([
   "terminal",
   "filesystem",
@@ -24,29 +12,12 @@ var DeviceCapabilitySchema = z.enum([
   "audio",
   "gpio",
   "sensor",
-  "actuator"
+  "actuator",
 ]);
-var AgentModelSchema = z.enum([
-  "claude-3-5-sonnet",
-  "claude-3-opus",
-  "gpt-4o",
-  "gpt-4o-mini"
-]);
+var AgentModelSchema = z.enum(["claude-3-5-sonnet", "claude-3-opus", "gpt-4o", "gpt-4o-mini"]);
 var MessageRoleSchema = z.enum(["user", "assistant", "system", "tool"]);
-var WebsiteFrameworkSchema = z.enum([
-  "nextjs",
-  "react",
-  "vue",
-  "svelte",
-  "astro"
-]);
-var WebsiteStatusSchema = z.enum([
-  "draft",
-  "building",
-  "ready",
-  "deployed",
-  "error"
-]);
+var WebsiteFrameworkSchema = z.enum(["nextjs", "react", "vue", "svelte", "astro"]);
+var WebsiteStatusSchema = z.enum(["draft", "building", "ready", "deployed", "error"]);
 
 // src/logger/index.ts
 import pino from "pino";
@@ -55,21 +26,21 @@ function createLogger(options) {
   return pino({
     level,
     name: service,
-    ...pretty && {
+    ...(pretty && {
       transport: {
         target: "pino-pretty",
         options: {
           colorize: true,
           translateTime: "SYS:standard",
-          ignore: "pid,hostname"
-        }
-      }
-    },
+          ignore: "pid,hostname",
+        },
+      },
+    }),
     base: {
       service,
-      env: process.env.NODE_ENV || "development"
+      env: process.env.NODE_ENV || "development",
     },
-    timestamp: pino.stdTimeFunctions.isoTime
+    timestamp: pino.stdTimeFunctions.isoTime,
   });
 }
 
@@ -84,7 +55,7 @@ function getRedisConfig() {
     port: parseInt(process.env.REDIS_PORT || "6379", 10),
     password: process.env.REDIS_PASSWORD,
     db: parseInt(process.env.REDIS_DB || "0", 10),
-    keyPrefix: process.env.REDIS_KEY_PREFIX || "rubic:"
+    keyPrefix: process.env.REDIS_KEY_PREFIX || "rubic:",
   };
 }
 function getRedisClient() {
@@ -99,7 +70,7 @@ function getRedisClient() {
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2e3);
         return delay;
-      }
+      },
     });
   }
   return redisClient;
@@ -111,7 +82,7 @@ function getRedisPubClient() {
       host: config.host,
       port: config.port,
       password: config.password,
-      db: config.db
+      db: config.db,
     });
   }
   return redisPubClient;
@@ -123,7 +94,7 @@ function getRedisSubClient() {
       host: config.host,
       port: config.port,
       password: config.password,
-      db: config.db
+      db: config.db,
     });
   }
   return redisSubClient;
@@ -183,7 +154,7 @@ var JWTPayloadSchema = z2.object({
   email: z2.string().email(),
   name: z2.string().optional(),
   iat: z2.number(),
-  exp: z2.number()
+  exp: z2.number(),
 });
 var jwtSecret = null;
 function getJWTSecret() {
@@ -212,8 +183,12 @@ async function createToken(userId, email, name, expiresIn = "7d") {
   const token = await new jose.SignJWT({
     sub: userId,
     email,
-    name
-  }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime(expiresIn).sign(getJWTSecret());
+    name,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(expiresIn)
+    .sign(getJWTSecret());
   return token;
 }
 async function validateApiKey(apiKey) {
@@ -224,7 +199,7 @@ async function validateApiKey(apiKey) {
   return {
     userId: parts[1] ?? "",
     keyId: parts[2] ?? "",
-    scopes: ["*"]
+    scopes: ["*"],
   };
 }
 async function extractAuth(authorization, apiKey) {
@@ -236,7 +211,7 @@ async function extractAuth(authorization, apiKey) {
         userId: payload.sub,
         email: payload.email,
         name: payload.name,
-        type: "jwt"
+        type: "jwt",
       };
     }
   }
@@ -245,11 +220,31 @@ async function extractAuth(authorization, apiKey) {
     if (payload) {
       return {
         userId: payload.userId,
-        type: "apikey"
+        type: "apikey",
       };
     }
   }
   return null;
+}
+
+// src/webhooks/index.ts
+var logger = createLogger({ service: "webhook-dispatch" });
+var WEBHOOK_SERVICE_URL = process.env.WEBHOOK_SERVICE_URL || "http://localhost:4007";
+var DISPATCH_TIMEOUT_MS = 5e3;
+async function dispatchWebhookEvent(event) {
+  try {
+    await fetch(`${WEBHOOK_SERVICE_URL}/internal/dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+      signal: AbortSignal.timeout(DISPATCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    logger.warn(
+      { eventType: event.eventType, resourceId: event.resourceId, error: err },
+      "Failed to dispatch webhook event (non-fatal)"
+    );
+  }
 }
 
 // src/index.ts
@@ -271,8 +266,8 @@ function createHealthCheck(service, version, checks) {
     status: allPass ? "healthy" : "unhealthy",
     service,
     version,
-    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    checks
+    timestamp: /* @__PURE__ */ new Date().toISOString(),
+    checks,
   };
 }
 function successResponse(data, requestId) {
@@ -280,9 +275,9 @@ function successResponse(data, requestId) {
     data,
     meta: {
       requestId,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      timestamp: /* @__PURE__ */ new Date().toISOString(),
     },
-    error: null
+    error: null,
   };
 }
 function errorResponse(error, requestId) {
@@ -290,9 +285,9 @@ function errorResponse(error, requestId) {
     data: null,
     meta: {
       requestId,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      timestamp: /* @__PURE__ */ new Date().toISOString(),
     },
-    error
+    error,
   };
 }
 var ErrorCodes = {
@@ -302,7 +297,7 @@ var ErrorCodes = {
   NOT_FOUND: "NOT_FOUND",
   RATE_LIMITED: "RATE_LIMITED",
   INTERNAL_ERROR: "INTERNAL_ERROR",
-  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE"
+  SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 };
 export {
   AgentModelSchema,
@@ -324,6 +319,7 @@ export {
   createId,
   createLogger,
   createToken,
+  dispatchWebhookEvent,
   errorResponse,
   extractAuth,
   getEnv,
@@ -337,6 +333,6 @@ export {
   successResponse,
   validateApiKey,
   verifyToken,
-  z3 as z
+  z3 as z,
 };
 //# sourceMappingURL=index.js.map

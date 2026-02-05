@@ -10,6 +10,8 @@ export {
   devices,
   deviceSessions,
   deviceCommands,
+  smartHomeHubs,
+  smartHomeEntities,
 } from "@repo/database/service-index";
 
 export type {
@@ -19,4 +21,8 @@ export type {
   NewDeviceSession,
   DeviceCommand,
   NewDeviceCommand,
+  SmartHomeHub,
+  NewSmartHomeHub,
+  SmartHomeEntity,
+  NewSmartHomeEntity,
 } from "@repo/database/service-index";

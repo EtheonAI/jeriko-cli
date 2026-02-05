@@ -6,6 +6,7 @@ import { deviceRoutes } from "./routes/devices.js";
 import { commandRoutes } from "./routes/commands.js";
 import { heartbeatRoutes, startStaleDeviceChecker } from "./routes/heartbeat.js";
 import { websocketRoutes } from "./routes/websocket.js";
+import { hubRoutes } from "./routes/hubs.js";
 
 const logger = createLogger({ service: "device" });
 
@@ -34,6 +35,7 @@ async function main() {
   await app.register(commandRoutes);
   await app.register(heartbeatRoutes);
   await app.register(websocketRoutes);
+  await app.register(hubRoutes);
 
   // Request logging
   app.addHook("onRequest", async (request) => {

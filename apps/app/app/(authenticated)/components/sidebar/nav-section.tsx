@@ -7,32 +7,20 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@repo/design-system/components/ui/sidebar";
-import {
-  LayoutDashboardIcon,
-  Link2Icon,
-  ZapIcon,
-  SmartphoneIcon,
-  BookOpenIcon,
-  CodeIcon,
-} from "lucide-react";
+import { FolderIcon, Link2Icon, ZapIcon, SmartphoneIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
   {
     title: "Library",
-    icon: LayoutDashboardIcon,
+    icon: FolderIcon,
     href: "/files",
   },
   {
     title: "Applications",
     icon: Link2Icon,
     href: "/applications",
-  },
-  {
-    title: "Knowledge",
-    icon: BookOpenIcon,
-    href: "/knowledge",
   },
   {
     title: "Automations",
@@ -43,11 +31,6 @@ const navItems = [
     title: "Devices",
     icon: SmartphoneIcon,
     href: "/devices",
-  },
-  {
-    title: "Builder",
-    icon: CodeIcon,
-    href: "/website-builder",
   },
 ];
 

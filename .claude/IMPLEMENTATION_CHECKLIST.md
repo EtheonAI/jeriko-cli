@@ -1,164 +1,287 @@
 # Implementation Checklist
 
-> P0 = Blocks everything | P1 = Core MVP | P2 = Polish
+> VERIFIED against actual codebase — Feb 2026 audit
+>
+> P0 = Makes the app work | P1 = Core pages | P2 = Polish
 
-## P0 - Critical Path (Week 1-2)
+## Verified Service Status (11/14 FULLY IMPLEMENTED)
 
-### 1. Database Migration - Wire All Services
+| Service      | Port | DB Queries    | Status       | LOC  | Notes                                        |
+| ------------ | ---- | ------------- | ------------ | ---- | -------------------------------------------- |
+| Gateway      | 4001 | None (proxy)  | **COMPLETE** | 554  | Auth, proxy, WebSocket, SSE, Redis pub/sub   |
+| Agent        | 8000 | None (Python) | **PARTIAL**  | 776  | LLM streaming works, NO tool loop, 3 stubs   |
+| Task         | 4002 | Real Drizzle  | **COMPLETE** | 585  | Inngest functions, DB CRUD, WebSocket events |
+| File         | 4005 | Real Drizzle  | **COMPLETE** | 492  | S3 upload, versioning, webhooks, pagination  |
+| Billing      | 4008 | Real Drizzle  | **PARTIAL**  | 343  | All DB queries work, 4 Stripe TODOs          |
+| Connector    | 4009 | Real Drizzle  | **COMPLETE** | 800  | Composio SDK, OAuth, catalog sync, tools     |
+| Device       | 4001 | Real Drizzle  | **COMPLETE** | 792  | CRUD, commands, heartbeat, WebSocket, safety |
+| Notification | 4006 | Real Drizzle  | **COMPLETE** | 364  | Knock email, Web Push, in-app, quiet hours   |
+| Webhook      | 4007 | Real Drizzle  | **COMPLETE** | 289  | Event dispatch, HMAC signatures, retries     |
+| Sandbox      | 4012 | Real Drizzle  | **COMPLETE** | 682  | E2B integration, code exec, shell, files     |
+| Knowledge    | 4011 | Real Drizzle  | **COMPLETE** | 515  | RAG pipeline, embeddings, vector search      |
+| Project      | 4010 | Real Drizzle  | **COMPLETE** | 313  | CRUD, members, sessions, files               |
+| Search       | 4013 | Real Drizzle  | **COMPLETE** | 775  | Typesense + DB fallback, autocomplete        |
+| Website      | 4004 | Real Drizzle  | **COMPLETE** | 1285 | Templates, file CRUD, deploy stubs           |
 
-**Why:** Every service has `// TODO: database` stubs. Schemas exist in `packages/database/src/schema/` but no service queries them.
+**Total backend LOC: ~8,565 lines of working code**
 
-- [ ] Run `drizzle-kit push` to sync all schemas to PostgreSQL
-- [ ] Seed subscription plans, credit packages, connector definitions
-- [ ] Wire `services/billing/src/index.ts` - import from `@repo/database`, replace all 8 TODO endpoints
-- [ ] Wire `services/connector/src/index.ts` - use connectorDefinitions + userConnectors tables
-- [ ] Wire `services/file/src/index.ts` - use files + fileVersions tables
-- [ ] Wire `services/knowledge/src/index.ts` - use knowledgeGroups + knowledgeItems + knowledgeChunks
-- [ ] Wire `services/notification/src/index.ts` - use notifications + notificationPreferences
-- [ ] Wire `services/project/src/index.ts` - use projects + projectMembers
-- [ ] Wire `services/sandbox/src/index.ts` - use sandboxes + sandboxExecutions
-- [ ] Wire `services/search/src/index.ts` - Typesense indexing
-- [ ] Wire `services/webhook/src/index.ts` - use webhooks + webhookDeliveries
-- [ ] Wire `services/task/src/routes/tasks.ts` - use agentSessions + agentTasks tables (currently in-memory)
+## Verified tRPC Router Status (16 routers, 160+ procedures, ALL have real queries)
 
-### 2. Chat Pipeline End-to-End
+| Router         | Procedures                     | Status                | Lines |
+| -------------- | ------------------------------ | --------------------- | ----- |
+| sessions       | 5 (CRUD + search sync)         | **REAL DB**           | 120   |
+| messages       | 3 (list, send, add)            | **REAL DB**           | 104   |
+| agents         | 7 (CRUD + tasks)               | **REAL DB**           | 281   |
+| files          | 8 (CRUD + versions)            | **REAL DB**           | 244   |
+| connectors     | 12 (CRUD + OAuth + tools)      | **REAL DB + service** | 374   |
+| notifications  | 10 (CRUD + push + prefs)       | **REAL DB**           | 333   |
+| scheduledTasks | 10 (CRUD + exec history)       | **REAL DB**           | 379   |
+| projects       | 13 (CRUD + members + groups)   | **REAL DB**           | 548   |
+| knowledge      | 14 (groups + items + RAG)      | **REAL DB + service** | 460   |
+| billing        | 18 (plans + credits + Stripe)  | **REAL DB + Stripe**  | 608   |
+| mail           | 11 (mailbox + AgentMail SDK)   | **REAL DB + SDK**     | 296   |
+| user           | 14 (profile + prefs + export)  | **REAL DB**           | 392   |
+| search         | 7 (global + reindex)           | **Typesense**         | 203   |
+| devices        | 7 (proxies to service)         | **Service proxy**     | 178   |
+| webhooks       | 11 (CRUD + delivery + retry)   | **REAL DB**           | 344   |
+| websiteBuilder | 16 (projects + files + deploy) | **REAL DB + service** | 618   |
 
-**Why:** Chat sends messages to `/api/chat/route.ts` but doesn't persist, doesn't go through task service, doesn't track credits.
+## Verified Chat Pipeline Status
 
-**Current flow:** User → `/api/chat` → `streamText()` → Response (no persistence)
-**Target flow:** User → tRPC `messages.sendMessage` → DB save → Inngest `task/execute` → Agent Service → Stream via WebSocket → DB save → Credit deduction
+**What WORKS end-to-end:**
 
-- [ ] `messages.router.ts` line 57: Implement "Trigger AI response via agent orchestrator" TODO
-- [ ] Agent service: Accept full conversation history (not just single prompt)
-- [ ] Task service `inngest.ts`: Step 3 "process-result" - save to messages table, update task status
-- [ ] Gateway WebSocket: Broadcast response chunks to session room
-- [ ] Frontend: `useRealTimeChat` should listen for WebSocket `message:stream` events
-- [ ] Credit deduction: After response, insert into `usageRecords` and decrement `creditBalances`
+1. User types in dashboard → creates session ID → stores in sessionStorage → navigates to `/chat/[id]`
+2. Chat page reads initial message → sends via `useRealTimeChat` hook → hits `/api/chat`
+3. API route (222 lines): authenticates → upserts session → persists user message → calls OpenAI/Anthropic → streams response
+4. Assistant response persisted in DB → title auto-generated via GPT-4o-mini
+5. RAG: queries knowledge service → injects context into system prompt (if knowledge groups provided)
 
-### 3. Stripe Integration
+**What does NOT work:**
 
-**Why:** billing.router.ts has 4 TODO comments for Stripe session creation. Everything else (DB queries, balance tracking) already works.
+- `/api/chat` is simple streaming — does NOT call the Python agent service
+- Agent service accepts `tools` param but never passes them to the LLM
+- No multi-step tool execution loop
+- No Inngest task orchestration from chat
+- No DAG workflows
+- `messages.send` tRPC has TODO for triggering AI response (line 62)
 
-- [ ] Import `stripe` from `@repo/payments` in `billing.router.ts`
-- [ ] Line 400: `createSubscriptionCheckout` - `stripe.checkout.sessions.create()` with plan's stripePriceId
-- [ ] Line 411: `createCreditPurchaseCheckout` - `stripe.checkout.sessions.create()` for credit packages
-- [ ] Line 519: `getBillingPortalUrl` - `stripe.billingPortal.sessions.create()`
-- [ ] Line 302: `deletePaymentMethod` - `stripe.paymentMethods.detach()`
-- [ ] Create Stripe webhook endpoint: `apps/api/app/webhooks/stripe/route.ts`
-- [ ] Handle events: `checkout.session.completed`, `invoice.paid`, `customer.subscription.updated/deleted`
-- [ ] Sync Stripe events to `userSubscriptions`, `creditBalances`, `invoices` tables
-- [ ] Frontend billing tab: wire subscription/credit purchase buttons to checkout mutations
+## Frontend Page Status
 
-### 4. Composio Integration
+| Page            | Client Component | Backend      | What's Missing                                 |
+| --------------- | ---------------- | ------------ | ---------------------------------------------- |
+| Dashboard       | No (server-only) | N/A          | Session creation uses sessionStorage, not tRPC |
+| Chat            | Yes (351 lines)  | **Working**  | No tools, no agent panel, edit/delete TODOs    |
+| Files/Library   | **No**           | **Complete** | Needs entire client component                  |
+| Applications    | **No**           | **Complete** | Needs entire client component                  |
+| Devices         | Yes (412 lines)  | **Complete** | Works! Needs smart home extension              |
+| Actions         | Stub tabs        | Partial      | Task list, action templates, schedules         |
+| Settings        | Yes (12+ tabs)   | **Complete** | Most tabs wired, billing needs Stripe          |
+| Knowledge       | Exists           | **Complete** | May need deletion per instructions             |
+| Website Builder | Exists           | **Complete** | Needs agent code gen integration               |
+| Search          | Exists           | **Complete** | Functional with Typesense                      |
 
-**Why:** Core differentiator - 500+ app integrations. Zero code exists.
+---
 
-- [ ] Install `composio-core` in `services/connector/`
-- [ ] Create Composio client: `new Composio({ apiKey: process.env.COMPOSIO_API_KEY })`
-- [ ] `/connectors` GET: `composio.apps.list()` to get available apps
-- [ ] `/connectors/:id/connect` POST: `composio.connectedAccounts.initiate()` for OAuth
-- [ ] `/connectors/:id/callback` GET: Handle OAuth callback, save to `userConnectors` table
-- [ ] `/integrations/:id/tools` GET: `composio.actions.list({ appName })` for tools
-- [ ] Register Composio tools as MCP tools for the agent service
-- [ ] Frontend Applications page: Display real apps from Composio API
-- [ ] Frontend: OAuth popup flow for connecting apps
-- [ ] Save connection status to `userConnectors` + `connectorSyncLogs` tables
+## P0 — Make the App Actually Work
 
-## P1 - Core Features (Week 3-4)
+### 1. Agent Tool Loop (HIGHEST PRIORITY)
 
-### 5. S3 Storage Refactor
+**Why:** This is the difference between "ChatGPT clone" and "Manus.im competitor". Currently chat just streams text.
 
-- [ ] Replace `@vercel/blob` in `packages/storage/` with `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`
-- [ ] Export: `uploadFile()`, `getPresignedUrl()`, `deleteFile()`, `listFiles()`
-- [ ] Wire `services/file/`: upload via multipart → S3, generate presigned download URLs
-- [ ] Wire to `files` + `fileVersions` Drizzle tables
-- [ ] Library page: grid/list views, upload modal, folder nav, file actions, drag-and-drop
+**The problem:** `/api/chat/route.ts` calls `streamText()` directly. It never calls the Python agent service. The Python agent service has tools defined but never passes them to the LLM.
 
-### 6. E2B Sandbox Integration
+**Fix options:**
 
-- [ ] Install `e2b` package in `services/sandbox/`
-- [ ] Create sandbox: `Sandbox.create({ apiKey: process.env.E2B_API_KEY })`
-- [ ] Execute code: `sandbox.runCode(code, { language })`
-- [ ] File operations: `sandbox.files.write()`, `sandbox.files.read()`
-- [ ] Wire as agent tool: When agent needs code execution, call sandbox service
-- [ ] Frontend: Terminal + preview pane for sandbox output
-- [ ] Save to `sandboxes` + `sandboxExecutions` tables
+**Option A: Enhance `/api/chat/route.ts` to use Vercel AI SDK tools**
 
-### 7. Settings Pages (ALL tabs)
+```typescript
+// In route.ts, add tools to streamText():
+const result = streamText({
+  model: resolveModel(model),
+  system: systemPrompt,
+  messages: sanitizedMessages,
+  tools: {
+    web_search: { description: "...", parameters: z.object({...}), execute: async (args) => { ... } },
+    execute_code: { ... },
+    browse_url: { ... },
+  },
+  maxSteps: 10, // Allow multi-step tool execution
+});
+```
 
-- [ ] Account: Profile update via `users.router.ts`, password change, email management
-- [ ] Billing: Plans, subscription, credits, invoices, payment methods (wire to `billing.router.ts`)
-- [ ] Connectors: Connected/available apps, connect/disconnect (wire to `connectors.router.ts`)
-- [ ] Devices: Device list, register, control (wire to `devices.router.ts`)
-- [ ] Personalization: Theme, language, AI response preferences
-- [ ] Scheduled Tasks: CRUD for scheduled Inngest jobs, cron editor
-- [ ] Data Controls: Export data, delete account, privacy settings
-- [ ] Skills: AI skills marketplace (future)
-- [ ] Mail: AgentMail configuration (future)
-- [ ] Usage: Credit usage charts and history
+**Option B: Route through Python agent service with tool loop**
 
-### 8. Device Control
+- Call `POST /v1/complete` on agent service with tools
+- Agent service passes tools to Anthropic/OpenAI
+- Agent service executes tool calls via service endpoints
+- Streams results back
 
-- [ ] Implement `services/device/` (Node.js Fastify or Go)
-- [ ] Home Assistant MCP integration for smart home devices
-- [ ] Device registration, heartbeat, command execution
-- [ ] Wire `devices`, `deviceSessions`, `deviceCommands` tables
-- [ ] Devices page: device cards with type-specific controls
-- [ ] Automations builder UI
+**Recommended:** Option A (simpler, uses Vercel AI SDK's built-in tool loop)
 
-## P2 - Polish (Week 5-6)
+**Files to modify:**
 
-### 9. Website Builder + Editor Package
+- `apps/app/app/api/chat/route.ts` — Add tools to `streamText()` call
+- Create tool definitions that call backend services (sandbox, device, connector, knowledge)
 
-- [ ] Implement `packages/editor/` with Monaco Editor
-- [ ] 3-pane layout: file tree + code editor + preview
-- [ ] AI code generation → file system → live preview
-- [ ] E2B or WebContainer for runtime
-- [ ] TiDB Serverless for client DB provisioning
-- [ ] Template system (React, Next.js, Vue, Express)
+### 2. Sidebar: Real Sessions + Remove Dead Nav
 
-### 10. Knowledge Base (RAG)
+**Why:** Sidebar shows 8 hardcoded dummy chats. Knowledge/Builder links go to pages that should be removed.
 
-- [ ] Wire knowledge service to `knowledgeGroups/Items/Chunks` tables
-- [ ] Document upload → text extraction → chunking → embedding (OpenAI text-embedding-3-small)
-- [ ] Vector search for context-aware AI responses
-- [ ] Knowledge base UI in Library section
+- [ ] Remove Knowledge + Builder from `nav-section.tsx` (lines 32-51)
+- [ ] Delete `apps/app/app/(authenticated)/knowledge/` directory
+- [ ] Delete `apps/app/app/(authenticated)/website-builder/` directory
+- [ ] Replace hardcoded `recentChats` in `sidebar/index.tsx` with `api.sessions.list.useQuery()`
+- [ ] Group sessions by date (Today, Yesterday, Last 7 days, Older)
+- [ ] Add Rubic logo at top
+- [ ] Wire ChatItem dropdown actions (Rename, Delete, Archive, Favorite)
+- [ ] Wire New Task button → `sessions.create` → navigate to `/chat/[id]`
 
-### 11. Webhooks Pipeline
+**See:** `.claude/frontend/sidebar/INSTRUCTIONS.md`
 
-- [ ] Wire webhook service to DB + Svix (`@repo/webhooks`)
-- [ ] Emit events from other services (task.completed, file.uploaded, etc.)
-- [ ] Webhook management UI in settings
-- [ ] Delivery logs and retry handling
+### 3. Dashboard → Chat Session Flow
 
-### 12. Notifications
+**Why:** Dashboard creates session ID in sessionStorage but doesn't create it in DB. The `/api/chat` route upserts it, but this is fragile.
 
-- [ ] Wire notification service to Knock (`@repo/notifications`)
-- [ ] Real-time notification feed component
-- [ ] Email + push + in-app channels
-- [ ] Notification preferences per user
+- [ ] Dashboard prompt: call `sessions.create` tRPC mutation FIRST
+- [ ] Then navigate to `/chat/[sessionId]?q=encodedMessage`
+- [ ] Chat page: read `?q=` param and send as first message
+- [ ] Replace hardcoded credits with `billing.getCreditBalance.useQuery()`
 
-### 13. Search Indexing
+**See:** `.claude/frontend/dashboard/INSTRUCTIONS.md`
 
-- [ ] Wire search service to Typesense (`@repo/search`)
-- [ ] Index: sessions, messages, files, projects on create/update
-- [ ] Search UI already partially implemented (search.router.ts 153 lines)
-- [ ] Autocomplete/suggestions
+### 4. Stripe Integration (4 TODOs)
 
-### 14. AgentMail
+**Why:** Billing tRPC router (608 lines) has real Drizzle queries. Only 4 Stripe API calls are missing.
 
-- [ ] Research AgentMail API, provision mailbox per user
-- [ ] Mail settings tab, wire as agent tool
+- [ ] `createSubscriptionCheckout` — `stripe.checkout.sessions.create()`
+- [ ] `createCreditPurchaseCheckout` — `stripe.checkout.sessions.create()`
+- [ ] `getBillingPortalUrl` — `stripe.billingPortal.sessions.create()`
+- [ ] `deletePaymentMethod` — `stripe.paymentMethods.detach()`
+- [ ] Billing service: 4 matching Stripe TODOs (subscription create/cancel, credit purchase, webhook verify)
+- [ ] Create Stripe webhook handler
+
+---
+
+## P1 — Core Frontend Pages
+
+### 5. Files/Library Page
+
+**Backend:** COMPLETE (file service 492 lines, storage with S3, tRPC 8 procedures)
+**Frontend:** EMPTY placeholder
+
+- [ ] Create `files-page-client.tsx` with grid/list views
+- [ ] Tab filtering, folder navigation, upload zone
+- [ ] File preview modal, file actions
+- [ ] Add `createFolder`, `move`, `bulkDelete`, `share` tRPC procedures
+- [ ] `fileShares` DB table for sharing
+
+**See:** `.claude/frontend/library/INSTRUCTIONS.md`
+
+### 6. Applications Page
+
+**Backend:** COMPLETE (connector service 800 lines, Composio, tRPC 12 procedures)
+**Frontend:** EMPTY placeholder
+
+- [ ] Create `applications-page-client.tsx` with Connected/Available tabs
+- [ ] Seed connectorDefinitions via `POST /connectors/sync-catalog`
+- [ ] App card with connect/connected status
+- [ ] OAuth popup flow (backend already handles it)
+- [ ] App configuration panel
+
+**See:** `.claude/frontend/applications/INSTRUCTIONS.md`
+
+### 7. Unified Prompt Component
+
+- [ ] Create unified prompt with auto-resize textarea + toolbar
+- [ ] Files button, Connectors popover, Skills button, Model selector
+
+**See:** `.claude/frontend/prompt/INSTRUCTIONS.md`
+
+### 8. Devices: Smart Home Extension
+
+**Backend + Frontend:** COMPLETE for Rubic devices
+
+- [ ] Add Home Assistant hub integration
+- [ ] Smart home device type cards (light, climate, sensor, media)
+- [ ] Tab layout: My Devices / Smart Home / Hubs
+
+**See:** `.claude/frontend/devices/INSTRUCTIONS.md`
+
+---
+
+## P2 — Advanced Features
+
+### 9. Chat: Rubic Computer Panel
+
+- [ ] Split-screen panel with Browser, Terminal, Preview, Files tabs
+- [ ] Browser use integration (Playwright screenshots)
+- [ ] E2B terminal (xterm.js) — sandbox service already works
+- [ ] Task segmentation display
+
+**See:** `.claude/frontend/chat/INSTRUCTIONS.md`
+
+### 10. Agent Service Stubs
+
+- [ ] `web_search` — Integrate Serper or Tavily API
+- [ ] `create_document` — PDF/Word generation
+- [ ] `generate_image` — DALL-E integration
+
+### 11. Settings Pages
+
+- [ ] Wire remaining settings tabs to their tRPC routers (most already work)
+
+### 12. Search UX
+
+- [ ] Search dialog already works (Cmd+K)
+- [ ] Needs Typesense running for full functionality
+
+### 13. Notifications
+
+- [ ] Notification service fully implemented (Knock + Web Push)
+- [ ] Need real-time notification feed component in frontend
+
+---
 
 ## Acceptance Criteria
 
-- [ ] Chat sends/receives/persists messages end-to-end
-- [ ] Sign up → verify email → sign in works
-- [ ] Subscribe via Stripe → credits appear
-- [ ] Connect app via Composio → available as AI tool
-- [ ] Upload/download files via S3
-- [ ] All settings tabs save correctly
-- [ ] WebSocket reconnects automatically
-- [ ] Credits deducted per AI action
-- [ ] Search returns relevant results
-- [ ] Notifications appear in real-time
+### Must Work (P0)
+
+- [ ] Type prompt on dashboard → creates session in DB → redirects to chat → AI responds with tools
+- [ ] Chat persists messages (ALREADY WORKS)
+- [ ] AI can use tools: web search, code execution, file operations
+- [ ] Sidebar shows real sessions grouped by date
+- [ ] Knowledge and Builder pages/links removed
+- [ ] Stripe checkout works for subscriptions and credit purchases
+
+### Should Work (P1)
+
+- [ ] Files page: upload, download, preview, folder navigation
+- [ ] Applications page: browse marketplace, connect via OAuth
+- [ ] Prompt has file upload, connectors popover, model selector
+- [ ] Devices: smart home device cards with controls
+
+### Nice to Have (P2)
+
+- [ ] Rubic Computer panel with browser + terminal
+- [ ] Notifications in real-time
+- [ ] Webhooks management
+- [ ] Agent service: document generation, image generation
+
+---
+
+## Instruction File Index
+
+| File                                            | Covers                                                |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| `.claude/frontend/dashboard/INSTRUCTIONS.md`    | Dashboard page, session creation, credits             |
+| `.claude/frontend/sidebar/INSTRUCTIONS.md`      | Sidebar, nav, real chats, filters, logo               |
+| `.claude/frontend/chat/INSTRUCTIONS.md`         | Chat pipeline, tools, Rubic Computer, E2B, browser    |
+| `.claude/frontend/prompt/INSTRUCTIONS.md`       | Unified prompt component, toolbar, connectors, skills |
+| `.claude/frontend/library/INSTRUCTIONS.md`      | Files page, upload, preview, folders, sharing         |
+| `.claude/frontend/applications/INSTRUCTIONS.md` | App marketplace, Composio, OAuth, config              |
+| `.claude/frontend/devices/INSTRUCTIONS.md`      | Device dashboard, smart home, HA, controls            |
+| `.claude/frontend/FRONTEND_MASTER.md`           | Frontend architecture overview                        |
+| `.claude/backend/BACKEND_MASTER.md`             | Backend architecture overview                         |
+| `.claude/database/DATABASE_MASTER.md`           | Database schema reference                             |
+| `.claude/business/VISION.md`                    | Business vision and product direction                 |
+| `.claude/MASTER_INSTRUCTIONS.md`                | Top-level project instructions                        |
