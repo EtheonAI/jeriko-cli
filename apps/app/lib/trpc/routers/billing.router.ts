@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../init";
 import {
   db,
+  users,
   subscriptionPlans,
   userSubscriptions,
   creditPackages,
@@ -17,6 +18,8 @@ import {
   lte,
   sql,
 } from "@repo/database";
+import { stripe } from "@repo/payments";
+import { getOrCreateStripeCustomer } from "@/lib/stripe/helpers";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
 
@@ -40,10 +43,7 @@ export const billingRouter = createTRPCRouter({
         plan: subscriptionPlans,
       })
       .from(userSubscriptions)
-      .innerJoin(
-        subscriptionPlans,
-        eq(userSubscriptions.planId, subscriptionPlans.id)
-      )
+      .innerJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
       .where(eq(userSubscriptions.userId, ctx.user.id))
       .limit(1);
 
@@ -267,12 +267,7 @@ export const billingRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(paymentMethods)
-        .where(
-          and(
-            eq(paymentMethods.id, input.id),
-            eq(paymentMethods.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(paymentMethods.id, input.id), eq(paymentMethods.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -305,12 +300,7 @@ export const billingRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(paymentMethods)
-        .where(
-          and(
-            eq(paymentMethods.id, input.id),
-            eq(paymentMethods.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(paymentMethods.id, input.id), eq(paymentMethods.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -320,7 +310,14 @@ export const billingRouter = createTRPCRouter({
         });
       }
 
-      // TODO: Delete from Stripe as well
+      // Detach from Stripe (may already be detached)
+      if (existing.stripePaymentMethodId) {
+        try {
+          await stripe.paymentMethods.detach(existing.stripePaymentMethodId);
+        } catch {
+          // Payment method may already be detached in Stripe
+        }
+      }
 
       await db.delete(paymentMethods).where(eq(paymentMethods.id, input.id));
 
@@ -333,9 +330,7 @@ export const billingRouter = createTRPCRouter({
       z.object({
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
-        status: z
-          .enum(["draft", "open", "paid", "void", "uncollectible"])
-          .optional(),
+        status: z.enum(["draft", "open", "paid", "void", "uncollectible"]).optional(),
       })
     )
     .query(async ({ ctx, input }) => {
@@ -363,9 +358,7 @@ export const billingRouter = createTRPCRouter({
       const [invoice] = await db
         .select()
         .from(invoices)
-        .where(
-          and(eq(invoices.id, input.id), eq(invoices.userId, ctx.user.id))
-        )
+        .where(and(eq(invoices.id, input.id), eq(invoices.userId, ctx.user.id)))
         .limit(1);
 
       if (!invoice) {
@@ -397,13 +390,44 @@ export const billingRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found" });
       }
 
-      // TODO: Create Stripe checkout session
-      // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-      // const session = await stripe.checkout.sessions.create({...});
+      const priceId =
+        input.interval === "yearly" ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
+
+      if (!priceId) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Plan does not have a Stripe price configured",
+        });
+      }
+
+      const customerId = await getOrCreateStripeCustomer(
+        ctx.user.id,
+        ctx.user.email,
+        ctx.user.name
+      );
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
+        metadata: {
+          userId: ctx.user.id,
+          planId: input.planId,
+          interval: input.interval,
+        },
+        subscription_data: {
+          metadata: {
+            userId: ctx.user.id,
+            planId: input.planId,
+          },
+        },
+      });
 
       return {
-        checkoutUrl: "", // TODO: return stripe session URL
-        sessionId: "",
+        checkoutUrl: session.url,
+        sessionId: session.id,
       };
     }),
 
@@ -431,11 +455,38 @@ export const billingRouter = createTRPCRouter({
         });
       }
 
-      // TODO: Create Stripe checkout session
+      if (!pkg.stripePriceId) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Credit package does not have a Stripe price configured",
+        });
+      }
+
+      const customerId = await getOrCreateStripeCustomer(
+        ctx.user.id,
+        ctx.user.email,
+        ctx.user.name
+      );
+
+      const totalCredits = pkg.credits + (pkg.bonusCredits ?? 0);
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "payment",
+        line_items: [{ price: pkg.stripePriceId, quantity: 1 }],
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
+        metadata: {
+          userId: ctx.user.id,
+          packageId: input.packageId,
+          credits: String(totalCredits),
+          type: "credit_purchase",
+        },
+      });
 
       return {
-        checkoutUrl: "", // TODO: return stripe session URL
-        sessionId: "",
+        checkoutUrl: session.url,
+        sessionId: session.id,
       };
     }),
 
@@ -461,10 +512,16 @@ export const billingRouter = createTRPCRouter({
         });
       }
 
-      // TODO: Cancel in Stripe
-      // await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-      //   cancel_at_period_end: input.cancelAtPeriodEnd
-      // });
+      // Cancel in Stripe
+      if (subscription.stripeSubscriptionId) {
+        if (input.cancelAtPeriodEnd) {
+          await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+            cancel_at_period_end: true,
+          });
+        } else {
+          await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
+        }
+      }
 
       const [updated] = await db
         .update(userSubscriptions)
@@ -502,7 +559,12 @@ export const billingRouter = createTRPCRouter({
       });
     }
 
-    // TODO: Reactivate in Stripe
+    // Reactivate in Stripe
+    if (subscription.stripeSubscriptionId) {
+      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        cancel_at_period_end: false,
+      });
+    }
 
     const [updated] = await db
       .update(userSubscriptions)
@@ -520,15 +582,26 @@ export const billingRouter = createTRPCRouter({
   getBillingPortalUrl: protectedProcedure
     .input(z.object({ returnUrl: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // TODO: Create Stripe billing portal session
-      // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-      // const session = await stripe.billingPortal.sessions.create({
-      //   customer: customerId,
-      //   return_url: input.returnUrl,
-      // });
+      const [user] = await db
+        .select({ stripeCustomerId: users.stripeCustomerId })
+        .from(users)
+        .where(eq(users.id, ctx.user.id))
+        .limit(1);
+
+      if (!user?.stripeCustomerId) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "No Stripe customer found. Please subscribe to a plan first.",
+        });
+      }
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: input.returnUrl,
+      });
 
       return {
-        url: "", // TODO: return stripe portal URL
+        url: session.url,
       };
     }),
 });

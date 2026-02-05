@@ -9,18 +9,14 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.750.0",
-    "@aws-sdk/s3-request-presigner": "^3.750.0",
     "@fastify/multipart": "^9.0.3",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
-    "fastify": "^5.2.2",
-    "fastify-plugin": "^5.0.1",
-    "mime-types": "^3.0.0"
+    "@repo/storage": "workspace:*",
+    "fastify": "^5.2.2"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/mime-types": "^3.0.0",
     "@types/node": "^22.13.4",
     "tsup": "^8.5.0",
     "tsx": "^4.19.3",

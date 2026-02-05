@@ -34,6 +34,8 @@ import {
   CopyIcon,
   CheckIcon,
   AlertCircleIcon,
+  LinkIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
@@ -52,13 +54,22 @@ type EmailSettingsForm = z.infer<typeof emailSettingsSchema>;
 export function MailManusTab() {
   const [copied, setCopied] = useState(false);
 
-  // Fetch notification preferences
-  const { data: preferences, isLoading, isError, refetch } = trpc.notifications.getPreferences.useQuery(undefined, { retry: 1 });
+  // Fetch profile for dynamic email and notification preferences
+  const { data: profile } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
+  const { data: preferences, isLoading: prefsLoading } = trpc.user.getPreferences.useQuery(
+    undefined,
+    { retry: 1 }
+  );
+  const {
+    data: notifPrefs,
+    isLoading: notifLoading,
+    isError: notifError,
+    refetch,
+  } = trpc.notifications.getPreferences.useQuery(undefined, { retry: 1 });
 
-  // Mutations
   const utils = trpc.useUtils();
 
-  const updatePreferences = trpc.notifications.updatePreferences.useMutation({
+  const updateNotifPreferences = trpc.notifications.updatePreferences.useMutation({
     onSuccess: () => {
       toast.success("Email settings updated");
       utils.notifications.getPreferences.invalidate();
@@ -68,20 +79,35 @@ export function MailManusTab() {
     },
   });
 
+  const updateUserPreferences = trpc.user.updatePreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Email processing preferences saved");
+      utils.user.getPreferences.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save preferences");
+    },
+  });
+
   // Form
   const form = useForm<EmailSettingsForm>({
     resolver: zodResolver(emailSettingsSchema),
-    values: preferences ? {
-      emailEnabled: preferences.emailEnabled,
-      emailDigest: preferences.emailDigest as EmailSettingsForm["emailDigest"],
-      quietHoursEnabled: preferences.quietHoursEnabled,
-      quietHoursStart: "quietHoursStart" in preferences ? (preferences.quietHoursStart || "") : "",
-      quietHoursEnd: "quietHoursEnd" in preferences ? (preferences.quietHoursEnd || "") : "",
-    } : undefined,
+    values: notifPrefs
+      ? {
+          emailEnabled: notifPrefs.emailEnabled,
+          emailDigest: notifPrefs.emailDigest as EmailSettingsForm["emailDigest"],
+          quietHoursEnabled: notifPrefs.quietHoursEnabled,
+          quietHoursStart:
+            ((notifPrefs as Record<string, unknown>).quietHoursStart as string) || "",
+          quietHoursEnd: ((notifPrefs as Record<string, unknown>).quietHoursEnd as string) || "",
+        }
+      : undefined,
   });
 
-  // Generate agent email address (demo)
-  const agentEmail = "agent-abc123@mail.rubic.dev";
+  // Dynamic agent email derived from user ID
+  const agentEmail = profile?.id
+    ? `agent-${profile.id.slice(0, 8)}@mail.rubic.dev`
+    : "agent-...@mail.rubic.dev";
 
   const copyEmail = async () => {
     await navigator.clipboard.writeText(agentEmail);
@@ -91,7 +117,7 @@ export function MailManusTab() {
   };
 
   const onSubmit = (data: EmailSettingsForm) => {
-    updatePreferences.mutate({
+    updateNotifPreferences.mutate({
       emailEnabled: data.emailEnabled,
       emailDigest: data.emailDigest,
       quietHoursEnabled: data.quietHoursEnabled,
@@ -99,6 +125,8 @@ export function MailManusTab() {
       quietHoursEnd: data.quietHoursEnd,
     });
   };
+
+  const isLoading = prefsLoading || notifLoading;
 
   if (isLoading) {
     return (
@@ -116,7 +144,7 @@ export function MailManusTab() {
     );
   }
 
-  if (isError) {
+  if (notifError) {
     return (
       <div className="space-y-6">
         <div>
@@ -163,19 +191,111 @@ export function MailManusTab() {
               {agentEmail}
             </div>
             <Button variant="outline" size="sm" onClick={copyEmail}>
-              {copied ? (
-                <CheckIcon className="h-4 w-4" />
-              ) : (
-                <CopyIcon className="h-4 w-4" />
-              )}
+              {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
             </Button>
           </div>
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
             <AlertCircleIcon className="h-4 w-4 mt-0.5 text-amber-600" />
             <div className="text-xs text-amber-800 dark:text-amber-200">
-              <strong>How to use:</strong> Forward important emails to this address,
-              and Rubic will analyze them and take appropriate actions based on your configured rules.
+              <strong>How to use:</strong> Forward important emails to this address, and Rubic will
+              analyze them and take appropriate actions based on your configured rules.
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Connected Email Accounts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LinkIcon className="h-4 w-4" />
+            Connected Email Accounts
+          </CardTitle>
+          <CardDescription>Connect your email accounts for automatic processing.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+                <MailIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Gmail</p>
+                <p className="text-xs text-muted-foreground">Connect your Google account</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                Coming Soon
+              </Badge>
+              <Button variant="outline" size="sm" disabled>
+                Connect
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+                <MailIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Outlook</p>
+                <p className="text-xs text-muted-foreground">Connect your Microsoft account</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">
+                Coming Soon
+              </Badge>
+              <Button variant="outline" size="sm" disabled>
+                Connect
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email Processing Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <SparklesIcon className="h-4 w-4" />
+            Email Processing
+          </CardTitle>
+          <CardDescription>Configure how Rubic processes incoming emails.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Auto-summarize Emails</Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically generate summaries for long emails
+              </p>
+            </div>
+            <Switch
+              checked={preferences?.autoSummarizeEmails ?? false}
+              onCheckedChange={(checked) =>
+                updateUserPreferences.mutate({ autoSummarizeEmails: checked })
+              }
+            />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Auto-categorize Emails</Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically categorize and label incoming emails
+              </p>
+            </div>
+            <Switch
+              checked={preferences?.autoCategorizeEmails ?? false}
+              onCheckedChange={(checked) =>
+                updateUserPreferences.mutate({ autoCategorizeEmails: checked })
+              }
+            />
           </div>
         </CardContent>
       </Card>
@@ -196,9 +316,7 @@ export function MailManusTab() {
             <div className="flex items-center justify-between">
               <div>
                 <Label>Email Notifications</Label>
-                <p className="text-xs text-muted-foreground">
-                  Receive important updates via email
-                </p>
+                <p className="text-xs text-muted-foreground">Receive important updates via email</p>
               </div>
               <Switch
                 checked={form.watch("emailEnabled")}
@@ -212,7 +330,9 @@ export function MailManusTab() {
               <Label>Digest Frequency</Label>
               <Select
                 value={form.watch("emailDigest")}
-                onValueChange={(value) => form.setValue("emailDigest", value as EmailSettingsForm["emailDigest"])}
+                onValueChange={(value) =>
+                  form.setValue("emailDigest", value as EmailSettingsForm["emailDigest"])
+                }
                 disabled={!form.watch("emailEnabled")}
               >
                 <SelectTrigger>
@@ -240,9 +360,7 @@ export function MailManusTab() {
               <SettingsIcon className="h-4 w-4" />
               Quiet Hours
             </CardTitle>
-            <CardDescription>
-              Pause email notifications during specific hours.
-            </CardDescription>
+            <CardDescription>Pause email notifications during specific hours.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -264,17 +382,11 @@ export function MailManusTab() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Start Time</Label>
-                    <Input
-                      type="time"
-                      {...form.register("quietHoursStart")}
-                    />
+                    <Input type="time" {...form.register("quietHoursStart")} />
                   </div>
                   <div className="space-y-2">
                     <Label>End Time</Label>
-                    <Input
-                      type="time"
-                      {...form.register("quietHoursEnd")}
-                    />
+                    <Input type="time" {...form.register("quietHoursEnd")} />
                   </div>
                 </div>
               </>
@@ -283,8 +395,10 @@ export function MailManusTab() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={updatePreferences.isPending}>
-            {updatePreferences.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+          <Button type="submit" disabled={updateNotifPreferences.isPending}>
+            {updateNotifPreferences.isPending && (
+              <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+            )}
             Save Changes
           </Button>
         </div>
@@ -300,8 +414,8 @@ export function MailManusTab() {
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Email Whitelist</h4>
               <p className="text-xs text-muted-foreground">
-                Only emails from verified senders will be processed by Rubic.
-                Configure your whitelist in the Connectors settings to add trusted email addresses.
+                Only emails from verified senders will be processed by Rubic. Configure your
+                whitelist in the Connectors settings to add trusted email addresses.
               </p>
             </div>
           </div>

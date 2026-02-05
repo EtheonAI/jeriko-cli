@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { db, eq, desc, and } from "@repo/database";
+import { db, eq, desc, and, agentSessions, agents, agentTasks, sql } from "@repo/database";
 import {
   createId,
   successResponse,
@@ -41,8 +41,8 @@ const ListTasksSchema = z.object({
 });
 
 // Helper to get user ID from headers
-function getUserId(request: { headers: { "x-user-id"?: string } }): string {
-  const userId = request.headers["x-user-id"];
+function getUserId(request: { headers: Record<string, string | string[] | undefined> }): string {
+  const userId = request.headers["x-user-id"] as string | undefined;
   if (!userId) {
     const error = new Error("Unauthorized") as Error & { statusCode: number; code: string };
     error.statusCode = 401;
@@ -58,40 +58,80 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const input = CreateTaskSchema.parse(request.body);
 
-    const id = createId();
-    const now = new Date();
+    try {
+      // First ensure we have an agent for this session
+      let [agent] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.sessionId, input.sessionId))
+        .limit(1);
 
-    // For now, we'll use a simple in-memory approach
-    // In production, this would use the database schema
-    const task = {
-      id,
-      userId,
-      sessionId: input.sessionId,
-      title: input.title || null,
-      prompt: input.prompt,
-      status: "pending" as const,
-      priority: input.priority,
-      targetDeviceId: input.targetDeviceId || null,
-      targetPlatform: input.targetPlatform || null,
-      requiredCapabilities: input.requiredCapabilities,
-      metadata: input.metadata,
-      createdAt: now,
-      updatedAt: now,
-      completedAt: null,
-    };
+      if (!agent) {
+        // Create a default orchestrator agent for this session
+        [agent] = await db
+          .insert(agents)
+          .values({
+            id: createId(),
+            sessionId: input.sessionId,
+            type: "orchestrator",
+            name: "Task Agent",
+            status: "idle",
+          })
+          .returning();
+      }
 
-    // TODO: Insert into database when schema is ready
-    // await db.insert(tasks).values(task);
+      const taskId = createId();
+      const now = new Date();
 
-    // Publish task created event
-    await publish(`user:${userId}`, {
-      type: "task:created",
-      data: task,
-    });
+      const [task] = await db
+        .insert(agentTasks)
+        .values({
+          id: taskId,
+          agentId: agent!.id,
+          title: input.title || input.prompt.slice(0, 100),
+          description: input.prompt,
+          status: "pending",
+          priority: typeof input.priority === "string" ? 0 : (input.priority as number) || 0,
+        })
+        .returning();
 
-    logger.info({ taskId: id, userId }, "Task created");
+      const responseTask = {
+        id: task!.id,
+        userId,
+        sessionId: input.sessionId,
+        title: task!.title,
+        prompt: input.prompt,
+        status: task!.status,
+        priority: input.priority,
+        targetDeviceId: input.targetDeviceId || null,
+        targetPlatform: input.targetPlatform || null,
+        requiredCapabilities: input.requiredCapabilities,
+        metadata: input.metadata,
+        createdAt: task!.createdAt,
+        updatedAt: task!.updatedAt,
+        completedAt: task!.completedAt,
+      };
 
-    return reply.status(201).send(successResponse(task, request.id));
+      // Publish task created event
+      await publish(`user:${userId}`, {
+        type: "task:created",
+        data: responseTask,
+      });
+
+      logger.info({ taskId: task!.id, userId }, "Task created");
+
+      return reply.status(201).send(successResponse(responseTask, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to create task");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create task" },
+            request.id
+          )
+        );
+    }
   });
 
   // List tasks
@@ -99,20 +139,64 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const query = ListTasksSchema.parse(request.query);
 
-    // TODO: Query database when schema is ready
-    // For now, return empty array
-    const tasks: unknown[] = [];
+    try {
+      const conditions = [];
+      if (query.sessionId) {
+        // Get agents for this session, then get their tasks
+        const sessionAgents = await db
+          .select({ id: agents.id })
+          .from(agents)
+          .where(eq(agents.sessionId, query.sessionId));
 
-    return reply.send(
-      successResponse(
-        {
-          items: tasks,
-          total: 0,
-          hasMore: false,
-        },
-        request.id
-      )
-    );
+        if (sessionAgents.length === 0) {
+          return reply.send(successResponse({ items: [], total: 0, hasMore: false }, request.id));
+        }
+
+        const agentIds = sessionAgents.map((a) => a.id);
+        conditions.push(
+          sql`${agentTasks.agentId} IN (${sql.join(
+            agentIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`
+        );
+      }
+      if (query.status) {
+        conditions.push(eq(agentTasks.status, query.status as any));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const tasks = await db
+        .select()
+        .from(agentTasks)
+        .where(whereClause)
+        .orderBy(desc(agentTasks.createdAt))
+        .limit(query.limit + 1);
+
+      const hasMore = tasks.length > query.limit;
+      const items = hasMore ? tasks.slice(0, query.limit) : tasks;
+
+      return reply.send(
+        successResponse(
+          {
+            items,
+            total: items.length,
+            hasMore,
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to list tasks");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list tasks" },
+            request.id
+          )
+        );
+    }
   });
 
   // Get task by ID
@@ -120,14 +204,29 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    // TODO: Query database when schema is ready
-    // For now, return not found
-    return reply.status(404).send(
-      errorResponse(
-        { code: ErrorCodes.NOT_FOUND, message: "Task not found" },
-        request.id
-      )
-    );
+    try {
+      const [task] = await db.select().from(agentTasks).where(eq(agentTasks.id, id)).limit(1);
+
+      if (!task) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id)
+          );
+      }
+
+      return reply.send(successResponse(task, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to get task");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get task" },
+            request.id
+          )
+        );
+    }
   });
 
   // Update task
@@ -136,14 +235,37 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const input = UpdateTaskSchema.parse(request.body);
 
-    // TODO: Update database when schema is ready
-    // For now, return not found
-    return reply.status(404).send(
-      errorResponse(
-        { code: ErrorCodes.NOT_FOUND, message: "Task not found" },
-        request.id
-      )
-    );
+    try {
+      const updateValues: Record<string, unknown> = {};
+      if (input.title) updateValues.title = input.title;
+      if (input.status) updateValues.status = input.status;
+
+      const [updated] = await db
+        .update(agentTasks)
+        .set(updateValues as any)
+        .where(eq(agentTasks.id, id))
+        .returning();
+
+      if (!updated) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id)
+          );
+      }
+
+      return reply.send(successResponse(updated, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to update task");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update task" },
+            request.id
+          )
+        );
+    }
   });
 
   // Delete task
@@ -151,14 +273,29 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    // TODO: Delete from database when schema is ready
-    // For now, return not found
-    return reply.status(404).send(
-      errorResponse(
-        { code: ErrorCodes.NOT_FOUND, message: "Task not found" },
-        request.id
-      )
-    );
+    try {
+      const [deleted] = await db.delete(agentTasks).where(eq(agentTasks.id, id)).returning();
+
+      if (!deleted) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id)
+          );
+      }
+
+      return reply.send(successResponse({ deleted: true }, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to delete task");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete task" },
+            request.id
+          )
+        );
+    }
   });
 
   // Continue multi-turn task
@@ -183,14 +320,28 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    // Publish cancel event
-    await publish(`user:${userId}`, {
-      type: "task:cancelled",
-      data: { taskId: id },
-    });
+    try {
+      await db.update(agentTasks).set({ status: "cancelled" }).where(eq(agentTasks.id, id));
 
-    logger.info({ taskId: id, userId }, "Task cancelled");
+      // Publish cancel event
+      await publish(`user:${userId}`, {
+        type: "task:cancelled",
+        data: { taskId: id },
+      });
 
-    return reply.send(successResponse({ taskId: id, status: "cancelled" }, request.id));
+      logger.info({ taskId: id, userId }, "Task cancelled");
+
+      return reply.send(successResponse({ taskId: id, status: "cancelled" }, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to cancel task");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to cancel task" },
+            request.id
+          )
+        );
+    }
   });
 };

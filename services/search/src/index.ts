@@ -1,5 +1,19 @@
 import Fastify from "fastify";
 import { createLogger, getEnv } from "@repo/service-utils";
+import {
+  db,
+  projects,
+  agentSessions,
+  messages,
+  files,
+  knowledgeItems,
+  eq,
+  and,
+  desc,
+  ilike,
+  or,
+  sql,
+} from "@repo/database";
 
 const logger = createLogger({ service: "search" });
 
@@ -29,16 +43,127 @@ async function main() {
       offset?: number;
     };
 
-    // TODO: Search across multiple indices
-    logger.info({ query, types, userId }, "Search executed");
+    try {
+      // TODO: Typesense integration for full-text search
+      // For now, use DB ILIKE as fallback
+      const searchLimit = Math.min(limit || 20, 100);
+      const searchOffset = offset || 0;
+      const searchPattern = `%${query}%`;
+      const results: Array<{
+        type: string;
+        id: string;
+        title: string;
+        preview?: string | null;
+        score: number;
+      }> = [];
 
-    return {
-      query,
-      results: [],
-      total: 0,
-      limit: limit || 20,
-      offset: offset || 0,
-    };
+      const searchTypes = types || ["projects", "sessions", "files", "knowledge", "messages"];
+
+      if (searchTypes.includes("projects")) {
+        const projectResults = await db
+          .select()
+          .from(projects)
+          .where(
+            and(
+              eq(projects.userId, userId),
+              or(ilike(projects.name, searchPattern), ilike(projects.description, searchPattern))
+            )
+          )
+          .limit(searchLimit);
+        for (const p of projectResults) {
+          results.push({
+            type: "project",
+            id: p.id,
+            title: p.name,
+            preview: p.description,
+            score: 1,
+          });
+        }
+      }
+
+      if (searchTypes.includes("sessions")) {
+        const sessionResults = await db
+          .select()
+          .from(agentSessions)
+          .where(and(eq(agentSessions.userId, userId), ilike(agentSessions.title, searchPattern)))
+          .limit(searchLimit);
+        for (const s of sessionResults) {
+          results.push({
+            type: "session",
+            id: s.id,
+            title: s.title || "Untitled",
+            preview: null,
+            score: 1,
+          });
+        }
+      }
+
+      if (searchTypes.includes("messages")) {
+        const messageResults = await db
+          .select()
+          .from(messages)
+          .where(ilike(messages.content, searchPattern))
+          .limit(searchLimit);
+        for (const m of messageResults) {
+          results.push({
+            type: "message",
+            id: m.id,
+            title: m.content.slice(0, 100),
+            preview: m.content.slice(0, 200),
+            score: 1,
+          });
+        }
+      }
+
+      if (searchTypes.includes("files")) {
+        const fileResults = await db
+          .select()
+          .from(files)
+          .where(and(eq(files.userId, userId), ilike(files.name, searchPattern)))
+          .limit(searchLimit);
+        for (const f of fileResults) {
+          results.push({ type: "file", id: f.id, title: f.name, preview: f.path, score: 1 });
+        }
+      }
+
+      if (searchTypes.includes("knowledge")) {
+        const knowledgeResults = await db
+          .select()
+          .from(knowledgeItems)
+          .where(
+            and(
+              eq(knowledgeItems.userId, userId),
+              or(
+                ilike(knowledgeItems.name, searchPattern),
+                ilike(knowledgeItems.content, searchPattern)
+              )
+            )
+          )
+          .limit(searchLimit);
+        for (const k of knowledgeResults) {
+          results.push({
+            type: "knowledge",
+            id: k.id,
+            title: k.name,
+            preview: k.contentPreview,
+            score: 1,
+          });
+        }
+      }
+
+      logger.info({ query, types, userId, resultCount: results.length }, "Search executed");
+
+      return {
+        query,
+        results: results.slice(searchOffset, searchOffset + searchLimit),
+        total: results.length,
+        limit: searchLimit,
+        offset: searchOffset,
+      };
+    } catch (error) {
+      logger.error(error, "Failed to execute search");
+      return reply.status(500).send({ error: "Failed to execute search" });
+    }
   });
 
   // Search projects
@@ -50,8 +175,24 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Search projects
-    return { results: [], total: 0 };
+    try {
+      const searchPattern = `%${query}%`;
+      const results = await db
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.userId, userId),
+            or(ilike(projects.name, searchPattern), ilike(projects.description, searchPattern))
+          )
+        )
+        .orderBy(desc(projects.updatedAt))
+        .limit(limit || 20);
+      return { results, total: results.length };
+    } catch (error) {
+      logger.error(error, "Failed to search projects");
+      return reply.status(500).send({ error: "Failed to search projects" });
+    }
   });
 
   // Search sessions
@@ -63,8 +204,24 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Search sessions
-    return { results: [], total: 0 };
+    try {
+      const searchPattern = `%${query}%`;
+      const conditions = [
+        eq(agentSessions.userId, userId),
+        ilike(agentSessions.title, searchPattern),
+      ];
+
+      const results = await db
+        .select()
+        .from(agentSessions)
+        .where(and(...conditions))
+        .orderBy(desc(agentSessions.updatedAt))
+        .limit(limit || 20);
+      return { results, total: results.length };
+    } catch (error) {
+      logger.error(error, "Failed to search sessions");
+      return reply.status(500).send({ error: "Failed to search sessions" });
+    }
   });
 
   // Search messages
@@ -76,8 +233,24 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Search messages (full-text)
-    return { results: [], total: 0 };
+    try {
+      const searchPattern = `%${query}%`;
+      const conditions = [ilike(messages.content, searchPattern)];
+      if (sessionId) {
+        conditions.push(eq(messages.sessionId, sessionId));
+      }
+
+      const results = await db
+        .select()
+        .from(messages)
+        .where(and(...conditions))
+        .orderBy(desc(messages.createdAt))
+        .limit(limit || 20);
+      return { results, total: results.length };
+    } catch (error) {
+      logger.error(error, "Failed to search messages");
+      return reply.status(500).send({ error: "Failed to search messages" });
+    }
   });
 
   // Search files
@@ -90,8 +263,24 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Search files
-    return { results: [], total: 0 };
+    try {
+      const searchPattern = `%${query}%`;
+      const conditions = [eq(files.userId, userId), ilike(files.name, searchPattern)];
+      if (mimeType) {
+        conditions.push(eq(files.mimeType, mimeType));
+      }
+
+      const results = await db
+        .select()
+        .from(files)
+        .where(and(...conditions))
+        .orderBy(desc(files.updatedAt))
+        .limit(limit || 20);
+      return { results, total: results.length };
+    } catch (error) {
+      logger.error(error, "Failed to search files");
+      return reply.status(500).send({ error: "Failed to search files" });
+    }
   });
 
   // Semantic search (vector similarity)
@@ -106,7 +295,7 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Generate embedding and search vector store
+    // TODO: Generate embedding and search vector store (Typesense)
     return {
       results: [],
       total: 0,
@@ -122,11 +311,29 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Generate suggestions
-    return { suggestions: [] };
+    try {
+      const searchPattern = `%${q}%`;
+      const suggestions: Array<{ type: string; id: string; title: string }> = [];
+
+      // Quick project name suggestions
+      const projectSuggestions = await db
+        .select({ id: projects.id, name: projects.name })
+        .from(projects)
+        .where(and(eq(projects.userId, userId), ilike(projects.name, searchPattern)))
+        .limit(5);
+
+      for (const p of projectSuggestions) {
+        suggestions.push({ type: "project", id: p.id, title: p.name });
+      }
+
+      return { suggestions: suggestions.slice(0, limit || 10) };
+    } catch (error) {
+      logger.error(error, "Failed to generate suggestions");
+      return reply.status(500).send({ error: "Failed to generate suggestions" });
+    }
   });
 
-  // Index entity (internal)
+  // Index entity (internal) - TODO: Typesense integration
   app.post("/internal/index", async (request, reply) => {
     const { type, id, data } = request.body as {
       type: string;
@@ -134,34 +341,39 @@ async function main() {
       data: Record<string, unknown>;
     };
 
-    // TODO: Add to search index
+    // TODO: Add to Typesense search index
     logger.info({ type, id }, "Entity indexed");
-
     return { indexed: true };
   });
 
-  // Remove from index (internal)
+  // Remove from index (internal) - TODO: Typesense integration
   app.delete("/internal/index/:type/:id", async (request, reply) => {
     const { type, id } = request.params as { type: string; id: string };
-    // TODO: Remove from search index
+    // TODO: Remove from Typesense search index
     return { removed: true };
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
   try {

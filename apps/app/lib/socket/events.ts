@@ -43,22 +43,14 @@ export interface ServerToClientEvents {
       metadata?: Record<string, unknown>;
     };
   }) => void;
-  "message:update": (data: {
-    sessionId: string;
-    messageId: string;
-    content: string;
-  }) => void;
+  "message:update": (data: { sessionId: string; messageId: string; content: string }) => void;
   "message:stream": (data: {
     sessionId: string;
     messageId: string;
     chunk: string;
     done?: boolean;
   }) => void;
-  "message:typing": (data: {
-    sessionId: string;
-    userId: string;
-    isTyping: boolean;
-  }) => void;
+  "message:typing": (data: { sessionId: string; userId: string; isTyping: boolean }) => void;
 
   // Agent events
   "agent:created": (data: {
@@ -127,6 +119,20 @@ export interface ServerToClientEvents {
     };
   }) => void;
   "file:deleted": (data: { sessionId: string; fileId: string }) => void;
+
+  // Device events
+  "device:status": (data: {
+    deviceId: string;
+    status: "online" | "offline" | "busy" | "error";
+    lastHeartbeat?: string;
+  }) => void;
+  "device:command:update": (data: {
+    deviceId: string;
+    commandId: string;
+    status: string;
+    result?: Record<string, unknown>;
+    error?: string;
+  }) => void;
 
   // Presence events
   "presence:online": (data: { userId: string }) => void;

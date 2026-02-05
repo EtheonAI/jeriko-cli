@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
-import { Badge } from "@repo/design-system/components/ui/badge";
 import { Switch } from "@repo/design-system/components/ui/switch";
 import { Label } from "@repo/design-system/components/ui/label";
 import { Separator } from "@repo/design-system/components/ui/separator";
@@ -13,6 +11,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/design-system/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/design-system/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,57 +39,110 @@ import {
   EyeOffIcon,
   FileTextIcon,
   AlertTriangleIcon,
+  FolderIcon,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
+import { ErrorState } from "./error-state";
 
 export function DataControlsTab() {
-  const [isExporting, setIsExporting] = useState(false);
-  const [isDeletingHistory, setIsDeletingHistory] = useState(false);
-  const [settings, setSettings] = useState({
-    saveHistory: true,
-    analyticsEnabled: true,
-    crashReports: true,
-    personalizedExperience: true,
+  const {
+    data: preferences,
+    isLoading,
+    isError,
+    refetch,
+  } = trpc.user.getPreferences.useQuery(undefined, { retry: 1 });
+  const utils = trpc.useUtils();
+
+  const updatePreferences = trpc.user.updatePreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Settings updated");
+      utils.user.getPreferences.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update settings");
+    },
   });
 
-  const handleExportData = async () => {
-    setIsExporting(true);
-    try {
-      // TODO: Call API to export user data
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      toast.success("Export request submitted. You'll receive an email when ready.");
-    } catch {
-      toast.error("Failed to request data export");
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  const exportData = trpc.user.exportData.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rubic-export-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("Data exported successfully");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to export data");
+    },
+  });
 
-  const handleClearHistory = async () => {
-    setIsDeletingHistory(true);
-    try {
-      // TODO: Call API to clear conversation history
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+  const clearHistory = trpc.user.clearChatHistory.useMutation({
+    onSuccess: () => {
       toast.success("Conversation history cleared");
-    } catch {
-      toast.error("Failed to clear history");
-    } finally {
-      setIsDeletingHistory(false);
-    }
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to clear history");
+    },
+  });
+
+  const clearFiles = trpc.user.clearFiles.useMutation({
+    onSuccess: () => {
+      toast.success("Files cleared");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to clear files");
+    },
+  });
+
+  const handleToggle = (key: string, value: boolean) => {
+    updatePreferences.mutate({ [key]: value });
   };
 
-  const handleSettingChange = (key: keyof typeof settings, value: boolean) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-    toast.success("Settings updated");
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Data Controls</h2>
+          <p className="text-sm text-muted-foreground">Manage your data and privacy settings.</p>
+        </div>
+        <Separator />
+        <Card>
+          <CardContent className="pt-6">
+            <div className="h-48 animate-pulse bg-muted rounded" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold">Data Controls</h2>
+          <p className="text-sm text-muted-foreground">Manage your data and privacy settings.</p>
+        </div>
+        <Separator />
+        <ErrorState
+          title="Failed to load data controls"
+          message="Unable to load your privacy settings. Please try again."
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Data Controls</h2>
-        <p className="text-sm text-muted-foreground">
-          Manage your data and privacy settings.
-        </p>
+        <p className="text-sm text-muted-foreground">Manage your data and privacy settings.</p>
       </div>
 
       <Separator />
@@ -96,9 +154,7 @@ export function DataControlsTab() {
             <ShieldIcon className="h-4 w-4" />
             Privacy Settings
           </CardTitle>
-          <CardDescription>
-            Control how your data is used and stored.
-          </CardDescription>
+          <CardDescription>Control how your data is used and stored.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
@@ -109,8 +165,8 @@ export function DataControlsTab() {
               </p>
             </div>
             <Switch
-              checked={settings.saveHistory}
-              onCheckedChange={(checked) => handleSettingChange("saveHistory", checked)}
+              checked={preferences?.saveHistory ?? true}
+              onCheckedChange={(checked) => handleToggle("saveHistory", checked)}
             />
           </div>
 
@@ -124,8 +180,8 @@ export function DataControlsTab() {
               </p>
             </div>
             <Switch
-              checked={settings.analyticsEnabled}
-              onCheckedChange={(checked) => handleSettingChange("analyticsEnabled", checked)}
+              checked={preferences?.analyticsEnabled ?? true}
+              onCheckedChange={(checked) => handleToggle("analyticsEnabled", checked)}
             />
           </div>
 
@@ -139,8 +195,8 @@ export function DataControlsTab() {
               </p>
             </div>
             <Switch
-              checked={settings.crashReports}
-              onCheckedChange={(checked) => handleSettingChange("crashReports", checked)}
+              checked={preferences?.crashReports ?? true}
+              onCheckedChange={(checked) => handleToggle("crashReports", checked)}
             />
           </div>
 
@@ -154,8 +210,8 @@ export function DataControlsTab() {
               </p>
             </div>
             <Switch
-              checked={settings.personalizedExperience}
-              onCheckedChange={(checked) => handleSettingChange("personalizedExperience", checked)}
+              checked={preferences?.personalizedExperience ?? true}
+              onCheckedChange={(checked) => handleToggle("personalizedExperience", checked)}
             />
           </div>
         </CardContent>
@@ -168,9 +224,7 @@ export function DataControlsTab() {
             <DatabaseIcon className="h-4 w-4" />
             Data Management
           </CardTitle>
-          <CardDescription>
-            Export or delete your data from Rubic.
-          </CardDescription>
+          <CardDescription>Export or delete your data from Rubic.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Export Data */}
@@ -189,10 +243,10 @@ export function DataControlsTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleExportData}
-              disabled={isExporting}
+              onClick={() => exportData.mutate()}
+              disabled={exportData.isPending}
             >
-              {isExporting ? (
+              {exportData.isPending ? (
                 <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <DownloadIcon className="h-4 w-4 mr-2" />
@@ -225,17 +279,62 @@ export function DataControlsTab() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Clear conversation history?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will permanently delete all your conversations. This action cannot be undone.
+                    This will permanently delete all your conversations. This action cannot be
+                    undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={handleClearHistory}
+                    onClick={() => clearHistory.mutate()}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {isDeletingHistory && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                    {clearHistory.isPending && (
+                      <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                    )}
                     Clear History
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+
+          {/* Clear Files */}
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                <FolderIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Clear Files</p>
+                <p className="text-xs text-muted-foreground">
+                  Delete all uploaded and generated files
+                </p>
+              </div>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <TrashIcon className="h-4 w-4 mr-2" />
+                  Clear
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear all files?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all your uploaded and generated files. This action
+                    cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => clearFiles.mutate()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {clearFiles.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                    Clear Files
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -251,9 +350,7 @@ export function DataControlsTab() {
             <EyeOffIcon className="h-4 w-4" />
             Data Retention
           </CardTitle>
-          <CardDescription>
-            How long we keep your data.
-          </CardDescription>
+          <CardDescription>Configure how long we keep your data.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -262,7 +359,24 @@ export function DataControlsTab() {
                 <FileTextIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">Conversation History</span>
               </div>
-              <Badge variant="secondary">90 days</Badge>
+              <Select
+                value={preferences?.conversationRetention || "90d"}
+                onValueChange={(value) =>
+                  updatePreferences.mutate({
+                    conversationRetention: value as "30d" | "90d" | "1y" | "never",
+                  })
+                }
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30d">30 days</SelectItem>
+                  <SelectItem value="90d">90 days</SelectItem>
+                  <SelectItem value="1y">1 year</SelectItem>
+                  <SelectItem value="never">Keep forever</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Separator />
             <div className="flex items-center justify-between py-2">
@@ -270,7 +384,24 @@ export function DataControlsTab() {
                 <DatabaseIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">Files & Uploads</span>
               </div>
-              <Badge variant="secondary">Until deleted</Badge>
+              <Select
+                value={preferences?.fileRetention || "never"}
+                onValueChange={(value) =>
+                  updatePreferences.mutate({
+                    fileRetention: value as "30d" | "90d" | "1y" | "never",
+                  })
+                }
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30d">30 days</SelectItem>
+                  <SelectItem value="90d">90 days</SelectItem>
+                  <SelectItem value="1y">1 year</SelectItem>
+                  <SelectItem value="never">Keep forever</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <Separator />
             <div className="flex items-center justify-between py-2">
@@ -278,7 +409,24 @@ export function DataControlsTab() {
                 <HistoryIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm">Activity Logs</span>
               </div>
-              <Badge variant="secondary">30 days</Badge>
+              <Select
+                value={preferences?.activityLogRetention || "30d"}
+                onValueChange={(value) =>
+                  updatePreferences.mutate({
+                    activityLogRetention: value as "30d" | "90d" | "1y" | "never",
+                  })
+                }
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30d">30 days</SelectItem>
+                  <SelectItem value="90d">90 days</SelectItem>
+                  <SelectItem value="1y">1 year</SelectItem>
+                  <SelectItem value="never">Keep forever</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardContent>
@@ -292,8 +440,8 @@ export function DataControlsTab() {
             <div className="space-y-1">
               <h4 className="text-sm font-medium">Data Security</h4>
               <p className="text-xs text-muted-foreground">
-                Your data is encrypted at rest and in transit. We follow industry best practices
-                to protect your information. For more details, see our{" "}
+                Your data is encrypted at rest and in transit. We follow industry best practices to
+                protect your information. For more details, see our{" "}
                 <a href="/privacy" className="text-primary hover:underline">
                   Privacy Policy
                 </a>

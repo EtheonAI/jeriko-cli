@@ -1,5 +1,16 @@
 import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
+import { createLogger, getEnv, createId } from "@repo/service-utils";
+import {
+  db,
+  projects,
+  projectMembers,
+  projectSessions,
+  files,
+  eq,
+  and,
+  desc,
+  sql,
+} from "@repo/database";
 
 const logger = createLogger({ service: "project" });
 
@@ -23,8 +34,31 @@ async function main() {
     const { userId } = request.params as { userId: string };
     const { cursor, limit } = request.query as { cursor?: string; limit?: number };
 
-    // TODO: Fetch from database
-    return { projects: [], cursor: null };
+    try {
+      const pageLimit = Math.min(limit || 20, 100);
+      const conditions = [eq(projects.userId, userId)];
+      if (cursor) {
+        conditions.push(
+          sql`${projects.createdAt} < (SELECT created_at FROM projects WHERE id = ${cursor})`
+        );
+      }
+
+      const results = await db
+        .select()
+        .from(projects)
+        .where(and(...conditions))
+        .orderBy(desc(projects.createdAt))
+        .limit(pageLimit + 1);
+
+      const hasMore = results.length > pageLimit;
+      const items = hasMore ? results.slice(0, pageLimit) : results;
+      const nextCursor = hasMore ? items[items.length - 1]!.id : null;
+
+      return { projects: items, cursor: nextCursor };
+    } catch (error) {
+      logger.error(error, "Failed to fetch projects");
+      return reply.status(500).send({ error: "Failed to fetch projects" });
+    }
   });
 
   // Create project
@@ -37,94 +71,200 @@ async function main() {
       visibility?: "private" | "team" | "public";
     };
 
-    const projectId = crypto.randomUUID();
+    try {
+      const [project] = await db
+        .insert(projects)
+        .values({
+          id: createId(),
+          name,
+          description,
+          userId,
+          organizationId,
+          visibility: visibility || "private",
+          status: "active",
+        })
+        .returning();
 
-    // TODO: Create in database
-    logger.info({ projectId, userId }, "Project created");
+      logger.info({ projectId: project!.id, userId }, "Project created");
 
-    return {
-      id: projectId,
-      name,
-      description,
-      visibility: visibility || "private",
-      status: "active",
-      createdAt: new Date().toISOString(),
-    };
+      return {
+        id: project!.id,
+        name: project!.name,
+        description: project!.description,
+        visibility: project!.visibility,
+        status: project!.status,
+        createdAt: project!.createdAt.toISOString(),
+      };
+    } catch (error) {
+      logger.error(error, "Failed to create project");
+      return reply.status(500).send({ error: "Failed to create project" });
+    }
   });
 
   // Get project
   app.get("/projects/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { id, status: "not_found" };
+    try {
+      const [project] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+      if (!project) {
+        return reply.status(404).send({ error: "Project not found" });
+      }
+      return project;
+    } catch (error) {
+      logger.error(error, "Failed to fetch project");
+      return reply.status(500).send({ error: "Failed to fetch project" });
+    }
   });
 
   // Update project
   app.patch("/projects/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const updates = request.body as Record<string, unknown>;
-    // TODO: Update in database
-    return { id, ...updates, updated: true };
+    try {
+      const [updated] = await db
+        .update(projects)
+        .set(updates as any)
+        .where(eq(projects.id, id))
+        .returning();
+      if (!updated) {
+        return reply.status(404).send({ error: "Project not found" });
+      }
+      return updated;
+    } catch (error) {
+      logger.error(error, "Failed to update project");
+      return reply.status(500).send({ error: "Failed to update project" });
+    }
   });
 
   // Delete project
   app.delete("/projects/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Delete from database
-    return { deleted: true };
+    try {
+      const [deleted] = await db.delete(projects).where(eq(projects.id, id)).returning();
+      if (!deleted) {
+        return reply.status(404).send({ error: "Project not found" });
+      }
+      return { deleted: true };
+    } catch (error) {
+      logger.error(error, "Failed to delete project");
+      return reply.status(500).send({ error: "Failed to delete project" });
+    }
   });
 
   // Get project members
   app.get("/projects/:id/members", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { members: [] };
+    try {
+      const members = await db
+        .select()
+        .from(projectMembers)
+        .where(eq(projectMembers.projectId, id));
+      return { members };
+    } catch (error) {
+      logger.error(error, "Failed to fetch project members");
+      return reply.status(500).send({ error: "Failed to fetch project members" });
+    }
   });
 
   // Add project member
   app.post("/projects/:id/members", async (request, reply) => {
     const { id } = request.params as { id: string };
     const { userId, role } = request.body as { userId: string; role: string };
-    // TODO: Add to database
-    return { projectId: id, userId, role, added: true };
+    try {
+      await db.insert(projectMembers).values({
+        id: createId(),
+        projectId: id,
+        userId,
+        role: role as "owner" | "admin" | "editor" | "viewer",
+      });
+      return { projectId: id, userId, role, added: true };
+    } catch (error) {
+      logger.error(error, "Failed to add project member");
+      return reply.status(500).send({ error: "Failed to add project member" });
+    }
   });
 
   // Remove project member
   app.delete("/projects/:id/members/:userId", async (request, reply) => {
     const { id, userId } = request.params as { id: string; userId: string };
-    // TODO: Remove from database
-    return { removed: true };
+    try {
+      await db
+        .delete(projectMembers)
+        .where(and(eq(projectMembers.projectId, id), eq(projectMembers.userId, userId)));
+      return { removed: true };
+    } catch (error) {
+      logger.error(error, "Failed to remove project member");
+      return reply.status(500).send({ error: "Failed to remove project member" });
+    }
   });
 
   // Get project sessions
   app.get("/projects/:id/sessions", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { sessions: [] };
+    try {
+      const sessions = await db
+        .select()
+        .from(projectSessions)
+        .where(eq(projectSessions.projectId, id))
+        .orderBy(desc(projectSessions.createdAt));
+      return { sessions };
+    } catch (error) {
+      logger.error(error, "Failed to fetch project sessions");
+      return reply.status(500).send({ error: "Failed to fetch project sessions" });
+    }
   });
 
   // Get project files
   app.get("/projects/:id/files", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { files: [] };
+    try {
+      const sessions = await db
+        .select({ sessionId: projectSessions.sessionId })
+        .from(projectSessions)
+        .where(eq(projectSessions.projectId, id));
+
+      if (sessions.length === 0) {
+        return { files: [] };
+      }
+
+      const sessionIds = sessions.map((s) => s.sessionId);
+      const projectFiles = await db
+        .select()
+        .from(files)
+        .where(
+          sql`${files.sessionId} IN (${sql.join(
+            sessionIds.map((sid) => sql`${sid}`),
+            sql`, `
+          )})`
+        );
+      return { files: projectFiles };
+    } catch (error) {
+      logger.error(error, "Failed to fetch project files");
+      return reply.status(500).send({ error: "Failed to fetch project files" });
+    }
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
   try {

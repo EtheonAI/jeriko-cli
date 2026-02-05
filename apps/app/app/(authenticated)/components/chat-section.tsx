@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { createId } from "@paralleldrive/cuid2";
 import type { MessagePart, Attachment } from "@repo/ai/lib/types";
 import { RubicInput, type InputConfig } from "./rubic-input";
 
@@ -31,7 +32,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
       setIsLoading(true);
 
       try {
-        const chatId = Math.random().toString(36).substring(2, 15);
+        const chatId = createId();
 
         // Store initial message and config in session storage for the chat page
         sessionStorage.setItem(

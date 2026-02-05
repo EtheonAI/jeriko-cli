@@ -15,6 +15,14 @@
     "./schema": {
       "types": "./src/schema/index.ts",
       "default": "./src/schema/index.ts"
+    },
+    "./service": {
+      "types": "./src/service-client.ts",
+      "default": "./src/service-client.ts"
+    },
+    "./service-index": {
+      "types": "./src/service-index.ts",
+      "default": "./src/service-index.ts"
     }
   },
   "scripts": {

@@ -11,11 +11,7 @@ import {
   setInputValue,
   type Message,
 } from "@/lib/store/slices/chat.slice";
-import {
-  setSelectedAgent,
-  type Agent,
-  type AgentTask,
-} from "@/lib/store/slices/agents.slice";
+import { setSelectedAgent, type Agent, type AgentTask } from "@/lib/store/slices/agents.slice";
 import { useSocket } from "@/lib/socket/provider";
 import {
   ChatContainer,
@@ -48,11 +44,7 @@ interface ChatPageClientProps {
 /**
  * ChatPageClient - Main chat page client component with Redux integration
  */
-export function ChatPageClient({
-  sessionId,
-  initialMessages = [],
-  user,
-}: ChatPageClientProps) {
+export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPageClientProps) {
   const dispatch = useAppDispatch();
   const composerRef = React.useRef<ChatComposerRef>(null);
 
@@ -119,6 +111,31 @@ export function ChatPageClient({
       console.error("Chat error:", err);
     },
   });
+
+  // Consume initial message from home page (sessionStorage)
+  const initialConsumedRef = React.useRef(false);
+  useEffect(() => {
+    if (initialConsumedRef.current) return;
+    const key = `chat-${sessionId}-initial`;
+    const stored = sessionStorage.getItem(key);
+    if (!stored) return;
+
+    initialConsumedRef.current = true;
+    sessionStorage.removeItem(key);
+
+    try {
+      const { parts } = JSON.parse(stored) as { parts: MessagePart[] };
+      const textPart = parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
+      if (textPart?.text) {
+        // Small delay to let the hook initialize
+        setTimeout(() => {
+          sendMessage({ text: textPart.text });
+        }, 100);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, [sessionId, sendMessage]);
 
   // Join/leave room on mount
   useEffect(() => {
@@ -236,7 +253,15 @@ export function ChatPageClient({
     return messages.flatMap((msg) =>
       msg.parts
         .filter((p) => p.type === "source-url" || p.type === "source-document")
-        .map((p) => p as { type: "source-url" | "source-document"; sourceId: string; url?: string; title?: string })
+        .map(
+          (p) =>
+            p as {
+              type: "source-url" | "source-document";
+              sourceId: string;
+              url?: string;
+              title?: string;
+            }
+        )
     );
   }, [messages]);
 
@@ -314,9 +339,7 @@ export function ChatPageClient({
               </div>
               <div>
                 <h2 className="text-lg font-medium">Start a conversation</h2>
-                <p className="text-sm text-muted-foreground">
-                  Ask anything to get started
-                </p>
+                <p className="text-sm text-muted-foreground">Ask anything to get started</p>
               </div>
             </div>
           }

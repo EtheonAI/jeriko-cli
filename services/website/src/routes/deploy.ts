@@ -6,23 +6,12 @@ import {
   createLogger,
   createId,
 } from "@repo/service-utils";
+import { db, websites as websitesTable, websiteCrawlJobs, eq, and, desc } from "@repo/database";
 
 const logger = createLogger({ service: "website-deploy" });
 
-// In-memory deployments store
-const deployments = new Map<string, {
-  id: string;
-  websiteId: string;
-  platform: string;
-  status: string;
-  url: string | null;
-  buildLogs: string[];
-  createdAt: Date;
-  completedAt: Date | null;
-}>();
-
-function getUserId(request: { headers: { "x-user-id"?: string } }): string {
-  const userId = request.headers["x-user-id"];
+function getUserId(request: { headers: Record<string, string | string[] | undefined> }): string {
+  const userId = request.headers["x-user-id"] as string | undefined;
   if (!userId) {
     const error = new Error("Unauthorized") as Error & { statusCode: number; code: string };
     error.statusCode = 401;
@@ -38,15 +27,45 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    // In production, this would spin up a WebContainer or E2B sandbox
-    // For now, return a placeholder
-    logger.info({ websiteId: id, userId }, "Preview requested");
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
 
-    return reply.send(successResponse({
-      status: "starting",
-      previewUrl: null, // Would be set when preview is ready
-      message: "Preview environment starting...",
-    }, request.id));
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      // In production, this would spin up a WebContainer or E2B sandbox
+      logger.info({ websiteId: id, userId }, "Preview requested");
+
+      return reply.send(
+        successResponse(
+          {
+            status: "starting",
+            previewUrl: null,
+            message: "Preview environment starting...",
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to start preview");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to start preview" },
+            request.id
+          )
+        );
+    }
   });
 
   // Get preview status
@@ -54,73 +73,103 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    // Placeholder response
-    return reply.send(successResponse({
-      status: "ready",
-      previewUrl: `https://preview-${id}.rubic.dev`,
-    }, request.id));
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
+
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      return reply.send(
+        successResponse(
+          {
+            status: "ready",
+            previewUrl: `https://preview-${id}.rubic.dev`,
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to get preview status");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get preview status" },
+            request.id
+          )
+        );
+    }
   });
 
   // Deploy to production
   fastify.post("/websites/:id/deploy", async (request, reply) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
-    const body = request.body as { platform?: string } || {};
+    const body = (request.body as { platform?: string }) || {};
 
-    const platform = body.platform || "vercel";
-    const deploymentId = createId();
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
 
-    const deployment = {
-      id: deploymentId,
-      websiteId: id,
-      platform,
-      status: "queued",
-      url: null,
-      buildLogs: ["Deployment queued..."],
-      createdAt: new Date(),
-      completedAt: null,
-    };
-
-    deployments.set(deploymentId, deployment);
-
-    logger.info({ websiteId: id, deploymentId, platform, userId }, "Deployment started");
-
-    // In production, this would:
-    // 1. Package files
-    // 2. Call Vercel/Netlify API
-    // 3. Return deployment status
-
-    // Simulate deployment progress
-    setTimeout(() => {
-      const d = deployments.get(deploymentId);
-      if (d) {
-        d.status = "building";
-        d.buildLogs.push("Installing dependencies...");
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
       }
-    }, 1000);
 
-    setTimeout(() => {
-      const d = deployments.get(deploymentId);
-      if (d) {
-        d.buildLogs.push("Building application...");
-      }
-    }, 3000);
+      const platform = body.platform || "vercel";
 
-    setTimeout(() => {
-      const d = deployments.get(deploymentId);
-      if (d) {
-        d.status = "ready";
-        d.url = `https://${id}.vercel.app`;
-        d.buildLogs.push("Deployment complete!");
-        d.completedAt = new Date();
-      }
-    }, 5000);
+      // Use crawl jobs table to track deployments
+      const [deployment] = await db
+        .insert(websiteCrawlJobs)
+        .values({
+          id: createId(),
+          websiteId: id,
+          status: "queued",
+          config: { platform, deployedBy: userId },
+        })
+        .returning();
 
-    return reply.status(202).send(successResponse({
-      deploymentId,
-      status: "queued",
-      message: "Deployment started",
-    }, request.id));
+      logger.info(
+        { websiteId: id, deploymentId: deployment!.id, platform, userId },
+        "Deployment started"
+      );
+
+      return reply.status(202).send(
+        successResponse(
+          {
+            deploymentId: deployment!.id,
+            status: "queued",
+            message: "Deployment started",
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to deploy");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to deploy" },
+            request.id
+          )
+        );
+    }
   });
 
   // Get deployment status
@@ -128,14 +177,36 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { deploymentId } = request.params as { id: string; deploymentId: string };
 
-    const deployment = deployments.get(deploymentId);
-    if (!deployment) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Deployment not found" }, request.id)
-      );
-    }
+    try {
+      const [deployment] = await db
+        .select()
+        .from(websiteCrawlJobs)
+        .where(eq(websiteCrawlJobs.id, deploymentId))
+        .limit(1);
 
-    return reply.send(successResponse(deployment, request.id));
+      if (!deployment) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse(
+              { code: ErrorCodes.NOT_FOUND, message: "Deployment not found" },
+              request.id
+            )
+          );
+      }
+
+      return reply.send(successResponse(deployment, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to get deployment");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get deployment" },
+            request.id
+          )
+        );
+    }
   });
 
   // List deployments
@@ -143,11 +214,25 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    const websiteDeployments = Array.from(deployments.values())
-      .filter(d => d.websiteId === id)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    try {
+      const deployments = await db
+        .select()
+        .from(websiteCrawlJobs)
+        .where(eq(websiteCrawlJobs.websiteId, id))
+        .orderBy(desc(websiteCrawlJobs.createdAt));
 
-    return reply.send(successResponse(websiteDeployments, request.id));
+      return reply.send(successResponse(deployments, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to list deployments");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list deployments" },
+            request.id
+          )
+        );
+    }
   });
 
   // Configure custom domain
@@ -156,24 +241,61 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const { domain } = request.body as { domain: string };
 
-    logger.info({ websiteId: id, domain, userId }, "Custom domain configuration requested");
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
 
-    // In production, this would:
-    // 1. Verify domain ownership
-    // 2. Configure DNS records
-    // 3. Provision SSL certificate
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
 
-    return reply.send(successResponse({
-      domain,
-      status: "pending_verification",
-      dnsRecords: [
-        {
-          type: "CNAME",
-          name: domain,
-          value: "cname.vercel-dns.com",
-        },
-      ],
-      message: "Please add the DNS records to verify domain ownership",
-    }, request.id));
+      await db
+        .update(websitesTable)
+        .set({
+          domain,
+          metadata: {
+            ...((website.metadata as object) || {}),
+            customDomainStatus: "pending_verification",
+          },
+        })
+        .where(eq(websitesTable.id, id));
+
+      logger.info({ websiteId: id, domain, userId }, "Custom domain configuration requested");
+
+      return reply.send(
+        successResponse(
+          {
+            domain,
+            status: "pending_verification",
+            dnsRecords: [
+              {
+                type: "CNAME",
+                name: domain,
+                value: "cname.vercel-dns.com",
+              },
+            ],
+            message: "Please add the DNS records to verify domain ownership",
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to configure domain");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to configure domain" },
+            request.id
+          )
+        );
+    }
   });
 };

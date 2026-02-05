@@ -1,7 +1,12 @@
 import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
-
-const logger = createLogger({ service: "connector" });
+import cors from "@fastify/cors";
+import { getEnv } from "@repo/service-utils";
+import { logger } from "./lib/helpers.js";
+import { connectorRoutes } from "./routes/connectors.js";
+import { oauthRoutes } from "./routes/oauth.js";
+import { integrationRoutes } from "./routes/integrations.js";
+import { toolRoutes } from "./routes/tools.js";
+import { syncRoutes } from "./routes/sync.js";
 
 async function main() {
   const port = parseInt(getEnv("PORT", "4009"), 10);
@@ -13,112 +18,58 @@ async function main() {
     genReqId: () => crypto.randomUUID(),
   });
 
+  // Plugins
+  await app.register(cors, {
+    origin: getEnv("CORS_ORIGIN", "*"),
+    credentials: true,
+  });
+
   // Health check
   app.get("/health", async () => {
     return { status: "ok", service: "connector" };
   });
 
-  // List available connectors
-  app.get("/connectors", async (request, reply) => {
-    return {
-      connectors: [
-        { id: "google-drive", name: "Google Drive", type: "storage", status: "available" },
-        { id: "github", name: "GitHub", type: "code", status: "available" },
-        { id: "slack", name: "Slack", type: "communication", status: "available" },
-        { id: "notion", name: "Notion", type: "productivity", status: "available" },
-        { id: "confluence", name: "Confluence", type: "productivity", status: "available" },
-      ],
-    };
-  });
+  // Register route modules
+  await app.register(connectorRoutes);
+  await app.register(oauthRoutes);
+  await app.register(integrationRoutes);
+  await app.register(toolRoutes);
+  await app.register(syncRoutes);
 
-  // Get user's connected integrations
-  app.get("/users/:userId/integrations", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    // TODO: Fetch from database
-    return { integrations: [] };
-  });
+  // Global error handler
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
+    logger.error({ err: error, requestId: request.id }, "Request error");
 
-  // Start OAuth flow for connector
-  app.get("/connectors/:connectorId/oauth/start", async (request, reply) => {
-    const { connectorId } = request.params as { connectorId: string };
-    const { redirectUri, userId } = request.query as {
-      redirectUri: string;
-      userId: string;
-    };
-
-    // TODO: Generate OAuth URL
-    const state = crypto.randomUUID();
-    const authUrl = `https://oauth.example.com/${connectorId}/authorize?state=${state}`;
-
-    return { authUrl, state };
-  });
-
-  // OAuth callback
-  app.get("/connectors/:connectorId/oauth/callback", async (request, reply) => {
-    const { connectorId } = request.params as { connectorId: string };
-    const { code, state } = request.query as { code: string; state: string };
-
-    // TODO: Exchange code for tokens and save
-    const integrationId = crypto.randomUUID();
-
-    return { integrationId, status: "connected" };
-  });
-
-  // Disconnect integration
-  app.delete("/integrations/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    // TODO: Revoke tokens and delete from database
-    return { deleted: true };
-  });
-
-  // Sync integration data
-  app.post("/integrations/:id/sync", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    // TODO: Queue sync job
-    const syncId = crypto.randomUUID();
-
-    logger.info({ integrationId: id, syncId }, "Sync started");
-
-    return { syncId, status: "syncing" };
-  });
-
-  // Get sync status
-  app.get("/integrations/:id/sync/status", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    // TODO: Fetch sync status
-    return { status: "idle", lastSyncAt: null };
-  });
-
-  // Get integration data
-  app.get("/integrations/:id/data", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { type, cursor, limit } = request.query as {
-      type?: string;
-      cursor?: string;
-      limit?: number;
-    };
-
-    // TODO: Fetch synced data
-    return { items: [], cursor: null };
+    const statusCode = error.statusCode || 500;
+    reply.status(statusCode).send({
+      error: statusCode === 500 ? "Internal server error" : error.message,
+    });
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
+  // Start server
   try {
     await app.listen({ port, host });
     logger.info({ port, host }, "Connector service started");
@@ -127,6 +78,7 @@ async function main() {
     process.exit(1);
   }
 
+  // Graceful shutdown
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
   for (const signal of signals) {
     process.on(signal, async () => {

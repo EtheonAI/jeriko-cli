@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     task_service_url: str = "http://localhost:3002"
     device_service_url: str = "http://localhost:8080"
     file_service_url: str = "http://localhost:3003"
+    connector_service_url: str = "http://localhost:4009"
+    sandbox_service_url: str = "http://localhost:4012"
 
     class Config:
         env_file = ".env"

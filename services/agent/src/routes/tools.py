@@ -148,8 +148,12 @@ TOOLS: dict[str, ToolDefinition] = {
 async def list_tools(
     x_user_id: str = Header(..., alias="x-user-id"),
 ) -> list[ToolDefinition]:
-    """List all available tools."""
-    return list(TOOLS.values())
+    """List all available tools, including Composio tools from connected apps."""
+    native_tools = list(TOOLS.values())
+
+    # Load Composio tools from connector service
+    composio_tools = await _fetch_composio_tools(x_user_id)
+    return native_tools + composio_tools
 
 
 @router.post("/tools/execute")
@@ -168,7 +172,8 @@ async def execute_tool(
 
     tool = TOOLS.get(request.tool_name)
     if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool not found: {request.tool_name}")
+        # Try executing as a Composio tool via connector service
+        return await _execute_composio_tool(request, x_user_id)
 
     # Check if tool requires device-related capabilities
     if tool.required_capabilities and request.target_device_id:
@@ -268,15 +273,57 @@ async def execute_browse_url(arguments: dict) -> dict:
 
 
 async def execute_code(arguments: dict) -> dict:
-    """Execute code in E2B sandbox."""
-    # TODO: Integrate E2B
+    """Execute code in E2B sandbox via the sandbox service."""
+    import httpx
+
     code = arguments.get("code", "")
     language = arguments.get("language", "python")
-    return {
-        "language": language,
-        "executed": False,
-        "message": "E2B integration pending",
-    }
+    sandbox_url = settings.sandbox_service_url
+    sandbox_id = arguments.get("sandbox_id")
+
+    async with httpx.AsyncClient() as client:
+        # Create a sandbox if no sandbox_id provided
+        if not sandbox_id:
+            create_resp = await client.post(
+                f"{sandbox_url}/sandboxes",
+                json={"userId": "agent", "config": {"timeout": 300000}},
+                timeout=30.0,
+            )
+            if create_resp.status_code >= 400:
+                return {
+                    "language": language,
+                    "executed": False,
+                    "error": f"Failed to create sandbox: {create_resp.text}",
+                }
+            sandbox_id = create_resp.json()["id"]
+
+        # Execute code
+        exec_resp = await client.post(
+            f"{sandbox_url}/sandboxes/{sandbox_id}/execute",
+            json={"code": code, "language": language, "timeout": 60000},
+            timeout=90.0,
+        )
+
+        if exec_resp.status_code >= 400:
+            return {
+                "language": language,
+                "executed": False,
+                "sandbox_id": sandbox_id,
+                "error": f"Execution failed: {exec_resp.text}",
+            }
+
+        result = exec_resp.json()
+        return {
+            "language": language,
+            "executed": True,
+            "sandbox_id": sandbox_id,
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "exit_code": result.get("exitCode", 0),
+            "error": result.get("error"),
+            "text": result.get("text"),
+            "execution_time_ms": result.get("executionTimeMs"),
+        }
 
 
 async def execute_create_document(arguments: dict) -> dict:
@@ -299,3 +346,94 @@ async def execute_generate_image(arguments: dict) -> dict:
         "generated": False,
         "message": "Image generation pending",
     }
+
+
+async def _fetch_composio_tools(user_id: str) -> list[ToolDefinition]:
+    """Fetch Composio tools from the connector service for the given user."""
+    import httpx
+
+    connector_url = settings.connector_service_url
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{connector_url}/users/{user_id}/tools",
+                timeout=10.0,
+            )
+
+            if response.status_code != 200:
+                logger.warning(
+                    "composio_tools_fetch_failed",
+                    status=response.status_code,
+                    user_id=user_id,
+                )
+                return []
+
+            data = response.json()
+            tools = data.get("tools", [])
+
+            return [
+                ToolDefinition(
+                    name=t["name"],
+                    description=t.get("description", ""),
+                    parameters=t.get("parameters", {}),
+                    required_capabilities=["composio"],
+                )
+                for t in tools
+            ]
+
+    except Exception as e:
+        logger.warning(
+            "composio_tools_fetch_error",
+            error=str(e),
+            user_id=user_id,
+        )
+        return []
+
+
+async def _execute_composio_tool(
+    request: ToolExecutionRequest,
+    user_id: str,
+) -> ToolExecutionResponse:
+    """Execute a tool via the connector service (Composio)."""
+    import httpx
+
+    connector_url = settings.connector_service_url
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{connector_url}/tools/execute",
+                json={
+                    "toolName": request.tool_name,
+                    "arguments": request.arguments,
+                },
+                headers={
+                    "x-user-id": user_id,
+                },
+                timeout=30.0,
+            )
+
+            if response.status_code != 200:
+                data = response.json()
+                return ToolExecutionResponse(
+                    success=False,
+                    error=data.get("error", f"Connector service error: {response.status_code}"),
+                )
+
+            data = response.json()
+            return ToolExecutionResponse(
+                success=data.get("success", True),
+                result=data.get("result"),
+            )
+
+    except Exception as e:
+        logger.error(
+            "composio_tool_execution_failed",
+            tool=request.tool_name,
+            error=str(e),
+        )
+        return ToolExecutionResponse(
+            success=False,
+            error=f"Failed to execute Composio tool: {str(e)}",
+        )

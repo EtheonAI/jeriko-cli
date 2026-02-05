@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
@@ -21,48 +20,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/design-system/components/ui/select";
-import {
-  Loader2Icon,
-  PaletteIcon,
-  UserIcon,
-  GlobeIcon,
-  SparklesIcon,
-  SunIcon,
-  MoonIcon,
-  MonitorIcon,
-} from "lucide-react";
+import { Loader2Icon, UserIcon, SparklesIcon, LayoutIcon } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
-import { cn } from "@repo/design-system/lib/utils";
 import { ErrorState } from "./error-state";
 
-const languages = [
-  { value: "en", label: "English" },
-  { value: "es", label: "Espa\u00f1ol" },
-  { value: "fr", label: "Fran\u00e7ais" },
-  { value: "de", label: "Deutsch" },
-  { value: "pt", label: "Portugu\u00eas" },
-  { value: "zh", label: "\u4e2d\u6587" },
-  { value: "ja", label: "\u65e5\u672c\u8a9e" },
-  { value: "ko", label: "\ud55c\uad6d\uc5b4" },
-];
-
-const themes = [
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-  { value: "system", label: "System", icon: MonitorIcon },
+const modelOptions = [
+  { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast)" },
+  { value: "gpt-4o", label: "GPT-4o (Balanced)" },
+  { value: "claude-sonnet-4-5-20250929", label: "Claude 4.5 Sonnet" },
+  { value: "claude-opus-4-5-20251101", label: "Claude 4.5 Opus" },
 ];
 
 export function PersonalizationTab() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  const [language, setLanguage] = useState("en");
-  const [bio, setBio] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Fetch user profile
-  const { data: profile, isLoading, isError, refetch } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
+  // Fetch user profile and preferences
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    isError: profileError,
+    refetch: refetchProfile,
+  } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
+  const {
+    data: preferences,
+    isLoading: prefsLoading,
+    isError: prefsError,
+    refetch: refetchPrefs,
+  } = trpc.user.getPreferences.useQuery(undefined, { retry: 1 });
   const utils = trpc.useUtils();
+
+  const [bio, setBio] = useState("");
+  const [customInstructions, setCustomInstructions] = useState("");
+
+  useEffect(() => {
+    if (preferences?.bio) setBio(preferences.bio);
+    if (preferences?.customInstructions) setCustomInstructions(preferences.customInstructions);
+  }, [preferences]);
 
   const updateProfile = trpc.user.updateProfile.useMutation({
     onSuccess: () => {
@@ -74,38 +66,36 @@ export function PersonalizationTab() {
     },
   });
 
-  useEffect(() => {
-    setMounted(true);
-    // Load language from localStorage
-    const savedLang = localStorage.getItem("rubic-language");
-    if (savedLang) setLanguage(savedLang);
-  }, []);
+  const updatePreferences = trpc.user.updatePreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Preferences saved");
+      utils.user.getPreferences.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save preferences");
+    },
+  });
 
-  const handleLanguageChange = (value: string) => {
-    setLanguage(value);
-    localStorage.setItem("rubic-language", value);
-    toast.success("Language updated");
-  };
+  const isLoading = profileLoading || prefsLoading;
+  const isError = profileError || prefsError;
 
-  const handleSaveBio = () => {
-    // For now, just show success - bio would be saved to profile
-    toast.success("Bio saved");
-  };
-
-  if (!mounted || isLoading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold">Personalization</h2>
-          <p className="text-sm text-muted-foreground">
-            Customize your Rubic experience.
-          </p>
+          <p className="text-sm text-muted-foreground">Customize your Rubic experience.</p>
         </div>
         <Separator />
         <div className="grid gap-6">
           <Card>
             <CardContent className="pt-6">
               <div className="h-32 animate-pulse bg-muted rounded" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="h-48 animate-pulse bg-muted rounded" />
             </CardContent>
           </Card>
         </div>
@@ -118,15 +108,16 @@ export function PersonalizationTab() {
       <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold">Personalization</h2>
-          <p className="text-sm text-muted-foreground">
-            Customize your Rubic experience.
-          </p>
+          <p className="text-sm text-muted-foreground">Customize your Rubic experience.</p>
         </div>
         <Separator />
         <ErrorState
           title="Failed to load personalization settings"
           message="Unable to load your personalization preferences. Please try again."
-          onRetry={() => refetch()}
+          onRetry={() => {
+            refetchProfile();
+            refetchPrefs();
+          }}
         />
       </div>
     );
@@ -136,77 +127,10 @@ export function PersonalizationTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Personalization</h2>
-        <p className="text-sm text-muted-foreground">
-          Customize your Rubic experience.
-        </p>
+        <p className="text-sm text-muted-foreground">Customize your Rubic experience.</p>
       </div>
 
       <Separator />
-
-      {/* Theme Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <PaletteIcon className="h-4 w-4" />
-            Appearance
-          </CardTitle>
-          <CardDescription>
-            Choose your preferred color theme.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-3">
-            {themes.map((t) => {
-              const Icon = t.icon;
-              const isSelected = theme === t.value;
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTheme(t.value)}
-                  className={cn(
-                    "flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors",
-                    isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <Icon className={cn("h-6 w-6", isSelected && "text-primary")} />
-                  <span className={cn("text-sm", isSelected && "font-medium")}>
-                    {t.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Language Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <GlobeIcon className="h-4 w-4" />
-            Language
-          </CardTitle>
-          <CardDescription>
-            Select your preferred language for the interface.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={language} onValueChange={handleLanguageChange}>
-            <SelectTrigger className="w-full md:w-[300px]">
-              <SelectValue placeholder="Select language" />
-            </SelectTrigger>
-            <SelectContent>
-              {languages.map((lang) => (
-                <SelectItem key={lang.value} value={lang.value}>
-                  {lang.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
 
       {/* Profile Customization */}
       <Card>
@@ -215,9 +139,7 @@ export function PersonalizationTab() {
             <UserIcon className="h-4 w-4" />
             Profile
           </CardTitle>
-          <CardDescription>
-            Customize how others see you.
-          </CardDescription>
+          <CardDescription>Customize how others see you.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -225,9 +147,6 @@ export function PersonalizationTab() {
             <Input
               defaultValue={profile?.name || ""}
               placeholder="Your display name"
-              onChange={(e) => {
-                // Debounced save would go here
-              }}
               onBlur={(e) => {
                 if (e.target.value !== profile?.name) {
                   updateProfile.mutate({ name: e.target.value });
@@ -249,7 +168,13 @@ export function PersonalizationTab() {
             </p>
           </div>
 
-          <Button variant="outline" size="sm" onClick={handleSaveBio}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => updatePreferences.mutate({ bio })}
+            disabled={updatePreferences.isPending}
+          >
+            {updatePreferences.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
             Save Bio
           </Button>
         </CardContent>
@@ -262,14 +187,38 @@ export function PersonalizationTab() {
             <SparklesIcon className="h-4 w-4" />
             AI Preferences
           </CardTitle>
-          <CardDescription>
-            Customize how Rubic interacts with you.
-          </CardDescription>
+          <CardDescription>Customize how Rubic interacts with you.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
+            <Label>Default Model</Label>
+            <Select
+              value={preferences?.defaultModel || "gpt-4o-mini"}
+              onValueChange={(value) => updatePreferences.mutate({ defaultModel: value })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((model) => (
+                  <SelectItem key={model.value} value={model.value}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label>Communication Style</Label>
-            <Select defaultValue="balanced">
+            <Select
+              value={preferences?.communicationStyle || "balanced"}
+              onValueChange={(value) =>
+                updatePreferences.mutate({
+                  communicationStyle: value as "concise" | "balanced" | "detailed",
+                })
+              }
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -283,13 +232,22 @@ export function PersonalizationTab() {
 
           <div className="space-y-2">
             <Label>Expertise Level</Label>
-            <Select defaultValue="intermediate">
+            <Select
+              value={preferences?.expertiseLevel || "intermediate"}
+              onValueChange={(value) =>
+                updatePreferences.mutate({
+                  expertiseLevel: value as "beginner" | "intermediate" | "expert",
+                })
+              }
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="beginner">Beginner - Explain technical terms</SelectItem>
-                <SelectItem value="intermediate">Intermediate - Some technical knowledge</SelectItem>
+                <SelectItem value="intermediate">
+                  Intermediate - Some technical knowledge
+                </SelectItem>
                 <SelectItem value="expert">Expert - Full technical depth</SelectItem>
               </SelectContent>
             </Select>
@@ -298,12 +256,76 @@ export function PersonalizationTab() {
           <div className="space-y-2">
             <Label>Custom Instructions</Label>
             <Textarea
+              value={customInstructions}
+              onChange={(e) => setCustomInstructions(e.target.value)}
               placeholder="Add any specific instructions for how Rubic should behave..."
               rows={3}
             />
             <p className="text-xs text-muted-foreground">
               These instructions will be considered in every conversation
             </p>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => updatePreferences.mutate({ customInstructions })}
+            disabled={updatePreferences.isPending}
+          >
+            {updatePreferences.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+            Save Instructions
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Display Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <LayoutIcon className="h-4 w-4" />
+            Display
+          </CardTitle>
+          <CardDescription>Adjust how content is displayed in conversations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Font Size</Label>
+            <Select
+              value={preferences?.fontSize || "medium"}
+              onValueChange={(value) =>
+                updatePreferences.mutate({ fontSize: value as "small" | "medium" | "large" })
+              }
+            >
+              <SelectTrigger className="w-full md:w-[300px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Chat Density</Label>
+            <Select
+              value={preferences?.chatDensity || "comfortable"}
+              onValueChange={(value) =>
+                updatePreferences.mutate({
+                  chatDensity: value as "compact" | "comfortable" | "spacious",
+                })
+              }
+            >
+              <SelectTrigger className="w-full md:w-[300px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="compact">Compact - Less spacing</SelectItem>
+                <SelectItem value="comfortable">Comfortable - Default spacing</SelectItem>
+                <SelectItem value="spacious">Spacious - More spacing</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

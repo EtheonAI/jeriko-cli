@@ -7,15 +7,11 @@ export {
   authSessions,
   authSessionsRelations,
   verifications,
+  type UserPreferences,
 } from "./users";
 
 // Agent session schemas
-export {
-  agentSessions,
-  agentSessionsRelations,
-  messages,
-  messagesRelations,
-} from "./sessions";
+export { agentSessions, agentSessionsRelations, messages, messagesRelations } from "./sessions";
 
 // Agent schemas
 export {
@@ -28,12 +24,7 @@ export {
 } from "./agents";
 
 // File schemas
-export {
-  files,
-  filesRelations,
-  fileVersions,
-  fileVersionsRelations,
-} from "./files";
+export { files, filesRelations, fileVersions, fileVersionsRelations } from "./files";
 
 // Organization schemas
 export {

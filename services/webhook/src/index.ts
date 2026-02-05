@@ -1,16 +1,8 @@
 import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
+import { createLogger, getEnv, createId } from "@repo/service-utils";
+import { db, webhooks, webhookDeliveries, webhookEvents, eq, and, desc, sql } from "@repo/database";
 
 const logger = createLogger({ service: "webhook" });
-
-// Generate HMAC signature for webhook payload
-function generateSignature(payload: string, secret: string): string {
-  const encoder = new TextEncoder();
-  const key = encoder.encode(secret);
-  const data = encoder.encode(payload);
-  // In production, use crypto.subtle.sign with HMAC-SHA256
-  return `sha256=${Buffer.from(data).toString("hex").slice(0, 64)}`;
-}
 
 async function main() {
   const port = parseInt(getEnv("PORT", "4007"), 10);
@@ -36,97 +28,224 @@ async function main() {
       secret?: string;
     };
 
-    const webhookId = crypto.randomUUID();
-    const generatedSecret = secret || crypto.randomUUID();
+    try {
+      const generatedSecret = secret || crypto.randomUUID();
+      const userId = (request.headers["x-user-id"] as string) || "";
 
-    // TODO: Save to database
+      const [webhook] = await db
+        .insert(webhooks)
+        .values({
+          id: createId(),
+          name,
+          url,
+          events: events as any,
+          secret: generatedSecret,
+          userId,
+          status: "active",
+        })
+        .returning();
 
-    return {
-      id: webhookId,
-      name,
-      url,
-      events,
-      secret: generatedSecret,
-      status: "active",
-    };
+      return {
+        id: webhook!.id,
+        name: webhook!.name,
+        url: webhook!.url,
+        events: webhook!.events,
+        secret: generatedSecret,
+        status: webhook!.status,
+      };
+    } catch (error) {
+      logger.error(error, "Failed to create webhook");
+      return reply.status(500).send({ error: "Failed to create webhook" });
+    }
   });
 
   // List webhooks
   app.get("/webhooks", async (request, reply) => {
-    // TODO: Fetch from database
-    return { webhooks: [] };
+    try {
+      const userId = (request.headers["x-user-id"] as string) || "";
+      const results = await db
+        .select()
+        .from(webhooks)
+        .where(eq(webhooks.userId, userId))
+        .orderBy(desc(webhooks.createdAt));
+      return { webhooks: results };
+    } catch (error) {
+      logger.error(error, "Failed to list webhooks");
+      return reply.status(500).send({ error: "Failed to list webhooks" });
+    }
   });
 
   // Get webhook
   app.get("/webhooks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { id, status: "not_found" };
+    try {
+      const [webhook] = await db.select().from(webhooks).where(eq(webhooks.id, id)).limit(1);
+      if (!webhook) {
+        return reply.status(404).send({ error: "Webhook not found" });
+      }
+      return webhook;
+    } catch (error) {
+      logger.error(error, "Failed to fetch webhook");
+      return reply.status(500).send({ error: "Failed to fetch webhook" });
+    }
   });
 
   // Update webhook
   app.patch("/webhooks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     const updates = request.body as Record<string, unknown>;
-    // TODO: Update in database
-    return { id, ...updates, updated: true };
+    try {
+      const [updated] = await db
+        .update(webhooks)
+        .set(updates as any)
+        .where(eq(webhooks.id, id))
+        .returning();
+      if (!updated) {
+        return reply.status(404).send({ error: "Webhook not found" });
+      }
+      return updated;
+    } catch (error) {
+      logger.error(error, "Failed to update webhook");
+      return reply.status(500).send({ error: "Failed to update webhook" });
+    }
   });
 
   // Delete webhook
   app.delete("/webhooks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Delete from database
-    return { deleted: true };
+    try {
+      const [deleted] = await db.delete(webhooks).where(eq(webhooks.id, id)).returning();
+      if (!deleted) {
+        return reply.status(404).send({ error: "Webhook not found" });
+      }
+      return { deleted: true };
+    } catch (error) {
+      logger.error(error, "Failed to delete webhook");
+      return reply.status(500).send({ error: "Failed to delete webhook" });
+    }
   });
 
   // Get webhook deliveries
   app.get("/webhooks/:id/deliveries", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { deliveries: [] };
+    try {
+      const results = await db
+        .select()
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.webhookId, id))
+        .orderBy(desc(webhookDeliveries.createdAt))
+        .limit(50);
+      return { deliveries: results };
+    } catch (error) {
+      logger.error(error, "Failed to fetch deliveries");
+      return reply.status(500).send({ error: "Failed to fetch deliveries" });
+    }
   });
 
   // Retry webhook delivery
   app.post("/deliveries/:id/retry", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Queue retry
-    return { id, retrying: true };
+    try {
+      const [delivery] = await db
+        .select()
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.id, id))
+        .limit(1);
+      if (!delivery) {
+        return reply.status(404).send({ error: "Delivery not found" });
+      }
+      await db
+        .update(webhookDeliveries)
+        .set({ status: "pending", nextRetryAt: new Date() })
+        .where(eq(webhookDeliveries.id, id));
+      return { id, retrying: true };
+    } catch (error) {
+      logger.error(error, "Failed to retry delivery");
+      return reply.status(500).send({ error: "Failed to retry delivery" });
+    }
   });
 
   // Internal: Queue event for delivery
   app.post("/internal/dispatch", async (request, reply) => {
-    const { eventType, resourceType, resourceId, payload, userId, organizationId } = request.body as {
-      eventType: string;
-      resourceType: string;
-      resourceId: string;
-      payload: Record<string, unknown>;
-      userId?: string;
-      organizationId?: string;
-    };
+    const { eventType, resourceType, resourceId, payload, userId, organizationId } =
+      request.body as {
+        eventType: string;
+        resourceType: string;
+        resourceId: string;
+        payload: Record<string, unknown>;
+        userId?: string;
+        organizationId?: string;
+      };
 
-    const eventId = crypto.randomUUID();
+    try {
+      const [event] = await db
+        .insert(webhookEvents)
+        .values({
+          id: createId(),
+          eventType: eventType as any,
+          resourceType,
+          resourceId,
+          payload,
+          userId,
+          organizationId,
+        })
+        .returning();
 
-    // TODO: Find matching webhooks and queue deliveries
-    logger.info({ eventType, resourceId, eventId }, "Event dispatched");
+      // Find matching webhooks and create deliveries
+      const matchingWebhooks = await db
+        .select()
+        .from(webhooks)
+        .where(
+          and(
+            eq(webhooks.status, "active"),
+            sql`${webhooks.events}::jsonb @> ${JSON.stringify([eventType])}::jsonb`
+          )
+        );
 
-    return { eventId, status: "queued" };
+      for (const webhook of matchingWebhooks) {
+        await db.insert(webhookDeliveries).values({
+          id: createId(),
+          webhookId: webhook.id,
+          eventType: eventType as any,
+          eventId: event!.id,
+          payload,
+          status: "pending",
+        });
+      }
+
+      logger.info(
+        { eventType, resourceId, eventId: event!.id, matchedWebhooks: matchingWebhooks.length },
+        "Event dispatched"
+      );
+
+      return { eventId: event!.id, status: "queued" };
+    } catch (error) {
+      logger.error(error, "Failed to dispatch event");
+      return reply.status(500).send({ error: "Failed to dispatch event" });
+    }
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
   try {

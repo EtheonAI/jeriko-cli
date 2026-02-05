@@ -43,33 +43,26 @@ export const connectorsRouter = createTRPCRouter({
   }),
 
   // Get a single connector by ID
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [connector] = await db
-        .select({
-          connector: userConnectors,
-          definition: connectorDefinitions,
-        })
-        .from(userConnectors)
-        .innerJoin(
-          connectorDefinitions,
-          eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
-        )
-        .where(
-          and(
-            eq(userConnectors.id, input.id),
-            eq(userConnectors.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [connector] = await db
+      .select({
+        connector: userConnectors,
+        definition: connectorDefinitions,
+      })
+      .from(userConnectors)
+      .innerJoin(
+        connectorDefinitions,
+        eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
+      )
+      .where(and(eq(userConnectors.id, input.id), eq(userConnectors.userId, ctx.user.id)))
+      .limit(1);
 
-      if (!connector) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Connector not found" });
-      }
+    if (!connector) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Connector not found" });
+    }
 
-      return connector;
-    }),
+    return connector;
+  }),
 
   // Install a connector
   install: protectedProcedure
@@ -145,9 +138,7 @@ export const connectorsRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(userConnectors)
-        .where(
-          and(eq(userConnectors.id, id), eq(userConnectors.userId, ctx.user.id))
-        )
+        .where(and(eq(userConnectors.id, id), eq(userConnectors.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -180,9 +171,7 @@ export const connectorsRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(userConnectors)
-        .where(
-          and(eq(userConnectors.id, id), eq(userConnectors.userId, ctx.user.id))
-        )
+        .where(and(eq(userConnectors.id, id), eq(userConnectors.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -208,12 +197,7 @@ export const connectorsRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(userConnectors)
-        .where(
-          and(
-            eq(userConnectors.id, input.id),
-            eq(userConnectors.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(userConnectors.id, input.id), eq(userConnectors.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -241,12 +225,7 @@ export const connectorsRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(userConnectors)
-        .where(
-          and(
-            eq(userConnectors.id, input.id),
-            eq(userConnectors.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(userConnectors.id, input.id), eq(userConnectors.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -259,48 +238,105 @@ export const connectorsRouter = createTRPCRouter({
     }),
 
   // Trigger sync
-  sync: protectedProcedure
-    .input(z.object({ id: z.string() }))
+  sync: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const [existing] = await db
+      .select()
+      .from(userConnectors)
+      .where(and(eq(userConnectors.id, input.id), eq(userConnectors.userId, ctx.user.id)))
+      .limit(1);
+
+    if (!existing) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Connector not found" });
+    }
+
+    if (existing.status !== "connected") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Connector is not connected",
+      });
+    }
+
+    // Create sync log
+    const logId = createId();
+    await db.insert(connectorSyncLogs).values({
+      id: logId,
+      userConnectorId: input.id,
+      status: "started",
+    });
+
+    // Update connector status
+    await db
+      .update(userConnectors)
+      .set({ status: "syncing" })
+      .where(eq(userConnectors.id, input.id));
+
+    // TODO: Trigger actual sync job via queue/worker
+
+    return { syncLogId: logId };
+  }),
+
+  // Initialize OAuth via connector service (Composio)
+  initializeOAuth: protectedProcedure
+    .input(
+      z.object({
+        type: z.string(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const [existing] = await db
-        .select()
-        .from(userConnectors)
-        .where(
-          and(
-            eq(userConnectors.id, input.id),
-            eq(userConnectors.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
 
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Connector not found" });
-      }
+      const response = await fetch(`${connectorServiceUrl}/connectors/${input.type}/oauth/start`, {
+        headers: {
+          "x-user-id": ctx.user.id,
+        },
+      });
 
-      if (existing.status !== "connected") {
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Connector is not connected",
+          code: response.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+          message: (error as { error?: string }).error || "Failed to initialize OAuth",
         });
       }
 
-      // Create sync log
-      const logId = createId();
-      await db.insert(connectorSyncLogs).values({
-        id: logId,
-        userConnectorId: input.id,
-        status: "started",
-      });
+      const data = (await response.json()) as {
+        authUrl: string;
+        connectorId: string;
+      };
+      return data;
+    }),
 
-      // Update connector status
-      await db
-        .update(userConnectors)
-        .set({ status: "syncing" })
-        .where(eq(userConnectors.id, input.id));
+  // Get tools for an integration via connector service (Composio)
+  getTools: protectedProcedure
+    .input(
+      z.object({
+        integrationId: z.string(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
 
-      // TODO: Trigger actual sync job via queue/worker
+      const response = await fetch(
+        `${connectorServiceUrl}/integrations/${input.integrationId}/tools`
+      );
 
-      return { syncLogId: logId };
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new TRPCError({
+          code: response.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+          message: (error as { error?: string }).error || "Failed to fetch tools",
+        });
+      }
+
+      const data = (await response.json()) as {
+        tools: Array<{
+          name: string;
+          description: string;
+          parameters: Record<string, unknown>;
+          appName: string;
+        }>;
+      };
+      return data.tools;
     }),
 
   // Get sync history
@@ -317,10 +353,7 @@ export const connectorsRouter = createTRPCRouter({
         .select()
         .from(userConnectors)
         .where(
-          and(
-            eq(userConnectors.id, input.connectorId),
-            eq(userConnectors.userId, ctx.user.id)
-          )
+          and(eq(userConnectors.id, input.connectorId), eq(userConnectors.userId, ctx.user.id))
         )
         .limit(1);
 

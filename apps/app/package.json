@@ -26,6 +26,7 @@
     "@repo/next-config": "workspace:*",
     "@repo/notifications": "workspace:*",
     "@repo/observability": "workspace:*",
+    "@repo/payments": "workspace:*",
     "@repo/search": "workspace:*",
     "@repo/security": "workspace:*",
     "@repo/seo": "workspace:*",

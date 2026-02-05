@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  type ReactNode,
-} from "react";
-import {
-  connectSocket,
-  disconnectSocket,
-  getSocket,
-  type TypedSocket,
-} from "./client";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { connectSocket, disconnectSocket, getSocket, type TypedSocket } from "./client";
 import type { ServerToClientEvents } from "./events";
 import { useAppDispatch } from "../store/hooks";
 import {
@@ -27,6 +15,7 @@ import { addMessage, appendToMessage, updateMessage } from "../store/slices/chat
 import { addAgent, updateAgent, addTask, updateTask } from "../store/slices/agents.slice";
 import { addSession, updateSession } from "../store/slices/sessions.slice";
 import { addFile, removeFile } from "../store/slices/files.slice";
+import { updateDeviceStatus } from "../store/slices/devices.slice";
 
 interface SocketContextValue {
   socket: TypedSocket | null;
@@ -217,6 +206,11 @@ export function SocketProvider({ children }: SocketProviderProps) {
       );
     });
 
+    // Device events
+    socket.on("device:status", ({ deviceId, status, lastHeartbeat }) => {
+      dispatch(updateDeviceStatus({ deviceId, status, lastHeartbeat }));
+    });
+
     // File events
     socket.on("file:new", ({ sessionId, file }) => {
       dispatch(
@@ -257,6 +251,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socket.off("agent:task:update");
       socket.off("session:new");
       socket.off("session:update");
+      socket.off("device:status");
       socket.off("file:new");
       socket.off("file:deleted");
     };

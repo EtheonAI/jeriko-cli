@@ -1,6 +1,32 @@
-import { pgTable, text, timestamp, boolean as pgBoolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean as pgBoolean, jsonb } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
+
+export type UserPreferences = {
+  // AI Preferences
+  communicationStyle?: "concise" | "balanced" | "detailed";
+  expertiseLevel?: "beginner" | "intermediate" | "expert";
+  customInstructions?: string;
+  defaultModel?: string;
+  // UI Preferences
+  bio?: string;
+  fontSize?: "small" | "medium" | "large";
+  chatDensity?: "compact" | "comfortable" | "spacious";
+  // Privacy Settings
+  saveHistory?: boolean;
+  analyticsEnabled?: boolean;
+  crashReports?: boolean;
+  personalizedExperience?: boolean;
+  // Data Retention
+  conversationRetention?: "30d" | "90d" | "1y" | "never";
+  fileRetention?: "30d" | "90d" | "1y" | "never";
+  activityLogRetention?: "30d" | "90d" | "1y" | "never";
+  // Skills
+  enabledSkills?: Record<string, boolean>;
+  // Email Processing
+  autoSummarizeEmails?: boolean;
+  autoCategorizeEmails?: boolean;
+};
 
 export const users = pgTable("users", {
   id: text("id")
@@ -24,6 +50,9 @@ export const users = pgTable("users", {
   stripeCurrentPeriodEnd: timestamp("stripe_current_period_end", {
     mode: "date",
   }),
+
+  // User preferences (JSONB)
+  preferences: jsonb("preferences").$type<UserPreferences>(),
 });
 
 export const usersRelations = relations(users, ({ many }) => ({

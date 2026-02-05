@@ -2,7 +2,4 @@
 > studio@0.0.0 dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/studio
 > prisma studio --schema ../../packages/database/prisma/schema.prisma --port 3005
 
-[2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
-Prisma Studio is up on http://localhost:3005
-[2mPrisma schema loaded from ../../packages/database/prisma/schema.prisma[22m
-[33mwarn[39m Preview feature "driverAdapters" is deprecated. The functionality can be used without specifying it as a preview feature.
+ ELIFECYCLE  Command failed.

@@ -22,22 +22,31 @@ async function fetchDeviceService<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: "Request failed" }));
+    const body = await response.json().catch(() => ({ error: { message: "Request failed" } }));
+    const message =
+      body?.error?.message || body?.message || `Device service error: ${response.status}`;
     throw new TRPCError({
-      code: response.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
-      message: error.message || `Device service error: ${response.status}`,
+      code:
+        response.status === 404
+          ? "NOT_FOUND"
+          : response.status === 403
+            ? "FORBIDDEN"
+            : "INTERNAL_SERVER_ERROR",
+      message,
     });
   }
 
-  return response.json();
+  const json = await response.json();
+  // Unwrap service response envelope: { data, meta, error }
+  return json.data as T;
 }
 
 export const devicesRouter = createTRPCRouter({
   // List user's devices
   list: protectedProcedure.query(async ({ ctx }) => {
     try {
-      const data = await fetchDeviceService<{ devices: Device[] }>("", {}, ctx.user.id);
-      return data.devices || [];
+      const devices = await fetchDeviceService<Device[]>("", {}, ctx.user.id);
+      return devices || [];
     } catch (error) {
       // Return empty array if service unavailable
       console.error("Device service error:", error);
@@ -46,11 +55,9 @@ export const devicesRouter = createTRPCRouter({
   }),
 
   // Get a single device
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      return fetchDeviceService<Device>(`/${input.id}`, {}, ctx.user.id);
-    }),
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    return fetchDeviceService<Device>(`/${input.id}`, {}, ctx.user.id);
+  }),
 
   // Register a new device
   register: protectedProcedure
@@ -103,11 +110,7 @@ export const devicesRouter = createTRPCRouter({
   unregister: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await fetchDeviceService<void>(
-        `/${input.id}`,
-        { method: "DELETE" },
-        ctx.user.id
-      );
+      await fetchDeviceService<void>(`/${input.id}`, { method: "DELETE" }, ctx.user.id);
       return { success: true };
     }),
 

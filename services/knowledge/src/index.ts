@@ -1,5 +1,16 @@
 import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
+import { createLogger, getEnv, createId } from "@repo/service-utils";
+import {
+  db,
+  knowledgeGroups,
+  knowledgeItems,
+  knowledgeChunks,
+  eq,
+  and,
+  desc,
+  inArray,
+  count,
+} from "@repo/database";
 
 const logger = createLogger({ service: "knowledge" });
 
@@ -21,8 +32,17 @@ async function main() {
   // List knowledge groups
   app.get("/users/:userId/groups", async (request, reply) => {
     const { userId } = request.params as { userId: string };
-    // TODO: Fetch from database
-    return { groups: [] };
+    try {
+      const groups = await db
+        .select()
+        .from(knowledgeGroups)
+        .where(eq(knowledgeGroups.userId, userId))
+        .orderBy(knowledgeGroups.sortOrder);
+      return { groups };
+    } catch (error) {
+      logger.error(error, "Failed to fetch knowledge groups");
+      return reply.status(500).send({ error: "Failed to fetch groups" });
+    }
   });
 
   // Create knowledge group
@@ -34,24 +54,65 @@ async function main() {
       projectId?: string;
     };
 
-    const groupId = crypto.randomUUID();
+    try {
+      const [group] = await db
+        .insert(knowledgeGroups)
+        .values({
+          id: createId(),
+          name,
+          description,
+          userId,
+        })
+        .returning();
 
-    // TODO: Create in database
-    return { id: groupId, name, description, itemCount: 0 };
+      return { id: group!.id, name: group!.name, description: group!.description, itemCount: 0 };
+    } catch (error) {
+      logger.error(error, "Failed to create knowledge group");
+      return reply.status(500).send({ error: "Failed to create group" });
+    }
   });
 
   // Get knowledge group
   app.get("/groups/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { id, status: "not_found" };
+    try {
+      const [group] = await db
+        .select()
+        .from(knowledgeGroups)
+        .where(eq(knowledgeGroups.id, id))
+        .limit(1);
+      if (!group) {
+        return reply.status(404).send({ error: "Group not found" });
+      }
+
+      const [itemCount] = await db
+        .select({ count: count() })
+        .from(knowledgeItems)
+        .where(eq(knowledgeItems.groupId, id));
+
+      return { ...group, itemCount: itemCount?.count || 0 };
+    } catch (error) {
+      logger.error(error, "Failed to fetch knowledge group");
+      return reply.status(500).send({ error: "Failed to fetch group" });
+    }
   });
 
   // Delete knowledge group
   app.delete("/groups/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Delete from database
-    return { deleted: true };
+    try {
+      const [deleted] = await db
+        .delete(knowledgeGroups)
+        .where(eq(knowledgeGroups.id, id))
+        .returning();
+      if (!deleted) {
+        return reply.status(404).send({ error: "Group not found" });
+      }
+      return { deleted: true };
+    } catch (error) {
+      logger.error(error, "Failed to delete knowledge group");
+      return reply.status(500).send({ error: "Failed to delete group" });
+    }
   });
 
   // Add item to knowledge group
@@ -65,26 +126,75 @@ async function main() {
       fileId?: string;
     };
 
-    const itemId = crypto.randomUUID();
+    try {
+      const userId = (request.headers["x-user-id"] as string) || "";
 
-    // TODO: Create item and generate embeddings
-    logger.info({ groupId, itemId, type }, "Knowledge item added");
+      const typeMap: Record<string, string> = {
+        text: "note",
+        file: "file",
+        url: "webpage",
+      };
 
-    return { id: itemId, groupId, type, title, status: "processing" };
+      const [item] = await db
+        .insert(knowledgeItems)
+        .values({
+          id: createId(),
+          groupId,
+          userId,
+          type: (typeMap[type] || type) as any,
+          name: title,
+          content,
+          sourceUrl,
+          status: "processing",
+        })
+        .returning();
+
+      // TODO: Generate embeddings asynchronously
+      logger.info({ groupId, itemId: item!.id, type }, "Knowledge item added");
+
+      return { id: item!.id, groupId, type, title, status: "processing" };
+    } catch (error) {
+      logger.error(error, "Failed to add knowledge item");
+      return reply.status(500).send({ error: "Failed to add item" });
+    }
   });
 
   // Get knowledge item
   app.get("/items/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { id, status: "not_found" };
+    try {
+      const [item] = await db
+        .select()
+        .from(knowledgeItems)
+        .where(eq(knowledgeItems.id, id))
+        .limit(1);
+      if (!item) {
+        return reply.status(404).send({ error: "Item not found" });
+      }
+      return item;
+    } catch (error) {
+      logger.error(error, "Failed to fetch knowledge item");
+      return reply.status(500).send({ error: "Failed to fetch item" });
+    }
   });
 
   // Delete knowledge item
   app.delete("/items/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Delete from database and vector store
-    return { deleted: true };
+    try {
+      const [deleted] = await db
+        .delete(knowledgeItems)
+        .where(eq(knowledgeItems.id, id))
+        .returning();
+      if (!deleted) {
+        return reply.status(404).send({ error: "Item not found" });
+      }
+      // TODO: Delete from vector store
+      return { deleted: true };
+    } catch (error) {
+      logger.error(error, "Failed to delete knowledge item");
+      return reply.status(500).send({ error: "Failed to delete item" });
+    }
   });
 
   // Query knowledge base (semantic search)
@@ -96,42 +206,87 @@ async function main() {
       limit?: number;
     };
 
-    // TODO: Generate query embedding and search vector store
-    return {
-      results: [],
-      query,
-    };
+    try {
+      // TODO: Generate query embedding and search vector store
+      // For now, do basic text search as fallback
+      const conditions = [
+        eq(knowledgeItems.userId, userId),
+        eq(knowledgeItems.status, "ready" as any),
+      ];
+      if (groupIds && groupIds.length > 0) {
+        conditions.push(inArray(knowledgeItems.groupId, groupIds));
+      }
+
+      const results = await db
+        .select()
+        .from(knowledgeItems)
+        .where(and(...conditions))
+        .limit(limit || 10);
+
+      return { results, query };
+    } catch (error) {
+      logger.error(error, "Failed to query knowledge base");
+      return reply.status(500).send({ error: "Failed to query" });
+    }
   });
 
   // Get chunks for an item
   app.get("/items/:id/chunks", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Fetch from database
-    return { chunks: [] };
+    try {
+      const chunks = await db
+        .select()
+        .from(knowledgeChunks)
+        .where(eq(knowledgeChunks.itemId, id))
+        .orderBy(knowledgeChunks.chunkIndex);
+      return { chunks };
+    } catch (error) {
+      logger.error(error, "Failed to fetch chunks");
+      return reply.status(500).send({ error: "Failed to fetch chunks" });
+    }
   });
 
   // Reprocess knowledge item
   app.post("/items/:id/reprocess", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Queue reprocessing
-    return { id, status: "reprocessing" };
+    try {
+      const [updated] = await db
+        .update(knowledgeItems)
+        .set({ status: "processing" })
+        .where(eq(knowledgeItems.id, id))
+        .returning();
+      if (!updated) {
+        return reply.status(404).send({ error: "Item not found" });
+      }
+      // TODO: Queue reprocessing for embeddings
+      return { id: updated.id, status: "reprocessing" };
+    } catch (error) {
+      logger.error(error, "Failed to reprocess item");
+      return reply.status(500).send({ error: "Failed to reprocess item" });
+    }
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
   try {

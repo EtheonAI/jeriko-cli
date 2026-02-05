@@ -2,13 +2,13 @@
 
 import { Button } from "@repo/design-system/components/ui/button";
 import { Separator } from "@repo/design-system/components/ui/separator";
+import { Card, CardContent } from "@repo/design-system/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/design-system/components/ui/card";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@repo/design-system/components/ui/accordion";
 import {
   BookOpenIcon,
   MessageCircleIcon,
@@ -19,12 +19,14 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   VideoIcon,
-  HeadphonesIcon,
-  SparklesIcon,
   KeyboardIcon,
+  SparklesIcon,
   ShieldIcon,
   ZapIcon,
 } from "lucide-react";
+import { useSettings } from "../settings-context";
+
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "5.2.1";
 
 const resources = [
   {
@@ -52,7 +54,7 @@ const resources = [
     title: "Keyboard Shortcuts",
     description: "Speed up your workflow with keyboard shortcuts",
     icon: KeyboardIcon,
-    href: "/docs/shortcuts",
+    href: "#shortcuts",
     external: false,
   },
 ];
@@ -67,11 +69,13 @@ const quickHelp = [
     title: "Connectors",
     description: "How to connect your apps and services to Rubic.",
     icon: ZapIcon,
+    tab: "connectors" as const,
   },
   {
     title: "Privacy & Security",
     description: "Learn how we protect your data and privacy.",
     icon: ShieldIcon,
+    tab: "data-controls" as const,
   },
 ];
 
@@ -118,7 +122,55 @@ const socialLinks = [
   },
 ];
 
+const keyboardShortcuts = [
+  { keys: ["Ctrl", "K"], description: "Open command palette" },
+  { keys: ["Ctrl", "N"], description: "New conversation" },
+  { keys: ["Ctrl", "/"], description: "Focus chat input" },
+  { keys: ["Ctrl", ","], description: "Open settings" },
+  { keys: ["Ctrl", "Shift", "S"], description: "Toggle sidebar" },
+  { keys: ["Esc"], description: "Close dialog / Cancel" },
+  { keys: ["Enter"], description: "Send message" },
+  { keys: ["Shift", "Enter"], description: "New line in message" },
+];
+
+const faqItems = [
+  {
+    question: "How do I reset my password?",
+    answer:
+      'Go to Account settings and click on "Change Password". You\'ll need to enter your current password and your new password.',
+    tab: "account" as const,
+  },
+  {
+    question: "How do I connect my services?",
+    answer:
+      'Visit the Connectors page in settings to see available integrations. Click "Connect" on any service to authorize Rubic.',
+    tab: "connectors" as const,
+  },
+  {
+    question: "What are credits and how do they work?",
+    answer:
+      "Credits are used for AI operations. Each plan includes a monthly credit allocation. You can purchase additional credits or upgrade your plan for more.",
+    tab: "billing" as const,
+  },
+  {
+    question: "Can I export my data?",
+    answer:
+      'Yes! Go to Data Controls in settings and click "Export Your Data". We\'ll prepare a download with all your data in JSON format.',
+    tab: "data-controls" as const,
+  },
+];
+
+function Kbd({ children }: { children: string }) {
+  return (
+    <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+      {children}
+    </kbd>
+  );
+}
+
 export function HelpTab() {
+  const { setActiveTab } = useSettings();
+
   return (
     <div className="space-y-6">
       <div>
@@ -154,13 +206,38 @@ export function HelpTab() {
                       <ExternalLinkIcon className="h-3 w-3 text-muted-foreground" />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {resource.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{resource.description}</p>
                 </div>
               </a>
             );
           })}
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Keyboard Shortcuts */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">Keyboard Shortcuts</h3>
+        <div className="rounded-lg border">
+          <div className="grid grid-cols-2 gap-x-6">
+            {keyboardShortcuts.map((shortcut) => (
+              <div
+                key={shortcut.description}
+                className="flex items-center justify-between px-4 py-2.5 border-b last:border-b-0"
+              >
+                <span className="text-sm text-muted-foreground">{shortcut.description}</span>
+                <div className="flex items-center gap-1">
+                  {shortcut.keys.map((key, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-xs text-muted-foreground">+</span>}
+                      <Kbd>{key}</Kbd>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -173,7 +250,11 @@ export function HelpTab() {
           {quickHelp.map((item) => {
             const Icon = item.icon;
             return (
-              <Card key={item.title} className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <Card
+                key={item.title}
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => item.tab && setActiveTab(item.tab)}
+              >
                 <CardContent className="pt-6">
                   <div className="flex items-start gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -181,9 +262,7 @@ export function HelpTab() {
                     </div>
                     <div>
                       <h4 className="text-sm font-medium">{item.title}</h4>
-                      <p className="text-xs text-muted-foreground">
-                        {item.description}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{item.description}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -206,9 +285,7 @@ export function HelpTab() {
                 <CardContent className="pt-6 text-center">
                   <Icon className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
                   <h4 className="text-sm font-medium mb-1">{option.title}</h4>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    {option.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground mb-3">{option.description}</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -240,44 +317,26 @@ export function HelpTab() {
       {/* FAQ */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium">Frequently Asked Questions</h3>
-        <div className="space-y-2">
-          <details className="group rounded-lg border">
-            <summary className="cursor-pointer p-4 text-sm font-medium">
-              How do I reset my password?
-            </summary>
-            <p className="px-4 pb-4 text-sm text-muted-foreground">
-              Go to Account settings and click on &quot;Change Password&quot;. You&apos;ll need to
-              enter your current password and your new password.
-            </p>
-          </details>
-          <details className="group rounded-lg border">
-            <summary className="cursor-pointer p-4 text-sm font-medium">
-              How do I connect my services?
-            </summary>
-            <p className="px-4 pb-4 text-sm text-muted-foreground">
-              Visit the Connectors page in settings to see available integrations.
-              Click &quot;Connect&quot; on any service to authorize Rubic.
-            </p>
-          </details>
-          <details className="group rounded-lg border">
-            <summary className="cursor-pointer p-4 text-sm font-medium">
-              What are credits and how do they work?
-            </summary>
-            <p className="px-4 pb-4 text-sm text-muted-foreground">
-              Credits are used for AI operations. Each plan includes a monthly credit
-              allocation. You can purchase additional credits or upgrade your plan for more.
-            </p>
-          </details>
-          <details className="group rounded-lg border">
-            <summary className="cursor-pointer p-4 text-sm font-medium">
-              Can I export my data?
-            </summary>
-            <p className="px-4 pb-4 text-sm text-muted-foreground">
-              Yes! Go to Data Controls in settings and click &quot;Export Your Data&quot;.
-              We&apos;ll prepare a download with all your data in JSON format.
-            </p>
-          </details>
-        </div>
+        <Accordion type="single" collapsible className="rounded-lg border">
+          {faqItems.map((faq, index) => (
+            <AccordionItem key={index} value={`faq-${index}`} className="px-4">
+              <AccordionTrigger>{faq.question}</AccordionTrigger>
+              <AccordionContent>
+                <p className="text-muted-foreground">{faq.answer}</p>
+                {faq.tab && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 mt-2"
+                    onClick={() => setActiveTab(faq.tab)}
+                  >
+                    Go to {faq.tab.replace("-", " ")} settings
+                  </Button>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
       </div>
 
       <Separator />
@@ -303,7 +362,7 @@ export function HelpTab() {
 
       {/* Version Info */}
       <div className="text-center text-xs text-muted-foreground">
-        <p>Rubic v1.0.0</p>
+        <p>Rubic v{APP_VERSION}</p>
         <p className="mt-1">
           <a href="/privacy" className="hover:underline">
             Privacy Policy

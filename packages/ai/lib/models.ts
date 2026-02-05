@@ -1,9 +1,14 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { keys } from "../keys";
 
 const openai = createOpenAI({
   apiKey: keys().OPENAI_API_KEY,
   // Note: 'compatibility: strict' is now the default in v5 and has been removed
+});
+
+const anthropic = createAnthropic({
+  apiKey: keys().ANTHROPIC_API_KEY,
 });
 
 /**
@@ -36,4 +41,16 @@ export function getModel(modelName: string): any {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getEmbeddingsModel(): any {
   return openai.embedding("text-embedding-3-small");
+}
+
+/** Resolve a model by ID, supporting both OpenAI and Anthropic */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveModel(modelId?: string): any {
+  if (!modelId) {
+    return openai("gpt-4o-mini");
+  }
+  if (modelId.startsWith("claude")) {
+    return anthropic(modelId);
+  }
+  return openai(modelId);
 }

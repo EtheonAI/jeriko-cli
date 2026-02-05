@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,7 +18,6 @@ import {
 } from "@repo/design-system/components/ui/select";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { Switch } from "@repo/design-system/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -49,15 +48,23 @@ import {
   RepeatIcon,
   CheckCircle2Icon,
   XCircleIcon,
-  AlertCircleIcon,
+  PencilIcon,
+  ExternalLinkIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
+import Link from "next/link";
 
 // Status badge config
-const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ComponentType<{ className?: string }> }> = {
+const statusConfig: Record<
+  string,
+  {
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: React.ComponentType<{ className?: string }>;
+  }
+> = {
   pending: { variant: "outline", icon: ClockIcon },
   running: { variant: "default", icon: Loader2Icon },
   completed: { variant: "secondary", icon: CheckCircle2Icon },
@@ -85,26 +92,33 @@ const recurrenceLabels: Record<string, string> = {
   custom: "Custom",
 };
 
-const createTaskSchema = z.object({
+const taskFormSchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
   description: z.string().optional(),
   taskType: z.enum(["agent_run", "report", "sync", "backup", "custom"]),
   scheduleType: z.enum(["once", "recurring", "cron"]),
   scheduledAt: z.string().optional(),
-  recurrencePattern: z.enum(["daily", "weekly", "biweekly", "monthly", "yearly", "custom"]).optional(),
+  recurrencePattern: z
+    .enum(["daily", "weekly", "biweekly", "monthly", "yearly", "custom"])
+    .optional(),
   recurrenceTime: z.string().optional(),
   cronExpression: z.string().optional(),
   timezone: z.string(),
 });
 
-type CreateTaskForm = z.infer<typeof createTaskSchema>;
+type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 export function ScheduledTasksTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<{ id: string; data: TaskFormValues } | null>(null);
 
   // Fetch tasks
-  const { data: tasks, isLoading, isError, refetch } = trpc.scheduledTasks.list.useQuery({}, { retry: 1 });
+  const {
+    data: tasks,
+    isLoading,
+    isError,
+    refetch,
+  } = trpc.scheduledTasks.list.useQuery({}, { retry: 1 });
 
   // Mutations
   const utils = trpc.useUtils();
@@ -114,10 +128,31 @@ export function ScheduledTasksTab() {
       toast.success("Task scheduled successfully");
       utils.scheduledTasks.list.invalidate();
       setIsCreateOpen(false);
-      form.reset();
+      createForm.reset();
     },
     onError: (error) => {
       toast.error(error.message || "Failed to create task");
+    },
+  });
+
+  const updateTask = trpc.scheduledTasks.update.useMutation({
+    onSuccess: () => {
+      toast.success("Task updated");
+      utils.scheduledTasks.list.invalidate();
+      setEditingTask(null);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update task");
+    },
+  });
+
+  const runNowTask = trpc.scheduledTasks.runNow.useMutation({
+    onSuccess: () => {
+      toast.success("Task triggered — running now");
+      utils.scheduledTasks.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to run task");
     },
   });
 
@@ -151,9 +186,9 @@ export function ScheduledTasksTab() {
     },
   });
 
-  // Form
-  const form = useForm<CreateTaskForm>({
-    resolver: zodResolver(createTaskSchema),
+  // Create form
+  const createForm = useForm<TaskFormValues>({
+    resolver: zodResolver(taskFormSchema),
     defaultValues: {
       name: "",
       description: "",
@@ -163,9 +198,22 @@ export function ScheduledTasksTab() {
     },
   });
 
-  const scheduleType = form.watch("scheduleType");
+  // Edit form
+  const editForm = useForm<TaskFormValues>({
+    resolver: zodResolver(taskFormSchema),
+  });
 
-  const onSubmit = (data: CreateTaskForm) => {
+  // Reset edit form when editingTask changes
+  useEffect(() => {
+    if (editingTask) {
+      editForm.reset(editingTask.data);
+    }
+  }, [editingTask, editForm]);
+
+  const createScheduleType = createForm.watch("scheduleType");
+  const editScheduleType = editForm.watch("scheduleType");
+
+  const onCreateSubmit = (data: TaskFormValues) => {
     const submitData: Parameters<typeof createTask.mutate>[0] = {
       name: data.name,
       description: data.description,
@@ -177,12 +225,10 @@ export function ScheduledTasksTab() {
     if (data.scheduleType === "once" && data.scheduledAt) {
       submitData.scheduledAt = new Date(data.scheduledAt);
     }
-
     if (data.scheduleType === "recurring") {
       submitData.recurrencePattern = data.recurrencePattern;
       submitData.recurrenceTime = data.recurrenceTime;
     }
-
     if (data.scheduleType === "cron") {
       submitData.cronExpression = data.cronExpression;
     }
@@ -190,15 +236,112 @@ export function ScheduledTasksTab() {
     createTask.mutate(submitData);
   };
 
+  const onEditSubmit = (data: TaskFormValues) => {
+    if (!editingTask) return;
+
+    const submitData: Parameters<typeof updateTask.mutate>[0] = {
+      id: editingTask.id,
+      name: data.name,
+      description: data.description,
+      timezone: data.timezone,
+    };
+
+    if (data.scheduleType === "recurring") {
+      submitData.recurrencePattern = data.recurrencePattern;
+      submitData.recurrenceTime = data.recurrenceTime;
+    }
+    if (data.scheduleType === "cron") {
+      submitData.cronExpression = data.cronExpression;
+    }
+
+    updateTask.mutate(submitData);
+  };
+
+  const openEditDialog = (task: NonNullable<typeof tasks>[number]) => {
+    setEditingTask({
+      id: task.id,
+      data: {
+        name: task.name,
+        description: task.description || "",
+        taskType: task.taskType as TaskFormValues["taskType"],
+        scheduleType: task.scheduleType as TaskFormValues["scheduleType"],
+        scheduledAt: task.scheduledAt
+          ? new Date(task.scheduledAt).toISOString().slice(0, 16)
+          : undefined,
+        recurrencePattern: task.recurrencePattern as TaskFormValues["recurrencePattern"],
+        recurrenceTime: task.recurrenceTime || undefined,
+        cronExpression: task.cronExpression || undefined,
+        timezone: task.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    });
+  };
+
+  function renderScheduleFields(
+    form: ReturnType<typeof useForm<TaskFormValues>>,
+    schedType: string
+  ) {
+    return (
+      <>
+        {schedType === "once" && (
+          <div className="space-y-2">
+            <Label htmlFor="scheduledAt">Run at</Label>
+            <Input id="scheduledAt" type="datetime-local" {...form.register("scheduledAt")} />
+          </div>
+        )}
+
+        {schedType === "recurring" && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="recurrencePattern">Frequency</Label>
+              <Select
+                value={form.watch("recurrencePattern")}
+                onValueChange={(value) =>
+                  form.setValue("recurrencePattern", value as TaskFormValues["recurrencePattern"])
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="recurrenceTime">Time</Label>
+              <Input id="recurrenceTime" type="time" {...form.register("recurrenceTime")} />
+            </div>
+          </>
+        )}
+
+        {schedType === "cron" && (
+          <div className="space-y-2">
+            <Label htmlFor="cronExpression">Cron Expression</Label>
+            <Input
+              id="cronExpression"
+              {...form.register("cronExpression")}
+              placeholder="0 9 * * 1-5"
+            />
+            <p className="text-xs text-muted-foreground">
+              Example: &quot;0 9 * * 1-5&quot; runs at 9 AM on weekdays
+            </p>
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Scheduled Tasks</h2>
-            <p className="text-sm text-muted-foreground">
-              Automate recurring tasks and workflows.
-            </p>
+            <p className="text-sm text-muted-foreground">Automate recurring tasks and workflows.</p>
           </div>
         </div>
         <Separator />
@@ -214,9 +357,7 @@ export function ScheduledTasksTab() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Scheduled Tasks</h2>
-            <p className="text-sm text-muted-foreground">
-              Automate recurring tasks and workflows.
-            </p>
+            <p className="text-sm text-muted-foreground">Automate recurring tasks and workflows.</p>
           </div>
         </div>
         <Separator />
@@ -234,11 +375,10 @@ export function ScheduledTasksTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Scheduled Tasks</h2>
-          <p className="text-sm text-muted-foreground">
-            Automate recurring tasks and workflows.
-          </p>
+          <p className="text-sm text-muted-foreground">Automate recurring tasks and workflows.</p>
         </div>
 
+        {/* Create Dialog */}
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">
@@ -249,22 +389,20 @@ export function ScheduledTasksTab() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Create Scheduled Task</DialogTitle>
-              <DialogDescription>
-                Set up an automated task to run on a schedule.
-              </DialogDescription>
+              <DialogDescription>Set up an automated task to run on a schedule.</DialogDescription>
             </DialogHeader>
 
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  {...form.register("name")}
+                  {...createForm.register("name")}
                   placeholder="Daily report generation"
                 />
-                {form.formState.errors.name && (
+                {createForm.formState.errors.name && (
                   <p className="text-xs text-destructive">
-                    {form.formState.errors.name.message}
+                    {createForm.formState.errors.name.message}
                   </p>
                 )}
               </div>
@@ -273,7 +411,7 @@ export function ScheduledTasksTab() {
                 <Label htmlFor="description">Description (optional)</Label>
                 <Textarea
                   id="description"
-                  {...form.register("description")}
+                  {...createForm.register("description")}
                   placeholder="What should this task do?"
                   rows={2}
                 />
@@ -282,8 +420,10 @@ export function ScheduledTasksTab() {
               <div className="space-y-2">
                 <Label htmlFor="taskType">Task Type</Label>
                 <Select
-                  value={form.watch("taskType")}
-                  onValueChange={(value) => form.setValue("taskType", value as CreateTaskForm["taskType"])}
+                  value={createForm.watch("taskType")}
+                  onValueChange={(value) =>
+                    createForm.setValue("taskType", value as TaskFormValues["taskType"])
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -301,8 +441,10 @@ export function ScheduledTasksTab() {
               <div className="space-y-2">
                 <Label htmlFor="scheduleType">Schedule</Label>
                 <Select
-                  value={form.watch("scheduleType")}
-                  onValueChange={(value) => form.setValue("scheduleType", value as CreateTaskForm["scheduleType"])}
+                  value={createForm.watch("scheduleType")}
+                  onValueChange={(value) =>
+                    createForm.setValue("scheduleType", value as TaskFormValues["scheduleType"])
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -315,68 +457,10 @@ export function ScheduledTasksTab() {
                 </Select>
               </div>
 
-              {scheduleType === "once" && (
-                <div className="space-y-2">
-                  <Label htmlFor="scheduledAt">Run at</Label>
-                  <Input
-                    id="scheduledAt"
-                    type="datetime-local"
-                    {...form.register("scheduledAt")}
-                  />
-                </div>
-              )}
-
-              {scheduleType === "recurring" && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="recurrencePattern">Frequency</Label>
-                    <Select
-                      value={form.watch("recurrencePattern")}
-                      onValueChange={(value) => form.setValue("recurrencePattern", value as CreateTaskForm["recurrencePattern"])}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select frequency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="recurrenceTime">Time</Label>
-                    <Input
-                      id="recurrenceTime"
-                      type="time"
-                      {...form.register("recurrenceTime")}
-                    />
-                  </div>
-                </>
-              )}
-
-              {scheduleType === "cron" && (
-                <div className="space-y-2">
-                  <Label htmlFor="cronExpression">Cron Expression</Label>
-                  <Input
-                    id="cronExpression"
-                    {...form.register("cronExpression")}
-                    placeholder="0 9 * * 1-5"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Example: &quot;0 9 * * 1-5&quot; runs at 9 AM on weekdays
-                  </p>
-                </div>
-              )}
+              {renderScheduleFields(createForm, createScheduleType)}
 
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreateOpen(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={createTask.isPending}>
@@ -415,7 +499,9 @@ export function ScheduledTasksTab() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{task.name}</span>
                       <Badge variant={status.variant} className="gap-1 text-xs">
-                        <StatusIcon className={`h-3 w-3 ${task.status === "running" ? "animate-spin" : ""}`} />
+                        <StatusIcon
+                          className={`h-3 w-3 ${task.status === "running" ? "animate-spin" : ""}`}
+                        />
                         {task.status}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
@@ -430,23 +516,50 @@ export function ScheduledTasksTab() {
                         </>
                       )}
                       {task.scheduleType === "once" && task.scheduledAt && (
-                        <>Scheduled for {format(new Date(task.scheduledAt), "MMM d, yyyy h:mm a")}</>
+                        <>
+                          Scheduled for {format(new Date(task.scheduledAt), "MMM d, yyyy h:mm a")}
+                        </>
                       )}
                       {task.scheduleType === "cron" && task.cronExpression && (
                         <>Cron: {task.cronExpression}</>
                       )}
                       {task.nextRunAt && (
-                        <> • Next run: {format(new Date(task.nextRunAt), "MMM d, h:mm a")}</>
+                        <> · Next run: {format(new Date(task.nextRunAt), "MMM d, h:mm a")}</>
                       )}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {/* Run Now */}
+                  {task.status !== "running" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Run now"
+                      onClick={() => runNowTask.mutate({ id: task.id })}
+                      disabled={runNowTask.isPending}
+                    >
+                      <PlayIcon className="h-4 w-4 text-green-600" />
+                    </Button>
+                  )}
+
+                  {/* Edit */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Edit"
+                    onClick={() => openEditDialog(task)}
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </Button>
+
+                  {/* Pause / Resume */}
                   {task.isEnabled && task.status !== "running" && (
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Pause"
                       onClick={() => pauseTask.mutate({ id: task.id })}
                       disabled={pauseTask.isPending}
                     >
@@ -458,6 +571,7 @@ export function ScheduledTasksTab() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Resume"
                       onClick={() => resumeTask.mutate({ id: task.id })}
                       disabled={resumeTask.isPending}
                     >
@@ -465,9 +579,14 @@ export function ScheduledTasksTab() {
                     </Button>
                   )}
 
+                  {/* Delete */}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                      >
                         <TrashIcon className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
@@ -475,7 +594,8 @@ export function ScheduledTasksTab() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete task?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will permanently delete &quot;{task.name}&quot; and all its execution history.
+                          This will permanently delete &quot;{task.name}&quot; and all its execution
+                          history.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -493,6 +613,16 @@ export function ScheduledTasksTab() {
               </div>
             );
           })}
+
+          {/* View All link */}
+          <div className="pt-2 text-center">
+            <Button variant="link" size="sm" asChild className="gap-1">
+              <Link href="/actions?tab=schedules">
+                View all scheduled tasks
+                <ExternalLinkIcon className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border p-8 text-center">
@@ -507,6 +637,76 @@ export function ScheduledTasksTab() {
           </Button>
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog
+        open={editingTask !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingTask(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Scheduled Task</DialogTitle>
+            <DialogDescription>Update the task configuration.</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                {...editForm.register("name")}
+                placeholder="Daily report generation"
+              />
+              {editForm.formState.errors.name && (
+                <p className="text-xs text-destructive">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description (optional)</Label>
+              <Textarea
+                id="edit-description"
+                {...editForm.register("description")}
+                placeholder="What should this task do?"
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Schedule</Label>
+              <Select
+                value={editForm.watch("scheduleType")}
+                onValueChange={(value) =>
+                  editForm.setValue("scheduleType", value as TaskFormValues["scheduleType"])
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="once">One-time</SelectItem>
+                  <SelectItem value="recurring">Recurring</SelectItem>
+                  <SelectItem value="cron">Cron Expression</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {renderScheduleFields(editForm, editScheduleType)}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingTask(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateTask.isPending}>
+                {updateTask.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

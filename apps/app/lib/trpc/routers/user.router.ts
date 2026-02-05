@@ -1,8 +1,40 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, users, accounts, authSessions, eq, and } from "@repo/database";
+import {
+  db,
+  users,
+  accounts,
+  authSessions,
+  agentSessions,
+  messages,
+  files,
+  eq,
+  and,
+  inArray,
+  type UserPreferences,
+} from "@repo/database";
 import { TRPCError } from "@trpc/server";
 import { auth } from "@repo/auth/server";
+
+const preferencesSchema = z.object({
+  communicationStyle: z.enum(["concise", "balanced", "detailed"]).optional(),
+  expertiseLevel: z.enum(["beginner", "intermediate", "expert"]).optional(),
+  customInstructions: z.string().max(2000).optional(),
+  defaultModel: z.string().optional(),
+  bio: z.string().max(500).optional(),
+  fontSize: z.enum(["small", "medium", "large"]).optional(),
+  chatDensity: z.enum(["compact", "comfortable", "spacious"]).optional(),
+  saveHistory: z.boolean().optional(),
+  analyticsEnabled: z.boolean().optional(),
+  crashReports: z.boolean().optional(),
+  personalizedExperience: z.boolean().optional(),
+  conversationRetention: z.enum(["30d", "90d", "1y", "never"]).optional(),
+  fileRetention: z.enum(["30d", "90d", "1y", "never"]).optional(),
+  activityLogRetention: z.enum(["30d", "90d", "1y", "never"]).optional(),
+  enabledSkills: z.record(z.string(), z.boolean()).optional(),
+  autoSummarizeEmails: z.boolean().optional(),
+  autoCategorizeEmails: z.boolean().optional(),
+});
 
 export const userRouter = createTRPCRouter({
   // Get current user profile
@@ -82,12 +114,7 @@ export const userRouter = createTRPCRouter({
       const [account] = await db
         .select()
         .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, ctx.user.id),
-            eq(accounts.providerId, "credential")
-          )
-        )
+        .where(and(eq(accounts.userId, ctx.user.id), eq(accounts.providerId, "credential")))
         .limit(1);
 
       if (!account || !account.password) {
@@ -139,12 +166,7 @@ export const userRouter = createTRPCRouter({
       const [account] = await db
         .select()
         .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, ctx.user.id),
-            eq(accounts.providerId, "credential")
-          )
-        )
+        .where(and(eq(accounts.userId, ctx.user.id), eq(accounts.providerId, "credential")))
         .limit(1);
 
       if (account?.password && input.password) {
@@ -189,12 +211,7 @@ export const userRouter = createTRPCRouter({
       const [session] = await db
         .select()
         .from(authSessions)
-        .where(
-          and(
-            eq(authSessions.id, input.sessionId),
-            eq(authSessions.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(authSessions.id, input.sessionId), eq(authSessions.userId, ctx.user.id)))
         .limit(1);
 
       if (!session) {
@@ -210,15 +227,13 @@ export const userRouter = createTRPCRouter({
   revokeAllSessions: protectedProcedure
     .input(z.object({ currentToken: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await db
-        .delete(authSessions)
-        .where(
-          and(
-            eq(authSessions.userId, ctx.user.id),
-            // Keep the current session
-            // In a real implementation, you'd compare the token
-          )
-        );
+      await db.delete(authSessions).where(
+        and(
+          eq(authSessions.userId, ctx.user.id)
+          // Keep the current session
+          // In a real implementation, you'd compare the token
+        )
+      );
 
       return { success: true };
     }),
@@ -243,10 +258,7 @@ export const userRouter = createTRPCRouter({
     .input(z.object({ accountId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Verify the user has at least one other login method
-      const userAccounts = await db
-        .select()
-        .from(accounts)
-        .where(eq(accounts.userId, ctx.user.id));
+      const userAccounts = await db.select().from(accounts).where(eq(accounts.userId, ctx.user.id));
 
       if (userAccounts.length <= 1) {
         throw new TRPCError({
@@ -257,13 +269,123 @@ export const userRouter = createTRPCRouter({
 
       await db
         .delete(accounts)
-        .where(
-          and(
-            eq(accounts.id, input.accountId),
-            eq(accounts.userId, ctx.user.id)
-          )
-        );
+        .where(and(eq(accounts.id, input.accountId), eq(accounts.userId, ctx.user.id)));
 
       return { success: true };
     }),
+
+  // Get user preferences
+  getPreferences: protectedProcedure.query(async ({ ctx }) => {
+    const [user] = await db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
+
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    }
+
+    return (user.preferences ?? {}) as UserPreferences;
+  }),
+
+  // Update user preferences (deep merge)
+  updatePreferences: protectedProcedure
+    .input(preferencesSchema)
+    .mutation(async ({ ctx, input }) => {
+      const [user] = await db
+        .select({ preferences: users.preferences })
+        .from(users)
+        .where(eq(users.id, ctx.user.id))
+        .limit(1);
+
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      const existing = (user.preferences ?? {}) as UserPreferences;
+      const merged: UserPreferences = {
+        ...existing,
+        ...input,
+        // Deep merge enabledSkills
+        ...(input.enabledSkills
+          ? { enabledSkills: { ...existing.enabledSkills, ...input.enabledSkills } }
+          : {}),
+      };
+
+      const [updated] = await db
+        .update(users)
+        .set({ preferences: merged })
+        .where(eq(users.id, ctx.user.id))
+        .returning({ preferences: users.preferences });
+
+      return (updated.preferences ?? {}) as UserPreferences;
+    }),
+
+  // Export user data as JSON
+  exportData: protectedProcedure.mutation(async ({ ctx }) => {
+    const [user] = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    }
+
+    const sessions = await db
+      .select()
+      .from(agentSessions)
+      .where(eq(agentSessions.userId, ctx.user.id));
+
+    const sessionIds = sessions.map((s) => s.id);
+    let allMessages: (typeof messages.$inferSelect)[] = [];
+    if (sessionIds.length > 0) {
+      allMessages = await db.select().from(messages).where(inArray(messages.sessionId, sessionIds));
+    }
+
+    const userFiles = await db.select().from(files).where(eq(files.userId, ctx.user.id));
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt,
+        preferences: user.preferences,
+      },
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        createdAt: s.createdAt,
+      })),
+      messages: allMessages.map((m) => ({
+        id: m.id,
+        sessionId: m.sessionId,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+      })),
+      files: userFiles.map((f) => ({
+        id: f.id,
+        name: f.name,
+        mimeType: f.mimeType,
+        size: f.size,
+        createdAt: f.createdAt,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+  }),
+
+  // Clear chat history (delete all agent sessions — messages cascade)
+  clearChatHistory: protectedProcedure.mutation(async ({ ctx }) => {
+    await db.delete(agentSessions).where(eq(agentSessions.userId, ctx.user.id));
+
+    return { success: true };
+  }),
+
+  // Clear all user files
+  clearFiles: protectedProcedure.mutation(async ({ ctx }) => {
+    await db.delete(files).where(eq(files.userId, ctx.user.id));
+
+    return { success: true };
+  }),
 });

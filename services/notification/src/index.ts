@@ -1,5 +1,15 @@
 import Fastify from "fastify";
-import { createLogger, getEnv } from "@repo/service-utils";
+import { createLogger, getEnv, createId } from "@repo/service-utils";
+import {
+  db,
+  notifications,
+  notificationPreferences,
+  pushSubscriptions,
+  eq,
+  and,
+  desc,
+  sql,
+} from "@repo/database";
 
 const logger = createLogger({ service: "notification" });
 
@@ -28,12 +38,26 @@ async function main() {
       data?: Record<string, unknown>;
     };
 
-    // TODO: Create notification in DB and send via push/email
-    const notificationId = crypto.randomUUID();
+    try {
+      const [notification] = await db
+        .insert(notifications)
+        .values({
+          id: createId(),
+          userId,
+          type: type as any,
+          title,
+          message,
+          metadata: data,
+        })
+        .returning();
 
-    logger.info({ userId, type, notificationId }, "Notification sent");
+      logger.info({ userId, type, notificationId: notification!.id }, "Notification sent");
 
-    return { id: notificationId, status: "sent" };
+      return { id: notification!.id, status: "sent" };
+    } catch (error) {
+      logger.error(error, "Failed to send notification");
+      return reply.status(500).send({ error: "Failed to send notification" });
+    }
   });
 
   // Get user notifications
@@ -41,58 +65,154 @@ async function main() {
     const { userId } = request.params as { userId: string };
     const { limit = 50, cursor } = request.query as { limit?: number; cursor?: string };
 
-    // TODO: Fetch from database
-    return { notifications: [], cursor: null };
+    try {
+      const pageLimit = Math.min(limit, 100);
+      const conditions = [eq(notifications.userId, userId)];
+      if (cursor) {
+        conditions.push(
+          sql`${notifications.createdAt} < (SELECT created_at FROM notifications WHERE id = ${cursor})`
+        );
+      }
+
+      const results = await db
+        .select()
+        .from(notifications)
+        .where(and(...conditions))
+        .orderBy(desc(notifications.createdAt))
+        .limit(pageLimit + 1);
+
+      const hasMore = results.length > pageLimit;
+      const items = hasMore ? results.slice(0, pageLimit) : results;
+      const nextCursor = hasMore ? items[items.length - 1]!.id : null;
+
+      return { notifications: items, cursor: nextCursor };
+    } catch (error) {
+      logger.error(error, "Failed to fetch notifications");
+      return reply.status(500).send({ error: "Failed to fetch notifications" });
+    }
   });
 
   // Mark notification as read
   app.patch("/notifications/:id/read", async (request, reply) => {
     const { id } = request.params as { id: string };
-    // TODO: Update in database
-    return { id, read: true };
+    try {
+      const [updated] = await db
+        .update(notifications)
+        .set({ isRead: true, readAt: new Date() })
+        .where(eq(notifications.id, id))
+        .returning();
+      if (!updated) {
+        return reply.status(404).send({ error: "Notification not found" });
+      }
+      return { id: updated.id, read: true };
+    } catch (error) {
+      logger.error(error, "Failed to mark notification as read");
+      return reply.status(500).send({ error: "Failed to update notification" });
+    }
   });
 
   // Register push subscription
   app.post("/push/subscribe", async (request, reply) => {
     const { userId, subscription } = request.body as {
       userId: string;
-      subscription: PushSubscriptionJSON;
+      subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
     };
 
-    // TODO: Save subscription to database
-    return { subscribed: true };
+    try {
+      await db.insert(pushSubscriptions).values({
+        id: createId(),
+        userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      });
+      return { subscribed: true };
+    } catch (error) {
+      logger.error(error, "Failed to save push subscription");
+      return reply.status(500).send({ error: "Failed to save push subscription" });
+    }
   });
 
   // Get notification preferences
   app.get("/users/:userId/preferences", async (request, reply) => {
     const { userId } = request.params as { userId: string };
-    // TODO: Fetch from database
-    return { userId, preferences: {} };
+    try {
+      const [prefs] = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+        .limit(1);
+      return { userId, preferences: prefs || {} };
+    } catch (error) {
+      logger.error(error, "Failed to fetch notification preferences");
+      return reply.status(500).send({ error: "Failed to fetch preferences" });
+    }
   });
 
   // Update notification preferences
   app.put("/users/:userId/preferences", async (request, reply) => {
     const { userId } = request.params as { userId: string };
     const preferences = request.body as Record<string, boolean>;
-    // TODO: Update in database
-    return { userId, preferences, updated: true };
+    try {
+      const [existing] = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+        .limit(1);
+
+      if (existing) {
+        const [updated] = await db
+          .update(notificationPreferences)
+          .set({
+            emailEnabled: preferences.emailEnabled ?? existing.emailEnabled,
+            pushEnabled: preferences.pushEnabled ?? existing.pushEnabled,
+            inAppEnabled: preferences.inAppEnabled ?? existing.inAppEnabled,
+            inAppSound: preferences.inAppSound ?? existing.inAppSound,
+          })
+          .where(eq(notificationPreferences.userId, userId))
+          .returning();
+        return { userId, preferences: updated, updated: true };
+      } else {
+        const [created] = await db
+          .insert(notificationPreferences)
+          .values({
+            id: createId(),
+            userId,
+            emailEnabled: preferences.emailEnabled ?? true,
+            pushEnabled: preferences.pushEnabled ?? true,
+            inAppEnabled: preferences.inAppEnabled ?? true,
+            inAppSound: preferences.inAppSound ?? true,
+          })
+          .returning();
+        return { userId, preferences: created, updated: true };
+      }
+    } catch (error) {
+      logger.error(error, "Failed to update notification preferences");
+      return reply.status(500).send({ error: "Failed to update preferences" });
+    }
   });
 
   // Request logging
   app.addHook("onRequest", async (request) => {
-    logger.info({
-      requestId: request.id,
-      method: request.method,
-      url: request.url,
-    }, "Incoming request");
+    logger.info(
+      {
+        requestId: request.id,
+        method: request.method,
+        url: request.url,
+      },
+      "Incoming request"
+    );
   });
 
   app.addHook("onResponse", async (request, reply) => {
-    logger.info({
-      requestId: request.id,
-      statusCode: reply.statusCode,
-      responseTime: reply.elapsedTime,
-    }, "Request completed");
+    logger.info(
+      {
+        requestId: request.id,
+        statusCode: reply.statusCode,
+        responseTime: reply.elapsedTime,
+      },
+      "Request completed"
+    );
   });
 
   try {

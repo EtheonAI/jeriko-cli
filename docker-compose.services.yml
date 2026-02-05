@@ -57,7 +57,7 @@ services:
       JWT_SECRET: dev-jwt-secret-change-in-production
       TASK_SERVICE_URL: http://task:3002
       AGENT_SERVICE_URL: http://agent:8000
-      DEVICE_SERVICE_URL: http://device:8080
+      DEVICE_SERVICE_URL: http://device:4001
       FILE_SERVICE_URL: http://file:3003
       WEBSITE_SERVICE_URL: http://website:3004
     ports:
@@ -225,6 +225,8 @@ services:
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://rubic:rubic_dev_password@postgres:5432/rubic
       COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
+      COMPOSIO_BASE_URL: ${COMPOSIO_BASE_URL:-}
+      APP_URL: ${APP_URL:-http://localhost:3000}
     ports:
       - "3008:3008"
     depends_on:
@@ -294,6 +296,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       E2B_API_KEY: ${E2B_API_KEY:-}
+      CONNECTOR_SERVICE_URL: http://connector:4009
     ports:
       - "8000:8000"
     depends_on:
@@ -323,10 +326,6 @@ services:
       redis:
         condition: service_healthy
 
-  # ===========================================
-  # Go Services
-  # ===========================================
-
   device:
     build:
       context: .
@@ -334,22 +333,27 @@ services:
     container_name: rubic-device
     restart: unless-stopped
     environment:
-      ENVIRONMENT: development
-      PORT: 8080
+      NODE_ENV: development
+      PORT: 4001
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://rubic:rubic_dev_password@postgres:5432/rubic
-      AWS_IOT_ENDPOINT: ${AWS_IOT_ENDPOINT:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
     ports:
-      - "8080:8080"
+      - "4001:4001"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./services/device:/app/services/device
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/services/device/node_modules
+
+  # ===========================================
+  # Go Services
+  # ===========================================
 
   sandbox:
     build:

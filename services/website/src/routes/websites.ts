@@ -7,6 +7,7 @@ import {
   ErrorCodes,
   createLogger,
 } from "@repo/service-utils";
+import { db, websites as websitesTable, websitePages, eq, and, desc } from "@repo/database";
 
 const logger = createLogger({ service: "website-routes" });
 
@@ -32,25 +33,8 @@ const GenerateCodeSchema = z.object({
   targetFiles: z.array(z.string()).optional(),
 });
 
-// In-memory store (use database in production)
-const websites = new Map<string, {
-  id: string;
-  userId: string;
-  name: string;
-  description: string | null;
-  framework: string;
-  previewUrl: string | null;
-  productionUrl: string | null;
-  customDomain: string | null;
-  status: string;
-  settings: Record<string, unknown>;
-  files: Map<string, { content: string; version: number }>;
-  createdAt: Date;
-  updatedAt: Date;
-}>();
-
-function getUserId(request: { headers: { "x-user-id"?: string } }): string {
-  const userId = request.headers["x-user-id"];
+function getUserId(request: { headers: Record<string, string | string[] | undefined> }): string {
+  const userId = request.headers["x-user-id"] as string | undefined;
   if (!userId) {
     const error = new Error("Unauthorized") as Error & { statusCode: number; code: string };
     error.statusCode = 401;
@@ -66,53 +50,91 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const input = CreateWebsiteSchema.parse(request.body);
 
-    const id = createId();
-    const now = new Date();
+    try {
+      const id = createId();
 
-    const website = {
-      id,
-      userId,
-      name: input.name,
-      description: input.description || null,
-      framework: input.framework,
-      previewUrl: null,
-      productionUrl: null,
-      customDomain: null,
-      status: "draft",
-      settings: {},
-      files: new Map<string, { content: string; version: number }>(),
-      createdAt: now,
-      updatedAt: now,
-    };
+      const [website] = await db
+        .insert(websitesTable)
+        .values({
+          id,
+          userId,
+          name: input.name,
+          description: input.description || null,
+          url: "",
+          domain: "",
+          status: "pending",
+          metadata: { framework: input.framework, templateId: input.templateId },
+        })
+        .returning();
 
-    // Initialize with template files
-    initializeTemplate(website, input.framework, input.templateId);
+      // Initialize template pages as websitePages
+      const templatePages = getTemplatePages(input.framework);
+      for (const page of templatePages) {
+        await db.insert(websitePages).values({
+          id: createId(),
+          websiteId: id,
+          url: page.path,
+          path: page.path,
+          title: page.path,
+          textContent: page.content,
+          depth: 0,
+        });
+      }
 
-    websites.set(id, website);
+      logger.info({ websiteId: id, userId, framework: input.framework }, "Website created");
 
-    logger.info({ websiteId: id, userId, framework: input.framework }, "Website created");
-
-    return reply.status(201).send(successResponse({
-      ...website,
-      files: Array.from(website.files.entries()).map(([path, file]) => ({
-        path,
-        version: file.version,
-      })),
-    }, request.id));
+      return reply.status(201).send(
+        successResponse(
+          {
+            id: website!.id,
+            userId: website!.userId,
+            name: website!.name,
+            description: website!.description,
+            framework: input.framework,
+            status: website!.status,
+            files: templatePages.map((p) => ({ path: p.path, version: 1 })),
+            createdAt: website!.createdAt,
+            updatedAt: website!.updatedAt,
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to create website");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to create website" },
+            request.id
+          )
+        );
+    }
   });
 
   // List websites
   fastify.get("/websites", async (request, reply) => {
     const userId = getUserId(request);
 
-    const userWebsites = Array.from(websites.values())
-      .filter(w => w.userId === userId)
-      .map(w => ({
-        ...w,
-        files: undefined, // Don't include files in list
-      }));
+    try {
+      const userWebsites = await db
+        .select()
+        .from(websitesTable)
+        .where(eq(websitesTable.userId, userId))
+        .orderBy(desc(websitesTable.createdAt));
 
-    return reply.send(successResponse(userWebsites, request.id));
+      return reply.send(successResponse(userWebsites, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to list websites");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list websites" },
+            request.id
+          )
+        );
+    }
   });
 
   // Get website
@@ -120,20 +142,46 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
-      );
-    }
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
 
-    return reply.send(successResponse({
-      ...website,
-      files: Array.from(website.files.entries()).map(([path, file]) => ({
-        path,
-        version: file.version,
-      })),
-    }, request.id));
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      const pages = await db
+        .select({ path: websitePages.path })
+        .from(websitePages)
+        .where(eq(websitePages.websiteId, id));
+
+      return reply.send(
+        successResponse(
+          {
+            ...website,
+            files: pages.map((p) => ({ path: p.path, version: 1 })),
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to get website");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get website" },
+            request.id
+          )
+        );
+    }
   });
 
   // Update website
@@ -142,20 +190,45 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const input = UpdateWebsiteSchema.parse(request.body);
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
-      );
+    try {
+      const [existing] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
+
+      if (!existing) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      const updateValues: Record<string, unknown> = {};
+      if (input.name) updateValues.name = input.name;
+      if (input.description !== undefined) updateValues.description = input.description;
+      if (input.settings)
+        updateValues.config = { ...((existing.config as object) || {}), ...input.settings };
+
+      const [updated] = await db
+        .update(websitesTable)
+        .set(updateValues as any)
+        .where(eq(websitesTable.id, id))
+        .returning();
+
+      return reply.send(successResponse(updated, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to update website");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update website" },
+            request.id
+          )
+        );
     }
-
-    if (input.name) website.name = input.name;
-    if (input.description !== undefined) website.description = input.description;
-    if (input.customDomain !== undefined) website.customDomain = input.customDomain;
-    if (input.settings) website.settings = { ...website.settings, ...input.settings };
-    website.updatedAt = new Date();
-
-    return reply.send(successResponse(website, request.id));
   });
 
   // Delete website
@@ -163,17 +236,33 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
-      );
+    try {
+      const [deleted] = await db
+        .delete(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .returning();
+
+      if (!deleted) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      logger.info({ websiteId: id, userId }, "Website deleted");
+      return reply.send(successResponse({ success: true }, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to delete website");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to delete website" },
+            request.id
+          )
+        );
     }
-
-    websites.delete(id);
-    logger.info({ websiteId: id, userId }, "Website deleted");
-
-    return reply.send(successResponse({ success: true }, request.id));
   });
 
   // AI Generate code
@@ -182,22 +271,44 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const input = GenerateCodeSchema.parse(request.body);
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+    try {
+      const [website] = await db
+        .select()
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
+
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      // TODO: Call Agent Service for AI code generation
+      logger.info({ websiteId: id, prompt: input.prompt }, "Code generation requested");
+
+      return reply.send(
+        successResponse(
+          {
+            status: "generating",
+            message: "AI code generation in progress",
+          },
+          request.id
+        )
       );
+    } catch (error) {
+      logger.error(error, "Failed to generate code");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to generate code" },
+            request.id
+          )
+        );
     }
-
-    // TODO: Call Agent Service for AI code generation
-    // For now, return a placeholder response
-    logger.info({ websiteId: id, prompt: input.prompt }, "Code generation requested");
-
-    return reply.send(successResponse({
-      status: "generating",
-      message: "AI code generation in progress",
-      // In production, this would stream updates via WebSocket
-    }, request.id));
   });
 
   // Get file content
@@ -206,25 +317,56 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
     const path = "/" + (request.params as { "*": string })["*"];
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
-      );
-    }
+    try {
+      const [website] = await db
+        .select({ id: websitesTable.id })
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
 
-    const file = website.files.get(path);
-    if (!file) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "File not found" }, request.id)
-      );
-    }
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
 
-    return reply.send(successResponse({
-      path,
-      content: file.content,
-      version: file.version,
-    }, request.id));
+      const [page] = await db
+        .select()
+        .from(websitePages)
+        .where(and(eq(websitePages.websiteId, id), eq(websitePages.path, path)))
+        .limit(1);
+
+      if (!page) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "File not found" }, request.id)
+          );
+      }
+
+      return reply.send(
+        successResponse(
+          {
+            path: page.path,
+            content: page.textContent || "",
+            version: 1,
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to get file");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get file" },
+            request.id
+          )
+        );
+    }
   });
 
   // Update file content
@@ -234,26 +376,67 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const path = "/" + (request.params as { "*": string })["*"];
     const { content } = request.body as { content: string };
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+    try {
+      const [website] = await db
+        .select({ id: websitesTable.id })
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
+
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      // Upsert the page
+      const [existing] = await db
+        .select()
+        .from(websitePages)
+        .where(and(eq(websitePages.websiteId, id), eq(websitePages.path, path)))
+        .limit(1);
+
+      if (existing) {
+        await db
+          .update(websitePages)
+          .set({ textContent: content })
+          .where(eq(websitePages.id, existing.id));
+      } else {
+        await db.insert(websitePages).values({
+          id: createId(),
+          websiteId: id,
+          url: path,
+          path,
+          title: path,
+          textContent: content,
+          depth: 0,
+        });
+      }
+
+      logger.info({ websiteId: id, path }, "File updated");
+
+      return reply.send(
+        successResponse(
+          {
+            path,
+            version: 1,
+          },
+          request.id
+        )
       );
+    } catch (error) {
+      logger.error(error, "Failed to update file");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to update file" },
+            request.id
+          )
+        );
     }
-
-    const existing = website.files.get(path);
-    website.files.set(path, {
-      content,
-      version: (existing?.version || 0) + 1,
-    });
-    website.updatedAt = new Date();
-
-    logger.info({ websiteId: id, path }, "File updated");
-
-    return reply.send(successResponse({
-      path,
-      version: website.files.get(path)!.version,
-    }, request.id));
   });
 
   // List all files
@@ -261,55 +444,77 @@ export const websiteRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
 
-    const website = websites.get(id);
-    if (!website || website.userId !== userId) {
-      return reply.status(404).send(
-        errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
-      );
+    try {
+      const [website] = await db
+        .select({ id: websitesTable.id })
+        .from(websitesTable)
+        .where(and(eq(websitesTable.id, id), eq(websitesTable.userId, userId)))
+        .limit(1);
+
+      if (!website) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Website not found" }, request.id)
+          );
+      }
+
+      const pages = await db
+        .select({ path: websitePages.path })
+        .from(websitePages)
+        .where(eq(websitePages.websiteId, id));
+
+      const files = pages.map((p) => ({ path: p.path, version: 1 }));
+
+      return reply.send(successResponse(files, request.id));
+    } catch (error) {
+      logger.error(error, "Failed to list files");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list files" },
+            request.id
+          )
+        );
     }
-
-    const files = Array.from(website.files.entries()).map(([path, file]) => ({
-      path,
-      version: file.version,
-    }));
-
-    return reply.send(successResponse(files, request.id));
   });
 };
 
 // Initialize template files
-function initializeTemplate(
-  website: { files: Map<string, { content: string; version: number }> },
-  framework: string,
-  templateId?: string
-) {
+function getTemplatePages(framework: string): Array<{ path: string; content: string }> {
   if (framework === "nextjs") {
-    website.files.set("/package.json", {
-      content: JSON.stringify({
-        name: "my-app",
-        version: "0.1.0",
-        private: true,
-        scripts: {
-          dev: "next dev",
-          build: "next build",
-          start: "next start",
-        },
-        dependencies: {
-          next: "15.1.0",
-          react: "19.0.0",
-          "react-dom": "19.0.0",
-        },
-        devDependencies: {
-          typescript: "^5.7.0",
-          "@types/node": "^22.0.0",
-          "@types/react": "^19.0.0",
-        },
-      }, null, 2),
-      version: 1,
-    });
-
-    website.files.set("/app/page.tsx", {
-      content: `export default function Home() {
+    return [
+      {
+        path: "/package.json",
+        content: JSON.stringify(
+          {
+            name: "my-app",
+            version: "0.1.0",
+            private: true,
+            scripts: {
+              dev: "next dev",
+              build: "next build",
+              start: "next start",
+            },
+            dependencies: {
+              next: "15.1.0",
+              react: "19.0.0",
+              "react-dom": "19.0.0",
+            },
+            devDependencies: {
+              typescript: "^5.7.0",
+              "@types/node": "^22.0.0",
+              "@types/react": "^19.0.0",
+            },
+          },
+          null,
+          2
+        ),
+      },
+      {
+        path: "/app/page.tsx",
+        content: `export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <h1 className="text-4xl font-bold">Welcome to your app</h1>
@@ -317,11 +522,10 @@ function initializeTemplate(
     </main>
   );
 }`,
-      version: 1,
-    });
-
-    website.files.set("/app/layout.tsx", {
-      content: `import type { Metadata } from "next";
+      },
+      {
+        path: "/app/layout.tsx",
+        content: `import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -340,18 +544,16 @@ export default function RootLayout({
     </html>
   );
 }`,
-      version: 1,
-    });
-
-    website.files.set("/app/globals.css", {
-      content: `@tailwind base;
+      },
+      {
+        path: "/app/globals.css",
+        content: `@tailwind base;
 @tailwind components;
 @tailwind utilities;`,
-      version: 1,
-    });
-
-    website.files.set("/tailwind.config.ts", {
-      content: `import type { Config } from "tailwindcss";
+      },
+      {
+        path: "/tailwind.config.ts",
+        content: `import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: [
@@ -365,7 +567,8 @@ const config: Config = {
 };
 
 export default config;`,
-      version: 1,
-    });
+      },
+    ];
   }
+  return [];
 }

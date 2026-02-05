@@ -13,7 +13,7 @@ export const secure = async (
   allow: (ArcjetWellKnownBot | ArcjetBotCategory)[],
   sourceRequest?: Request
 ) => {
-  if (!arcjetKey) {
+  if (!arcjetKey || process.env.NODE_ENV === "development") {
     return;
   }
 
