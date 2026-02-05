@@ -104,6 +104,9 @@
       "types": "./components/tools/index.ts",
       "default": "./components/tools/index.ts"
     },
+    "./components/tools/tool-animations.css": {
+      "default": "./components/tools/tool-animations.css"
+    },
     "./components/agents": {
       "types": "./components/agents/index.ts",
       "default": "./components/agents/index.ts"

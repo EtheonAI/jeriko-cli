@@ -2,16 +2,15 @@
 > web@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/web
 > next dev -p 3001
 
-⨯ Failed to start server
-Error: listen EADDRINUSE: address already in use :::3001
-    at <unknown> (Error: listen EADDRINUSE: address already in use :::3001)
-    at new Promise (<anonymous>) {
-  code: 'EADDRINUSE',
-  errno: -48,
-  syscall: 'listen',
-  address: '::',
-  port: 3001
-}
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
-[?25h
- ELIFECYCLE  Command failed with exit code 1.
+▲ Next.js 16.1.5 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.0.198:3001
+- Environments: .env.local
+
+✓ Starting...
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help
+[33mwarn[0m - Sending Web Vitals to /dev/null
+[33mwarn[0m - Sending logs to console
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[33mwarn[0m - Envvars not detected. If this is production please see https://betterstack.com/docs/logs/javascript/nextjs/ for help

@@ -20,9 +20,7 @@
 ✔ processing schema
 ✔ writing files
 ✔ generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
-🪄 Generated basehub types in 2493ms
+🪄 Generated basehub types in 2261ms
  
 ┌────────────────────────────────────────────────────────────────────────────────────────────┐
 │ 👀 `basehub` experimental --watch mode. Bugs: https://github.com/basehub-ai/basehub/issues │
-└────────────────────────────────────────────────────────────────────────────────────────────┘
- 

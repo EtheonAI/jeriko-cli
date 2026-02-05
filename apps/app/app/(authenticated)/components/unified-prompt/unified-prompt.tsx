@@ -11,7 +11,6 @@ import { AttachmentRow } from "./attachment-row";
 import { FilesButton } from "./files-button";
 import { ConnectorsButton } from "./connectors-button";
 import { SkillsButton } from "./skills-button";
-import { ModelSelector } from "./model-selector";
 import { QuickActions, ACTION_PREFILLS } from "./quick-actions";
 
 export const UnifiedPrompt = forwardRef<UnifiedPromptRef, UnifiedPromptProps>(
@@ -56,14 +55,15 @@ export const UnifiedPrompt = forwardRef<UnifiedPromptRef, UnifiedPromptProps>(
       if (!trimmed && attachments.length === 0) return;
       if (isUploading) return;
 
+      // Note: model selection is handled by the agent service internally
+      // Users don't choose models - Rubic's agent routes to the appropriate model
       onSubmit(trimmed, attachments, {
-        model: selectedModel,
         skills: activeSkills.length > 0 ? activeSkills : undefined,
       });
 
       reset();
       textareaRef.current?.focus();
-    }, [text, attachments, isUploading, selectedModel, activeSkills, onSubmit, reset, textareaRef]);
+    }, [text, attachments, isUploading, activeSkills, onSubmit, reset, textareaRef]);
 
     const handleKeyDown = useCallback(
       (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,14 +172,8 @@ export const UnifiedPrompt = forwardRef<UnifiedPromptRef, UnifiedPromptProps>(
               />
             </div>
 
-            {/* Right: model + submit */}
+            {/* Right: submit button */}
             <div className="flex items-center gap-1">
-              <ModelSelector
-                value={selectedModel}
-                onChange={setSelectedModel}
-                disabled={disabled}
-              />
-
               {isStreaming ? (
                 <Button
                   type="button"

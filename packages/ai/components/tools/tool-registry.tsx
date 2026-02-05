@@ -3,6 +3,8 @@
 import * as React from "react";
 import { createContext, useContext, useMemo, type ComponentType } from "react";
 import type { ToolInvocationState } from "../../lib/types/ui-message";
+
+// Standard renderers
 import { WebSearch } from "./renderers/web-search";
 import { CodeBlock } from "./renderers/code-block";
 import { TerminalOutput } from "./renderers/terminal-output";
@@ -13,6 +15,13 @@ import { ProgressTool } from "./renderers/progress-tool";
 import { BrowserViewer } from "./renderers/browser-viewer";
 import { ImageResult } from "./renderers/image-result";
 import { DeployResult } from "./renderers/deploy-result";
+
+// Enhanced renderers with animations and rich UI
+import { WebSearchEnhanced } from "./renderers/web-search-enhanced";
+import { CodeBlockEnhanced } from "./renderers/code-block-enhanced";
+import { TerminalOutputEnhanced } from "./renderers/terminal-output-enhanced";
+import { BrowserViewerEnhanced } from "./renderers/browser-viewer-enhanced";
+import { PlanToolEnhanced } from "./renderers/plan-tool-enhanced";
 
 export interface ToolRendererProps<TInput = unknown, TOutput = unknown> {
   toolName: string;
@@ -35,32 +44,38 @@ const ToolRegistryContext = createContext<ToolRegistryContextValue | null>(null)
 
 /**
  * Default tool renderers mapping
+ * Uses enhanced renderers with animations and rich UI
  */
 const defaultRenderers: Record<string, ToolRenderer> = {
-  // Web search
-  web_search: WebSearch as ToolRenderer,
-  search_web: WebSearch as ToolRenderer,
-  tavily_search: WebSearch as ToolRenderer,
-  exa_search: WebSearch as ToolRenderer,
-  perplexity_search: WebSearch as ToolRenderer,
-  google_search: WebSearch as ToolRenderer,
-  bing_search: WebSearch as ToolRenderer,
+  // Web search (enhanced with expandable results, citations)
+  web_search: WebSearchEnhanced as ToolRenderer,
+  search_web: WebSearchEnhanced as ToolRenderer,
+  tavily_search: WebSearchEnhanced as ToolRenderer,
+  exa_search: WebSearchEnhanced as ToolRenderer,
+  perplexity_search: WebSearchEnhanced as ToolRenderer,
+  google_search: WebSearchEnhanced as ToolRenderer,
+  bing_search: WebSearchEnhanced as ToolRenderer,
 
-  // Code execution
-  code_interpreter: CodeBlock as ToolRenderer,
-  execute_code: CodeBlock as ToolRenderer,
-  run_code: CodeBlock as ToolRenderer,
-  python: CodeBlock as ToolRenderer,
-  javascript: CodeBlock as ToolRenderer,
+  // Code execution (enhanced with syntax highlighting, line numbers)
+  code_interpreter: CodeBlockEnhanced as ToolRenderer,
+  execute_code: CodeBlockEnhanced as ToolRenderer,
+  run_code: CodeBlockEnhanced as ToolRenderer,
+  python: CodeBlockEnhanced as ToolRenderer,
+  javascript: CodeBlockEnhanced as ToolRenderer,
+  code_execute: CodeBlockEnhanced as ToolRenderer,
 
-  // Shell/Terminal
-  shell_command: TerminalOutput as ToolRenderer,
-  shell_exec: TerminalOutput as ToolRenderer,
-  execute_shell: TerminalOutput as ToolRenderer,
-  run_command: TerminalOutput as ToolRenderer,
-  terminal: TerminalOutput as ToolRenderer,
-  bash: TerminalOutput as ToolRenderer,
-  exec: TerminalOutput as ToolRenderer,
+  // Shell/Terminal (enhanced with ANSI colors, collapsible output)
+  shell_command: TerminalOutputEnhanced as ToolRenderer,
+  shell_exec: TerminalOutputEnhanced as ToolRenderer,
+  shell_view: TerminalOutputEnhanced as ToolRenderer,
+  shell_wait: TerminalOutputEnhanced as ToolRenderer,
+  shell_write_to_process: TerminalOutputEnhanced as ToolRenderer,
+  shell_kill_process: TerminalOutputEnhanced as ToolRenderer,
+  execute_shell: TerminalOutputEnhanced as ToolRenderer,
+  run_command: TerminalOutputEnhanced as ToolRenderer,
+  terminal: TerminalOutputEnhanced as ToolRenderer,
+  bash: TerminalOutputEnhanced as ToolRenderer,
+  exec: TerminalOutputEnhanced as ToolRenderer,
 
   // File operations
   file_read: FilePreview as ToolRenderer,
@@ -72,29 +87,37 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   edit_file: FilePreview as ToolRenderer,
   file_preview: FilePreview as ToolRenderer,
 
-  // Code execution (alias for sandbox code_execute)
-  code_execute: CodeBlock as ToolRenderer,
-
-  // Browser (navigation + screenshots)
-  browser_navigate: BrowserViewer as ToolRenderer,
-  browser_screenshot: BrowserViewer as ToolRenderer,
+  // Browser (enhanced with zoom, fullscreen, console)
+  browser_navigate: BrowserViewerEnhanced as ToolRenderer,
+  browser_view: BrowserViewerEnhanced as ToolRenderer,
+  browser_click: BrowserViewerEnhanced as ToolRenderer,
+  browser_input: BrowserViewerEnhanced as ToolRenderer,
+  browser_scroll: BrowserViewerEnhanced as ToolRenderer,
+  browser_key_press: BrowserViewerEnhanced as ToolRenderer,
+  browser_select_option: BrowserViewerEnhanced as ToolRenderer,
+  browser_console_exec: BrowserViewerEnhanced as ToolRenderer,
+  browser_console_view: BrowserViewerEnhanced as ToolRenderer,
+  browser_screenshot: BrowserViewerEnhanced as ToolRenderer,
+  browser_restart: BrowserViewerEnhanced as ToolRenderer,
 
   // Image generation
   generate_image: ImageResult as ToolRenderer,
 
   // Deployment
   deploy_expose_port: DeployResult as ToolRenderer,
+  deploy_apply_deployment: DeployResult as ToolRenderer,
 
-  // Planning & Progress
-  plan: PlanTool as ToolRenderer,
-  create_plan: PlanTool as ToolRenderer,
-  project_plan: PlanTool as ToolRenderer,
+  // Planning & Progress (enhanced with timeline, progress bar)
+  plan: PlanToolEnhanced as ToolRenderer,
+  create_plan: PlanToolEnhanced as ToolRenderer,
+  project_plan: PlanToolEnhanced as ToolRenderer,
   progress: ProgressTool as ToolRenderer,
   track_progress: ProgressTool as ToolRenderer,
   update_progress: ProgressTool as ToolRenderer,
 
   // Communication (user notifications shown as progress)
   message_notify_user: ProgressTool as ToolRenderer,
+  message_ask_user: ProgressTool as ToolRenderer,
 
   // Fallback
   "*": GenericTool,

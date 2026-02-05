@@ -1,0 +1,468 @@
+/**
+ * Tool UI Animations
+ *
+ * Motion-safe animations for tool execution states.
+ * All animations respect prefers-reduced-motion.
+ */
+
+/* ============================================================================
+ * Shimmer Effect - Active/loading text highlight
+ * ============================================================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    currentColor 0%,
+    hsl(var(--primary)) 40%,
+    hsl(var(--primary) / 0.8) 50%,
+    hsl(var(--primary)) 60%,
+    currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shimmer {
+    animation: shimmer 2s linear infinite;
+  }
+}
+
+/* Inverted shimmer for dark backgrounds */
+.shimmer-invert {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--foreground)) 0%,
+    hsl(var(--primary-foreground)) 40%,
+    hsl(var(--primary-foreground) / 0.8) 50%,
+    hsl(var(--primary-foreground)) 60%,
+    hsl(var(--foreground)) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shimmer-invert {
+    animation: shimmer 2s linear infinite;
+  }
+}
+
+/* ============================================================================
+ * Spring Bounce - Completion checkmarks
+ * ============================================================================ */
+
+@keyframes spring-bounce {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+ * Check Draw - SVG checkmark path animation
+ * ============================================================================ */
+
+@keyframes check-draw {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.check-draw {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .check-draw {
+    animation: check-draw 400ms ease-out forwards;
+  }
+}
+
+/* ============================================================================
+ * Progress Pulse - 100% completion celebration
+ * ============================================================================ */
+
+@keyframes progress-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scaleX(1.02);
+  }
+}
+
+/* ============================================================================
+ * Glow Pulse - Success glow effect
+ * ============================================================================ */
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px 6px hsl(var(--primary) / 0.15);
+  }
+}
+
+/* ============================================================================
+ * Fade In - Staggered entry
+ * ============================================================================ */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================================
+ * Slide In - Directional transitions
+ * ============================================================================ */
+
+@keyframes slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================================================
+ * Blur In - Soft appearance
+ * ============================================================================ */
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* ============================================================================
+ * Spinner - Loading indicator
+ * ============================================================================ */
+
+@keyframes spin-smooth {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin-smooth 0.7s linear infinite;
+}
+
+/* ============================================================================
+ * Typing Cursor - Streaming text indicator
+ * ============================================================================ */
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.typing-cursor::after {
+  content: "▊";
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+  color: hsl(var(--primary));
+}
+
+/* ============================================================================
+ * Skeleton Loading - Placeholder animation
+ * ============================================================================ */
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+/* ============================================================================
+ * Connector Line - Step progression indicator
+ * ============================================================================ */
+
+.connector-line {
+  position: absolute;
+  width: 2px;
+  background: hsl(var(--border));
+  transition: background-color 300ms ease;
+}
+
+.connector-line.completed {
+  background: hsl(var(--primary) / 0.5);
+}
+
+.connector-line.active {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--primary)),
+    hsl(var(--border))
+  );
+}
+
+/* ============================================================================
+ * Status Badge - Animated state indicators
+ * ============================================================================ */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.status-badge.pending {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.status-badge.running {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.3);
+}
+
+.status-badge.completed {
+  background: hsl(142.1 76.2% 36.3% / 0.1);
+  color: hsl(142.1 76.2% 36.3%);
+}
+
+.status-badge.failed {
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}
+
+/* ============================================================================
+ * Tool Card States
+ * ============================================================================ */
+
+.tool-card {
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms ease;
+}
+
+.tool-card:hover {
+  border-color: hsl(var(--border) / 0.8);
+}
+
+.tool-card.streaming {
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.1);
+}
+
+.tool-card.executing {
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.tool-card.completed {
+  border-color: hsl(142.1 76.2% 36.3% / 0.3);
+}
+
+.tool-card.error {
+  border-color: hsl(var(--destructive) / 0.3);
+}
+
+/* ============================================================================
+ * Expandable Content - Smooth height transitions
+ * ============================================================================ */
+
+.expandable-content {
+  display: grid;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 200ms ease;
+}
+
+.expandable-content.collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.expandable-content.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.expandable-content > div {
+  overflow: hidden;
+}
+
+/* ============================================================================
+ * Terminal Output - ANSI color support
+ * ============================================================================ */
+
+.terminal-output {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ANSI colors */
+.ansi-black { color: #1e1e1e; }
+.ansi-red { color: #f44747; }
+.ansi-green { color: #6a9955; }
+.ansi-yellow { color: #dcdcaa; }
+.ansi-blue { color: #569cd6; }
+.ansi-magenta { color: #c586c0; }
+.ansi-cyan { color: #4ec9b0; }
+.ansi-white { color: #d4d4d4; }
+
+.ansi-bright-black { color: #808080; }
+.ansi-bright-red { color: #f14c4c; }
+.ansi-bright-green { color: #89d185; }
+.ansi-bright-yellow { color: #f5f543; }
+.ansi-bright-blue { color: #75beff; }
+.ansi-bright-magenta { color: #e48aff; }
+.ansi-bright-cyan { color: #5fffff; }
+.ansi-bright-white { color: #ffffff; }
+
+.ansi-bold { font-weight: 700; }
+.ansi-dim { opacity: 0.7; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+
+/* ============================================================================
+ * Code Syntax Highlighting Theme
+ * ============================================================================ */
+
+.code-highlight {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.code-highlight .line-number {
+  display: inline-block;
+  width: 3ch;
+  margin-right: 1ch;
+  text-align: right;
+  color: hsl(var(--muted-foreground) / 0.5);
+  user-select: none;
+}
+
+.code-highlight .line.highlighted {
+  background: hsl(var(--primary) / 0.1);
+  margin: 0 -16px;
+  padding: 0 16px;
+}

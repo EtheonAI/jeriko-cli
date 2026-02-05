@@ -1,5 +1,8 @@
 "use client";
 
+// Import tool animations CSS
+import "@repo/ai/components/tools/tool-animations.css";
+
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
@@ -11,6 +14,7 @@ import {
 import { setSelectedAgent, type Agent, type AgentTask } from "@/lib/store/slices/agents.slice";
 import { useSocket } from "@/lib/socket/provider";
 import { ChatContainer, MessageList, AgentDagPanel } from "@repo/ai/components";
+import { AgentActivityTracker, type ActivityStep } from "@repo/ai/components/tools";
 import { useRealTimeChat } from "@repo/ai/hooks";
 import type { UIMessage, MessagePart, Attachment } from "@repo/ai/lib/types";
 import {
@@ -251,6 +255,68 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     );
   }, [messages]);
 
+  // Derive activity steps from messages for AgentActivityTracker
+  const activitySteps = useMemo<ActivityStep[]>(() => {
+    const steps: ActivityStep[] = [];
+
+    // Get the latest assistant message to extract tool activity
+    const latestAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!latestAssistant) return steps;
+
+    // Extract tool parts
+    for (const part of latestAssistant.parts) {
+      if (part.type === "tool-invocation") {
+        const toolPart = part as {
+          type: "tool-invocation";
+          toolCallId: string;
+          toolName: string;
+          state: string;
+          input?: unknown;
+          output?: unknown;
+        };
+
+        const getStatus = (state: string): ActivityStep["status"] => {
+          switch (state) {
+            case "input-streaming":
+            case "input-available":
+              return "running";
+            case "output-available":
+              return "completed";
+            case "output-error":
+              return "failed";
+            default:
+              return "pending";
+          }
+        };
+
+        steps.push({
+          id: toolPart.toolCallId,
+          type: "tool",
+          label: formatToolName(toolPart.toolName),
+          toolName: toolPart.toolName,
+          status: getStatus(toolPart.state),
+        });
+      }
+    }
+
+    return steps;
+  }, [messages]);
+
+  // Format tool name for display
+  function formatToolName(name: string): string {
+    return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  // Current step is the first running one
+  const currentStepId = useMemo(() => {
+    return activitySteps.find((s) => s.status === "running")?.id;
+  }, [activitySteps]);
+
+  // Show activity tracker when there are active tool executions
+  const showActivityTracker =
+    activitySteps.length > 0 &&
+    (status === "streaming" || activitySteps.some((s) => s.status === "running"));
+
   return (
     <ChatContainer
       className="h-full"
@@ -283,6 +349,19 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
                 agents={agentData}
                 selectedAgentId={selectedAgentId}
                 onAgentSelect={handleAgentSelect}
+                compact
+              />
+            </div>
+          )}
+
+          {/* Activity Tracker - shows tool execution progress */}
+          {showActivityTracker && (
+            <div className="mx-auto max-w-3xl mb-4">
+              <AgentActivityTracker
+                steps={activitySteps}
+                currentStepId={currentStepId}
+                isActive={status === "streaming"}
+                onCancel={stop}
                 compact
               />
             </div>

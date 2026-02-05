@@ -155,6 +155,7 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
       // Start async reader that pushes data immediately
       const pumpPromise = (async () => {
         let buffer = "";
+        let hasStarted = false;
         try {
           while (true) {
             const { done, value } = await agentReader.read();
@@ -183,6 +184,11 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
               if (!part.trim()) continue;
               const output = processSSEPartToString(part.trim(), collectedText);
               if (output) {
+                // Send start event on first output for immediate UI feedback
+                if (!hasStarted) {
+                  hasStarted = true;
+                  await writer.write(encoder.encode(`f:${JSON.stringify({ type: "start" })}\n`));
+                }
                 await writer.write(encoder.encode(output));
               }
             }
@@ -252,7 +258,7 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
       },
     });
 
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
   } catch (error) {
     log.error("Chat error:", error as Error);
     return new Response(
@@ -271,7 +277,7 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
 
 async function saveMessageToDB(
   sessionId: string,
-  role: string,
+  role: "user" | "assistant" | "system" | "tool",
   content: string,
   metadata?: Record<string, unknown>
 ) {
@@ -349,17 +355,17 @@ function processSSEPartToString(part: string, collectedText: string[]): string {
       }
 
       case "tool_start": {
+        // Agent sends complete tool input (not streaming), so send tool-input-available directly
+        // The frontend hook handles this case by creating the tool part with correct state
         const toolCallId = event.toolCallId || `tool_${Date.now()}`;
         const toolName = event.tool || "unknown";
-        output =
-          `9:${JSON.stringify({ toolCallId, toolName })}\n` +
-          `f:${JSON.stringify({
-            type: "tool-input-available",
-            toolCallId,
-            toolName,
-            input: event.input || {},
-            providerExecuted: true,
-          })}\n`;
+        output = `f:${JSON.stringify({
+          type: "tool-input-available",
+          toolCallId,
+          toolName,
+          input: event.input || {},
+          providerExecuted: true,
+        })}\n`;
         break;
       }
 

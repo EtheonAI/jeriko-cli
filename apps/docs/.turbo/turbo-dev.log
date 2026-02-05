@@ -2,4 +2,33 @@
 > docs@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/docs
 > mintlify dev --port 3004
 
- ELIFECYCLE  Command failed.
+(node:11687) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+update available - run `mintlify update` to get the latest version
+
+⠋ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠙ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠹ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠸ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠼ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠴ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠦ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+⠧ preparing local preview...
+[2K[1A[2K[1A[2K[1A[2K[Gupdate available - run `mintlify update` to get the latest version
+
+✓ preview ready
+
