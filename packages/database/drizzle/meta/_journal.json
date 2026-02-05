@@ -8,6 +8,13 @@
       "when": 1770221499850,
       "tag": "0000_typical_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770301838890,
+      "tag": "0001_daily_avengers",
+      "breakpoints": true
     }
   ]
 }

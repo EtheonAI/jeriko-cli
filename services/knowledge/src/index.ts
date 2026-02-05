@@ -1,20 +1,29 @@
 import Fastify from "fastify";
 import { createLogger, getEnv, createId } from "@repo/service-utils";
-import {
-  db,
-  knowledgeGroups,
-  knowledgeItems,
-  knowledgeChunks,
-  eq,
-  and,
-  desc,
-  inArray,
-  count,
-} from "@repo/database";
+import { eq, and, desc, inArray, count, sql } from "drizzle-orm";
+import { extractText, extractFromPdf, extractFromUrl } from "./lib/extract.js";
+import { chunkText } from "./lib/chunk.js";
+import { generateEmbeddings, generateEmbedding, EMBEDDING_MODEL } from "./lib/embed.js";
+
+// Dynamic import to work around ESM + pnpm workspace resolution issues
+let db: any;
+let knowledgeGroups: any;
+let knowledgeItems: any;
+let knowledgeChunks: any;
+
+async function initDb() {
+  const database = await import("@repo/database/service-index");
+  db = database.db;
+  knowledgeGroups = database.knowledgeGroups;
+  knowledgeItems = database.knowledgeItems;
+  knowledgeChunks = database.knowledgeChunks;
+}
 
 const logger = createLogger({ service: "knowledge" });
 
 async function main() {
+  await initDb();
+
   const port = parseInt(getEnv("PORT", "4011"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
@@ -115,7 +124,7 @@ async function main() {
     }
   });
 
-  // Add item to knowledge group
+  // Add item to knowledge group — with full processing pipeline
   app.post("/groups/:groupId/items", async (request, reply) => {
     const { groupId } = request.params as { groupId: string };
     const { type, title, content, sourceUrl, fileId } = request.body as {
@@ -149,7 +158,11 @@ async function main() {
         })
         .returning();
 
-      // TODO: Generate embeddings asynchronously
+      // Process in the background (non-blocking)
+      processItem(item!.id, type, content, sourceUrl).catch((err) => {
+        logger.error(err, "Background processing failed for item %s", item!.id);
+      });
+
       logger.info({ groupId, itemId: item!.id, type }, "Knowledge item added");
 
       return { id: item!.id, groupId, type, title, status: "processing" };
@@ -178,7 +191,23 @@ async function main() {
     }
   });
 
-  // Delete knowledge item
+  // List items for a group
+  app.get("/groups/:groupId/items", async (request, reply) => {
+    const { groupId } = request.params as { groupId: string };
+    try {
+      const items = await db
+        .select()
+        .from(knowledgeItems)
+        .where(eq(knowledgeItems.groupId, groupId))
+        .orderBy(desc(knowledgeItems.createdAt));
+      return { items };
+    } catch (error) {
+      logger.error(error, "Failed to fetch items for group");
+      return reply.status(500).send({ error: "Failed to fetch items" });
+    }
+  });
+
+  // Delete knowledge item (chunks cascade via FK)
   app.delete("/items/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
@@ -189,7 +218,6 @@ async function main() {
       if (!deleted) {
         return reply.status(404).send({ error: "Item not found" });
       }
-      // TODO: Delete from vector store
       return { deleted: true };
     } catch (error) {
       logger.error(error, "Failed to delete knowledge item");
@@ -197,7 +225,7 @@ async function main() {
     }
   });
 
-  // Query knowledge base (semantic search)
+  // Query knowledge base (vector semantic search)
   app.post("/query", async (request, reply) => {
     const { query, groupIds, userId, limit } = request.body as {
       query: string;
@@ -207,23 +235,41 @@ async function main() {
     };
 
     try {
-      // TODO: Generate query embedding and search vector store
-      // For now, do basic text search as fallback
-      const conditions = [
-        eq(knowledgeItems.userId, userId),
-        eq(knowledgeItems.status, "ready" as any),
-      ];
+      // Generate embedding for the query
+      const queryEmbedding = await generateEmbedding(query);
+      const queryVector = `[${queryEmbedding.join(",")}]`;
+      const resultLimit = limit || 5;
+
+      // Build conditions for filtering
+      let groupFilter = sql`true`;
       if (groupIds && groupIds.length > 0) {
-        conditions.push(inArray(knowledgeItems.groupId, groupIds));
+        groupFilter = sql`ki.group_id IN (${sql.join(
+          groupIds.map((id) => sql`${id}`),
+          sql`, `
+        )})`;
       }
 
-      const results = await db
-        .select()
-        .from(knowledgeItems)
-        .where(and(...conditions))
-        .limit(limit || 10);
+      // Vector cosine similarity search via raw SQL
+      const results = await db.execute(sql`
+        SELECT
+          kc.id as chunk_id,
+          kc.content as chunk_content,
+          kc.chunk_index,
+          ki.id as item_id,
+          ki.name as item_name,
+          ki.type as item_type,
+          1 - (kc.embedding <=> ${queryVector}::vector) as similarity
+        FROM knowledge_chunks kc
+        JOIN knowledge_items ki ON kc.item_id = ki.id
+        WHERE ki.user_id = ${userId}
+          AND ki.status = 'ready'
+          AND kc.embedding IS NOT NULL
+          AND ${groupFilter}
+        ORDER BY kc.embedding <=> ${queryVector}::vector
+        LIMIT ${resultLimit}
+      `);
 
-      return { results, query };
+      return { results: results.rows, query };
     } catch (error) {
       logger.error(error, "Failed to query knowledge base");
       return reply.status(500).send({ error: "Failed to query" });
@@ -246,20 +292,84 @@ async function main() {
     }
   });
 
-  // Reprocess knowledge item
+  // Process a knowledge item (called by tRPC after creating an item in DB)
+  app.post("/items/:id/process", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const [item] = await db
+        .select()
+        .from(knowledgeItems)
+        .where(eq(knowledgeItems.id, id))
+        .limit(1);
+
+      if (!item) {
+        return reply.status(404).send({ error: "Item not found" });
+      }
+
+      const typeToProcessType: Record<string, string> = {
+        note: "text",
+        document: "text",
+        file: "file",
+        webpage: "url",
+        bookmark: "url",
+      };
+      const processType = typeToProcessType[item.type] || "text";
+
+      // Process in the background
+      processItem(id, processType, item.content ?? undefined, item.sourceUrl ?? undefined).catch(
+        (err) => {
+          logger.error(err, "Process failed for item %s", id);
+        }
+      );
+
+      return { id, status: "processing" };
+    } catch (error) {
+      logger.error(error, "Failed to start processing item");
+      return reply.status(500).send({ error: "Failed to process item" });
+    }
+  });
+
+  // Reprocess knowledge item — delete old chunks, re-extract, re-chunk, re-embed
   app.post("/items/:id/reprocess", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const [updated] = await db
-        .update(knowledgeItems)
-        .set({ status: "processing" })
+      const [item] = await db
+        .select()
+        .from(knowledgeItems)
         .where(eq(knowledgeItems.id, id))
-        .returning();
-      if (!updated) {
+        .limit(1);
+
+      if (!item) {
         return reply.status(404).send({ error: "Item not found" });
       }
-      // TODO: Queue reprocessing for embeddings
-      return { id: updated.id, status: "reprocessing" };
+
+      // Set status to processing
+      await db
+        .update(knowledgeItems)
+        .set({ status: "processing", processingError: null })
+        .where(eq(knowledgeItems.id, id));
+
+      // Delete existing chunks
+      await db.delete(knowledgeChunks).where(eq(knowledgeChunks.itemId, id));
+
+      // Determine type for processing
+      const typeToProcessType: Record<string, string> = {
+        note: "text",
+        document: "text",
+        file: "file",
+        webpage: "url",
+        bookmark: "url",
+      };
+      const processType = typeToProcessType[item.type] || "text";
+
+      // Re-process in the background
+      processItem(id, processType, item.content ?? undefined, item.sourceUrl ?? undefined).catch(
+        (err) => {
+          logger.error(err, "Reprocess failed for item %s", id);
+        }
+      );
+
+      return { id, status: "processing" };
     } catch (error) {
       logger.error(error, "Failed to reprocess item");
       return reply.status(500).send({ error: "Failed to reprocess item" });
@@ -304,6 +414,101 @@ async function main() {
       await app.close();
       process.exit(0);
     });
+  }
+}
+
+/**
+ * Process a knowledge item: extract text → chunk → embed → store chunks
+ */
+async function processItem(
+  itemId: string,
+  type: string,
+  content?: string,
+  sourceUrl?: string
+): Promise<void> {
+  try {
+    // 1. Extract text
+    let text: string;
+    if (type === "url" && sourceUrl) {
+      text = await extractFromUrl(sourceUrl);
+    } else if (content) {
+      text = await extractText(content, "text/plain");
+    } else {
+      throw new Error("No content or sourceUrl provided");
+    }
+
+    if (!text || text.trim().length === 0) {
+      throw new Error("Extracted text is empty");
+    }
+
+    // Update item content if extracted from URL
+    if (type === "url") {
+      await db
+        .update(knowledgeItems)
+        .set({
+          content: text,
+          contentPreview: text.slice(0, 500),
+        })
+        .where(eq(knowledgeItems.id, itemId));
+    }
+
+    // 2. Chunk the text
+    const chunks = chunkText(text);
+    if (chunks.length === 0) {
+      throw new Error("No chunks produced from text");
+    }
+
+    logger.info({ itemId, chunkCount: chunks.length }, "Text chunked");
+
+    // 3. Generate embeddings for all chunks
+    const chunkTexts = chunks.map((c: { content: string }) => c.content);
+    const embeddings = await generateEmbeddings(chunkTexts);
+
+    logger.info({ itemId, embeddingCount: embeddings.length }, "Embeddings generated");
+
+    // 4. Insert chunks with embeddings
+    const chunkValues = chunks.map(
+      (
+        chunk: { content: string; chunkIndex: number; startOffset: number; endOffset: number },
+        i: number
+      ) => ({
+        id: createId(),
+        itemId,
+        content: chunk.content,
+        chunkIndex: chunk.chunkIndex,
+        startOffset: chunk.startOffset,
+        endOffset: chunk.endOffset,
+        embedding: embeddings[i]!,
+        embeddingModel: EMBEDDING_MODEL,
+      })
+    );
+
+    await db.insert(knowledgeChunks).values(chunkValues);
+
+    // 5. Update item status to ready
+    await db
+      .update(knowledgeItems)
+      .set({
+        status: "ready",
+        embeddingModel: EMBEDDING_MODEL,
+        metadata: {
+          wordCount: text.split(/\s+/).length,
+          chunkCount: chunks.length,
+        },
+      })
+      .where(eq(knowledgeItems.id, itemId));
+
+    logger.info({ itemId }, "Item processing complete");
+  } catch (error) {
+    logger.error(error, "Failed to process item %s", itemId);
+    // Mark item as failed
+    await db
+      .update(knowledgeItems)
+      .set({
+        status: "failed",
+        processingError: error instanceof Error ? error.message : "Unknown error",
+      })
+      .where(eq(knowledgeItems.id, itemId));
   }
 }
 

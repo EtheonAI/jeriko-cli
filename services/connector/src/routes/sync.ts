@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createId } from "@repo/service-utils";
+import { createId, dispatchWebhookEvent } from "@repo/service-utils";
 import { db, userConnectors, connectorSyncLogs, eq, desc } from "../lib/db.js";
 import { logger } from "../lib/helpers.js";
 
@@ -38,6 +38,12 @@ export async function syncRoutes(app: FastifyInstance) {
       // Fire-and-forget async sync (placeholder — real logic is P2)
       performSync(id, syncId).catch((err) => {
         logger.error({ integrationId: id, syncId, error: err }, "Sync failed");
+        dispatchWebhookEvent({
+          eventType: "connector.error",
+          resourceType: "connector",
+          resourceId: id,
+          payload: { integrationId: id, syncId, error: String(err) },
+        });
       });
 
       return { syncId, status: "syncing" };
@@ -128,6 +134,13 @@ async function performSync(integrationId: string, syncId: string) {
       lastSyncStatus: "success",
     })
     .where(eq(userConnectors.id, integrationId));
+
+  dispatchWebhookEvent({
+    eventType: "connector.synced",
+    resourceType: "connector",
+    resourceId: integrationId,
+    payload: { integrationId, syncId, status: "success", itemsSynced: 0 },
+  });
 
   logger.info({ integrationId, syncId }, "Sync completed (placeholder)");
 }

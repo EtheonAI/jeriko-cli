@@ -121,6 +121,9 @@ export {
   type NewProjectGroupItem,
 } from "./projects";
 
+// Vector type (pgvector)
+export { vector } from "./vector";
+
 // Knowledge schemas
 export {
   knowledgeGroups,
@@ -257,3 +260,35 @@ export {
   type WebsiteCrawlJob,
   type NewWebsiteCrawlJob,
 } from "./websites";
+
+// Agent Mailbox schemas
+export {
+  agentMailboxes,
+  agentMailboxesRelations,
+  type AgentMailbox,
+  type NewAgentMailbox,
+} from "./agentMailboxes";
+
+// Website Builder schemas
+export {
+  websiteProjects,
+  websiteProjectsRelations,
+  projectFiles,
+  projectFilesRelations,
+  deployments,
+  deploymentsRelations,
+  builderFrameworks,
+  projectStatuses,
+  deploymentPlatforms,
+  deploymentStatuses,
+  type BuilderFramework,
+  type ProjectStatus,
+  type DeploymentPlatform,
+  type DeploymentStatus,
+  type WebsiteProject,
+  type NewWebsiteProject,
+  type ProjectFile,
+  type NewProjectFile,
+  type Deployment,
+  type NewDeployment,
+} from "./websiteBuilder";

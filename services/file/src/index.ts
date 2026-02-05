@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
+import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
 import { db, files, fileVersions, eq, and, desc, asc, sql } from "@repo/database/service-index";
 import {
   uploadFile,
@@ -84,6 +84,14 @@ async function main() {
         storageKey,
         size: buffer.length,
         changeDescription: "Initial upload",
+      });
+
+      dispatchWebhookEvent({
+        eventType: "file.uploaded",
+        resourceType: "file",
+        resourceId: file!.id,
+        payload: { id: file!.id, name: file!.name, mimeType: file!.mimeType, size: file!.size },
+        userId,
       });
 
       return {

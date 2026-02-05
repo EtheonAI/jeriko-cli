@@ -12,7 +12,8 @@
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
     "fastify": "^5.2.2",
-    "fastify-plugin": "^5.0.1"
+    "fastify-plugin": "^5.0.1",
+    "typesense": "^2.0.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

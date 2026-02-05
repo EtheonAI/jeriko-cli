@@ -1,17 +1,9 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import {
-  db,
-  scheduledTasks,
-  taskExecutions,
-  eq,
-  and,
-  desc,
-  gte,
-  lte,
-} from "@repo/database";
+import { db, scheduledTasks, taskExecutions, eq, and, desc, gte, lte } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
+import { syncTaskToSearch, removeTaskFromSearch } from "@repo/search";
 
 export const scheduledTasksRouter = createTRPCRouter({
   // List scheduled tasks
@@ -21,9 +13,7 @@ export const scheduledTasksRouter = createTRPCRouter({
         status: z
           .enum(["pending", "running", "completed", "failed", "cancelled", "paused"])
           .optional(),
-        taskType: z
-          .enum(["agent_run", "report", "sync", "backup", "custom"])
-          .optional(),
+        taskType: z.enum(["agent_run", "report", "sync", "backup", "custom"]).optional(),
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
       })
@@ -51,26 +41,19 @@ export const scheduledTasksRouter = createTRPCRouter({
     }),
 
   // Get a single task
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [task] = await db
-        .select()
-        .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [task] = await db
+      .select()
+      .from(scheduledTasks)
+      .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
+      .limit(1);
 
-      if (!task) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
-      }
+    if (!task) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+    }
 
-      return task;
-    }),
+    return task;
+  }),
 
   // Create a scheduled task
   create: protectedProcedure
@@ -169,6 +152,10 @@ export const scheduledTasksRouter = createTRPCRouter({
         })
         .returning();
 
+      if (task) {
+        void syncTaskToSearch(task);
+      }
+
       return task;
     }),
 
@@ -204,9 +191,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(eq(scheduledTasks.id, id), eq(scheduledTasks.userId, ctx.user.id))
-        )
+        .where(and(eq(scheduledTasks.id, id), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -219,36 +204,37 @@ export const scheduledTasksRouter = createTRPCRouter({
         .where(eq(scheduledTasks.id, id))
         .returning();
 
+      if (task) {
+        void syncTaskToSearch(task);
+      }
+
       return task;
     }),
 
   // Pause a task
-  pause: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const [existing] = await db
-        .select()
-        .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+  pause: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const [existing] = await db
+      .select()
+      .from(scheduledTasks)
+      .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
+      .limit(1);
 
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
-      }
+    if (!existing) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+    }
 
-      const [task] = await db
-        .update(scheduledTasks)
-        .set({ status: "paused", isEnabled: false })
-        .where(eq(scheduledTasks.id, input.id))
-        .returning();
+    const [task] = await db
+      .update(scheduledTasks)
+      .set({ status: "paused", isEnabled: false })
+      .where(eq(scheduledTasks.id, input.id))
+      .returning();
 
-      return task;
-    }),
+    if (task) {
+      void syncTaskToSearch(task);
+    }
+
+    return task;
+  }),
 
   // Resume a task
   resume: protectedProcedure
@@ -257,12 +243,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -275,6 +256,10 @@ export const scheduledTasksRouter = createTRPCRouter({
         .where(eq(scheduledTasks.id, input.id))
         .returning();
 
+      if (task) {
+        void syncTaskToSearch(task);
+      }
+
       return task;
     }),
 
@@ -285,12 +270,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -303,6 +283,10 @@ export const scheduledTasksRouter = createTRPCRouter({
         .where(eq(scheduledTasks.id, input.id))
         .returning();
 
+      if (task) {
+        void syncTaskToSearch(task);
+      }
+
       return task;
     }),
 
@@ -313,12 +297,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -326,6 +305,8 @@ export const scheduledTasksRouter = createTRPCRouter({
       }
 
       await db.delete(scheduledTasks).where(eq(scheduledTasks.id, input.id));
+
+      void removeTaskFromSearch(input.id);
 
       return { success: true };
     }),
@@ -337,12 +318,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.id),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(scheduledTasks.id, input.id), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -382,12 +358,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       const [task] = await db
         .select()
         .from(scheduledTasks)
-        .where(
-          and(
-            eq(scheduledTasks.id, input.taskId),
-            eq(scheduledTasks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(scheduledTasks.id, input.taskId), eq(scheduledTasks.userId, ctx.user.id)))
         .limit(1);
 
       if (!task) {

@@ -3,6 +3,7 @@ export * from "./types/index.js";
 export * from "./logger/index.js";
 export * from "./redis/index.js";
 export * from "./auth/index.js";
+export * from "./webhooks/index.js";
 
 // Re-export commonly used utilities
 export { createId } from "@paralleldrive/cuid2";
@@ -63,10 +64,7 @@ export function successResponse<T>(data: T, requestId: string): ApiResponse<T> {
   };
 }
 
-export function errorResponse(
-  error: ApiError,
-  requestId: string
-): ApiResponse<null> {
+export function errorResponse(error: ApiError, requestId: string): ApiResponse<null> {
   return {
     data: null,
     meta: {

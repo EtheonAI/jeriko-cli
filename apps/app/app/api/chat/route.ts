@@ -7,6 +7,7 @@ import { auth } from "@repo/auth";
 import { headers } from "next/headers";
 import { db, messages as messagesTable, agentSessions, eq } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
+import { queryKnowledge } from "./knowledge";
 
 export const maxDuration = 60;
 
@@ -32,11 +33,13 @@ export const POST = async (req: Request) => {
       chatId,
       metadata,
       model: bodyModel,
+      knowledgeGroupIds,
     } = body as {
       messages: UIMessage[];
       chatId?: string;
       metadata?: { sessionId?: string; model?: string };
       model?: string;
+      knowledgeGroupIds?: string[];
     };
 
     const sessionId = chatId ?? metadata?.sessionId;
@@ -111,6 +114,28 @@ export const POST = async (req: Request) => {
       sanitized as Parameters<typeof aiConvertToModelMessages>[0]
     );
 
+    // RAG: Query knowledge base for relevant context
+    let systemPrompt = "You are Rubic, a helpful AI assistant. Be concise, helpful, and friendly.";
+    const ragUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    const lastUserText =
+      ragUserMsg?.parts
+        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("") ?? "";
+
+    if (lastUserText) {
+      const ragContext = await queryKnowledge(userId, lastUserText, knowledgeGroupIds);
+      if (ragContext) {
+        systemPrompt = `You are Rubic, a helpful AI assistant. Be concise, helpful, and friendly.
+
+The user has provided the following knowledge base context. Use it to inform your response when relevant:
+
+${ragContext}
+
+If the knowledge context is not relevant to the user's question, ignore it.`;
+      }
+    }
+
     log.info("Generating response...", {
       messageCount: modelMessages.length,
       model: model ?? "gpt-4o-mini",
@@ -118,7 +143,7 @@ export const POST = async (req: Request) => {
 
     const result = streamText({
       model: resolveModel(model),
-      system: "You are Rubic, a helpful AI assistant. Be concise, helpful, and friendly.",
+      system: systemPrompt,
       messages: modelMessages,
       onFinish: async ({ text, usage }) => {
         // Persist assistant message

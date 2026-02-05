@@ -8,6 +8,7 @@ import {
   ErrorCodes,
   createLogger,
   publish,
+  dispatchWebhookEvent,
   TaskStatusSchema,
   TaskPrioritySchema,
 } from "@repo/service-utils";
@@ -116,6 +117,14 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
       await publish(`user:${userId}`, {
         type: "task:created",
         data: responseTask,
+      });
+
+      dispatchWebhookEvent({
+        eventType: "agent.task.created",
+        resourceType: "task",
+        resourceId: task!.id,
+        payload: responseTask,
+        userId,
       });
 
       logger.info({ taskId: task!.id, userId }, "Task created");
@@ -252,6 +261,16 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
           .send(
             errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id)
           );
+      }
+
+      if (input.status === "completed" || input.status === "failed") {
+        dispatchWebhookEvent({
+          eventType: input.status === "completed" ? "agent.task.completed" : "agent.task.failed",
+          resourceType: "task",
+          resourceId: id,
+          payload: { id: updated.id, status: updated.status, title: updated.title },
+          userId,
+        });
       }
 
       return reply.send(successResponse(updated, request.id));

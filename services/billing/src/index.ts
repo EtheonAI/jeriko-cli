@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
+import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
 import {
   db,
   subscriptionPlans,
@@ -93,6 +93,14 @@ async function main() {
           currentPeriodEnd: periodEnd,
         })
         .returning();
+
+      dispatchWebhookEvent({
+        eventType: "billing.subscription.created",
+        resourceType: "subscription",
+        resourceId: subscription!.id,
+        payload: { id: subscription!.id, planId, status: "active" },
+        userId,
+      });
 
       return { id: subscription!.id, userId, planId, status: "active" };
     } catch (error) {

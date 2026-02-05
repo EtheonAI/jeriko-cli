@@ -12,12 +12,34 @@ import {
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Switch } from "@repo/design-system/components/ui/switch";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
+import { Input } from "@repo/design-system/components/ui/input";
+import { Button } from "@repo/design-system/components/ui/button";
 import { useTheme } from "next-themes";
-import { MonitorIcon, MoonIcon, SunIcon, Loader2Icon } from "lucide-react";
+import {
+  MonitorIcon,
+  MoonIcon,
+  SunIcon,
+  Loader2Icon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+} from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
+
+const notificationTypes = [
+  { value: "system", label: "System" },
+  { value: "session", label: "Session" },
+  { value: "agent", label: "Agent" },
+  { value: "team", label: "Team" },
+  { value: "billing", label: "Billing" },
+  { value: "connector", label: "Connector" },
+  { value: "task", label: "Task" },
+  { value: "mention", label: "Mention" },
+  { value: "share", label: "Share" },
+  { value: "comment", label: "Comment" },
+] as const;
 
 const languages = [
   { value: "en", label: "English" },
@@ -40,13 +62,16 @@ export function SettingsTab() {
   const [language, setLanguage] = useState("en");
 
   // Fetch notification preferences
-  const { data: preferences, isLoading, isError, error, refetch } = trpc.notifications.getPreferences.useQuery(
-    undefined,
-    {
-      retry: 1,
-      retryDelay: 1000,
-    }
-  );
+  const {
+    data: preferences,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = trpc.notifications.getPreferences.useQuery(undefined, {
+    retry: 1,
+    retryDelay: 1000,
+  });
 
   // Update preferences mutation
   const utils = trpc.useUtils();
@@ -65,6 +90,20 @@ export function SettingsTab() {
   const [inAppEnabled, setInAppEnabled] = useState(true);
   const [inAppSound, setInAppSound] = useState(true);
 
+  // Quiet hours state
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState("22:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useState("07:00");
+  const [quietHoursTimezone, setQuietHoursTimezone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  );
+
+  // Per-type settings state
+  const [showTypeSettings, setShowTypeSettings] = useState(false);
+  const [typeSettings, setTypeSettings] = useState<
+    Record<string, { email?: boolean; push?: boolean; inApp?: boolean }>
+  >({});
+
   // Sync local state with server data
   useEffect(() => {
     if (preferences) {
@@ -72,11 +111,18 @@ export function SettingsTab() {
       setPushEnabled(preferences.pushEnabled ?? true);
       setInAppEnabled(preferences.inAppEnabled ?? true);
       setInAppSound(preferences.inAppSound ?? true);
+      setQuietHoursEnabled((preferences as any).quietHoursEnabled ?? false);
+      setQuietHoursStart((preferences as any).quietHoursStart ?? "22:00");
+      setQuietHoursEnd((preferences as any).quietHoursEnd ?? "07:00");
+      setQuietHoursTimezone(
+        (preferences as any).quietHoursTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+      );
+      setTypeSettings((preferences as any).typeSettings ?? {});
     }
   }, [preferences]);
 
   const handleToggle = (
-    field: "emailEnabled" | "pushEnabled" | "inAppEnabled" | "inAppSound",
+    field: "emailEnabled" | "pushEnabled" | "inAppEnabled" | "inAppSound" | "quietHoursEnabled",
     value: boolean,
     setState: (value: boolean) => void
   ) => {
@@ -93,6 +139,36 @@ export function SettingsTab() {
         },
       }
     );
+  };
+
+  const handleQuietHoursTimeChange = (
+    field: "quietHoursStart" | "quietHoursEnd",
+    value: string,
+    setState: (value: string) => void
+  ) => {
+    setState(value);
+    updatePreferences.mutate({ [field]: value });
+  };
+
+  const handleTimezoneChange = (value: string) => {
+    setQuietHoursTimezone(value);
+    updatePreferences.mutate({ quietHoursTimezone: value });
+  };
+
+  const handleTypeSettingToggle = (
+    type: string,
+    channel: "email" | "push" | "inApp",
+    value: boolean
+  ) => {
+    const updated = {
+      ...typeSettings,
+      [type]: {
+        ...typeSettings[type],
+        [channel]: value,
+      },
+    };
+    setTypeSettings(updated);
+    updatePreferences.mutate({ typeSettings: updated });
   };
 
   const handleLanguageChange = (value: string) => {
@@ -142,7 +218,9 @@ export function SettingsTab() {
         <Separator />
         <ErrorState
           title="Failed to load preferences"
-          message={error?.message || "Unable to load your notification preferences. Please try again."}
+          message={
+            error?.message || "Unable to load your notification preferences. Please try again."
+          }
           onRetry={() => refetch()}
         />
       </div>
@@ -153,9 +231,7 @@ export function SettingsTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Settings</h2>
-        <p className="text-sm text-muted-foreground">
-          Customize your experience and preferences.
-        </p>
+        <p className="text-sm text-muted-foreground">Customize your experience and preferences.</p>
       </div>
 
       <Separator />
@@ -184,9 +260,7 @@ export function SettingsTab() {
 
       <div className="space-y-4">
         <h3 className="text-sm font-medium">Appearance</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose how Rubic looks to you.
-        </p>
+        <p className="text-sm text-muted-foreground">Choose how Rubic looks to you.</p>
 
         <div className="flex gap-3">
           {themes.map((t) => {
@@ -200,9 +274,7 @@ export function SettingsTab() {
                 onClick={() => setTheme(t.value)}
                 className={cn(
                   "flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors",
-                  isActive
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
+                  isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
                 )}
               >
                 <div
@@ -253,9 +325,7 @@ export function SettingsTab() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="push-notifications">Push notifications</Label>
-              <p className="text-xs text-muted-foreground">
-                Get notified in your browser
-              </p>
+              <p className="text-xs text-muted-foreground">Get notified in your browser</p>
             </div>
             <div className="flex items-center gap-2">
               {updatePreferences.isPending && (
@@ -264,9 +334,7 @@ export function SettingsTab() {
               <Switch
                 id="push-notifications"
                 checked={pushEnabled}
-                onCheckedChange={(checked) =>
-                  handleToggle("pushEnabled", checked, setPushEnabled)
-                }
+                onCheckedChange={(checked) => handleToggle("pushEnabled", checked, setPushEnabled)}
               />
             </div>
           </div>
@@ -274,9 +342,7 @@ export function SettingsTab() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="in-app-notifications">In-app notifications</Label>
-              <p className="text-xs text-muted-foreground">
-                Show notifications within the app
-              </p>
+              <p className="text-xs text-muted-foreground">Show notifications within the app</p>
             </div>
             <div className="flex items-center gap-2">
               {updatePreferences.isPending && (
@@ -295,9 +361,7 @@ export function SettingsTab() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="notification-sound">Notification sound</Label>
-              <p className="text-xs text-muted-foreground">
-                Play a sound for new notifications
-              </p>
+              <p className="text-xs text-muted-foreground">Play a sound for new notifications</p>
             </div>
             <div className="flex items-center gap-2">
               {updatePreferences.isPending && (
@@ -306,9 +370,7 @@ export function SettingsTab() {
               <Switch
                 id="notification-sound"
                 checked={inAppSound}
-                onCheckedChange={(checked) =>
-                  handleToggle("inAppSound", checked, setInAppSound)
-                }
+                onCheckedChange={(checked) => handleToggle("inAppSound", checked, setInAppSound)}
               />
             </div>
           </div>
@@ -342,6 +404,159 @@ export function SettingsTab() {
             <SelectItem value="never">Never</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">Quiet Hours</h3>
+        <p className="text-sm text-muted-foreground">
+          Pause non-urgent push and in-app notifications during specific hours.
+        </p>
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="quiet-hours">Enable quiet hours</Label>
+            <p className="text-xs text-muted-foreground">
+              Non-urgent notifications will be silenced during this period
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {updatePreferences.isPending && (
+              <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+            <Switch
+              id="quiet-hours"
+              checked={quietHoursEnabled}
+              onCheckedChange={(checked) =>
+                handleToggle("quietHoursEnabled", checked, setQuietHoursEnabled)
+              }
+            />
+          </div>
+        </div>
+
+        {quietHoursEnabled && (
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="quiet-start" className="text-xs">
+                  Start
+                </Label>
+                <Input
+                  id="quiet-start"
+                  type="time"
+                  value={quietHoursStart}
+                  onChange={(e) =>
+                    handleQuietHoursTimeChange(
+                      "quietHoursStart",
+                      e.target.value,
+                      setQuietHoursStart
+                    )
+                  }
+                  className="w-[130px]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="quiet-end" className="text-xs">
+                  End
+                </Label>
+                <Input
+                  id="quiet-end"
+                  type="time"
+                  value={quietHoursEnd}
+                  onChange={(e) =>
+                    handleQuietHoursTimeChange("quietHoursEnd", e.target.value, setQuietHoursEnd)
+                  }
+                  className="w-[130px]"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="quiet-timezone" className="text-xs">
+                Timezone
+              </Label>
+              <Select value={quietHoursTimezone} onValueChange={handleTimezoneChange}>
+                <SelectTrigger className="w-[280px]">
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[200px]">
+                  {Intl.supportedValuesOf("timeZone").map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz.replace(/_/g, " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium">Per-Type Settings</h3>
+            <p className="text-sm text-muted-foreground">
+              Customize which channels are used for each notification type.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setShowTypeSettings(!showTypeSettings)}>
+            {showTypeSettings ? (
+              <>
+                Hide <ChevronUpIcon className="ml-1 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Customize <ChevronDownIcon className="ml-1 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        </div>
+
+        {showTypeSettings && (
+          <div className="rounded-lg border">
+            <div className="grid grid-cols-4 gap-4 border-b px-4 py-2 text-xs font-medium text-muted-foreground">
+              <div>Type</div>
+              <div className="text-center">Email</div>
+              <div className="text-center">Push</div>
+              <div className="text-center">In-App</div>
+            </div>
+            {notificationTypes.map((nt) => (
+              <div
+                key={nt.value}
+                className="grid grid-cols-4 items-center gap-4 border-b px-4 py-2 last:border-b-0"
+              >
+                <Label className="text-sm">{nt.label}</Label>
+                <div className="flex justify-center">
+                  <Switch
+                    checked={typeSettings[nt.value]?.email !== false}
+                    onCheckedChange={(checked) =>
+                      handleTypeSettingToggle(nt.value, "email", checked)
+                    }
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <Switch
+                    checked={typeSettings[nt.value]?.push !== false}
+                    onCheckedChange={(checked) =>
+                      handleTypeSettingToggle(nt.value, "push", checked)
+                    }
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <Switch
+                    checked={typeSettings[nt.value]?.inApp !== false}
+                    onCheckedChange={(checked) =>
+                      handleTypeSettingToggle(nt.value, "inApp", checked)
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

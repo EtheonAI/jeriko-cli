@@ -16,6 +16,9 @@ import {
 } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
+import { log } from "@repo/observability/log";
+
+const KNOWLEDGE_SERVICE_URL = process.env.KNOWLEDGE_SERVICE_URL || "http://localhost:4011";
 
 export const knowledgeRouter = createTRPCRouter({
   // List knowledge groups
@@ -93,12 +96,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(knowledgeGroups)
-        .where(
-          and(
-            eq(knowledgeGroups.id, id),
-            eq(knowledgeGroups.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(knowledgeGroups.id, id), eq(knowledgeGroups.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -121,12 +119,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(knowledgeGroups)
-        .where(
-          and(
-            eq(knowledgeGroups.id, input.id),
-            eq(knowledgeGroups.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(knowledgeGroups.id, input.id), eq(knowledgeGroups.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -187,32 +180,25 @@ export const knowledgeRouter = createTRPCRouter({
     }),
 
   // Get a knowledge item
-  getItem: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [item] = await db
-        .select()
-        .from(knowledgeItems)
-        .where(
-          and(
-            eq(knowledgeItems.id, input.id),
-            eq(knowledgeItems.userId, ctx.user.id)
-          )
-        )
-        .limit(1);
+  getItem: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [item] = await db
+      .select()
+      .from(knowledgeItems)
+      .where(and(eq(knowledgeItems.id, input.id), eq(knowledgeItems.userId, ctx.user.id)))
+      .limit(1);
 
-      if (!item) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
-      }
+    if (!item) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Item not found" });
+    }
 
-      // Update last accessed
-      await db
-        .update(knowledgeItems)
-        .set({ lastAccessedAt: new Date() })
-        .where(eq(knowledgeItems.id, input.id));
+    // Update last accessed
+    await db
+      .update(knowledgeItems)
+      .set({ lastAccessedAt: new Date() })
+      .where(eq(knowledgeItems.id, input.id));
 
-      return item;
-    }),
+    return item;
+  }),
 
   // Create knowledge item
   createItem: protectedProcedure
@@ -253,9 +239,17 @@ export const knowledgeRouter = createTRPCRouter({
           fileSize: input.fileSize,
           storageKey: input.storageKey,
           tags: input.tags,
-          status: input.content ? "ready" : "processing",
+          status: "processing",
         })
         .returning();
+
+      // Trigger knowledge service to process (embed) the item
+      fetch(`${KNOWLEDGE_SERVICE_URL}/items/${id}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }).catch((err) => {
+        log.error("Failed to trigger knowledge processing:", err as Error);
+      });
 
       return item;
     }),
@@ -279,9 +273,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(knowledgeItems)
-        .where(
-          and(eq(knowledgeItems.id, id), eq(knowledgeItems.userId, ctx.user.id))
-        )
+        .where(and(eq(knowledgeItems.id, id), eq(knowledgeItems.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -309,12 +301,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(knowledgeItems)
-        .where(
-          and(
-            eq(knowledgeItems.id, input.id),
-            eq(knowledgeItems.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(knowledgeItems.id, input.id), eq(knowledgeItems.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -334,12 +321,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [item] = await db
         .select()
         .from(knowledgeItems)
-        .where(
-          and(
-            eq(knowledgeItems.id, input.itemId),
-            eq(knowledgeItems.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(knowledgeItems.id, input.itemId), eq(knowledgeItems.userId, ctx.user.id)))
         .limit(1);
 
       if (!item) {
@@ -413,12 +395,7 @@ export const knowledgeRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(sessionAttachments)
-        .where(
-          and(
-            eq(sessionAttachments.id, input.id),
-            eq(sessionAttachments.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(sessionAttachments.id, input.id), eq(sessionAttachments.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -428,9 +405,7 @@ export const knowledgeRouter = createTRPCRouter({
         });
       }
 
-      await db
-        .delete(sessionAttachments)
-        .where(eq(sessionAttachments.id, input.id));
+      await db.delete(sessionAttachments).where(eq(sessionAttachments.id, input.id));
 
       return { success: true };
     }),
@@ -440,9 +415,7 @@ export const knowledgeRouter = createTRPCRouter({
     .input(
       z.object({
         query: z.string().min(1),
-        types: z
-          .array(z.enum(["document", "webpage", "file", "note", "bookmark"]))
-          .optional(),
+        types: z.array(z.enum(["document", "webpage", "file", "note", "bookmark"])).optional(),
         limit: z.number().min(1).max(50).default(20),
       })
     )
@@ -459,7 +432,10 @@ export const knowledgeRouter = createTRPCRouter({
 
       if (input.types && input.types.length > 0) {
         conditions.push(
-          sql`${knowledgeItems.type} IN (${sql.join(input.types.map((t) => sql`${t}`), sql`, `)})`
+          sql`${knowledgeItems.type} IN (${sql.join(
+            input.types.map((t) => sql`${t}`),
+            sql`, `
+          )})`
         );
       }
 

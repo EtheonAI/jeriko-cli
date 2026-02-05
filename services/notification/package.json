@@ -9,6 +9,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@knocklabs/node": "^1.20.0",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
     "fastify": "^5.2.2",

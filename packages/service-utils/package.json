@@ -67,6 +67,10 @@
     "./cors": {
       "types": "./dist/cors/index.d.ts",
       "import": "./dist/cors/index.js"
+    },
+    "./webhooks": {
+      "types": "./dist/webhooks/index.d.ts",
+      "import": "./dist/webhooks/index.js"
     }
   },
   "scripts": {

@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
+import { createLogger, getEnv, createId, publish } from "@repo/service-utils";
 import {
   db,
   notifications,
@@ -10,8 +10,20 @@ import {
   desc,
   sql,
 } from "@repo/database";
+import { Knock } from "@knocklabs/node";
+import { getActiveChannels, applyQuietHours, type ChannelPreferences } from "./lib/channels.js";
+import { configurePush, sendWebPush } from "./lib/push.js";
 
 const logger = createLogger({ service: "notification" });
+
+// Initialize Knock conditionally
+const knock = process.env.KNOCK_SECRET_API_KEY
+  ? new Knock({ apiKey: process.env.KNOCK_SECRET_API_KEY })
+  : null;
+
+if (!knock) {
+  logger.warn("KNOCK_SECRET_API_KEY not set - email delivery via Knock disabled");
+}
 
 async function main() {
   const port = parseInt(getEnv("PORT", "4006"), 10);
@@ -30,30 +42,132 @@ async function main() {
 
   // Send notification
   app.post("/send", async (request, reply) => {
-    const { userId, type, title, message, data } = request.body as {
+    const {
+      userId,
+      type,
+      title,
+      message,
+      data,
+      priority = "normal",
+      actionUrl,
+      actionLabel,
+      entityType,
+      entityId,
+    } = request.body as {
       userId: string;
       type: string;
       title: string;
       message: string;
       data?: Record<string, unknown>;
+      priority?: string;
+      actionUrl?: string;
+      actionLabel?: string;
+      entityType?: string;
+      entityId?: string;
     };
 
     try {
+      // 1. Fetch user preferences
+      const [prefs] = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, userId))
+        .limit(1);
+
+      const channelPrefs: ChannelPreferences = prefs || null;
+
+      // 2. Determine active channels and apply quiet hours
+      let channels = getActiveChannels(channelPrefs, type);
+      channels = applyQuietHours(channels, channelPrefs, priority);
+
+      // 3. Save to DB
       const [notification] = await db
         .insert(notifications)
         .values({
           id: createId(),
           userId,
           type: type as any,
+          priority: priority as any,
           title,
           message,
+          actionUrl,
+          actionLabel,
+          entityType,
+          entityId,
           metadata: data,
         })
         .returning();
 
-      logger.info({ userId, type, notificationId: notification!.id }, "Notification sent");
+      const notificationId = notification!.id;
+      const deliveredChannels: string[] = [];
 
-      return { id: notification!.id, status: "sent" };
+      // 4. In-app: Publish WebSocket event via Redis
+      if (channels.inApp) {
+        try {
+          await publish(`user:${userId}`, {
+            type: "notification:new",
+            data: {
+              id: notificationId,
+              type,
+              priority,
+              title,
+              message,
+              actionUrl,
+              actionLabel,
+              metadata: data,
+              createdAt: notification!.createdAt?.toISOString() || new Date().toISOString(),
+            },
+          });
+          deliveredChannels.push("inApp");
+        } catch (err) {
+          logger.error(err, "Failed to publish WebSocket notification");
+        }
+      }
+
+      // 5. Push: Send web push notifications
+      if (channels.push) {
+        try {
+          const pushResult = await sendWebPush(userId, {
+            title,
+            body: message,
+            data: {
+              url: actionUrl,
+              notificationId,
+              type,
+            },
+          });
+          if (pushResult.sent > 0) {
+            deliveredChannels.push("push");
+          }
+          logger.info({ userId, pushResult }, "Web push delivery result");
+        } catch (err) {
+          logger.error(err, "Failed to send web push");
+        }
+      }
+
+      // 6. Email: Trigger Knock workflow
+      if (channels.email && knock) {
+        const emailDigest = prefs?.emailDigest || "daily";
+        try {
+          if (emailDigest === "instant") {
+            await knock.workflows.trigger("notification", {
+              recipients: [userId],
+              data: { title, message, actionUrl, type, priority },
+            });
+            deliveredChannels.push("email");
+          }
+          // For other digest frequencies, Knock handles batching via workflow config
+        } catch (err) {
+          logger.error(err, "Failed to trigger Knock workflow");
+        }
+      }
+
+      logger.info(
+        { userId, type, notificationId, channels: deliveredChannels },
+        "Notification sent"
+      );
+
+      return { id: notificationId, status: "sent", channels: deliveredChannels };
     } catch (error) {
       logger.error(error, "Failed to send notification");
       return reply.status(500).send({ error: "Failed to send notification" });
@@ -104,6 +218,17 @@ async function main() {
       if (!updated) {
         return reply.status(404).send({ error: "Notification not found" });
       }
+
+      // Publish read event via WebSocket
+      try {
+        await publish(`user:${updated.userId}`, {
+          type: "notification:read",
+          data: { id: updated.id },
+        });
+      } catch (err) {
+        logger.error(err, "Failed to publish notification:read event");
+      }
+
       return { id: updated.id, read: true };
     } catch (error) {
       logger.error(error, "Failed to mark notification as read");
@@ -214,6 +339,9 @@ async function main() {
       "Request completed"
     );
   });
+
+  // Configure web push (VAPID keys)
+  configurePush();
 
   try {
     await app.listen({ port, host });

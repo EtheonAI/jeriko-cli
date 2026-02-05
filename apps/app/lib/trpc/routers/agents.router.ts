@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { db, agents, agentTasks, agentSessions, eq, asc, desc } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
+import { syncActionToSearch } from "@repo/search";
 
 export const agentsRouter = createTRPCRouter({
   // List agents for a session
@@ -29,32 +30,26 @@ export const agentsRouter = createTRPCRouter({
     }),
 
   // Get an agent by ID
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, input.id))
-        .limit(1);
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [agent] = await db.select().from(agents).where(eq(agents.id, input.id)).limit(1);
 
-      if (!agent) {
-        return null;
-      }
+    if (!agent) {
+      return null;
+    }
 
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, agent.sessionId))
-        .limit(1);
+    // Verify session ownership
+    const [session] = await db
+      .select()
+      .from(agentSessions)
+      .where(eq(agentSessions.id, agent.sessionId))
+      .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        return null;
-      }
+    if (!session || session.userId !== ctx.user.id) {
+      return null;
+    }
 
-      return agent;
-    }),
+    return agent;
+  }),
 
   // Create an agent (internal use)
   create: protectedProcedure
@@ -108,14 +103,7 @@ export const agentsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        status: z.enum([
-          "idle",
-          "thinking",
-          "executing",
-          "waiting",
-          "completed",
-          "failed",
-        ]),
+        status: z.enum(["idle", "thinking", "executing", "waiting", "completed", "failed"]),
         currentTask: z.string().optional(),
         progress: z.number().min(0).max(100).optional(),
       })
@@ -123,11 +111,7 @@ export const agentsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
 
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, id))
-        .limit(1);
+      const [agent] = await db.select().from(agents).where(eq(agents.id, id)).limit(1);
 
       if (!agent) {
         throw new Error("Agent not found");
@@ -160,11 +144,7 @@ export const agentsRouter = createTRPCRouter({
   tasks: protectedProcedure
     .input(z.object({ agentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, input.agentId))
-        .limit(1);
+      const [agent] = await db.select().from(agents).where(eq(agents.id, input.agentId)).limit(1);
 
       if (!agent) {
         throw new Error("Agent not found");
@@ -202,11 +182,7 @@ export const agentsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, input.agentId))
-        .limit(1);
+      const [agent] = await db.select().from(agents).where(eq(agents.id, input.agentId)).limit(1);
 
       if (!agent) {
         throw new Error("Agent not found");
@@ -237,6 +213,10 @@ export const agentsRouter = createTRPCRouter({
         })
         .returning();
 
+      if (task) {
+        void syncActionToSearch(task, agent, ctx.user.id);
+      }
+
       return task;
     }),
 
@@ -245,31 +225,21 @@ export const agentsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        status: z
-          .enum(["pending", "in_progress", "completed", "failed", "cancelled"])
-          .optional(),
+        status: z.enum(["pending", "in_progress", "completed", "failed", "cancelled"]).optional(),
         result: z.record(z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
 
-      const [task] = await db
-        .select()
-        .from(agentTasks)
-        .where(eq(agentTasks.id, id))
-        .limit(1);
+      const [task] = await db.select().from(agentTasks).where(eq(agentTasks.id, id)).limit(1);
 
       if (!task) {
         throw new Error("Task not found");
       }
 
       // Verify ownership through agent -> session chain
-      const [agent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, task.agentId))
-        .limit(1);
+      const [agent] = await db.select().from(agents).where(eq(agents.id, task.agentId)).limit(1);
 
       if (!agent) {
         throw new Error("Agent not found");
@@ -291,10 +261,7 @@ export const agentsRouter = createTRPCRouter({
         updateData.startedAt = new Date();
       }
 
-      if (
-        updates.status &&
-        ["completed", "failed", "cancelled"].includes(updates.status)
-      ) {
+      if (updates.status && ["completed", "failed", "cancelled"].includes(updates.status)) {
         updateData.completedAt = new Date();
       }
 
@@ -303,6 +270,10 @@ export const agentsRouter = createTRPCRouter({
         .set(updateData)
         .where(eq(agentTasks.id, id))
         .returning();
+
+      if (updatedTask) {
+        void syncActionToSearch(updatedTask, agent, ctx.user.id);
+      }
 
       return updatedTask;
     }),

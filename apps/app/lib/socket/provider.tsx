@@ -16,6 +16,12 @@ import { addAgent, updateAgent, addTask, updateTask } from "../store/slices/agen
 import { addSession, updateSession } from "../store/slices/sessions.slice";
 import { addFile, removeFile } from "../store/slices/files.slice";
 import { updateDeviceStatus } from "../store/slices/devices.slice";
+import {
+  addNotification,
+  markAsRead,
+  deleteNotification,
+  setHasNewNotifications,
+} from "../store/slices/notifications.slice";
 
 interface SocketContextValue {
   socket: TypedSocket | null;
@@ -235,6 +241,38 @@ export function SocketProvider({ children }: SocketProviderProps) {
       dispatch(removeFile(fileId));
     });
 
+    // Notification events
+    socket.on("notification:new", (data) => {
+      dispatch(
+        addNotification({
+          id: data.id,
+          userId: "",
+          type: data.type as any,
+          priority: data.priority as any,
+          title: data.title,
+          message: data.message,
+          isRead: false,
+          isArchived: false,
+          metadata: data.metadata,
+          createdAt: data.createdAt,
+        })
+      );
+      dispatch(setHasNewNotifications(true));
+    });
+
+    socket.on("notification:read", ({ id }) => {
+      dispatch(markAsRead(id));
+    });
+
+    socket.on("notification:dismissed", ({ id }) => {
+      dispatch(deleteNotification(id));
+    });
+
+    socket.on("notification:count", ({ unreadCount }) => {
+      // Update unread count directly - used for syncing count from server
+      dispatch(setHasNewNotifications(unreadCount > 0));
+    });
+
     // Cleanup
     return () => {
       socket.off("connect");
@@ -254,6 +292,10 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socket.off("device:status");
       socket.off("file:new");
       socket.off("file:deleted");
+      socket.off("notification:new");
+      socket.off("notification:read");
+      socket.off("notification:dismissed");
+      socket.off("notification:count");
     };
   }, [socket, dispatch]);
 

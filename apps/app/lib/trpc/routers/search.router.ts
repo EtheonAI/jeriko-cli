@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
+import { db, projects, agentSessions, files, scheduledTasks, eq } from "@repo/database";
 import {
   search,
   quickSearch,
   initializeCollections,
   getAllCollectionStats,
   checkTypesenseHealth,
+  syncAllFilesToSearch,
+  syncAllSessionsToSearch,
+  syncAllTasksToSearch,
+  syncAllProjectsToSearch,
   COLLECTION_NAMES,
   type SearchOptions,
   type CollectionName,
@@ -150,4 +155,48 @@ export const searchRouter = createTRPCRouter({
       // For now, return empty array (client manages recent searches in localStorage)
       return [];
     }),
+
+  // Reindex all data from DB into Typesense
+  reindex: protectedProcedure.mutation(async ({ ctx }) => {
+    const userId = ctx.user.id;
+    const results: Record<string, { success: number; failed: number }> = {};
+
+    try {
+      // Fetch and sync projects
+      const allProjects = await db.select().from(projects).where(eq(projects.userId, userId));
+      results.projects = await syncAllProjectsToSearch(allProjects);
+
+      // Fetch and sync sessions
+      const allSessions = await db
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.userId, userId));
+      results.sessions = await syncAllSessionsToSearch(allSessions);
+
+      // Fetch and sync files
+      const allFiles = await db.select().from(files).where(eq(files.userId, userId));
+      results.files = await syncAllFilesToSearch(allFiles);
+
+      // Fetch and sync scheduled tasks
+      const allTasks = await db
+        .select()
+        .from(scheduledTasks)
+        .where(eq(scheduledTasks.userId, userId));
+      results.tasks = await syncAllTasksToSearch(allTasks);
+
+      return {
+        success: true,
+        results,
+        totalIndexed: Object.values(results).reduce((sum, r) => sum + r.success, 0),
+        totalFailed: Object.values(results).reduce((sum, r) => sum + r.failed, 0),
+      };
+    } catch (error) {
+      console.error("Reindex failed:", error);
+      return {
+        success: false,
+        results,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }),
 });

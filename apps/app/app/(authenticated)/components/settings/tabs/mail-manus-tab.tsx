@@ -36,6 +36,7 @@ import {
   AlertCircleIcon,
   LinkIcon,
   SparklesIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
@@ -53,6 +54,14 @@ type EmailSettingsForm = z.infer<typeof emailSettingsSchema>;
 
 export function MailManusTab() {
   const [copied, setCopied] = useState(false);
+
+  // Provision or fetch AgentMail inbox
+  const {
+    data: mailbox,
+    isLoading: mailboxLoading,
+    isError: mailboxError,
+    refetch: refetchMailbox,
+  } = trpc.mail.getOrCreateMailbox.useQuery(undefined, { retry: 1 });
 
   // Fetch profile for dynamic email and notification preferences
   const { data: profile } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
@@ -104,13 +113,12 @@ export function MailManusTab() {
       : undefined,
   });
 
-  // Dynamic agent email derived from user ID
-  const agentEmail = profile?.id
-    ? `agent-${profile.id.slice(0, 8)}@mail.rubic.dev`
-    : "agent-...@mail.rubic.dev";
+  // Agent email from provisioned mailbox
+  const agentEmail = mailbox?.email ?? "Provisioning...";
 
   const copyEmail = async () => {
-    await navigator.clipboard.writeText(agentEmail);
+    if (!mailbox?.email) return;
+    await navigator.clipboard.writeText(mailbox.email);
     setCopied(true);
     toast.success("Email copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
@@ -126,7 +134,7 @@ export function MailManusTab() {
     });
   };
 
-  const isLoading = prefsLoading || notifLoading;
+  const isLoading = prefsLoading || notifLoading || mailboxLoading;
 
   if (isLoading) {
     return (
@@ -180,27 +188,52 @@ export function MailManusTab() {
           <CardTitle className="text-base flex items-center gap-2">
             <InboxIcon className="h-4 w-4" />
             Agent Email Address
+            {mailbox && (
+              <Badge variant="default" className="ml-auto text-xs bg-green-600">
+                Active
+              </Badge>
+            )}
+            {mailboxError && (
+              <Badge variant="destructive" className="ml-auto text-xs">
+                Error
+              </Badge>
+            )}
           </CardTitle>
           <CardDescription>
-            Forward emails to this address to have Rubic process them automatically.
+            This is your personal Rubic agent email. Emails sent here are processed automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 rounded-lg border bg-muted/50 px-4 py-3 font-mono text-sm">
-              {agentEmail}
+          {mailboxError ? (
+            <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircleIcon className="h-4 w-4 text-destructive" />
+                <span className="text-sm text-destructive">Failed to provision email inbox</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refetchMailbox()}>
+                <RefreshCwIcon className="h-4 w-4 mr-1" />
+                Retry
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={copyEmail}>
-              {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
-            </Button>
-          </div>
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-            <AlertCircleIcon className="h-4 w-4 mt-0.5 text-amber-600" />
-            <div className="text-xs text-amber-800 dark:text-amber-200">
-              <strong>How to use:</strong> Forward important emails to this address, and Rubic will
-              analyze them and take appropriate actions based on your configured rules.
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-lg border bg-muted/50 px-4 py-3 font-mono text-sm">
+                  {agentEmail}
+                </div>
+                <Button variant="outline" size="sm" onClick={copyEmail} disabled={!mailbox?.email}>
+                  {copied ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />}
+                </Button>
+              </div>
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                <AlertCircleIcon className="h-4 w-4 mt-0.5 text-amber-600" />
+                <div className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>How to use:</strong> Forward important emails to this address, and Rubic
+                  will analyze them and take appropriate actions based on your configured rules.
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

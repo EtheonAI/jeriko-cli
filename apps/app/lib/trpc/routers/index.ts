@@ -9,10 +9,12 @@ import { scheduledTasksRouter } from "./scheduledTasks.router";
 import { projectsRouter } from "./projects.router";
 import { knowledgeRouter } from "./knowledge.router";
 import { billingRouter } from "./billing.router";
+import { mailRouter } from "./mail.router";
 import { searchRouter } from "./search.router";
 import { userRouter } from "./user.router";
 import { devicesRouter } from "./devices.router";
 import { webhooksRouter } from "./webhooks.router";
+import { websiteBuilderRouter } from "./websiteBuilder.router";
 
 /**
  * This is the primary router for your server.
@@ -33,12 +35,15 @@ export const appRouter = createTRPCRouter({
   projects: projectsRouter,
   knowledge: knowledgeRouter,
   billing: billingRouter,
+  mail: mailRouter,
   // User management
   user: userRouter,
   // Device management
   devices: devicesRouter,
   // Integrations
   webhooks: webhooksRouter,
+  // Website Builder
+  websiteBuilder: websiteBuilderRouter,
 });
 
 // Export type definition of API

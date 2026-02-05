@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
+import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
 import {
   db,
   projects,
@@ -87,6 +87,15 @@ async function main() {
 
       logger.info({ projectId: project!.id, userId }, "Project created");
 
+      dispatchWebhookEvent({
+        eventType: "project.created",
+        resourceType: "project",
+        resourceId: project!.id,
+        payload: { id: project!.id, name: project!.name, visibility: project!.visibility },
+        userId,
+        organizationId,
+      });
+
       return {
         id: project!.id,
         name: project!.name,
@@ -129,6 +138,14 @@ async function main() {
       if (!updated) {
         return reply.status(404).send({ error: "Project not found" });
       }
+
+      dispatchWebhookEvent({
+        eventType: "project.updated",
+        resourceType: "project",
+        resourceId: id,
+        payload: { id: updated.id, name: updated.name, ...updates },
+      });
+
       return updated;
     } catch (error) {
       logger.error(error, "Failed to update project");
@@ -144,6 +161,14 @@ async function main() {
       if (!deleted) {
         return reply.status(404).send({ error: "Project not found" });
       }
+
+      dispatchWebhookEvent({
+        eventType: "project.deleted",
+        resourceType: "project",
+        resourceId: id,
+        payload: { id: deleted.id, name: deleted.name },
+      });
+
       return { deleted: true };
     } catch (error) {
       logger.error(error, "Failed to delete project");

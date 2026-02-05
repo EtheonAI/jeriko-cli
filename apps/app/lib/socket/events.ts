@@ -134,6 +134,22 @@ export interface ServerToClientEvents {
     error?: string;
   }) => void;
 
+  // Notification events
+  "notification:new": (data: {
+    id: string;
+    type: string;
+    priority: string;
+    title: string;
+    message: string;
+    actionUrl?: string;
+    actionLabel?: string;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+  }) => void;
+  "notification:read": (data: { id: string }) => void;
+  "notification:dismissed": (data: { id: string }) => void;
+  "notification:count": (data: { unreadCount: number }) => void;
+
   // Presence events
   "presence:online": (data: { userId: string }) => void;
   "presence:offline": (data: { userId: string }) => void;

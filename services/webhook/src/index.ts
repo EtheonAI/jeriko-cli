@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import { createLogger, getEnv, createId } from "@repo/service-utils";
 import { db, webhooks, webhookDeliveries, webhookEvents, eq, and, desc, sql } from "@repo/database";
+import { processDelivery } from "./lib/deliver.js";
+import { startProcessor, stopProcessor } from "./lib/processor.js";
 
 const logger = createLogger({ service: "webhook" });
 
@@ -202,14 +204,30 @@ async function main() {
           )
         );
 
+      const deliveryIds: string[] = [];
       for (const webhook of matchingWebhooks) {
+        const deliveryId = createId();
         await db.insert(webhookDeliveries).values({
-          id: createId(),
+          id: deliveryId,
           webhookId: webhook.id,
           eventType: eventType as any,
           eventId: event!.id,
           payload,
           status: "pending",
+        });
+        deliveryIds.push(deliveryId);
+      }
+
+      // Mark event as processed
+      await db
+        .update(webhookEvents)
+        .set({ processed: true, processedAt: new Date() })
+        .where(eq(webhookEvents.id, event!.id));
+
+      // Fire-and-forget immediate delivery attempts
+      for (const deliveryId of deliveryIds) {
+        processDelivery(deliveryId).catch((err) => {
+          logger.error({ deliveryId, error: err }, "Immediate delivery attempt failed");
         });
       }
 
@@ -250,6 +268,7 @@ async function main() {
 
   try {
     await app.listen({ port, host });
+    startProcessor();
     logger.info({ port, host }, "Webhook service started");
   } catch (err) {
     logger.error(err, "Failed to start server");
@@ -260,6 +279,7 @@ async function main() {
   for (const signal of signals) {
     process.on(signal, async () => {
       logger.info({ signal }, "Received shutdown signal");
+      stopProcessor();
       await app.close();
       process.exit(0);
     });

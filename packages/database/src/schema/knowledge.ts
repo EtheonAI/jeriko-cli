@@ -1,34 +1,18 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  boolean,
-  jsonb,
-  integer,
-  real,
-} from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, jsonb, integer, real } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
 import { organizations } from "./organizations";
 import { agentSessions } from "./sessions";
+import { vector } from "./vector";
 
 /**
  * Knowledge Schema
  * Knowledge base, documents, and attachments
  */
 
-export type KnowledgeItemType =
-  | "document"
-  | "webpage"
-  | "file"
-  | "note"
-  | "bookmark";
-export type KnowledgeStatus =
-  | "processing"
-  | "ready"
-  | "failed"
-  | "archived";
+export type KnowledgeItemType = "document" | "webpage" | "file" | "note" | "bookmark";
+export type KnowledgeStatus = "processing" | "ready" | "failed" | "archived";
 
 // Knowledge Groups (folders/collections)
 export const knowledgeGroups = pgTable("knowledge_groups", {
@@ -63,24 +47,21 @@ export const knowledgeGroups = pgTable("knowledge_groups", {
     .$onUpdate(() => new Date()),
 });
 
-export const knowledgeGroupsRelations = relations(
-  knowledgeGroups,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [knowledgeGroups.userId],
-      references: [users.id],
-    }),
-    organization: one(organizations, {
-      fields: [knowledgeGroups.organizationId],
-      references: [organizations.id],
-    }),
-    parent: one(knowledgeGroups, {
-      fields: [knowledgeGroups.parentId],
-      references: [knowledgeGroups.id],
-    }),
-    items: many(knowledgeItems),
-  })
-);
+export const knowledgeGroupsRelations = relations(knowledgeGroups, ({ one, many }) => ({
+  user: one(users, {
+    fields: [knowledgeGroups.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [knowledgeGroups.organizationId],
+    references: [organizations.id],
+  }),
+  parent: one(knowledgeGroups, {
+    fields: [knowledgeGroups.parentId],
+    references: [knowledgeGroups.id],
+  }),
+  items: many(knowledgeItems),
+}));
 
 // Knowledge Items (documents, files, webpages, etc.)
 export const knowledgeItems = pgTable("knowledge_items", {
@@ -144,24 +125,21 @@ export const knowledgeItems = pgTable("knowledge_items", {
     .$onUpdate(() => new Date()),
 });
 
-export const knowledgeItemsRelations = relations(
-  knowledgeItems,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [knowledgeItems.userId],
-      references: [users.id],
-    }),
-    organization: one(organizations, {
-      fields: [knowledgeItems.organizationId],
-      references: [organizations.id],
-    }),
-    group: one(knowledgeGroups, {
-      fields: [knowledgeItems.groupId],
-      references: [knowledgeGroups.id],
-    }),
-    chunks: many(knowledgeChunks),
-  })
-);
+export const knowledgeItemsRelations = relations(knowledgeItems, ({ one, many }) => ({
+  user: one(users, {
+    fields: [knowledgeItems.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [knowledgeItems.organizationId],
+    references: [organizations.id],
+  }),
+  group: one(knowledgeGroups, {
+    fields: [knowledgeItems.groupId],
+    references: [knowledgeGroups.id],
+  }),
+  chunks: many(knowledgeChunks),
+}));
 
 // Knowledge Chunks (for RAG)
 export const knowledgeChunks = pgTable("knowledge_chunks", {
@@ -180,6 +158,8 @@ export const knowledgeChunks = pgTable("knowledge_chunks", {
   pageNumber: integer("page_number"),
   // Embedding
   embeddingId: text("embedding_id"),
+  embedding: vector("embedding", { dimensions: 1536 }),
+  embeddingModel: text("embedding_model"),
   // Metadata
   metadata: jsonb("metadata").$type<{
     heading?: string;
@@ -189,15 +169,12 @@ export const knowledgeChunks = pgTable("knowledge_chunks", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 
-export const knowledgeChunksRelations = relations(
-  knowledgeChunks,
-  ({ one }) => ({
-    item: one(knowledgeItems, {
-      fields: [knowledgeChunks.itemId],
-      references: [knowledgeItems.id],
-    }),
-  })
-);
+export const knowledgeChunksRelations = relations(knowledgeChunks, ({ one }) => ({
+  item: one(knowledgeItems, {
+    fields: [knowledgeChunks.itemId],
+    references: [knowledgeItems.id],
+  }),
+}));
 
 // Session Attachments (files attached to chat sessions)
 export const sessionAttachments = pgTable("session_attachments", {
@@ -211,12 +188,9 @@ export const sessionAttachments = pgTable("session_attachments", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   // Can link to existing knowledge item
-  knowledgeItemId: text("knowledge_item_id").references(
-    () => knowledgeItems.id,
-    {
-      onDelete: "set null",
-    }
-  ),
+  knowledgeItemId: text("knowledge_item_id").references(() => knowledgeItems.id, {
+    onDelete: "set null",
+  }),
   // Or be a standalone attachment
   name: text("name").notNull(),
   mimeType: text("mime_type"),
@@ -234,23 +208,20 @@ export const sessionAttachments = pgTable("session_attachments", {
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });
 
-export const sessionAttachmentsRelations = relations(
-  sessionAttachments,
-  ({ one }) => ({
-    session: one(agentSessions, {
-      fields: [sessionAttachments.sessionId],
-      references: [agentSessions.id],
-    }),
-    user: one(users, {
-      fields: [sessionAttachments.userId],
-      references: [users.id],
-    }),
-    knowledgeItem: one(knowledgeItems, {
-      fields: [sessionAttachments.knowledgeItemId],
-      references: [knowledgeItems.id],
-    }),
-  })
-);
+export const sessionAttachmentsRelations = relations(sessionAttachments, ({ one }) => ({
+  session: one(agentSessions, {
+    fields: [sessionAttachments.sessionId],
+    references: [agentSessions.id],
+  }),
+  user: one(users, {
+    fields: [sessionAttachments.userId],
+    references: [users.id],
+  }),
+  knowledgeItem: one(knowledgeItems, {
+    fields: [sessionAttachments.knowledgeItemId],
+    references: [knowledgeItems.id],
+  }),
+}));
 
 // Export types
 export type KnowledgeGroup = typeof knowledgeGroups.$inferSelect;

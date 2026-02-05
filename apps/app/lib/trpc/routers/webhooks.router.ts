@@ -1,16 +1,9 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import {
-  db,
-  webhooks,
-  webhookDeliveries,
-  eq,
-  and,
-  desc,
-} from "@repo/database";
+import { db, webhooks, webhookDeliveries, eq, and, desc } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
-import { randomBytes } from "crypto";
+import { randomBytes, createHmac } from "crypto";
 
 // Webhook event types
 const webhookEventTypes = [
@@ -45,23 +38,19 @@ export const webhooksRouter = createTRPCRouter({
   }),
 
   // Get a single webhook
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [webhook] = await db
-        .select()
-        .from(webhooks)
-        .where(
-          and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id))
-        )
-        .limit(1);
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [webhook] = await db
+      .select()
+      .from(webhooks)
+      .where(and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id)))
+      .limit(1);
 
-      if (!webhook) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
-      }
+    if (!webhook) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
+    }
 
-      return webhook;
-    }),
+    return webhook;
+  }),
 
   // Create a webhook
   create: protectedProcedure
@@ -139,9 +128,7 @@ export const webhooksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(webhooks)
-        .where(
-          and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id))
-        )
+        .where(and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -160,9 +147,7 @@ export const webhooksRouter = createTRPCRouter({
       const [existing] = await db
         .select()
         .from(webhooks)
-        .where(
-          and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id))
-        )
+        .where(and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id)))
         .limit(1);
 
       if (!existing) {
@@ -194,12 +179,7 @@ export const webhooksRouter = createTRPCRouter({
       const [webhook] = await db
         .select()
         .from(webhooks)
-        .where(
-          and(
-            eq(webhooks.id, input.webhookId),
-            eq(webhooks.userId, ctx.user.id)
-          )
-        )
+        .where(and(eq(webhooks.id, input.webhookId), eq(webhooks.userId, ctx.user.id)))
         .limit(1);
 
       if (!webhook) {
@@ -230,51 +210,134 @@ export const webhooksRouter = createTRPCRouter({
   }),
 
   // Test webhook (send a test payload)
-  test: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
+  test: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    const [webhook] = await db
+      .select()
+      .from(webhooks)
+      .where(and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id)))
+      .limit(1);
+
+    if (!webhook) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
+    }
+
+    // Send test payload
+    try {
+      const testPayload = {
+        event: "test",
+        timestamp: new Date().toISOString(),
+        data: {
+          message: "This is a test webhook delivery",
+          webhookId: webhook.id,
+        },
+      };
+
+      const body = JSON.stringify(testPayload);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signedContent = `${timestamp}.${body}`;
+      const signature = `v1=${createHmac("sha256", webhook.secret).update(signedContent).digest("hex")}`;
+
+      const response = await fetch(webhook.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Id": webhook.id,
+          "X-Webhook-Event": "test",
+          "X-Webhook-Timestamp": String(timestamp),
+          "X-Webhook-Signature": signature,
+          ...((webhook.headers as Record<string, string>) || {}),
+        },
+        body,
+      });
+
+      return {
+        success: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }),
+
+  // Get full delivery details
+  getDeliveryDetails: protectedProcedure
+    .input(z.object({ deliveryId: z.string(), webhookId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      // Verify webhook ownership
       const [webhook] = await db
         .select()
         .from(webhooks)
-        .where(
-          and(eq(webhooks.id, input.id), eq(webhooks.userId, ctx.user.id))
-        )
+        .where(and(eq(webhooks.id, input.webhookId), eq(webhooks.userId, ctx.user.id)))
         .limit(1);
 
       if (!webhook) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
       }
 
-      // Send test payload
-      try {
-        const testPayload = {
-          event: "test",
-          timestamp: new Date().toISOString(),
-          data: {
-            message: "This is a test webhook delivery",
-            webhookId: webhook.id,
-          },
-        };
+      const [delivery] = await db
+        .select()
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.id, input.deliveryId),
+            eq(webhookDeliveries.webhookId, input.webhookId)
+          )
+        )
+        .limit(1);
 
-        const response = await fetch(webhook.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...((webhook.headers as Record<string, string>) || {}),
-          },
-          body: JSON.stringify(testPayload),
-        });
-
-        return {
-          success: response.ok,
-          status: response.status,
-          statusText: response.statusText,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        };
+      if (!delivery) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Delivery not found" });
       }
+
+      return delivery;
+    }),
+
+  // Retry a failed delivery
+  retryDelivery: protectedProcedure
+    .input(z.object({ deliveryId: z.string(), webhookId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify webhook ownership
+      const [webhook] = await db
+        .select()
+        .from(webhooks)
+        .where(and(eq(webhooks.id, input.webhookId), eq(webhooks.userId, ctx.user.id)))
+        .limit(1);
+
+      if (!webhook) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
+      }
+
+      const [delivery] = await db
+        .select()
+        .from(webhookDeliveries)
+        .where(
+          and(
+            eq(webhookDeliveries.id, input.deliveryId),
+            eq(webhookDeliveries.webhookId, input.webhookId)
+          )
+        )
+        .limit(1);
+
+      if (!delivery) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Delivery not found" });
+      }
+
+      await db
+        .update(webhookDeliveries)
+        .set({
+          status: "pending",
+          nextRetryAt: new Date(),
+          error: null,
+          responseStatus: null,
+          responseBody: null,
+          responseHeaders: null,
+        })
+        .where(eq(webhookDeliveries.id, input.deliveryId));
+
+      return { success: true };
     }),
 });

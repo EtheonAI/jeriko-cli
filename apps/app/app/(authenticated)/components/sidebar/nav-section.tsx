@@ -12,6 +12,8 @@ import {
   Link2Icon,
   ZapIcon,
   SmartphoneIcon,
+  BookOpenIcon,
+  CodeIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -28,6 +30,11 @@ const navItems = [
     href: "/applications",
   },
   {
+    title: "Knowledge",
+    icon: BookOpenIcon,
+    href: "/knowledge",
+  },
+  {
     title: "Automations",
     icon: ZapIcon,
     href: "/actions",
@@ -37,6 +44,11 @@ const navItems = [
     icon: SmartphoneIcon,
     href: "/devices",
   },
+  {
+    title: "Builder",
+    icon: CodeIcon,
+    href: "/website-builder",
+  },
 ];
 
 export function NavSection() {
@@ -44,9 +56,7 @@ export function NavSection() {
 
   return (
     <SidebarGroup className="p-0">
-      <SidebarGroupLabel className="px-4 text-sidebar-foreground/60">
-        Platform
-      </SidebarGroupLabel>
+      <SidebarGroupLabel className="px-4 text-sidebar-foreground/60">Platform</SidebarGroupLabel>
       <SidebarMenu className="px-2 gap-0.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
