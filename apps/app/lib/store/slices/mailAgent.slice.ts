@@ -109,20 +109,14 @@ export const mailAgentSlice = createSlice({
       }
     },
 
-    updateAgentEmailInfo: (
-      state,
-      action: PayloadAction<Partial<AgentEmailInfo>>
-    ) => {
+    updateAgentEmailInfo: (state, action: PayloadAction<Partial<AgentEmailInfo>>) => {
       if (state.agentEmailInfo) {
         state.agentEmailInfo = { ...state.agentEmailInfo, ...action.payload };
       }
     },
 
     // Whitelist
-    setEmailWhiteList: (
-      state,
-      action: PayloadAction<AgentEmailWhiteListInfo[]>
-    ) => {
+    setEmailWhiteList: (state, action: PayloadAction<AgentEmailWhiteListInfo[]>) => {
       state.emailWhiteList = action.payload;
     },
 
@@ -132,9 +126,7 @@ export const mailAgentSlice = createSlice({
     },
 
     removeFromWhitelist: (state, action: PayloadAction<string>) => {
-      state.emailWhiteList = state.emailWhiteList.filter(
-        (e) => e.email !== action.payload
-      );
+      state.emailWhiteList = state.emailWhiteList.filter((e) => e.email !== action.payload);
       state.isRemovingFromWhitelist = false;
     },
 
@@ -165,9 +157,7 @@ export const mailAgentSlice = createSlice({
     },
 
     removeSubEmail: (state, action: PayloadAction<string>) => {
-      state.agentSubEmails = state.agentSubEmails.filter(
-        (e) => e.id !== action.payload
-      );
+      state.agentSubEmails = state.agentSubEmails.filter((e) => e.id !== action.payload);
     },
 
     verifySubEmail: (state, action: PayloadAction<string>) => {
@@ -255,6 +245,38 @@ export const mailAgentSlice = createSlice({
     resetMailAgent: (state) => {
       Object.assign(state, initialState);
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility (mailManus slice name)
+    builder.addCase(
+      "mailManus/setAgentEmailInfo",
+      (state, action: PayloadAction<AgentEmailInfo | null>) => {
+        state.agentEmailInfo = action.payload ?? null;
+        state.isLoading = false;
+        if (action.payload) {
+          state.canEditAgentEmail = action.payload.canEditAgentEmail;
+          state.canEditTime = action.payload.canEditTime;
+        }
+      }
+    );
+    builder.addCase(
+      "mailManus/setEmailWhiteList",
+      (state, action: PayloadAction<AgentEmailWhiteListInfo[]>) => {
+        state.emailWhiteList = action.payload ?? [];
+      }
+    );
+    builder.addCase("mailManus/setCanEditAgentEmail", (state, action: PayloadAction<boolean>) => {
+      state.canEditAgentEmail = action.payload;
+    });
+    builder.addCase("mailManus/setCanEditTime", (state, action: PayloadAction<string | null>) => {
+      state.canEditTime = action.payload;
+    });
+    builder.addCase(
+      "mailManus/setAgentSubEmails",
+      (state, action: PayloadAction<AgentSubEmail[]>) => {
+        state.agentSubEmails = action.payload ?? [];
+      }
+    );
   },
 });
 

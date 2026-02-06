@@ -59,6 +59,8 @@ export const messagesRouter = createTRPCRouter({
         })
         .returning();
 
+      // TODO: Publish message:new event via gateway/backend service
+
       // TODO: Trigger AI response via agent orchestrator
 
       return message;
@@ -97,6 +99,8 @@ export const messagesRouter = createTRPCRouter({
           metadata: input.metadata,
         })
         .returning();
+
+      // TODO: Publish message:new event via gateway/backend service
 
       return message;
     }),

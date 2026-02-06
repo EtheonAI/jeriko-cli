@@ -1,114 +1,67 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
-export type ScheduleFrequency =
-  | "once"
-  | "hourly"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "custom";
-
-export type ScheduledTaskStatus =
-  | "active"
-  | "paused"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
-export type ExecutionStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "skipped";
-
-export interface ScheduleConfig {
-  frequency: ScheduleFrequency;
-  // For custom schedules
-  cronExpression?: string;
-  // For specific time scheduling
-  scheduledAt?: string;
-  // For recurring schedules
-  hour?: number;
-  minute?: number;
-  dayOfWeek?: number[]; // 0-6, Sunday = 0
-  dayOfMonth?: number[];
-  // Timezone
-  timezone: string;
-  // Repeat settings
-  repeatCount?: number; // null = infinite
-  endDate?: string;
-}
+export type TaskScheduleType = "once" | "recurring" | "cron";
+export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "paused";
+export type RecurrencePattern = "daily" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom";
 
 export interface ScheduledTaskExecution {
   id: string;
   scheduledTaskId: string;
-  status: ExecutionStatus;
-  scheduledAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  // Result
-  sessionId?: string; // Created session for this execution
-  result?: {
-    success: boolean;
-    output?: string;
-    error?: string;
-  };
-  // Metadata
-  retryCount: number;
-  metadata?: Record<string, unknown>;
+  status: "pending" | "running" | "success" | "failed" | "cancelled";
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  errorStack?: string | null;
+  retryNumber: number | null;
+  sessionId?: string | null;
+  createdAt: string;
 }
 
 export interface ScheduledTask {
   id: string;
   userId: string;
-  // Task definition
-  title: string;
-  description?: string;
-  prompt: string; // The AI prompt to execute
-  // Schedule configuration
-  schedule: ScheduleConfig;
-  // Status
-  status: ScheduledTaskStatus;
-  // Execution tracking
-  lastExecutionId?: string;
-  lastExecutedAt?: string;
-  nextExecutionAt?: string;
-  executionCount: number;
-  successCount: number;
-  failureCount: number;
-  // Configuration
-  connectorIds?: string[]; // Connectors to use
-  agentType?: string; // Specific agent type to use
-  maxExecutionTime?: number; // In seconds
-  retryOnFailure: boolean;
-  maxRetries: number;
-  notifyOnComplete: boolean;
-  notifyOnFailure: boolean;
-  // Metadata
-  tags?: string[];
-  metadata?: Record<string, unknown>;
-  // Timestamps
+  organizationId?: string | null;
+  name: string;
+  description?: string | null;
+  taskType: "agent_run" | "report" | "sync" | "backup" | "custom";
+  scheduleType: TaskScheduleType;
+  scheduledAt?: string | null;
+  recurrencePattern?: RecurrencePattern | null;
+  recurrenceInterval?: number | null;
+  recurrenceDaysOfWeek?: number[] | null;
+  recurrenceDayOfMonth?: number | null;
+  recurrenceTime?: string | null;
+  cronExpression?: string | null;
+  timezone: string;
+  status: TaskStatus;
+  isEnabled: boolean;
+  lastRunAt?: string | null;
+  lastRunStatus?: "success" | "failed" | "partial" | null;
+  lastRunError?: string | null;
+  nextRunAt?: string | null;
+  runCount: number;
+  maxRetries?: number | null;
+  retryDelaySeconds?: number | null;
+  currentRetryCount?: number | null;
+  payload?: Record<string, unknown> | null;
+  endDate?: string | null;
+  maxRuns?: number | null;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface ScheduledTasksState {
-  // All scheduled tasks
   tasks: ScheduledTask[];
-  // Executions by task ID
   executions: Record<string, ScheduledTaskExecution[]>;
-  // Current chat's scheduled task IDs (for filtering)
   chatScheduledTaskIds: string[];
-  // Selected task for details view
   selectedTaskId: string | null;
-  // Creation/edit flow
   editingTask: Partial<ScheduledTask> | null;
   isCreating: boolean;
-  // Loading states
   isLoading: boolean;
   isLoadingExecutions: boolean;
-  // Error state
   error: string | null;
 }
 
@@ -128,35 +81,33 @@ export const scheduledTasksSlice = createSlice({
   name: "scheduledTasks",
   initialState,
   reducers: {
-    // Set all scheduled tasks
     setScheduledTasks: (state, action: PayloadAction<ScheduledTask[]>) => {
       state.tasks = action.payload;
       state.isLoading = false;
+      state.error = null;
     },
 
-    // Add a new scheduled task
     addScheduledTask: (state, action: PayloadAction<ScheduledTask>) => {
       state.tasks.unshift(action.payload);
       state.isCreating = false;
       state.editingTask = null;
     },
 
-    // Update a scheduled task
     updateScheduledTask: (
       state,
       action: PayloadAction<{ id: string; updates: Partial<ScheduledTask> }>
     ) => {
       const index = state.tasks.findIndex((t) => t.id === action.payload.id);
       if (index !== -1) {
+        const updates = action.payload.updates;
         state.tasks[index] = {
           ...state.tasks[index],
-          ...action.payload.updates,
-          updatedAt: new Date().toISOString(),
+          ...updates,
+          updatedAt: updates.updatedAt ?? new Date().toISOString(),
         };
       }
     },
 
-    // Delete a scheduled task
     deleteScheduledTask: (state, action: PayloadAction<string>) => {
       state.tasks = state.tasks.filter((t) => t.id !== action.payload);
       delete state.executions[action.payload];
@@ -165,16 +116,16 @@ export const scheduledTasksSlice = createSlice({
       }
     },
 
-    // Toggle task status (pause/resume)
     toggleTaskStatus: (state, action: PayloadAction<string>) => {
       const task = state.tasks.find((t) => t.id === action.payload);
       if (task) {
-        task.status = task.status === "active" ? "paused" : "active";
+        const nextStatus = task.status === "paused" ? "pending" : "paused";
+        task.status = nextStatus;
+        task.isEnabled = nextStatus !== "paused";
         task.updatedAt = new Date().toISOString();
       }
     },
 
-    // Set executions for a task
     setTaskExecutions: (
       state,
       action: PayloadAction<{
@@ -186,7 +137,6 @@ export const scheduledTasksSlice = createSlice({
       state.isLoadingExecutions = false;
     },
 
-    // Add a new execution
     addExecution: (state, action: PayloadAction<ScheduledTaskExecution>) => {
       const { scheduledTaskId } = action.payload;
       if (!state.executions[scheduledTaskId]) {
@@ -194,18 +144,20 @@ export const scheduledTasksSlice = createSlice({
       }
       state.executions[scheduledTaskId].unshift(action.payload);
 
-      // Update task execution count
       const task = state.tasks.find((t) => t.id === scheduledTaskId);
       if (task) {
-        task.executionCount += 1;
-        task.lastExecutionId = action.payload.id;
+        task.runCount = (task.runCount ?? 0) + 1;
         if (action.payload.startedAt) {
-          task.lastExecutedAt = action.payload.startedAt;
+          task.lastRunAt = action.payload.startedAt;
+        }
+        if (action.payload.status === "success") {
+          task.lastRunStatus = "success";
+        } else if (action.payload.status === "failed") {
+          task.lastRunStatus = "failed";
         }
       }
     },
 
-    // Update execution status
     updateExecution: (
       state,
       action: PayloadAction<{
@@ -216,45 +168,37 @@ export const scheduledTasksSlice = createSlice({
     ) => {
       const executions = state.executions[action.payload.taskId];
       if (executions) {
-        const index = executions.findIndex(
-          (e) => e.id === action.payload.executionId
-        );
+        const index = executions.findIndex((e) => e.id === action.payload.executionId);
         if (index !== -1) {
           executions[index] = { ...executions[index], ...action.payload.updates };
 
-          // Update task success/failure counts
           const task = state.tasks.find((t) => t.id === action.payload.taskId);
-          if (task && action.payload.updates.status === "completed") {
-            task.successCount += 1;
+          if (task && action.payload.updates.status === "success") {
+            task.lastRunStatus = "success";
           } else if (task && action.payload.updates.status === "failed") {
-            task.failureCount += 1;
+            task.lastRunStatus = "failed";
           }
         }
       }
     },
 
-    // Set chat's scheduled task IDs
     setChatScheduledTaskIds: (state, action: PayloadAction<string[]>) => {
       state.chatScheduledTaskIds = action.payload;
     },
 
-    // Selection
     setSelectedTask: (state, action: PayloadAction<string | null>) => {
       state.selectedTaskId = action.payload;
     },
 
-    // Editing flow
     startCreating: (state) => {
       state.isCreating = true;
       state.editingTask = {
-        schedule: {
-          frequency: "daily",
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-        retryOnFailure: true,
-        maxRetries: 3,
-        notifyOnComplete: true,
-        notifyOnFailure: true,
+        scheduleType: "recurring",
+        recurrencePattern: "daily",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        taskType: "agent_run",
+        isEnabled: true,
+        status: "pending",
       };
     },
 
@@ -265,10 +209,7 @@ export const scheduledTasksSlice = createSlice({
       }
     },
 
-    updateEditingTask: (
-      state,
-      action: PayloadAction<Partial<ScheduledTask>>
-    ) => {
+    updateEditingTask: (state, action: PayloadAction<Partial<ScheduledTask>>) => {
       if (state.editingTask) {
         state.editingTask = { ...state.editingTask, ...action.payload };
       }
@@ -279,7 +220,6 @@ export const scheduledTasksSlice = createSlice({
       state.isCreating = false;
     },
 
-    // Loading states
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
     },
@@ -288,13 +228,19 @@ export const scheduledTasksSlice = createSlice({
       state.isLoadingExecutions = action.payload;
     },
 
-    // Error handling
     setScheduledTasksError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
       state.isLoading = false;
       state.isLoadingExecutions = false;
       state.isCreating = false;
     },
+  },
+  extraReducers: (builder) => {
+    builder.addCase("scheduledTask/addSchedule", (state, action: PayloadAction<ScheduledTask>) => {
+      state.tasks.unshift(action.payload);
+      state.isCreating = false;
+      state.editingTask = null;
+    });
   },
 });
 

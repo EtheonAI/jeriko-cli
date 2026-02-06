@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@repo/design-system/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/design-system/components/ui/tabs";
 import { PlugIcon, AppWindowIcon, MonitorSmartphoneIcon, Loader2Icon } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import { useDevicesData } from "@/lib/store/hooks/useDevicesData";
 
 interface ConnectorsButtonProps {
   disabled?: boolean;
@@ -19,10 +20,7 @@ export function ConnectorsButton({ disabled }: ConnectorsButtonProps) {
     }
   );
 
-  const { data: devices, isLoading: loadingDevices } = trpc.devices.list.useQuery(undefined, {
-    retry: 1,
-    staleTime: 60_000,
-  });
+  const { devices, isLoading: loadingDevices } = useDevicesData();
 
   const connectorCount = connectors?.length ?? 0;
   const deviceCount = Array.isArray(devices) ? devices.length : 0;

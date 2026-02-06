@@ -32,11 +32,7 @@ export function ChatContainer({
   return (
     <div className={cn("flex h-full w-full flex-col overflow-hidden", className)}>
       {/* Header */}
-      {header && (
-        <div className="flex-shrink-0 border-b border-border bg-background">
-          {header}
-        </div>
-      )}
+      {header && <div className="flex-shrink-0 border-b border-border bg-background">{header}</div>}
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
@@ -50,16 +46,10 @@ export function ChatContainer({
         {/* Chat content */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Messages area */}
-          <div className="flex-1 overflow-y-auto">
-            {children}
-          </div>
+          <div className="flex-1 overflow-y-auto">{children}</div>
 
           {/* Footer (input area) */}
-          {footer && (
-            <div className="flex-shrink-0 border-t border-border bg-background">
-              {footer}
-            </div>
-          )}
+          {footer && <div className="flex-shrink-0 bg-background">{footer}</div>}
         </div>
 
         {/* Right sidebar */}

@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import { createLogger, getEnv } from "@repo/service-utils";
+import { initDb } from "./lib/db.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { commandRoutes } from "./routes/commands.js";
 import { heartbeatRoutes, startStaleDeviceChecker } from "./routes/heartbeat.js";
@@ -11,6 +12,9 @@ import { hubRoutes } from "./routes/hubs.js";
 const logger = createLogger({ service: "device" });
 
 async function main() {
+  // Initialize database connection before starting the server
+  await initDb();
+  logger.info("Database initialized");
   const port = parseInt(getEnv("PORT", "4001"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 

@@ -67,15 +67,11 @@
 
 @keyframes spring-bounce {
   0% {
-    transform: scale(0);
+    transform: scale(0.8);
     opacity: 0;
   }
   50% {
-    transform: scale(1.25);
-    opacity: 1;
-  }
-  75% {
-    transform: scale(0.9);
+    transform: scale(1.1);
   }
   100% {
     transform: scale(1);
@@ -89,21 +85,17 @@
 
 @keyframes check-draw {
   0% {
-    stroke-dashoffset: 100;
+    stroke-dasharray: var(--check-path-length, 24);
+    stroke-dashoffset: var(--check-path-length, 24);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
   }
   100% {
+    stroke-dasharray: var(--check-path-length, 24);
     stroke-dashoffset: 0;
-  }
-}
-
-.check-draw {
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .check-draw {
-    animation: check-draw 400ms ease-out forwards;
+    opacity: 1;
   }
 }
 
@@ -114,12 +106,10 @@
 @keyframes progress-pulse {
   0%,
   100% {
-    opacity: 1;
-    transform: scaleX(1);
+    filter: brightness(1);
   }
   50% {
-    opacity: 0.85;
-    transform: scaleX(1.02);
+    filter: brightness(1.3);
   }
 }
 
@@ -130,10 +120,10 @@
 @keyframes glow-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 12px 6px hsl(var(--primary) / 0.15);
+    opacity: 1;
   }
 }
 
@@ -465,4 +455,67 @@
   background: hsl(var(--primary) / 0.1);
   margin: 0 -16px;
   padding: 0 16px;
+}
+
+/* ============================================================================
+ * Fade Up - Plan item entrance
+ * ============================================================================ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================================
+ * Fade In/Out Stagger - Plan list transitions
+ * ============================================================================ */
+
+@keyframes fade-in-stagger {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-out-stagger {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* ============================================================================
+ * Collapsible Height - Radix content transitions
+ * ============================================================================ */
+
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
 }

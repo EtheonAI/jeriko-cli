@@ -106,6 +106,7 @@ export interface ConfigsState {
   clientConfig: ClientConfig | null;
   // Invitation codes
   invitationCodes: InvitationCode[];
+  invitationCodeLength: number | null;
   // Agent email (like Manus bot email)
   agentEmailInfo: AgentEmailInfo | null;
   emailWhiteList: Array<{
@@ -202,6 +203,7 @@ const defaultClientConfig: ClientConfig = {
 const initialState: ConfigsState = {
   clientConfig: null,
   invitationCodes: [],
+  invitationCodeLength: null,
   agentEmailInfo: null,
   emailWhiteList: [],
   features: {
@@ -263,10 +265,7 @@ export const configsSlice = createSlice({
     },
 
     // Update partial client config
-    updateClientConfig: (
-      state,
-      action: PayloadAction<Partial<ClientConfig>>
-    ) => {
+    updateClientConfig: (state, action: PayloadAction<Partial<ClientConfig>>) => {
       if (state.clientConfig) {
         state.clientConfig = { ...state.clientConfig, ...action.payload };
       }
@@ -293,10 +292,7 @@ export const configsSlice = createSlice({
     },
 
     // Update notification config
-    updateNotificationConfig: (
-      state,
-      action: PayloadAction<Partial<NotificationConfig>>
-    ) => {
+    updateNotificationConfig: (state, action: PayloadAction<Partial<NotificationConfig>>) => {
       if (state.clientConfig) {
         state.clientConfig.notifications = {
           ...state.clientConfig.notifications,
@@ -306,10 +302,7 @@ export const configsSlice = createSlice({
     },
 
     // Update privacy config
-    updatePrivacyConfig: (
-      state,
-      action: PayloadAction<Partial<PrivacyConfig>>
-    ) => {
+    updatePrivacyConfig: (state, action: PayloadAction<Partial<PrivacyConfig>>) => {
       if (state.clientConfig) {
         state.clientConfig.privacy = {
           ...state.clientConfig.privacy,
@@ -319,10 +312,7 @@ export const configsSlice = createSlice({
     },
 
     // Update accessibility config
-    updateAccessibilityConfig: (
-      state,
-      action: PayloadAction<Partial<AccessibilityConfig>>
-    ) => {
+    updateAccessibilityConfig: (state, action: PayloadAction<Partial<AccessibilityConfig>>) => {
       if (state.clientConfig) {
         state.clientConfig.accessibility = {
           ...state.clientConfig.accessibility,
@@ -346,10 +336,7 @@ export const configsSlice = createSlice({
     },
 
     // Keyboard shortcuts
-    updateKeyboardShortcut: (
-      state,
-      action: PayloadAction<{ id: string; keys: string[] }>
-    ) => {
+    updateKeyboardShortcut: (state, action: PayloadAction<{ id: string; keys: string[] }>) => {
       if (state.clientConfig) {
         const shortcut = state.clientConfig.keyboardShortcuts.find(
           (s) => s.id === action.payload.id
@@ -362,9 +349,7 @@ export const configsSlice = createSlice({
 
     toggleKeyboardShortcut: (state, action: PayloadAction<string>) => {
       if (state.clientConfig) {
-        const shortcut = state.clientConfig.keyboardShortcuts.find(
-          (s) => s.id === action.payload
-        );
+        const shortcut = state.clientConfig.keyboardShortcuts.find((s) => s.id === action.payload);
         if (shortcut) {
           shortcut.enabled = !shortcut.enabled;
         }
@@ -372,10 +357,7 @@ export const configsSlice = createSlice({
     },
 
     // Storage quota
-    updateStorageQuota: (
-      state,
-      action: PayloadAction<{ used: number; total?: number }>
-    ) => {
+    updateStorageQuota: (state, action: PayloadAction<{ used: number; total?: number }>) => {
       if (state.clientConfig) {
         state.clientConfig.storageQuota.used = action.payload.used;
         if (action.payload.total !== undefined) {
@@ -385,10 +367,7 @@ export const configsSlice = createSlice({
     },
 
     // Rate limits
-    updateRateLimits: (
-      state,
-      action: PayloadAction<Partial<ClientConfig["rateLimits"]>>
-    ) => {
+    updateRateLimits: (state, action: PayloadAction<Partial<ClientConfig["rateLimits"]>>) => {
       if (state.clientConfig) {
         state.clientConfig.rateLimits = {
           ...state.clientConfig.rateLimits,
@@ -411,10 +390,7 @@ export const configsSlice = createSlice({
       state.agentEmailInfo = action.payload;
     },
 
-    updateAgentEmailInfo: (
-      state,
-      action: PayloadAction<Partial<AgentEmailInfo>>
-    ) => {
+    updateAgentEmailInfo: (state, action: PayloadAction<Partial<AgentEmailInfo>>) => {
       if (state.agentEmailInfo) {
         state.agentEmailInfo = { ...state.agentEmailInfo, ...action.payload };
       }
@@ -435,24 +411,16 @@ export const configsSlice = createSlice({
     },
 
     removeFromEmailWhiteList: (state, action: PayloadAction<string>) => {
-      state.emailWhiteList = state.emailWhiteList.filter(
-        (e) => e.email !== action.payload
-      );
+      state.emailWhiteList = state.emailWhiteList.filter((e) => e.email !== action.payload);
     },
 
     // Features
-    setFeatures: (
-      state,
-      action: PayloadAction<Partial<ConfigsState["features"]>>
-    ) => {
+    setFeatures: (state, action: PayloadAction<Partial<ConfigsState["features"]>>) => {
       state.features = { ...state.features, ...action.payload };
     },
 
     // Payment info
-    setPaymentInfo: (
-      state,
-      action: PayloadAction<ConfigsState["paymentInfo"]>
-    ) => {
+    setPaymentInfo: (state, action: PayloadAction<ConfigsState["paymentInfo"]>) => {
       state.paymentInfo = action.payload;
     },
 
@@ -490,11 +458,18 @@ export const configsSlice = createSlice({
     clearConfigsState: (state) => {
       state.clientConfig = null;
       state.invitationCodes = [];
+      state.invitationCodeLength = null;
       state.agentEmailInfo = null;
       state.emailWhiteList = [];
       state.paymentInfo = null;
       state.isInitialized = false;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase("configs/setInvitationCodeLength", (state, action: PayloadAction<number>) => {
+      state.invitationCodeLength = action.payload ?? null;
+    });
   },
 });
 

@@ -51,11 +51,23 @@ import {
   PencilIcon,
   ExternalLinkIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
 import Link from "next/link";
+import { useAppDispatch } from "@/lib/store/hooks";
+import {
+  addScheduledTask,
+  deleteScheduledTask,
+  setScheduledTasksError,
+  updateScheduledTask,
+  type ScheduledTask,
+} from "@/lib/store/slices/scheduledTasks.slice";
+import {
+  normalizeScheduledTask,
+  useScheduledTasksData,
+} from "@/lib/store/hooks/useScheduledTasksData";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 
 // Status badge config
 const statusConfig: Record<
@@ -111,80 +123,10 @@ type TaskFormValues = z.infer<typeof taskFormSchema>;
 export function ScheduledTasksTab() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<{ id: string; data: TaskFormValues } | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ type: string; id?: string } | null>(null);
+  const dispatch = useAppDispatch();
 
-  // Fetch tasks
-  const {
-    data: tasks,
-    isLoading,
-    isError,
-    refetch,
-  } = trpc.scheduledTasks.list.useQuery({}, { retry: 1 });
-
-  // Mutations
-  const utils = trpc.useUtils();
-
-  const createTask = trpc.scheduledTasks.create.useMutation({
-    onSuccess: () => {
-      toast.success("Task scheduled successfully");
-      utils.scheduledTasks.list.invalidate();
-      setIsCreateOpen(false);
-      createForm.reset();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to create task");
-    },
-  });
-
-  const updateTask = trpc.scheduledTasks.update.useMutation({
-    onSuccess: () => {
-      toast.success("Task updated");
-      utils.scheduledTasks.list.invalidate();
-      setEditingTask(null);
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update task");
-    },
-  });
-
-  const runNowTask = trpc.scheduledTasks.runNow.useMutation({
-    onSuccess: () => {
-      toast.success("Task triggered — running now");
-      utils.scheduledTasks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to run task");
-    },
-  });
-
-  const pauseTask = trpc.scheduledTasks.pause.useMutation({
-    onSuccess: () => {
-      toast.success("Task paused");
-      utils.scheduledTasks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to pause task");
-    },
-  });
-
-  const resumeTask = trpc.scheduledTasks.resume.useMutation({
-    onSuccess: () => {
-      toast.success("Task resumed");
-      utils.scheduledTasks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to resume task");
-    },
-  });
-
-  const deleteTask = trpc.scheduledTasks.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Task deleted");
-      utils.scheduledTasks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to delete task");
-    },
-  });
+  const { tasks, isLoading, error, refetch } = useScheduledTasksData();
 
   // Create form
   const createForm = useForm<TaskFormValues>({
@@ -213,8 +155,8 @@ export function ScheduledTasksTab() {
   const createScheduleType = createForm.watch("scheduleType");
   const editScheduleType = editForm.watch("scheduleType");
 
-  const onCreateSubmit = (data: TaskFormValues) => {
-    const submitData: Parameters<typeof createTask.mutate>[0] = {
+  const onCreateSubmit = async (data: TaskFormValues) => {
+    const submitData = {
       name: data.name,
       description: data.description,
       taskType: data.taskType,
@@ -233,13 +175,25 @@ export function ScheduledTasksTab() {
       submitData.cronExpression = data.cronExpression;
     }
 
-    createTask.mutate(submitData);
+    try {
+      setPendingAction({ type: "create" });
+      const created = await getTrpcClient().scheduledTasks.create.mutate(submitData);
+      dispatch(addScheduledTask(normalizeScheduledTask(created)));
+      toast.success("Task scheduled successfully");
+      setIsCreateOpen(false);
+      createForm.reset();
+    } catch (error: any) {
+      dispatch(setScheduledTasksError(error?.message || "Failed to create task"));
+      toast.error(error?.message || "Failed to create task");
+    } finally {
+      setPendingAction(null);
+    }
   };
 
-  const onEditSubmit = (data: TaskFormValues) => {
+  const onEditSubmit = async (data: TaskFormValues) => {
     if (!editingTask) return;
 
-    const submitData: Parameters<typeof updateTask.mutate>[0] = {
+    const submitData = {
       id: editingTask.id,
       name: data.name,
       description: data.description,
@@ -254,10 +208,21 @@ export function ScheduledTasksTab() {
       submitData.cronExpression = data.cronExpression;
     }
 
-    updateTask.mutate(submitData);
+    try {
+      setPendingAction({ type: "update", id: editingTask.id });
+      const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData);
+      dispatch(updateScheduledTask({ id: updated.id, updates: normalizeScheduledTask(updated) }));
+      toast.success("Task updated");
+      setEditingTask(null);
+    } catch (error: any) {
+      dispatch(setScheduledTasksError(error?.message || "Failed to update task"));
+      toast.error(error?.message || "Failed to update task");
+    } finally {
+      setPendingAction(null);
+    }
   };
 
-  const openEditDialog = (task: NonNullable<typeof tasks>[number]) => {
+  const openEditDialog = (task: ScheduledTask) => {
     setEditingTask({
       id: task.id,
       data: {
@@ -351,7 +316,7 @@ export function ScheduledTasksTab() {
     );
   }
 
-  if (isError) {
+  if (error) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -463,8 +428,10 @@ export function ScheduledTasksTab() {
                 <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createTask.isPending}>
-                  {createTask.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                <Button type="submit" disabled={pendingAction?.type === "create"}>
+                  {pendingAction?.type === "create" && (
+                    <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                  )}
                   Create Task
                 </Button>
               </DialogFooter>
@@ -537,8 +504,19 @@ export function ScheduledTasksTab() {
                       variant="ghost"
                       size="sm"
                       title="Run now"
-                      onClick={() => runNowTask.mutate({ id: task.id })}
-                      disabled={runNowTask.isPending}
+                      onClick={async () => {
+                        try {
+                          setPendingAction({ type: "run", id: task.id });
+                          await getTrpcClient().scheduledTasks.runNow.mutate({ id: task.id });
+                          toast.success("Task triggered — running now");
+                          refetch();
+                        } catch (error: any) {
+                          toast.error(error?.message || "Failed to run task");
+                        } finally {
+                          setPendingAction(null);
+                        }
+                      }}
+                      disabled={pendingAction?.id === task.id && pendingAction?.type === "run"}
                     >
                       <PlayIcon className="h-4 w-4 text-green-600" />
                     </Button>
@@ -560,8 +538,26 @@ export function ScheduledTasksTab() {
                       variant="ghost"
                       size="sm"
                       title="Pause"
-                      onClick={() => pauseTask.mutate({ id: task.id })}
-                      disabled={pauseTask.isPending}
+                      onClick={async () => {
+                        try {
+                          setPendingAction({ type: "pause", id: task.id });
+                          const updated = await getTrpcClient().scheduledTasks.pause.mutate({
+                            id: task.id,
+                          });
+                          dispatch(
+                            updateScheduledTask({
+                              id: updated.id,
+                              updates: normalizeScheduledTask(updated),
+                            })
+                          );
+                          toast.success("Task paused");
+                        } catch (error: any) {
+                          toast.error(error?.message || "Failed to pause task");
+                        } finally {
+                          setPendingAction(null);
+                        }
+                      }}
+                      disabled={pendingAction?.id === task.id && pendingAction?.type === "pause"}
                     >
                       <PauseIcon className="h-4 w-4" />
                     </Button>
@@ -572,8 +568,26 @@ export function ScheduledTasksTab() {
                       variant="ghost"
                       size="sm"
                       title="Resume"
-                      onClick={() => resumeTask.mutate({ id: task.id })}
-                      disabled={resumeTask.isPending}
+                      onClick={async () => {
+                        try {
+                          setPendingAction({ type: "resume", id: task.id });
+                          const updated = await getTrpcClient().scheduledTasks.resume.mutate({
+                            id: task.id,
+                          });
+                          dispatch(
+                            updateScheduledTask({
+                              id: updated.id,
+                              updates: normalizeScheduledTask(updated),
+                            })
+                          );
+                          toast.success("Task resumed");
+                        } catch (error: any) {
+                          toast.error(error?.message || "Failed to resume task");
+                        } finally {
+                          setPendingAction(null);
+                        }
+                      }}
+                      disabled={pendingAction?.id === task.id && pendingAction?.type === "resume"}
                     >
                       <PlayIcon className="h-4 w-4" />
                     </Button>
@@ -601,7 +615,18 @@ export function ScheduledTasksTab() {
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => deleteTask.mutate({ id: task.id })}
+                          onClick={async () => {
+                            try {
+                              setPendingAction({ type: "delete", id: task.id });
+                              await getTrpcClient().scheduledTasks.delete.mutate({ id: task.id });
+                              dispatch(deleteScheduledTask(task.id));
+                              toast.success("Task deleted");
+                            } catch (error: any) {
+                              toast.error(error?.message || "Failed to delete task");
+                            } finally {
+                              setPendingAction(null);
+                            }
+                          }}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                           Delete
@@ -699,8 +724,13 @@ export function ScheduledTasksTab() {
               <Button type="button" variant="outline" onClick={() => setEditingTask(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateTask.isPending}>
-                {updateTask.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+              <Button
+                type="submit"
+                disabled={pendingAction?.type === "update" && pendingAction?.id === editingTask?.id}
+              >
+                {pendingAction?.type === "update" && pendingAction?.id === editingTask?.id && (
+                  <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
+                )}
                 Save Changes
               </Button>
             </DialogFooter>

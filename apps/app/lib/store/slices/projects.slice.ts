@@ -120,10 +120,7 @@ export const projectsSlice = createSlice({
     },
 
     // Update a project
-    updateProject: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<Project> }>
-    ) => {
+    updateProject: (state, action: PayloadAction<{ id: string; updates: Partial<Project> }>) => {
       const index = state.projects.findIndex((p) => p.id === action.payload.id);
       if (index !== -1) {
         state.projects[index] = {
@@ -168,8 +165,7 @@ export const projectsSlice = createSlice({
     // Set current project
     setCurrentProject: (state, action: PayloadAction<string | null>) => {
       state.currentProjectId = action.payload;
-      state.currentProject =
-        state.projects.find((p) => p.id === action.payload) || null;
+      state.currentProject = state.projects.find((p) => p.id === action.payload) || null;
     },
 
     // Set project sessions
@@ -209,9 +205,7 @@ export const projectsSlice = createSlice({
       state,
       action: PayloadAction<{ projectId: string; member: ProjectMember }>
     ) => {
-      const project = state.projects.find(
-        (p) => p.id === action.payload.projectId
-      );
+      const project = state.projects.find((p) => p.id === action.payload.projectId);
       if (project) {
         project.members.push(action.payload.member);
       }
@@ -225,13 +219,9 @@ export const projectsSlice = createSlice({
         updates: Partial<ProjectMember>;
       }>
     ) => {
-      const project = state.projects.find(
-        (p) => p.id === action.payload.projectId
-      );
+      const project = state.projects.find((p) => p.id === action.payload.projectId);
       if (project) {
-        const memberIndex = project.members.findIndex(
-          (m) => m.userId === action.payload.userId
-        );
+        const memberIndex = project.members.findIndex((m) => m.userId === action.payload.userId);
         if (memberIndex !== -1) {
           project.members[memberIndex] = {
             ...project.members[memberIndex],
@@ -241,17 +231,10 @@ export const projectsSlice = createSlice({
       }
     },
 
-    removeProjectMember: (
-      state,
-      action: PayloadAction<{ projectId: string; userId: string }>
-    ) => {
-      const project = state.projects.find(
-        (p) => p.id === action.payload.projectId
-      );
+    removeProjectMember: (state, action: PayloadAction<{ projectId: string; userId: string }>) => {
+      const project = state.projects.find((p) => p.id === action.payload.projectId);
       if (project) {
-        project.members = project.members.filter(
-          (m) => m.userId !== action.payload.userId
-        );
+        project.members = project.members.filter((m) => m.userId !== action.payload.userId);
       }
     },
 
@@ -270,9 +253,7 @@ export const projectsSlice = createSlice({
 
     setSortBy: (
       state,
-      action: PayloadAction<
-        "name" | "createdAt" | "updatedAt" | "lastActivityAt"
-      >
+      action: PayloadAction<"name" | "createdAt" | "updatedAt" | "lastActivityAt">
     ) => {
       state.sortBy = action.payload;
     },
@@ -308,10 +289,7 @@ export const projectsSlice = createSlice({
       }
     },
 
-    updateEditingProject: (
-      state,
-      action: PayloadAction<Partial<Project>>
-    ) => {
+    updateEditingProject: (state, action: PayloadAction<Partial<Project>>) => {
       if (state.editingProject) {
         state.editingProject = { ...state.editingProject, ...action.payload };
       }
@@ -350,6 +328,16 @@ export const projectsSlice = createSlice({
       state.projectSessions = {};
       state.currentProjectSessionTotal = 0;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility (project slice name)
+    builder.addCase("project/setInitProjectLoading", (state, action: PayloadAction<boolean>) => {
+      state.isLoading = action.payload;
+    });
+    builder.addCase("project/setProjectList", (state, action: PayloadAction<Project[]>) => {
+      state.projects = action.payload ?? [];
+      state.isLoading = false;
+    });
   },
 });
 

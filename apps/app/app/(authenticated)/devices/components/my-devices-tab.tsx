@@ -36,7 +36,6 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import {
-  Loader2Icon,
   PlusIcon,
   MonitorIcon,
   SmartphoneIcon,
@@ -47,7 +46,8 @@ import {
   TrashIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useDevicesData } from "@/lib/store/hooks/useDevicesData";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -79,31 +79,7 @@ type RegisterDeviceForm = z.infer<typeof registerDeviceSchema>;
 export function MyDevicesTab() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
-  const { data: devices, isLoading, refetch } = trpc.devices.list.useQuery(undefined, { retry: 1 });
-
-  const utils = trpc.useUtils();
-
-  const registerDevice = trpc.devices.register.useMutation({
-    onSuccess: () => {
-      toast.success("Device registered successfully");
-      utils.devices.list.invalidate();
-      setIsRegisterOpen(false);
-      form.reset();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to register device");
-    },
-  });
-
-  const unregisterDevice = trpc.devices.unregister.useMutation({
-    onSuccess: () => {
-      toast.success("Device removed");
-      utils.devices.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to remove device");
-    },
-  });
+  const { devices, isLoading, refetch } = useDevicesData();
 
   const form = useForm<RegisterDeviceForm>({
     resolver: zodResolver(registerDeviceSchema),
@@ -115,7 +91,17 @@ export function MyDevicesTab() {
   });
 
   const onSubmit = (data: RegisterDeviceForm) => {
-    registerDevice.mutate(data);
+    getTrpcClient()
+      .devices.register.mutate(data)
+      .then(() => {
+        toast.success("Device registered successfully");
+        refetch();
+        setIsRegisterOpen(false);
+        form.reset();
+      })
+      .catch((error: any) => {
+        toast.error(error?.message || "Failed to register device");
+      });
   };
 
   if (isLoading) {
@@ -215,12 +201,7 @@ export function MyDevicesTab() {
                   <Button type="button" variant="outline" onClick={() => setIsRegisterOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={registerDevice.isPending}>
-                    {registerDevice.isPending && (
-                      <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
-                    )}
-                    Register Device
-                  </Button>
+                  <Button type="submit">Register Device</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -292,12 +273,19 @@ export function MyDevicesTab() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => unregisterDevice.mutate({ id: device.id })}
+                            onClick={() => {
+                              getTrpcClient()
+                                .devices.unregister.mutate({ id: device.id })
+                                .then(() => {
+                                  toast.success("Device removed");
+                                  refetch();
+                                })
+                                .catch((error: any) => {
+                                  toast.error(error?.message || "Failed to remove device");
+                                });
+                            }}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
-                            {unregisterDevice.isPending && (
-                              <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
-                            )}
                             Remove
                           </AlertDialogAction>
                         </AlertDialogFooter>

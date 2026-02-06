@@ -37,6 +37,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   AlertCircleIcon,
+  PlugIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
@@ -66,11 +67,15 @@ export function HubsTab() {
   const utils = trpc.useUtils();
 
   const registerHub = trpc.smartHome.registerHub.useMutation({
-    onSuccess: () => {
+    onSuccess: (hub) => {
       toast.success("Hub connected successfully");
       utils.smartHome.listHubs.invalidate();
       setIsAddOpen(false);
       form.reset();
+      // Auto-discover entities after registration
+      if (hub?.id) {
+        discoverEntities.mutate({ hubId: hub.id });
+      }
     },
     onError: (error) => {
       toast.error(error.message || "Failed to connect hub");
@@ -95,6 +100,20 @@ export function HubsTab() {
     },
     onError: (error) => {
       toast.error(error.message || "Failed to sync devices");
+    },
+  });
+
+  const testConnection = trpc.smartHome.testConnection.useMutation({
+    onSuccess: (data) => {
+      if (data.ok) {
+        toast.success(`Connection OK${data.version ? ` (HA ${data.version})` : ""}`);
+      } else {
+        toast.error("Connection failed. Check your Home Assistant URL and access token.");
+      }
+      utils.smartHome.listHubs.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to test connection");
     },
   });
 
@@ -226,6 +245,15 @@ export function HubsTab() {
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <span className="capitalize">{hub.type.replace("_", " ")}</span>
+                        {String((hub.metadata as Record<string, unknown>)?.haVersion ?? "") !==
+                          "" && (
+                          <>
+                            <span>·</span>
+                            <span>
+                              v{String((hub.metadata as Record<string, unknown>)?.haVersion)}
+                            </span>
+                          </>
+                        )}
                         <span>·</span>
                         <span>{hub.entityCount} devices</span>
                         {hub.lastSyncAt && (
@@ -245,6 +273,21 @@ export function HubsTab() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => testConnection.mutate({ hubId: hub.id })}
+                    disabled={testConnection.isPending}
+                  >
+                    {testConnection.isPending ? (
+                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <PlugIcon className="h-3.5 w-3.5" />
+                    )}
+                    Test
+                  </Button>
+
                   <Button
                     variant="outline"
                     size="sm"

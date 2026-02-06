@@ -1,4 +1,5 @@
 import { useDispatch, useSelector, useStore } from "react-redux";
+import { createSelector } from "@reduxjs/toolkit";
 import type { AppDispatch, RootState, AppStore } from "./index";
 import { selectIsFeatureEnabled, selectVariant } from "./slices/experiment.slice";
 import type { AgentSession } from "./slices/sessions.slice";
@@ -38,12 +39,18 @@ export const useCurrentUser = () => useAppSelector((state) => state.auth.user);
 export const useIsAuthenticated = () => useAppSelector((state) => state.auth.isAuthenticated);
 export const useAuthLoading = () => useAppSelector((state) => state.auth.isLoading);
 
-// ================== SESSION SELECTORS ==================
-export const useCurrentSession = () =>
-  useAppSelector((state) => {
-    const { sessions, currentSessionId } = state.sessions;
-    return currentSessionId ? sessions.find((s: AgentSession) => s.id === currentSessionId) : null;
-  });
+// ================== SESSION SELECTORS (memoized) ==================
+const selectCurrentSession = createSelector(
+  [
+    (state: RootState) => state.sessions.sessions,
+    (state: RootState) => state.sessions.currentSessionId,
+  ],
+  (sessions, currentSessionId): AgentSession | null =>
+    currentSessionId
+      ? (sessions.find((s: AgentSession) => s.id === currentSessionId) ?? null)
+      : null
+);
+export const useCurrentSession = () => useAppSelector(selectCurrentSession);
 
 export const useSessionMessages = (sessionId: string | null) =>
   useAppSelector((state) => {
@@ -57,30 +64,38 @@ export const useSessionAgents = (sessionId: string | null) =>
     return state.agents.agents[sessionId] || [];
   });
 
-export const useRecentSessions = () =>
-  useAppSelector((state) => {
-    const { sessions, recentSessionIds } = state.sessions;
-    return recentSessionIds
+const selectRecentSessions = createSelector(
+  [
+    (state: RootState) => state.sessions.sessions,
+    (state: RootState) => state.sessions.recentSessionIds,
+  ],
+  (sessions, recentSessionIds): AgentSession[] =>
+    recentSessionIds
       .map((id: string) => sessions.find((s: AgentSession) => s.id === id))
-      .filter(Boolean);
-  });
+      .filter(Boolean) as AgentSession[]
+);
+export const useRecentSessions = () => useAppSelector(selectRecentSessions);
 
-export const usePinnedSessions = () =>
-  useAppSelector((state) =>
-    state.sessions.sessions.filter((s: AgentSession) => s.isPinned)
-  );
+const selectPinnedSessions = createSelector(
+  [(state: RootState) => state.sessions.sessions],
+  (sessions): AgentSession[] => sessions.filter((s: AgentSession) => s.isPinned)
+);
+export const usePinnedSessions = () => useAppSelector(selectPinnedSessions);
 
-// ================== AGENT SELECTORS ==================
-export const useSelectedAgent = () =>
-  useAppSelector((state) => {
-    const { agents, selectedAgentId } = state.agents;
+// ================== AGENT SELECTORS (memoized) ==================
+const selectSelectedAgent = createSelector(
+  [(state: RootState) => state.agents.agents, (state: RootState) => state.agents.selectedAgentId],
+  (agents, selectedAgentId) => {
     if (!selectedAgentId) return null;
-    for (const sessionAgents of Object.values(agents) as Agent[][]) {
+    for (const sessionAgents of Object.values(agents)) {
+      if (!Array.isArray(sessionAgents)) continue;
       const agent = sessionAgents.find((a: Agent) => a.id === selectedAgentId);
       if (agent) return agent;
     }
     return null;
-  });
+  }
+);
+export const useSelectedAgent = () => useAppSelector(selectSelectedAgent);
 
 export const useAgentTasks = (agentId: string | null) =>
   useAppSelector((state) => {
@@ -117,14 +132,15 @@ export const useConnectorsByCategory = (category: string) =>
     state.connectors.availableConnectors.filter((c: Connector) => c.category === category)
   );
 
-// ================== NOTIFICATION SELECTORS ==================
+// ================== NOTIFICATION SELECTORS (memoized) ==================
 export const useUnreadNotificationCount = () =>
   useAppSelector((state) => state.notifications.unreadCount);
 
-export const useUnreadNotifications = () =>
-  useAppSelector((state) =>
-    state.notifications.notifications.filter((n: Notification) => !n.isRead)
-  );
+const selectUnreadNotifications = createSelector(
+  [(state: RootState) => state.notifications.notifications],
+  (notifications): Notification[] => notifications.filter((n: Notification) => !n.isRead)
+);
+export const useUnreadNotifications = () => useAppSelector(selectUnreadNotifications);
 
 export const useNotificationsByType = (type: string) =>
   useAppSelector((state) =>
@@ -132,18 +148,14 @@ export const useNotificationsByType = (type: string) =>
   );
 
 // ================== TEAM SELECTORS ==================
-export const useCurrentTeam = () =>
-  useAppSelector((state) => state.team.currentTeam);
+export const useCurrentTeam = () => useAppSelector((state) => state.team.currentTeam);
 
-export const useTeamMembers = () =>
-  useAppSelector((state) => state.team.members);
+export const useTeamMembers = () => useAppSelector((state) => state.team.members);
 
-export const useTeamInvitations = () =>
-  useAppSelector((state) => state.team.invitations);
+export const useTeamInvitations = () => useAppSelector((state) => state.team.invitations);
 
 // ================== PROJECT SELECTORS ==================
-export const useCurrentProject = () =>
-  useAppSelector((state) => state.projects.currentProject);
+export const useCurrentProject = () => useAppSelector((state) => state.projects.currentProject);
 
 export const useProjectSessions = (projectId: string | null) =>
   useAppSelector((state) => {
@@ -151,16 +163,19 @@ export const useProjectSessions = (projectId: string | null) =>
     return state.projects.projectSessions[projectId] || [];
   });
 
-export const useActiveProjects = () =>
-  useAppSelector((state) =>
-    state.projects.projects.filter((p: Project) => p.status === "active")
-  );
+const selectActiveProjects = createSelector(
+  [(state: RootState) => state.projects.projects],
+  (projects): Project[] => projects.filter((p: Project) => p.status === "active")
+);
+export const useActiveProjects = () => useAppSelector(selectActiveProjects);
 
 // ================== SCHEDULED TASK SELECTORS ==================
-export const useActiveScheduledTasks = () =>
-  useAppSelector((state) =>
-    state.scheduledTasks.tasks.filter((t: ScheduledTask) => t.status === "active")
-  );
+const selectActiveScheduledTasks = createSelector(
+  [(state: RootState) => state.scheduledTasks.tasks],
+  (tasks): ScheduledTask[] =>
+    tasks.filter((t: ScheduledTask) => ["pending", "running"].includes(t.status))
+);
+export const useActiveScheduledTasks = () => useAppSelector(selectActiveScheduledTasks);
 
 export const useScheduledTaskExecutions = (taskId: string | null) =>
   useAppSelector((state) => {
@@ -169,16 +184,15 @@ export const useScheduledTaskExecutions = (taskId: string | null) =>
   });
 
 // ================== KNOWLEDGE SELECTORS ==================
-export const useAttachments = () =>
-  useAppSelector((state) => state.knowledge.attachments);
+export const useAttachments = () => useAppSelector((state) => state.knowledge.attachments);
 
-export const useAttachmentGroups = () =>
-  useAppSelector((state) => state.knowledge.groups);
+export const useAttachmentGroups = () => useAppSelector((state) => state.knowledge.groups);
 
-export const useFavoriteAttachments = () =>
-  useAppSelector((state) =>
-    state.knowledge.attachments.filter((a: Attachment) => a.isFavorite)
-  );
+const selectFavoriteAttachments = createSelector(
+  [(state: RootState) => state.knowledge.attachments],
+  (attachments): Attachment[] => attachments.filter((a: Attachment) => a.isFavorite)
+);
+export const useFavoriteAttachments = () => useAppSelector(selectFavoriteAttachments);
 
 // ================== EXPERIMENT/FEATURE FLAG SELECTORS ==================
 export const useFeatureFlag = (featureKey: string) =>
@@ -194,37 +208,30 @@ export const useIsFeatureEnabled = (featureKey: string) =>
   });
 
 // ================== CONFIG SELECTORS ==================
-export const useClientConfig = () =>
-  useAppSelector((state) => state.configs.clientConfig);
+export const useClientConfig = () => useAppSelector((state) => state.configs.clientConfig);
 
-export const useAgentEmailInfo = () =>
-  useAppSelector((state) => state.configs.agentEmailInfo);
+export const useAgentEmailInfo = () => useAppSelector((state) => state.configs.agentEmailInfo);
 
-export const usePaymentInfo = () =>
-  useAppSelector((state) => state.configs.paymentInfo);
+export const usePaymentInfo = () => useAppSelector((state) => state.configs.paymentInfo);
 
-export const useFeatures = () =>
-  useAppSelector((state) => state.configs.features);
+export const useFeatures = () => useAppSelector((state) => state.configs.features);
 
 // ================== CHAT SELECTORS ==================
-export const useChatTaskMode = () =>
-  useAppSelector((state) => state.chat.taskMode);
+export const useChatTaskMode = () => useAppSelector((state) => state.chat.taskMode);
 
-export const useChatFiles = () =>
-  useAppSelector((state) => state.chat.files);
+export const useChatFiles = () => useAppSelector((state) => state.chat.files);
 
-export const useIsStreaming = () =>
-  useAppSelector((state) => state.chat.isStreaming);
+export const useIsStreaming = () => useAppSelector((state) => state.chat.isStreaming);
 
 // ================== WEBSOCKET SELECTORS ==================
-export const useConnectionStatus = () =>
-  useAppSelector((state) => state.websocket.status);
+export const useConnectionStatus = () => useAppSelector((state) => state.websocket.status);
 
 export const useIsConnected = () =>
   useAppSelector((state) => state.websocket.status === "connected");
 
-export const useSubscribedRooms = () =>
-  useAppSelector((state) => state.websocket.rooms);
+export const useSubscribedRooms = () => useAppSelector((state) => state.websocket.rooms);
+
+export const useDevices = () => useAppSelector((state) => state.devices);
 
 // ================== ADDITIONAL MANUS-STYLE SELECTORS ==================
 export const useWorkspace = () => useAppSelector((state) => state.workspace);

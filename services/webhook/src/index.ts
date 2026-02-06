@@ -16,6 +16,15 @@ async function main() {
     genReqId: () => crypto.randomUUID(),
   });
 
+  const requireUserId = (request: any, reply: any): string | null => {
+    const userId = request.headers["x-user-id"] as string | undefined;
+    if (!userId) {
+      reply.status(401).send({ error: "Unauthorized" });
+      return null;
+    }
+    return userId;
+  };
+
   // Health check
   app.get("/health", async () => {
     return { status: "ok", service: "webhook" };
@@ -32,7 +41,8 @@ async function main() {
 
     try {
       const generatedSecret = secret || crypto.randomUUID();
-      const userId = (request.headers["x-user-id"] as string) || "";
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
 
       const [webhook] = await db
         .insert(webhooks)
@@ -64,7 +74,8 @@ async function main() {
   // List webhooks
   app.get("/webhooks", async (request, reply) => {
     try {
-      const userId = (request.headers["x-user-id"] as string) || "";
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
       const results = await db
         .select()
         .from(webhooks)
@@ -81,7 +92,13 @@ async function main() {
   app.get("/webhooks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const [webhook] = await db.select().from(webhooks).where(eq(webhooks.id, id)).limit(1);
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
+      const [webhook] = await db
+        .select()
+        .from(webhooks)
+        .where(and(eq(webhooks.id, id), eq(webhooks.userId, userId)))
+        .limit(1);
       if (!webhook) {
         return reply.status(404).send({ error: "Webhook not found" });
       }
@@ -97,10 +114,12 @@ async function main() {
     const { id } = request.params as { id: string };
     const updates = request.body as Record<string, unknown>;
     try {
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
       const [updated] = await db
         .update(webhooks)
         .set(updates as any)
-        .where(eq(webhooks.id, id))
+        .where(and(eq(webhooks.id, id), eq(webhooks.userId, userId)))
         .returning();
       if (!updated) {
         return reply.status(404).send({ error: "Webhook not found" });
@@ -116,7 +135,12 @@ async function main() {
   app.delete("/webhooks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const [deleted] = await db.delete(webhooks).where(eq(webhooks.id, id)).returning();
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
+      const [deleted] = await db
+        .delete(webhooks)
+        .where(and(eq(webhooks.id, id), eq(webhooks.userId, userId)))
+        .returning();
       if (!deleted) {
         return reply.status(404).send({ error: "Webhook not found" });
       }
@@ -131,6 +155,16 @@ async function main() {
   app.get("/webhooks/:id/deliveries", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
+      const [webhook] = await db
+        .select({ id: webhooks.id })
+        .from(webhooks)
+        .where(and(eq(webhooks.id, id), eq(webhooks.userId, userId)))
+        .limit(1);
+      if (!webhook) {
+        return reply.status(404).send({ error: "Webhook not found" });
+      }
       const results = await db
         .select()
         .from(webhookDeliveries)
@@ -148,10 +182,13 @@ async function main() {
   app.post("/deliveries/:id/retry", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
+      const userId = requireUserId(request, reply);
+      if (!userId) return;
       const [delivery] = await db
         .select()
         .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.id, id))
+        .innerJoin(webhooks, eq(webhookDeliveries.webhookId, webhooks.id))
+        .where(and(eq(webhookDeliveries.id, id), eq(webhooks.userId, userId)))
         .limit(1);
       if (!delivery) {
         return reply.status(404).send({ error: "Delivery not found" });

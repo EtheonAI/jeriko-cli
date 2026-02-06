@@ -4,18 +4,23 @@
 import "@repo/ai/components/tools/tool-animations.css";
 
 import * as React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
 import {
   setMessages as setReduxMessages,
   setStreaming,
+  setCurrentStreamingSession,
+  setChatLoading,
+  setChatError,
   type Message,
 } from "@/lib/store/slices/chat.slice";
 import { setSelectedAgent, type Agent, type AgentTask } from "@/lib/store/slices/agents.slice";
+import { updateSession as updateSessionInStore } from "@/lib/store/slices/sessions.slice";
+import { useAgentsData } from "@/lib/store/hooks/useAgentsData";
 import { useSocket } from "@/lib/socket/provider";
 import { ChatContainer, MessageList, AgentDagPanel } from "@repo/ai/components";
-import { AgentActivityTracker, type ActivityStep } from "@repo/ai/components/tools";
-import { useRealTimeChat } from "@repo/ai/hooks";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage as AIUIMessage } from "ai";
 import type { UIMessage, MessagePart, Attachment } from "@repo/ai/lib/types";
 import {
   UnifiedPrompt,
@@ -24,6 +29,11 @@ import {
 } from "@/app/(authenticated)/components/unified-prompt";
 import { SourcesPanel } from "./components/sources-panel";
 import { ConnectionStatus } from "./components/connection-status";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+
+// ============================================================================
+// Component
+// ============================================================================
 
 interface ChatPageClientProps {
   sessionId: string;
@@ -35,21 +45,18 @@ interface ChatPageClientProps {
   };
 }
 
-/**
- * ChatPageClient - Main chat page client component with Redux integration
- */
 export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPageClientProps) {
   const dispatch = useAppDispatch();
   const composerRef = React.useRef<UnifiedPromptRef>(null);
+  const hasLoadedRef = useRef(false);
 
-  // Model state - read from sessionStorage initial if available
+  // Model state
   const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
 
   // Redux state
   const reduxMessages = useAppSelector((state) => state.chat.messages[sessionId] ?? []);
   const isStreaming = useAppSelector((state) => state.chat.isStreaming);
-  const agents = useAppSelector((state) => state.agents.agents[sessionId] ?? []);
-  const tasks = useAppSelector((state) => state.agents.tasks);
+  const { agents, tasks } = useAgentsData(sessionId, { autoFetch: false });
   const selectedAgentId = useAppSelector((state) => state.agents.selectedAgentId);
 
   // Socket connection
@@ -71,44 +78,127 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     }));
   }, [initialMessages, reduxMessages]);
 
-  // Real-time chat hook
+  // Initial load (HTTP-first)
+  useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+
+    if (initialMessages.length > 0) {
+      dispatch(setReduxMessages({ sessionId, messages: initialMessages }));
+      return;
+    }
+
+    if (reduxMessages.length > 0) return;
+
+    dispatch(setChatLoading(true));
+    getTrpcClient()
+      .messages.list.query({ sessionId })
+      .then((messages) => {
+        const mapped: Message[] = messages.map((m: any) => ({
+          id: m.id,
+          sessionId: m.sessionId,
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt?.toISOString?.() ?? new Date().toISOString(),
+          metadata: m.metadata ?? undefined,
+        }));
+        dispatch(setReduxMessages({ sessionId, messages: mapped }));
+      })
+      .catch((error: any) => {
+        dispatch(setChatError(error?.message || "Failed to load messages"));
+      })
+      .finally(() => {
+        dispatch(setChatLoading(false));
+      });
+  }, [dispatch, initialMessages, reduxMessages.length, sessionId]);
+
+  // AI SDK v6 transport (stable ref, created once)
+  const transportRef = useRef(new DefaultChatTransport({ api: "/api/chat" }));
+
+  // AI SDK v6 useChat — official hook handles streaming, state, and rendering correctly
   const {
-    messages,
-    setMessages,
+    messages: rawMessages,
+    setMessages: setRawMessages,
     status,
     error,
-    sendMessage,
+    sendMessage: sdkSendMessage,
     stop,
     regenerate,
     addToolApprovalResponse,
-    pendingToolCalls,
-    hasToolsAwaitingApproval,
-  } = useRealTimeChat({
+  } = useChat({
     id: sessionId,
-    messages: initialUIMessages,
-    sessionId,
-    api: "/api/chat",
-    onFinish: ({ message, messages }) => {
-      // Sync back to Redux
-      const reduxMsgs: Message[] = messages.map((m) => ({
+    transport: transportRef.current,
+    experimental_throttle: 50,
+    onFinish: ({ messages: finishedMessages }) => {
+      // Sync to Redux
+      const reduxMsgs: Message[] = finishedMessages.map((m) => ({
         id: m.id,
         sessionId,
         role: m.role,
-        content: m.parts
-          .filter((p) => p.type === "text")
-          .map((p) => (p as { type: "text"; text: string }).text)
+        content: (m.parts ?? [])
+          .filter((p) => p.type === "text" && "text" in p)
+          .map((p) => (p as { type: "text"; text: string }).text ?? "")
           .join(""),
-        createdAt: m.createdAt?.toISOString() ?? new Date().toISOString(),
-        metadata: m.metadata,
+        createdAt: new Date().toISOString(),
+        metadata: m.metadata as Record<string, unknown> | undefined,
       }));
       dispatch(setReduxMessages({ sessionId, messages: reduxMsgs }));
+
+      // Bump session updatedAt so sidebar re-sorts this chat to the top
+      dispatch(
+        updateSessionInStore({ id: sessionId, updates: { updatedAt: new Date().toISOString() } })
+      );
     },
     onError: (err) => {
       console.error("Chat error:", err);
     },
   });
 
-  // Consume initial message from home page (sessionStorage)
+  // Cast AI SDK messages to our custom UIMessage type for rendering components.
+  // Both types are structurally compatible at runtime.
+  const messages = rawMessages as unknown as UIMessage[];
+  const setMessages = setRawMessages as unknown as (
+    msgs: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])
+  ) => void;
+
+  // Wrap sendMessage to always include chatId/sessionId in body
+  const sendMessage = useCallback(
+    (
+      text: string,
+      options?: { body?: Record<string, unknown>; headers?: Record<string, string> }
+    ) => {
+      const body = { chatId: sessionId, ...(options?.body ?? {}) };
+      return sdkSendMessage({ text }, { ...options, body });
+    },
+    [sdkSendMessage, sessionId]
+  );
+
+  // Sync DB-loaded messages into useChat state after initial load.
+  // The hook creates the Chat object on first render — async DB loads
+  // won't be picked up unless we explicitly call setMessages.
+  const hasSyncedRef = useRef(false);
+  useEffect(() => {
+    // Only sync once, don't overwrite during streaming, and only when we have data
+    if (hasSyncedRef.current) return;
+    if (status === "streaming" || status === "submitted") return;
+    if (initialUIMessages.length === 0) return;
+    // Don't overwrite if the hook already has messages (e.g. from sessionStorage auto-send)
+    if (messages.length > 0) {
+      hasSyncedRef.current = true;
+      return;
+    }
+    hasSyncedRef.current = true;
+    setMessages(initialUIMessages);
+  }, [initialUIMessages, messages.length, status, setMessages]);
+
+  // Use messages directly so text streams in real-time.
+  // useDeferredValue was deferring MessageList updates during rapid streaming,
+  // causing text to only appear after streaming finished (or on refresh).
+
+  // ============================================================================
+  // Session storage initial message consumer
+  // ============================================================================
+
   const initialConsumedRef = React.useRef(false);
   useEffect(() => {
     if (initialConsumedRef.current) return;
@@ -125,16 +215,14 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
         model?: string;
       };
 
-      // Carry over model selection from dashboard
       if (model) {
         setSelectedModel(model);
       }
 
       const textPart = parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
       if (textPart?.text) {
-        // Small delay to let the hook initialize
         setTimeout(() => {
-          sendMessage({ text: textPart.text, body: { model } });
+          sendMessage(textPart.text, { body: { model } });
         }, 100);
       }
     } catch {
@@ -156,24 +244,23 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
 
   // Update streaming state in Redux
   useEffect(() => {
-    dispatch(setStreaming(status === "streaming"));
-  }, [status, dispatch]);
+    const isActive = status === "streaming" || status === "submitted";
+    dispatch(setStreaming(isActive));
+    if (isActive) {
+      dispatch(setCurrentStreamingSession(sessionId));
+    } else {
+      dispatch(setCurrentStreamingSession(null));
+    }
+  }, [status, sessionId, dispatch]);
 
   // Handle send message from UnifiedPrompt
   const handleSendMessage = useCallback(
     (input: string, attachments: Attachment[], options: SubmitOptions) => {
-      const fileArray = attachments.filter((a) => a.file).map((a) => a.file!);
-
-      // Update model if changed
       if (options.model) {
         setSelectedModel(options.model);
       }
 
-      sendMessage({
-        text: input,
-        files: fileArray.length > 0 ? fileArray : undefined,
-        body: { model: options.model },
-      });
+      sendMessage(input, { body: { model: options.model } });
     },
     [sendMessage]
   );
@@ -186,13 +273,10 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
           regenerate({ messageId });
           break;
         case "copy":
-          // Handled in component
           break;
         case "edit":
-          // TODO: Implement edit
           break;
         case "delete":
-          // TODO: Implement delete
           break;
       }
     },
@@ -255,68 +339,6 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     );
   }, [messages]);
 
-  // Derive activity steps from messages for AgentActivityTracker
-  const activitySteps = useMemo<ActivityStep[]>(() => {
-    const steps: ActivityStep[] = [];
-
-    // Get the latest assistant message to extract tool activity
-    const latestAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!latestAssistant) return steps;
-
-    // Extract tool parts
-    for (const part of latestAssistant.parts) {
-      if (part.type === "tool-invocation") {
-        const toolPart = part as {
-          type: "tool-invocation";
-          toolCallId: string;
-          toolName: string;
-          state: string;
-          input?: unknown;
-          output?: unknown;
-        };
-
-        const getStatus = (state: string): ActivityStep["status"] => {
-          switch (state) {
-            case "input-streaming":
-            case "input-available":
-              return "running";
-            case "output-available":
-              return "completed";
-            case "output-error":
-              return "failed";
-            default:
-              return "pending";
-          }
-        };
-
-        steps.push({
-          id: toolPart.toolCallId,
-          type: "tool",
-          label: formatToolName(toolPart.toolName),
-          toolName: toolPart.toolName,
-          status: getStatus(toolPart.state),
-        });
-      }
-    }
-
-    return steps;
-  }, [messages]);
-
-  // Format tool name for display
-  function formatToolName(name: string): string {
-    return name.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  // Current step is the first running one
-  const currentStepId = useMemo(() => {
-    return activitySteps.find((s) => s.status === "running")?.id;
-  }, [activitySteps]);
-
-  // Show activity tracker when there are active tool executions
-  const showActivityTracker =
-    activitySteps.length > 0 &&
-    (status === "streaming" || activitySteps.some((s) => s.status === "running"));
-
   return (
     <ChatContainer
       className="h-full"
@@ -341,34 +363,19 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
         </div>
       }
       footer={
-        <div className="p-4">
-          {/* Agent DAG */}
-          {agentData.length > 0 && (
-            <div className="mb-4">
+        <div className="px-4 pb-4 pt-2">
+          <div className="mx-auto max-w-3xl space-y-3">
+            {/* Agent DAG (multi-agent only) */}
+            {agentData.length > 0 && (
               <AgentDagPanel
                 agents={agentData}
                 selectedAgentId={selectedAgentId}
                 onAgentSelect={handleAgentSelect}
                 compact
               />
-            </div>
-          )}
+            )}
 
-          {/* Activity Tracker - shows tool execution progress */}
-          {showActivityTracker && (
-            <div className="mx-auto max-w-3xl mb-4">
-              <AgentActivityTracker
-                steps={activitySteps}
-                currentStepId={currentStepId}
-                isActive={status === "streaming"}
-                onCancel={stop}
-                compact
-              />
-            </div>
-          )}
-
-          {/* Composer */}
-          <div className="mx-auto max-w-3xl">
+            {/* Prompt */}
             <UnifiedPrompt
               ref={composerRef}
               onSubmit={handleSendMessage}
@@ -376,7 +383,7 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
               disabled={status === "submitted"}
               isStreaming={status === "streaming"}
               initialModel={selectedModel}
-              placeholder="Ask anything..."
+              showAnimatedPlaceholder={false}
             />
           </div>
         </div>

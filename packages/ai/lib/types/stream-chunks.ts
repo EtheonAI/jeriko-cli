@@ -5,27 +5,27 @@
  * between server and client during streaming responses.
  */
 
-import type { FinishReason, ProviderMetadata } from './ui-message';
+import type { FinishReason, ProviderMetadata } from "./ui-message";
 
 // ============================================================================
 // Text Chunks
 // ============================================================================
 
 export interface TextStartChunk {
-  type: 'text-start';
+  type: "text-start";
   id: string;
   providerMetadata?: ProviderMetadata;
 }
 
 export interface TextDeltaChunk {
-  type: 'text-delta';
+  type: "text-delta";
   id: string;
   delta: string;
   providerMetadata?: ProviderMetadata;
 }
 
 export interface TextEndChunk {
-  type: 'text-end';
+  type: "text-end";
   id: string;
   providerMetadata?: ProviderMetadata;
 }
@@ -35,20 +35,20 @@ export interface TextEndChunk {
 // ============================================================================
 
 export interface ReasoningStartChunk {
-  type: 'reasoning-start';
+  type: "reasoning-start";
   id: string;
   providerMetadata?: ProviderMetadata;
 }
 
 export interface ReasoningDeltaChunk {
-  type: 'reasoning-delta';
+  type: "reasoning-delta";
   id: string;
   delta: string;
   providerMetadata?: ProviderMetadata;
 }
 
 export interface ReasoningEndChunk {
-  type: 'reasoning-end';
+  type: "reasoning-end";
   id: string;
   providerMetadata?: ProviderMetadata;
 }
@@ -58,7 +58,7 @@ export interface ReasoningEndChunk {
 // ============================================================================
 
 export interface ToolInputStartChunk {
-  type: 'tool-input-start';
+  type: "tool-input-start";
   toolCallId: string;
   toolName: string;
   dynamic?: boolean;
@@ -68,13 +68,13 @@ export interface ToolInputStartChunk {
 }
 
 export interface ToolInputDeltaChunk {
-  type: 'tool-input-delta';
+  type: "tool-input-delta";
   toolCallId: string;
   inputTextDelta: string;
 }
 
 export interface ToolInputAvailableChunk {
-  type: 'tool-input-available';
+  type: "tool-input-available";
   toolCallId: string;
   toolName: string;
   input: unknown;
@@ -85,7 +85,7 @@ export interface ToolInputAvailableChunk {
 }
 
 export interface ToolInputErrorChunk {
-  type: 'tool-input-error';
+  type: "tool-input-error";
   toolCallId: string;
   toolName: string;
   input?: unknown;
@@ -96,13 +96,13 @@ export interface ToolInputErrorChunk {
 }
 
 export interface ToolApprovalRequestChunk {
-  type: 'tool-approval-request';
+  type: "tool-approval-request";
   toolCallId: string;
   approvalId: string;
 }
 
 export interface ToolOutputAvailableChunk {
-  type: 'tool-output-available';
+  type: "tool-output-available";
   toolCallId: string;
   output: unknown;
   preliminary?: boolean;
@@ -110,14 +110,14 @@ export interface ToolOutputAvailableChunk {
 }
 
 export interface ToolOutputErrorChunk {
-  type: 'tool-output-error';
+  type: "tool-output-error";
   toolCallId: string;
   errorText: string;
   providerExecuted?: boolean;
 }
 
 export interface ToolOutputDeniedChunk {
-  type: 'tool-output-denied';
+  type: "tool-output-denied";
   toolCallId: string;
 }
 
@@ -126,14 +126,14 @@ export interface ToolOutputDeniedChunk {
 // ============================================================================
 
 export interface FileChunk {
-  type: 'file';
+  type: "file";
   mediaType: string;
   url: string;
   filename?: string;
 }
 
 export interface SourceUrlChunk {
-  type: 'source-url';
+  type: "source-url";
   sourceId: string;
   url: string;
   title?: string;
@@ -141,7 +141,7 @@ export interface SourceUrlChunk {
 }
 
 export interface SourceDocumentChunk {
-  type: 'source-document';
+  type: "source-document";
   sourceId: string;
   mediaType: string;
   title: string;
@@ -154,11 +154,11 @@ export interface SourceDocumentChunk {
 // ============================================================================
 
 export interface StartStepChunk {
-  type: 'start-step';
+  type: "start-step";
 }
 
 export interface FinishStepChunk {
-  type: 'finish-step';
+  type: "finish-step";
 }
 
 // ============================================================================
@@ -166,24 +166,24 @@ export interface FinishStepChunk {
 // ============================================================================
 
 export interface StartChunk {
-  type: 'start';
+  type: "start";
   messageId?: string;
   messageMetadata?: unknown;
 }
 
 export interface FinishChunk {
-  type: 'finish';
+  type: "finish";
   finishReason?: FinishReason;
   messageMetadata?: unknown;
 }
 
 export interface MessageMetadataChunk {
-  type: 'message-metadata';
+  type: "message-metadata";
   messageMetadata: unknown;
 }
 
 export interface ErrorChunk {
-  type: 'error';
+  type: "error";
   errorText: string;
 }
 
@@ -239,24 +239,34 @@ export type UIMessageStreamChunk =
 // Type Guards
 // ============================================================================
 
-export function isTextChunk(chunk: UIMessageStreamChunk): chunk is TextStartChunk | TextDeltaChunk | TextEndChunk {
-  return chunk.type === 'text-start' || chunk.type === 'text-delta' || chunk.type === 'text-end';
+export function isTextChunk(
+  chunk: UIMessageStreamChunk
+): chunk is TextStartChunk | TextDeltaChunk | TextEndChunk {
+  return chunk.type === "text-start" || chunk.type === "text-delta" || chunk.type === "text-end";
 }
 
-export function isReasoningChunk(chunk: UIMessageStreamChunk): chunk is ReasoningStartChunk | ReasoningDeltaChunk | ReasoningEndChunk {
-  return chunk.type === 'reasoning-start' || chunk.type === 'reasoning-delta' || chunk.type === 'reasoning-end';
+export function isReasoningChunk(
+  chunk: UIMessageStreamChunk
+): chunk is ReasoningStartChunk | ReasoningDeltaChunk | ReasoningEndChunk {
+  return (
+    chunk.type === "reasoning-start" ||
+    chunk.type === "reasoning-delta" ||
+    chunk.type === "reasoning-end"
+  );
 }
 
 export function isToolChunk(chunk: UIMessageStreamChunk): boolean {
-  return chunk.type.startsWith('tool-');
+  return chunk.type.startsWith("tool-");
 }
 
 export function isDataChunk(chunk: UIMessageStreamChunk): chunk is DataChunk {
-  return chunk.type.startsWith('data-');
+  return chunk.type.startsWith("data-");
 }
 
-export function isControlChunk(chunk: UIMessageStreamChunk): chunk is StartChunk | FinishChunk | ErrorChunk {
-  return chunk.type === 'start' || chunk.type === 'finish' || chunk.type === 'error';
+export function isControlChunk(
+  chunk: UIMessageStreamChunk
+): chunk is StartChunk | FinishChunk | ErrorChunk {
+  return chunk.type === "start" || chunk.type === "finish" || chunk.type === "error";
 }
 
 // ============================================================================
@@ -270,18 +280,18 @@ export function formatSSEChunk(chunk: UIMessageStreamChunk): string {
   const lines: string[] = [];
   lines.push(`event: ${chunk.type}`);
   lines.push(`data: ${JSON.stringify(chunk)}`);
-  return lines.join('\n') + '\n\n';
+  return lines.join("\n") + "\n\n";
 }
 
 /**
  * Parse an SSE message into a chunk
  */
 export function parseSSEChunk(message: string): UIMessageStreamChunk | null {
-  const lines = message.split('\n');
-  let data = '';
+  const lines = message.split("\n");
+  let data = "";
 
   for (const line of lines) {
-    if (line.startsWith('data:')) {
+    if (line.startsWith("data:")) {
       data += line.slice(5).trim();
     }
   }
@@ -311,90 +321,98 @@ export function parseSSEChunk(message: string): UIMessageStreamChunk | null {
 export function parseAISDKDataStream(line: string): UIMessageStreamChunk | null {
   if (!line || line.length < 2) return null;
 
-  const prefix = line[0];
-  const colonIndex = line.indexOf(':');
-  if (colonIndex === -1) return null;
+  const colonIndex = line.indexOf(":");
+  // AI SDK data stream format always has a single-character prefix: 0:"text", d:{...}, e:{...}
+  // Reject SSE lines like "data: {...}" where colon is at index 4+
+  if (colonIndex !== 1) return null;
 
-  const content = line.slice(colonIndex + 1);
+  const prefix = line[0];
+  const content = line.slice(2);
 
   try {
     switch (prefix) {
-      case '0': {
+      case "0": {
         // Text delta
         const text = JSON.parse(content) as string;
         return {
-          type: 'text-delta',
-          id: 'text-0',
+          type: "text-delta",
+          id: "text-0",
           delta: text,
         };
       }
 
-      case '9': {
+      case "9": {
         // Tool call streaming start
         const data = JSON.parse(content) as {
           toolCallId: string;
           toolName: string;
         };
         return {
-          type: 'tool-input-start',
+          type: "tool-input-start",
           toolCallId: data.toolCallId,
           toolName: data.toolName,
         };
       }
 
-      case 'a': {
+      case "a": {
         // Tool call delta
         const data = JSON.parse(content) as {
           toolCallId: string;
           argsTextDelta: string;
         };
         return {
-          type: 'tool-input-delta',
+          type: "tool-input-delta",
           toolCallId: data.toolCallId,
           inputTextDelta: data.argsTextDelta,
         };
       }
 
-      case 'b': {
+      case "b": {
         // Tool result
         const data = JSON.parse(content) as {
           toolCallId: string;
           result: unknown;
         };
         return {
-          type: 'tool-output-available',
+          type: "tool-output-available",
           toolCallId: data.toolCallId,
           output: data.result,
         };
       }
 
-      case 'd': {
+      case "d": {
         // Finish
         const data = JSON.parse(content) as {
           finishReason?: string;
         };
         return {
-          type: 'finish',
-          finishReason: (data.finishReason as FinishReason) ?? 'stop',
+          type: "finish",
+          finishReason: (data.finishReason as FinishReason) ?? "stop",
         };
       }
 
-      case 'e': {
+      case "e": {
         // Usage/metadata - convert to message metadata
         const data = JSON.parse(content) as unknown;
         return {
-          type: 'message-metadata',
+          type: "message-metadata",
           messageMetadata: data,
         };
       }
 
-      case '3': {
+      case "3": {
         // Error
         const errorText = JSON.parse(content) as string;
         return {
-          type: 'error',
+          type: "error",
           errorText,
         };
+      }
+
+      case "f": {
+        // Custom data chunk (JSON-encoded UIMessageStreamChunk)
+        const data = JSON.parse(content) as UIMessageStreamChunk;
+        return data;
       }
 
       default:
@@ -459,17 +477,10 @@ export interface UIMessageStreamWriter {
   }): void;
 
   /** Write tool output available */
-  writeToolOutput(options: {
-    toolCallId: string;
-    output: unknown;
-    preliminary?: boolean;
-  }): void;
+  writeToolOutput(options: { toolCallId: string; output: unknown; preliminary?: boolean }): void;
 
   /** Write tool output error */
-  writeToolError(options: {
-    toolCallId: string;
-    errorText: string;
-  }): void;
+  writeToolError(options: { toolCallId: string; errorText: string }): void;
 
   /** Write a file */
   writeFile(options: { mediaType: string; url: string; filename?: string }): void;

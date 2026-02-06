@@ -10,4 +10,6 @@ export {
   withChat,
   type ChatContextValue,
   type ChatProviderProps,
-} from './chat-provider';
+} from "./chat-provider";
+
+export { RubicRuntimeProvider, type RubicRuntimeProviderProps } from "./assistant-runtime-provider";

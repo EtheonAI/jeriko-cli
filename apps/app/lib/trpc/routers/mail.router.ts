@@ -19,17 +19,17 @@ import { TRPCError } from "@trpc/server";
 export const mailRouter = createTRPCRouter({
   // Get or auto-create a mailbox for the current user
   getOrCreateMailbox: protectedProcedure.query(async ({ ctx }) => {
-    // Check for existing mailbox
-    const [existing] = await db
-      .select()
-      .from(agentMailboxes)
-      .where(eq(agentMailboxes.userId, ctx.user.id))
-      .limit(1);
-
-    if (existing) return existing;
-
-    // Create a new inbox via AgentMail API
     try {
+      // Check for existing mailbox
+      const [existing] = await db
+        .select()
+        .from(agentMailboxes)
+        .where(eq(agentMailboxes.userId, ctx.user.id))
+        .limit(1);
+
+      if (existing) return existing;
+
+      // Create a new inbox via AgentMail API
       const inbox = await createInbox({
         displayName: ctx.user.name ?? ctx.user.email,
       });
@@ -62,9 +62,13 @@ export const mailRouter = createTRPCRouter({
 
       return mailbox;
     } catch (error) {
+      console.error("[mail.getOrCreateMailbox] Failed:", error);
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",
-        message: "Failed to provision email inbox",
+        message:
+          error instanceof Error
+            ? `Failed to provision email inbox: ${error.message}`
+            : "Failed to provision email inbox",
         cause: error,
       });
     }

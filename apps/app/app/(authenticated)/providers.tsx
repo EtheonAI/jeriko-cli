@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { StoreProvider } from "../providers";
 import { SocketProvider } from "@/lib/socket/provider";
 import { TRPCProvider } from "@/lib/trpc/provider";
+import { ReduxDataLoader } from "./redux-data-loader";
 
 interface AuthenticatedProvidersProps {
   children: ReactNode;
@@ -17,6 +18,7 @@ export function AuthenticatedProviders({ children }: AuthenticatedProvidersProps
   return (
     <StoreProvider>
       <TRPCProvider>
+        <ReduxDataLoader />
         <SocketProvider>{children}</SocketProvider>
       </TRPCProvider>
     </StoreProvider>

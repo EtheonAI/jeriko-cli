@@ -97,6 +97,7 @@ export interface ChatState {
   messages: Record<string, Message[]>; // sessionId -> messages
   isStreaming: boolean;
   currentStreamingMessageId: string | null;
+  currentStreamingSessionId: string | null;
   inputValue: string;
   isLoading: boolean;
   error: string | null;
@@ -143,6 +144,7 @@ const initialState: ChatState = {
   messages: {},
   isStreaming: false,
   currentStreamingMessageId: null,
+  currentStreamingSessionId: null,
   inputValue: "",
   isLoading: false,
   error: null,
@@ -177,10 +179,7 @@ export const chatSlice = createSlice({
   name: "chat",
   initialState,
   reducers: {
-    setMessages: (
-      state,
-      action: PayloadAction<{ sessionId: string; messages: Message[] }>
-    ) => {
+    setMessages: (state, action: PayloadAction<{ sessionId: string; messages: Message[] }>) => {
       state.messages[action.payload.sessionId] = action.payload.messages;
       state.isLoading = false;
     },
@@ -240,10 +239,14 @@ export const chatSlice = createSlice({
       state.isStreaming = action.payload;
       if (!action.payload) {
         state.currentStreamingMessageId = null;
+        state.currentStreamingSessionId = null;
       }
     },
     setCurrentStreamingMessage: (state, action: PayloadAction<string | null>) => {
       state.currentStreamingMessageId = action.payload;
+    },
+    setCurrentStreamingSession: (state, action: PayloadAction<string | null>) => {
+      state.currentStreamingSessionId = action.payload;
     },
     setInputValue: (state, action: PayloadAction<string>) => {
       state.inputValue = action.payload;
@@ -284,10 +287,7 @@ export const chatSlice = createSlice({
       state.files.push(action.payload);
     },
 
-    updateChatFile: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<ChatFile> }>
-    ) => {
+    updateChatFile: (state, action: PayloadAction<{ id: string; updates: Partial<ChatFile> }>) => {
       const index = state.files.findIndex((f) => f.id === action.payload.id);
       if (index !== -1) {
         state.files[index] = { ...state.files[index], ...action.payload.updates };
@@ -424,6 +424,33 @@ export const chatSlice = createSlice({
       state.typingUsers = [];
     },
   },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase(
+      "chat/setRecommendedPlaybooksV2",
+      (state, action: PayloadAction<PlaybookInfo[]>) => {
+        state.recommendedPlaybooks = action.payload ?? [];
+        state.recommendedPlaybooksLoading = false;
+      }
+    );
+    builder.addCase(
+      "chat/setSlideTemplateList",
+      (state, action: PayloadAction<SlideTemplate[]>) => {
+        state.slideTemplateList = action.payload ?? [];
+        state.slideTemplateListLoading = false;
+      }
+    );
+    builder.addCase("chat/setSlideTemplateListLoading", (state, action: PayloadAction<boolean>) => {
+      state.slideTemplateListLoading = action.payload;
+    });
+    builder.addCase("chat/setImageStyleList", (state, action: PayloadAction<ImageStyle[]>) => {
+      state.imageStyleList = action.payload ?? [];
+      state.imageStyleListLoading = false;
+    });
+    builder.addCase("chat/setImageStyleListLoading", (state, action: PayloadAction<boolean>) => {
+      state.imageStyleListLoading = action.payload;
+    });
+  },
 });
 
 export const {
@@ -434,6 +461,7 @@ export const {
   appendToMessage,
   setStreaming,
   setCurrentStreamingMessage,
+  setCurrentStreamingSession,
   setInputValue,
   setChatLoading,
   setChatError,

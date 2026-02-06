@@ -12,7 +12,7 @@ interface ServiceConfig {
 const services: Record<string, ServiceConfig> = {
   tasks: { url: process.env.TASK_SERVICE_URL || "http://localhost:4002" },
   agents: { url: process.env.AGENT_SERVICE_URL || "http://localhost:8000" },
-  devices: { url: process.env.DEVICE_SERVICE_URL || "http://localhost:8080" },
+  devices: { url: process.env.DEVICE_SERVICE_URL || "http://localhost:4001" },
   files: { url: process.env.FILE_SERVICE_URL || "http://localhost:4005" },
   websites: { url: process.env.WEBSITE_SERVICE_URL || "http://localhost:4004" },
   billing: { url: process.env.BILLING_SERVICE_URL || "http://localhost:4008" },
@@ -57,12 +57,14 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
     const serviceConfig = services[service];
 
     if (!serviceConfig) {
-      return reply.status(404).send(
-        errorResponse(
-          { code: ErrorCodes.NOT_FOUND, message: `Service '${service}' not found` },
-          request.id
-        )
-      );
+      return reply
+        .status(404)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.NOT_FOUND, message: `Service '${service}' not found` },
+            request.id
+          )
+        );
     }
 
     // Allow unauthenticated health checks
@@ -78,12 +80,14 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
         );
         return reply.status(result.status).send(result.data);
       } catch {
-        return reply.status(503).send(
-          errorResponse(
-            { code: "SERVICE_UNAVAILABLE", message: `Service '${service}' is unavailable` },
-            request.id
-          )
-        );
+        return reply
+          .status(503)
+          .send(
+            errorResponse(
+              { code: "SERVICE_UNAVAILABLE", message: `Service '${service}' is unavailable` },
+              request.id
+            )
+          );
       }
     }
 
@@ -115,20 +119,24 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
       logger.error({ err: error, service, path }, "Proxy request failed");
 
       if (error instanceof Error && error.name === "TimeoutError") {
-        return reply.status(504).send(
+        return reply
+          .status(504)
+          .send(
+            errorResponse(
+              { code: "GATEWAY_TIMEOUT", message: "Downstream service timeout" },
+              request.id
+            )
+          );
+      }
+
+      return reply
+        .status(502)
+        .send(
           errorResponse(
-            { code: "GATEWAY_TIMEOUT", message: "Downstream service timeout" },
+            { code: "BAD_GATEWAY", message: "Downstream service unavailable" },
             request.id
           )
         );
-      }
-
-      return reply.status(502).send(
-        errorResponse(
-          { code: "BAD_GATEWAY", message: "Downstream service unavailable" },
-          request.id
-        )
-      );
     }
   });
 
@@ -136,11 +144,13 @@ export const proxyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/auth/token", async (request, reply) => {
     // This would typically validate credentials and return a token
     // For now, we'll return a placeholder
-    return reply.status(501).send(
-      errorResponse(
-        { code: "NOT_IMPLEMENTED", message: "Use the Next.js auth endpoints" },
-        request.id
-      )
-    );
+    return reply
+      .status(501)
+      .send(
+        errorResponse(
+          { code: "NOT_IMPLEMENTED", message: "Use the Next.js auth endpoints" },
+          request.id
+        )
+      );
   });
 };

@@ -44,6 +44,10 @@
       "types": "./providers/chat-provider.tsx",
       "default": "./providers/chat-provider.tsx"
     },
+    "./providers/assistant-runtime": {
+      "types": "./providers/assistant-runtime-provider.tsx",
+      "default": "./providers/assistant-runtime-provider.tsx"
+    },
     "./lib/types": {
       "types": "./lib/types/index.ts",
       "default": "./lib/types/index.ts"
@@ -141,14 +145,15 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@repo/auth": "workspace:*",
-    "@repo/design-system": "workspace:*",
-    "@tanstack/react-virtual": "^3.13.18",
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/google": "^1.2.20",
     "@ai-sdk/openai": "^2.0.77",
     "@ai-sdk/react": "^3.0.29",
+    "@assistant-ui/react": "^0.12.9",
+    "@repo/auth": "workspace:*",
+    "@repo/design-system": "workspace:*",
     "@t3-oss/env-nextjs": "^0.13.8",
+    "@tanstack/react-virtual": "^3.13.18",
     "ai": "^6.0.27",
     "lucide-react": "^0.511.0",
     "react": "19.2.3",

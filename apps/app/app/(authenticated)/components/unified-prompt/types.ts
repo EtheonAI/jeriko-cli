@@ -1,4 +1,5 @@
 import type { Attachment } from "@repo/ai/lib/types";
+import type { SelectedConnection } from "./connections-modal";
 
 // ============================================================================
 // Skill Types
@@ -28,6 +29,8 @@ export interface SubmitOptions {
   model?: string;
   /** Active skills for this message */
   skills?: SkillId[];
+  /** Selected connections for this message */
+  connections?: SelectedConnection[];
 }
 
 // ============================================================================
@@ -38,7 +41,7 @@ export interface UnifiedPromptProps {
   /** Called when user submits a message */
   onSubmit: (input: string, attachments: Attachment[], options: SubmitOptions) => void;
 
-  /** Placeholder text */
+  /** Placeholder text (overrides animated placeholders) */
   placeholder?: string;
 
   /** Whether input is disabled */
@@ -67,6 +70,21 @@ export interface UnifiedPromptProps {
 
   /** Additional CSS classes */
   className?: string;
+
+  /** Show voice input button */
+  showVoice?: boolean;
+
+  /** Show animated rotating placeholder */
+  showAnimatedPlaceholder?: boolean;
+
+  /** Custom animated placeholder strings */
+  animatedPlaceholders?: string[];
+
+  /** Called when textarea gains focus */
+  onFocus?: () => void;
+
+  /** Called when textarea loses focus */
+  onBlur?: () => void;
 }
 
 // ============================================================================

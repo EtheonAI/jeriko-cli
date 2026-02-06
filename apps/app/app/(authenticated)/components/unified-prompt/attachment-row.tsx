@@ -23,7 +23,7 @@ export function AttachmentRow({ attachments, onRemove }: AttachmentRowProps) {
   if (attachments.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 px-3 pt-3">
+    <div className="flex flex-wrap gap-2">
       {attachments.map((attachment) => {
         const Icon = getIcon(attachment.type);
         return (

@@ -50,9 +50,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       if (composioConnectionId) {
         try {
           const composio = getComposioClient();
-          await composio.connectedAccounts.delete({
-            connectedAccountId: composioConnectionId,
-          });
+          await composio.connectedAccounts.delete(composioConnectionId);
         } catch (revokeError) {
           // Log but don't block deletion — connection may already be gone
           logger.warn(

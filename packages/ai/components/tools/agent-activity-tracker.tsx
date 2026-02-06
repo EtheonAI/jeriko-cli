@@ -4,6 +4,7 @@
  * AgentActivityTracker - Real-time visualization of agent execution
  *
  * Shows:
+ * - Collapsible plan progress strip above the prompt
  * - Planning phase with task breakdown
  * - Tool execution loops with state changes
  * - Progress indicators with animations
@@ -18,6 +19,7 @@ import { cn } from "@repo/design-system/lib/utils";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
   CheckIcon,
   XIcon,
   LoaderIcon,
@@ -171,9 +173,10 @@ function TypeIcon({ type, toolName }: { type: ActivityStep["type"]; toolName?: s
       return <ZapIcon className={cn(iconClasses, "text-yellow-500")} />;
     case "message":
       return <MessageSquareIcon className={cn(iconClasses, "text-blue-500")} />;
-    case "tool":
+    case "tool": {
       const Icon = TOOL_ICONS[toolName ?? "default"] ?? TOOL_ICONS.default;
       return <Icon className={cn(iconClasses, "text-primary")} />;
+    }
   }
 }
 
@@ -314,7 +317,7 @@ function ActivityStepItem({
           {/* Substeps */}
           {hasSubsteps && isExpanded && (
             <div className="mt-2 ml-2 border-l-2 border-border pl-3 space-y-1">
-              {step.substeps!.map((substep, i) => (
+              {step.substeps!.map((substep) => (
                 <div key={substep.id} className="flex items-center gap-2 text-xs">
                   <StatusIcon status={substep.status} animate={false} />
                   <span
@@ -353,6 +356,7 @@ export function AgentActivityTracker({
 }: AgentActivityTrackerProps) {
   const seenStepsRef = useRef(new Set<string>());
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Track seen steps for animation
   const stepsWithAnimation = useMemo(() => {
@@ -370,6 +374,8 @@ export function AgentActivityTracker({
     return steps.length > 0 ? (completed / steps.length) * 100 : 0;
   }, [steps]);
 
+  const completedCount = steps.filter((s) => s.status === "completed").length;
+
   // Auto-scroll to current step
   useEffect(() => {
     if (containerRef.current && currentStepId) {
@@ -380,16 +386,95 @@ export function AgentActivityTracker({
     }
   }, [currentStepId]);
 
-  // Compact mode
-  if (compact) {
-    const currentStep =
-      steps.find((s) => s.id === currentStepId) ?? steps.find((s) => s.status === "running");
-    const completedCount = steps.filter((s) => s.status === "completed").length;
+  // Current running step for compact display
+  const currentStep =
+    steps.find((s) => s.id === currentStepId) ?? steps.find((s) => s.status === "running");
 
+  // Compact mode: collapsible plan strip
+  if (compact) {
     return (
-      <div className={cn("flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg", className)}>
-        {/* Progress */}
-        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+      <div className={cn("rounded-xl border bg-card overflow-hidden", className)}>
+        {/* Compact strip (always visible) */}
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-3 w-full px-3 py-2 hover:bg-accent/50 transition-colors"
+        >
+          {/* Activity indicator */}
+          {isActive && (
+            <ZapIcon className="size-3.5 text-primary shrink-0 motion-safe:animate-pulse" />
+          )}
+
+          {/* Current step label */}
+          {currentStep ? (
+            <span
+              className={cn(
+                "text-xs text-muted-foreground truncate flex-1 text-left",
+                isActive && "motion-safe:shimmer"
+              )}
+            >
+              {currentStep.label}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground flex-1 text-left">Processing...</span>
+          )}
+
+          {/* Progress dots */}
+          <div className="flex items-center gap-1">
+            {steps.slice(0, 6).map((s) => (
+              <div
+                key={s.id}
+                className={cn(
+                  "size-1.5 rounded-full transition-colors duration-300",
+                  s.status === "completed" && "bg-green-500",
+                  s.status === "running" && "bg-primary motion-safe:animate-pulse",
+                  s.status === "failed" && "bg-red-500",
+                  s.status === "pending" && "bg-muted-foreground/30",
+                  s.status === "cancelled" && "bg-orange-500"
+                )}
+              />
+            ))}
+            {steps.length > 6 && (
+              <span className="text-[10px] text-muted-foreground">+{steps.length - 6}</span>
+            )}
+          </div>
+
+          {/* Step counter */}
+          <span className="text-xs text-muted-foreground shrink-0">
+            {completedCount}/{steps.length}
+          </span>
+
+          {elapsedTime != null && (
+            <span className="text-xs text-muted-foreground flex items-center gap-0.5 shrink-0">
+              <ClockIcon className="size-3" />
+              {formatDuration(elapsedTime)}
+            </span>
+          )}
+
+          {/* Cancel button */}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              className="p-0.5 hover:bg-accent rounded text-muted-foreground hover:text-red-500 shrink-0"
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          )}
+
+          {/* Expand chevron */}
+          {isExpanded ? (
+            <ChevronUpIcon className="size-3.5 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronDownIcon className="size-3.5 text-muted-foreground shrink-0" />
+          )}
+        </button>
+
+        {/* Progress bar */}
+        <div className="h-0.5 bg-muted">
           <div
             className={cn(
               "h-full bg-primary transition-all duration-300",
@@ -399,33 +484,30 @@ export function AgentActivityTracker({
           />
         </div>
 
-        {/* Current step */}
-        {currentStep && (
-          <span
-            className={cn(
-              "text-xs text-muted-foreground truncate max-w-[200px]",
-              isActive && "motion-safe:shimmer"
-            )}
+        {/* Expanded step list */}
+        {isExpanded && (
+          <div
+            ref={containerRef}
+            className="px-4 py-2 max-h-[250px] overflow-y-auto border-t motion-safe:animate-[fade-in_200ms_ease-out]"
           >
-            {currentStep.label}
-          </span>
-        )}
-
-        {/* Stats */}
-        <span className="text-xs text-muted-foreground">
-          {completedCount}/{steps.length}
-        </span>
-
-        {elapsedTime && (
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
-            <ClockIcon className="size-3" />
-            {formatDuration(elapsedTime)}
-          </span>
+            {stepsWithAnimation.map((step, index) => (
+              <div key={step.id} data-step-id={step.id}>
+                <ActivityStepItem
+                  step={step}
+                  index={index}
+                  isLast={index === steps.length - 1}
+                  isCurrent={step.id === currentStepId}
+                  animationDelay={step.animationDelay}
+                />
+              </div>
+            ))}
+          </div>
         )}
       </div>
     );
   }
 
+  // Full mode
   return (
     <div className={cn("bg-card border rounded-xl", className)}>
       {/* Header */}
@@ -446,7 +528,7 @@ export function AgentActivityTracker({
         </div>
 
         <div className="flex items-center gap-2">
-          {elapsedTime && (
+          {elapsedTime != null && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <ClockIcon className="size-3" />
               {formatDuration(elapsedTime)}
@@ -516,48 +598,3 @@ export function AgentActivityTracker({
     </div>
   );
 }
-
-// ============================================================================
-// CSS for custom animations (add to global CSS or use CSS-in-JS)
-// ============================================================================
-
-/*
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    currentColor 0%,
-    hsl(var(--primary)) 50%,
-    currentColor 100%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: shimmer 2s linear infinite;
-}
-
-@keyframes spring-bounce {
-  0% { transform: scale(0); }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); }
-}
-
-@keyframes progress-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4); }
-  50% { box-shadow: 0 0 8px 4px hsl(var(--primary) / 0.2); }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-*/

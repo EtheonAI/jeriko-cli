@@ -9,13 +9,7 @@ export type AgentType =
   | "executor"
   | "analyst";
 
-export type AgentStatus =
-  | "idle"
-  | "thinking"
-  | "executing"
-  | "waiting"
-  | "completed"
-  | "failed";
+export type AgentStatus = "idle" | "thinking" | "executing" | "waiting" | "completed" | "failed";
 
 export interface Agent {
   id: string;
@@ -72,19 +66,23 @@ export const agentsSlice = createSlice({
   name: "agents",
   initialState,
   reducers: {
-    setAgents: (
-      state,
-      action: PayloadAction<{ sessionId: string; agents: Agent[] }>
-    ) => {
+    setAgents: (state, action: PayloadAction<{ sessionId: string; agents: Agent[] }>) => {
       state.agents[action.payload.sessionId] = action.payload.agents;
       state.isLoading = false;
+      state.error = null;
     },
     addAgent: (state, action: PayloadAction<Agent>) => {
       const { sessionId } = action.payload;
       if (!state.agents[sessionId]) {
         state.agents[sessionId] = [];
       }
-      state.agents[sessionId].push(action.payload);
+      // Prevent duplicates — update existing agent or add new
+      const existingIndex = state.agents[sessionId].findIndex((a) => a.id === action.payload.id);
+      if (existingIndex >= 0) {
+        state.agents[sessionId][existingIndex] = action.payload;
+      } else {
+        state.agents[sessionId].push(action.payload);
+      }
     },
     updateAgent: (
       state,
@@ -111,10 +109,7 @@ export const agentsSlice = createSlice({
         state.selectedAgentId = null;
       }
     },
-    setTasks: (
-      state,
-      action: PayloadAction<{ agentId: string; tasks: AgentTask[] }>
-    ) => {
+    setTasks: (state, action: PayloadAction<{ agentId: string; tasks: AgentTask[] }>) => {
       state.tasks[action.payload.agentId] = action.payload.tasks;
     },
     addTask: (state, action: PayloadAction<AgentTask>) => {

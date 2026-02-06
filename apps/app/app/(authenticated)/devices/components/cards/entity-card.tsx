@@ -24,10 +24,19 @@ export function EntityCard({ hubId, entity }: EntityCardProps) {
     case "light":
       return <LightCard hubId={hubId} entity={entity} />;
     case "switch":
+    case "fan":
+    case "vacuum":
+    case "input_boolean":
+    case "automation":
+    case "siren":
+    case "humidifier":
+    case "cover":
       return <SwitchCard hubId={hubId} entity={entity} />;
     case "climate":
+    case "water_heater":
       return <ClimateCard hubId={hubId} entity={entity} />;
     case "sensor":
+    case "binary_sensor":
       return <SensorCard entity={entity} />;
     default:
       return <GenericCard entity={entity} />;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
@@ -46,18 +46,20 @@ export function ApplicationsPageClient() {
       startOAuth(variables.connectorDefinitionId);
     },
     onError: (error) => {
-      setConnectingDefId(null);
       if (error.message.includes("already installed")) {
-        // Already installed, find the connector and start OAuth
-        const existing = installedConnectors?.find((c) => c.definition.id === connectingDefId);
-        if (existing) {
-          startOAuth(existing.definition.id);
+        // Already installed — go straight to OAuth
+        const def = definitions?.find((d) => d.id === connectingDefId);
+        if (def) {
+          initOAuth.mutate({ type: def.type });
         }
       } else {
+        setConnectingDefId(null);
         toast.error(error.message || "Failed to connect");
       }
     },
   });
+
+  const checkConnection = trpc.connectors.checkConnection.useMutation();
 
   const initOAuth = trpc.connectors.initializeOAuth.useMutation({
     onSuccess: (data) => {
@@ -68,14 +70,27 @@ export function ApplicationsPageClient() {
         setConnectingDefId(null);
         return;
       }
-      // Poll for popup close
-      const check = setInterval(() => {
+      // Poll for popup close + listen for postMessage from callback page
+      const check = setInterval(async () => {
         if (popup.closed) {
           clearInterval(check);
+          // Check connection status via connector service
+          const def = definitions?.find((d) => d.id === connectingDefId);
+          if (def) {
+            try {
+              const result = await checkConnection.mutateAsync({ type: def.type });
+              if (result.status === "connected") {
+                toast.success(`${def.name} connected successfully!`);
+              } else {
+                toast.info("Connection pending. It may take a moment to complete.");
+              }
+            } catch {
+              // Ignore — just refresh
+            }
+          }
           setConnectingDefId(null);
           utils.connectors.list.invalidate();
           utils.connectors.listDefinitions.invalidate();
-          toast.success("Connection flow completed. Checking status...");
         }
       }, 500);
     },
@@ -84,6 +99,18 @@ export function ApplicationsPageClient() {
       toast.error(error.message || "Failed to start connection");
     },
   });
+
+  // Listen for postMessage from the OAuth callback popup
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "composio-oauth-callback") {
+        utils.connectors.list.invalidate();
+        utils.connectors.listDefinitions.invalidate();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [utils]);
 
   const startOAuth = useCallback(
     (definitionId: string) => {
@@ -98,17 +125,10 @@ export function ApplicationsPageClient() {
   const handleConnect = useCallback(
     (definitionId: string, _type: string) => {
       setConnectingDefId(definitionId);
-      // Check if already installed
-      const existing = installedConnectors?.find((c) => c.definition.id === definitionId);
-      if (existing) {
-        // Already installed, go straight to OAuth
-        const def = definitions?.find((d) => d.id === definitionId);
-        if (def) {
-          initOAuth.mutate({ type: def.type });
-        }
-      } else {
-        // Install first (will trigger OAuth on success)
-        installConnector.mutate({ connectorDefinitionId: definitionId });
+      // Go straight to OAuth — connector service creates the user_connector record
+      const def = definitions?.find((d) => d.id === definitionId);
+      if (def) {
+        initOAuth.mutate({ type: def.type });
       }
     },
     [installedConnectors, definitions, initOAuth, installConnector]

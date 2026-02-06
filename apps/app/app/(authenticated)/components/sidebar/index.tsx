@@ -17,6 +17,7 @@ import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { trpc } from "@/lib/trpc/client";
+import { useAppSelector } from "@/lib/store/hooks";
 import { NavSection } from "./nav-section";
 import { NewTaskButton } from "./new-task-button";
 import { SearchButton } from "./search-button";
@@ -39,8 +40,8 @@ type Session = {
   title: string | null;
   status: string | null;
   metadata: Record<string, unknown> | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string | Date;
+  updatedAt: string | Date;
 };
 
 function groupSessionsByDate(sessions: Session[]) {
@@ -75,7 +76,16 @@ function groupSessionsByDate(sessions: Session[]) {
 }
 
 export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
-  const { data: sessions, isLoading } = trpc.sessions.list.useQuery();
+  const { data: trpcSessions, isLoading: trpcLoading } = trpc.sessions.list.useQuery();
+  // Merge: tRPC data as source of truth, with any optimistic Redux additions
+  const reduxSessions = useAppSelector((state) => state.sessions.sessions);
+  const sessions = useMemo(() => {
+    const base = trpcSessions ?? [];
+    const baseIds = new Set(base.map((s) => s.id));
+    const extras = reduxSessions.filter((s) => !baseIds.has(s.id));
+    return [...extras, ...base];
+  }, [trpcSessions, reduxSessions]);
+  const isLoading = trpcLoading;
 
   const grouped = useMemo(() => groupSessionsByDate(sessions ?? []), [sessions]);
 

@@ -3,14 +3,6 @@ import { db, connectorDefinitions, userConnectors, eq, and } from "../lib/db.js"
 import { getComposioClient } from "../lib/composio.js";
 import { getUserId, logger } from "../lib/helpers.js";
 
-interface ComposioTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  appName?: string;
-  [key: string]: unknown;
-}
-
 export async function toolRoutes(app: FastifyInstance) {
   // Get ALL tools across user's connected apps — called by agent service
   app.get<{ Params: { userId: string } }>("/users/:userId/tools", async (request, reply) => {
@@ -33,46 +25,44 @@ export async function toolRoutes(app: FastifyInstance) {
         return { tools: [] };
       }
 
-      // Extract app names from connected integrations
-      const appNames = integrations.map((i) => i.definition.type);
+      // Extract toolkit names from connected integrations
+      const toolkitNames = integrations.map((i) => i.definition.type.toUpperCase());
 
-      // Fetch tools from Composio for these apps
+      // Fetch tools from Composio for these toolkits (new SDK)
       const composio = getComposioClient();
-      let tools: ComposioTool[] = [];
-
       try {
-        const result = await composio.actions.list({
-          apps: appNames.join(","),
+        const tools = await composio.tools.get(userId, {
+          toolkits: toolkitNames,
         });
-        tools = result.items.map((action) => ({
-          name: action.name,
-          description: action.description,
-          parameters: action.parameters,
-          appName: action.appName,
+
+        const mappedTools = (
+          tools as Array<{
+            name?: string;
+            description?: string;
+            inputParameters?: Record<string, unknown>;
+            slug?: string;
+          }>
+        ).map((tool) => ({
+          name: tool.slug ?? tool.name ?? "",
+          description: tool.description ?? "",
+          parameters: tool.inputParameters ?? {},
+          appName: extractAppFromToolName(tool.slug ?? tool.name ?? ""),
+          source: "composio" as const,
         }));
+
+        logger.info(
+          { userId, toolkits: toolkitNames.length, tools: mappedTools.length },
+          "Tools fetched for user"
+        );
+
+        return { tools: mappedTools };
       } catch (composioError) {
         logger.warn(
-          { error: composioError, apps: appNames },
+          { error: composioError, toolkits: toolkitNames },
           "Failed to fetch tools from Composio, returning empty"
         );
         return { tools: [] };
       }
-
-      // Map to a consistent shape
-      const mappedTools = tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description ?? "",
-        parameters: tool.parameters ?? {},
-        appName: tool.appName ?? extractAppFromToolName(tool.name),
-        source: "composio" as const,
-      }));
-
-      logger.info(
-        { userId, apps: appNames.length, tools: mappedTools.length },
-        "Tools fetched for user"
-      );
-
-      return { tools: mappedTools };
     } catch (error) {
       logger.error(error, "Failed to fetch user tools");
       return reply.status(500).send({ error: "Failed to fetch user tools" });
@@ -83,7 +73,6 @@ export async function toolRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>("/integrations/:id/tools", async (request, reply) => {
     const { id } = request.params;
     try {
-      // Look up integration with its definition
       const [result] = await db
         .select({
           connector: userConnectors,
@@ -106,18 +95,28 @@ export async function toolRoutes(app: FastifyInstance) {
       }
 
       const composio = getComposioClient();
-      const actionsResult = await composio.actions.list({
-        apps: result.definition.type,
+      const userId = result.connector.userId;
+      const toolkitName = result.definition.type.toUpperCase();
+
+      const tools = await composio.tools.get(userId, {
+        toolkits: [toolkitName],
       });
 
-      const tools = actionsResult.items.map((action) => ({
-        name: action.name,
-        description: action.description ?? "",
-        parameters: action.parameters ?? {},
-        appName: action.appName ?? result.definition.type,
+      const mappedTools = (
+        tools as Array<{
+          name?: string;
+          description?: string;
+          inputParameters?: Record<string, unknown>;
+          slug?: string;
+        }>
+      ).map((tool) => ({
+        name: tool.slug ?? tool.name ?? "",
+        description: tool.description ?? "",
+        parameters: tool.inputParameters ?? {},
+        appName: result.definition.type,
       }));
 
-      return { tools };
+      return { tools: mappedTools };
     } catch (error) {
       logger.error(error, "Failed to fetch integration tools");
       return reply.status(500).send({ error: "Failed to fetch integration tools" });
@@ -137,12 +136,9 @@ export async function toolRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "Missing toolName" });
       }
 
-      // Determine the app from the tool name (e.g., "GITHUB_CREATE_ISSUE" → "github")
       const appName = extractAppFromToolName(body.toolName);
 
-      // Verify user has this app connected and get the Composio connection ID
-      let connectedAccountId: string | undefined;
-
+      // Verify user has this app connected
       if (appName) {
         const [definition] = await db
           .select()
@@ -168,30 +164,22 @@ export async function toolRoutes(app: FastifyInstance) {
               error: `User does not have ${appName} connected`,
             });
           }
-
-          // Extract Composio connection ID from metadata
-          const metadata = integration.metadata as Record<string, unknown> | null;
-          connectedAccountId = metadata?.composioConnectionId as string | undefined;
         }
       }
 
-      // Execute via Composio actions API
+      // Execute via new Composio SDK
       const composio = getComposioClient();
-      const result = await composio.actions.execute({
-        actionName: body.toolName,
-        requestBody: {
-          connectedAccountId,
-          input: body.arguments,
-          appName: appName || undefined,
-        },
+      const result = await composio.tools.execute(body.toolName, {
+        userId,
+        arguments: body.arguments,
       });
 
       logger.info({ userId, tool: body.toolName }, "Tool executed");
 
       return {
-        success: !result.error,
-        result: result.data ?? {},
-        error: result.error ?? undefined,
+        success: !(result as { error?: string }).error,
+        result: (result as { data?: Record<string, unknown> }).data ?? result ?? {},
+        error: (result as { error?: string }).error ?? undefined,
       };
     } catch (error) {
       logger.error(error, "Failed to execute tool");

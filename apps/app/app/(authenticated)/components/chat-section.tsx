@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Attachment } from "@repo/ai/lib/types";
 import { trpc } from "@/lib/trpc/client";
 import { UnifiedPrompt, type SubmitOptions } from "./unified-prompt";
+import { useAppDispatch } from "@/lib/store/hooks";
+import { createAndSelectSession, type AgentSession } from "@/lib/store/slices/sessions.slice";
 
 type ChatSectionProps = {
   showConfigBar?: boolean;
@@ -13,8 +15,15 @@ type ChatSectionProps = {
 export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const dispatch = useAppDispatch();
 
-  const createSession = trpc.sessions.create.useMutation();
+  const utils = trpc.useUtils();
+  const createSession = trpc.sessions.create.useMutation({
+    onSuccess: () => {
+      // Invalidate sessions list so sidebar picks up the new session
+      utils.sessions.list.invalidate();
+    },
+  });
 
   const handleSubmit = useCallback(
     async (input: string, attachments: Attachment[], options: SubmitOptions) => {
@@ -26,6 +35,23 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
         const session = await createSession.mutateAsync({
           title: input.slice(0, 100),
         });
+
+        // Update Redux session list so sidebar renders immediately
+        const normalized: AgentSession = {
+          ...(session as AgentSession),
+          createdAt:
+            typeof session.createdAt === "string"
+              ? session.createdAt
+              : new Date(session.createdAt).toISOString(),
+          updatedAt:
+            typeof session.updatedAt === "string"
+              ? session.updatedAt
+              : new Date(session.updatedAt).toISOString(),
+          mode: (session as any).mode ?? "chat",
+          isShared: (session as any).isShared ?? false,
+          status: (session as any).status ?? "active",
+        };
+        dispatch(createAndSelectSession(normalized));
 
         // Store initial message, attachments, and model for the chat page
         sessionStorage.setItem(
@@ -51,7 +77,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
         setIsLoading(false);
       }
     },
-    [router, createSession]
+    [router, createSession, dispatch]
   );
 
   const handleCancel = useCallback(() => {

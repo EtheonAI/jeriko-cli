@@ -95,6 +95,8 @@ export const agentsRouter = createTRPCRouter({
         })
         .returning();
 
+      // TODO: Publish agent:new event via gateway/backend service
+
       return agent;
     }),
 
@@ -136,6 +138,8 @@ export const agentsRouter = createTRPCRouter({
         })
         .where(eq(agents.id, id))
         .returning();
+
+      // TODO: Publish agent:update event via gateway/backend service
 
       return updatedAgent;
     }),
@@ -215,6 +219,7 @@ export const agentsRouter = createTRPCRouter({
 
       if (task) {
         void syncActionToSearch(task, agent, ctx.user.id);
+        // TODO: Publish task:created event via gateway/backend service
       }
 
       return task;
@@ -273,6 +278,7 @@ export const agentsRouter = createTRPCRouter({
 
       if (updatedTask) {
         void syncActionToSearch(updatedTask, agent, ctx.user.id);
+        // TODO: Publish task:updated/cancelled/completed events via gateway/backend service
       }
 
       return updatedTask;

@@ -35,11 +35,17 @@ import {
   ExternalLinkIcon,
   ArchiveIcon,
   Trash2Icon,
+  Loader2Icon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
+import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
+import {
+  removeSession,
+  updateSession as updateSessionAction,
+} from "@/lib/store/slices/sessions.slice";
 
 const chatIconMap: Record<string, LucideIcon> = {
   weather: CloudSunIcon,
@@ -86,16 +92,25 @@ export function ChatItem({ chat }: ChatItemProps) {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const isActive = pathname === `/chat/${chat.id}`;
+  const { isStreaming, currentStreamingSessionId } = useAppSelector((state) => state.chat);
+  const isLoading = isStreaming && currentStreamingSessionId === chat.id;
+  const dispatch = useAppDispatch();
 
   const Icon = getIconForChat(chat.title);
   const utils = trpc.useUtils();
 
   const updateSession = trpc.sessions.update.useMutation({
-    onSuccess: () => utils.sessions.list.invalidate(),
+    onSuccess: (updated) => {
+      dispatch(updateSessionAction({ id: updated.id, updates: updated as any }));
+    },
+    onError: () => utils.sessions.list.invalidate(),
   });
 
   const deleteSession = trpc.sessions.delete.useMutation({
-    onSuccess: () => utils.sessions.list.invalidate(),
+    onSuccess: () => {
+      dispatch(removeSession(chat.id));
+    },
+    onError: () => utils.sessions.list.invalidate(),
   });
 
   useEffect(() => {
@@ -121,6 +136,8 @@ export function ChatItem({ chat }: ChatItemProps) {
   const handleRenameSubmit = () => {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== chat.title) {
+      // Optimistic update for sidebar
+      dispatch(updateSessionAction({ id: chat.id, updates: { title: trimmed } }));
       updateSession.mutate({ id: chat.id, title: trimmed });
     }
     setIsRenaming(false);
@@ -139,6 +156,8 @@ export function ChatItem({ chat }: ChatItemProps) {
   };
 
   const handleDelete = () => {
+    // Optimistic update for sidebar
+    dispatch(removeSession(chat.id));
     deleteSession.mutate({ id: chat.id });
     setShowDeleteDialog(false);
   };
@@ -168,6 +187,9 @@ export function ChatItem({ chat }: ChatItemProps) {
           <Link href={`/chat/${chat.id}`}>
             <Icon className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
             <span className="truncate">{chat.title}</span>
+            {isLoading && (
+              <Loader2Icon className="ml-auto h-4 w-4 animate-spin text-sidebar-foreground/50" />
+            )}
           </Link>
         </SidebarMenuButton>
 

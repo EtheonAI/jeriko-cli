@@ -34,10 +34,7 @@ import {
   type PlaybookInfo,
 } from "../slices/chat.slice";
 import { wsSend } from "../middleware/websocket.middleware";
-import {
-  useGetMessagesQuery,
-  useSendMessageMutation,
-} from "../api/api.slice";
+import { useGetMessagesQuery, useSendMessageMutation } from "../api/api.slice";
 
 /**
  * Chat Hook - Integrates WebSocket streaming, RTK Query, and chat slice
@@ -87,9 +84,15 @@ export function useChatIntegration(sessionId: string | null) {
     dispatch(setChatLoading(isFetchingMessages || isSendingMessage));
   }, [isFetchingMessages, isSendingMessage, dispatch]);
 
-  // Clear typing users on session change
+  // Clear typing users on session change + cleanup typing timeout on unmount
   useEffect(() => {
     dispatch(clearTypingUsers());
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+    };
   }, [sessionId, dispatch]);
 
   /**

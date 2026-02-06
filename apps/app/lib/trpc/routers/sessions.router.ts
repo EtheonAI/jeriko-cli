@@ -17,21 +17,19 @@ export const sessionsRouter = createTRPCRouter({
   }),
 
   // Get a single session by ID
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, input.id))
-        .limit(1);
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [session] = await db
+      .select()
+      .from(agentSessions)
+      .where(eq(agentSessions.id, input.id))
+      .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        return null;
-      }
+    if (!session || session.userId !== ctx.user.id) {
+      return null;
+    }
 
-      return session;
-    }),
+    return session;
+  }),
 
   // Create a new session
   create: protectedProcedure
@@ -54,6 +52,7 @@ export const sessionsRouter = createTRPCRouter({
 
       // Sync to search index (non-blocking)
       syncSessionToSearch(session).catch(() => {});
+      // TODO: Publish session:new event via gateway/backend service (not from Next.js)
 
       return session;
     }),
@@ -90,6 +89,7 @@ export const sessionsRouter = createTRPCRouter({
 
       // Sync to search index (non-blocking)
       syncSessionToSearch(session).catch(() => {});
+      // TODO: Publish session:update event via gateway/backend service
 
       return session;
     }),
@@ -113,6 +113,7 @@ export const sessionsRouter = createTRPCRouter({
 
       // Remove from search index (non-blocking)
       removeSessionFromSearch(input.id).catch(() => {});
+      // TODO: Publish session:deleted event via gateway/backend service
 
       return { success: true };
     }),

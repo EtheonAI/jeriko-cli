@@ -126,12 +126,7 @@ export function MessageList({
   return (
     <div className={cn("relative h-full", className)}>
       {/* Scrollable container */}
-      <div
-        ref={parentRef}
-        onScroll={handleScroll}
-        className="h-full overflow-y-auto"
-        style={{ contain: "strict" }}
-      >
+      <div ref={parentRef} onScroll={handleScroll} className="h-full overflow-y-auto">
         {/* Virtual list container */}
         <div
           style={{

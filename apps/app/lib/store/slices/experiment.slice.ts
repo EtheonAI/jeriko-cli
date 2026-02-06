@@ -101,10 +101,7 @@ export const experimentSlice = createSlice({
     },
 
     // Set frontend variants
-    setFrontendVariants: (
-      state,
-      action: PayloadAction<Record<string, ExperimentVariant>>
-    ) => {
+    setFrontendVariants: (state, action: PayloadAction<Record<string, ExperimentVariant>>) => {
       state.frontendVariants = action.payload;
     },
 
@@ -117,10 +114,7 @@ export const experimentSlice = createSlice({
     },
 
     // Set backend variants
-    setBackendVariants: (
-      state,
-      action: PayloadAction<Record<string, ExperimentVariant>>
-    ) => {
+    setBackendVariants: (state, action: PayloadAction<Record<string, ExperimentVariant>>) => {
       state.backendVariants = action.payload;
     },
 
@@ -133,26 +127,19 @@ export const experimentSlice = createSlice({
     },
 
     // Set feature flags
-    setFeatureFlags: (
-      state,
-      action: PayloadAction<Record<string, FeatureFlag>>
-    ) => {
+    setFeatureFlags: (state, action: PayloadAction<Record<string, FeatureFlag>>) => {
       state.featureFlags = action.payload;
     },
 
     // Update a single feature flag
-    updateFeatureFlag: (
-      state,
-      action: PayloadAction<{ key: string; flag: FeatureFlag }>
-    ) => {
+    updateFeatureFlag: (state, action: PayloadAction<{ key: string; flag: FeatureFlag }>) => {
       state.featureFlags[action.payload.key] = action.payload.flag;
     },
 
     // Toggle a feature flag
     toggleFeatureFlag: (state, action: PayloadAction<string>) => {
       if (state.featureFlags[action.payload]) {
-        state.featureFlags[action.payload].enabled =
-          !state.featureFlags[action.payload].enabled;
+        state.featureFlags[action.payload].enabled = !state.featureFlags[action.payload].enabled;
       }
     },
 
@@ -171,9 +158,7 @@ export const experimentSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; updates: Partial<Experiment> }>
     ) => {
-      const index = state.experiments.findIndex(
-        (e) => e.id === action.payload.id
-      );
+      const index = state.experiments.findIndex((e) => e.id === action.payload.id);
       if (index !== -1) {
         state.experiments[index] = {
           ...state.experiments[index],
@@ -185,16 +170,11 @@ export const experimentSlice = createSlice({
 
     // Delete an experiment
     deleteExperiment: (state, action: PayloadAction<string>) => {
-      state.experiments = state.experiments.filter(
-        (e) => e.id !== action.payload
-      );
+      state.experiments = state.experiments.filter((e) => e.id !== action.payload);
     },
 
     // Set guest page experiment
-    setGuestPageExperiment: (
-      state,
-      action: PayloadAction<ExperimentVariant | null>
-    ) => {
+    setGuestPageExperiment: (state, action: PayloadAction<ExperimentVariant | null>) => {
       state.guestPageExperiment = action.payload;
     },
 
@@ -218,6 +198,35 @@ export const experimentSlice = createSlice({
       state.guestPageExperiment = null;
       state.isInitialized = false;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase(
+      "experiment/setVariants",
+      (
+        state,
+        action: PayloadAction<{
+          frontendVariants?: Record<string, ExperimentVariant>;
+          backendVariants?: Record<string, ExperimentVariant>;
+          variants?: Record<string, ExperimentVariant>;
+        }>
+      ) => {
+        if (action.payload?.frontendVariants) {
+          state.frontendVariants = action.payload.frontendVariants;
+        } else if (action.payload?.variants) {
+          state.frontendVariants = action.payload.variants;
+        }
+        if (action.payload?.backendVariants) {
+          state.backendVariants = action.payload.backendVariants;
+        }
+      }
+    );
+    builder.addCase(
+      "experiment/setBackendVariants",
+      (state, action: PayloadAction<Record<string, ExperimentVariant>>) => {
+        state.backendVariants = action.payload ?? {};
+      }
+    );
   },
 });
 

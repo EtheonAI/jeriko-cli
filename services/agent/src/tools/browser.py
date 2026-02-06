@@ -54,12 +54,23 @@ async def browser_web_search(
     sandbox_id: str | None, query: str, num_results: int = 5, date_range: str | None = None
 ) -> dict:
     """
-    Search the web using browser-use inside the E2B sandbox.
-    browser-use navigates to a search engine and extracts results.
-    Falls back to Serper API if no sandbox.
+    Search the web using Serper as primary (fast, stable).
+    Falls back to browser-use inside the sandbox for JS-heavy pages.
     """
+    if settings.serper_api_key:
+        serper_result = await _serper_search(query, num_results, date_range)
+        if serper_result.get("results"):
+            return serper_result
+        # If Serper failed or returned no results and we have a sandbox, try browser-use
+        if not sandbox_id:
+            return serper_result
+
     if not sandbox_id:
-        return await _fallback_serper_search(query, num_results, date_range)
+        return {
+            "error": "Web search unavailable: no sandbox and no SERPER_API_KEY configured.",
+            "query": query,
+            "results": [],
+        }
 
     # Escape the query for Python string embedding
     safe_query = query.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
@@ -123,7 +134,13 @@ async def browser_web_search(
         asyncio.run(search())
     """)
 
-    return await _sandbox_code_execute(sandbox_id, script, timeout=60)
+    browser_result = await _sandbox_code_execute(sandbox_id, script, timeout=60)
+    if isinstance(browser_result, dict) and browser_result.get("results"):
+        return browser_result
+    # Final fallback to Serper if browser-use failed
+    if settings.serper_api_key:
+        return await _serper_search(query, num_results, date_range)
+    return browser_result
 
 
 async def browser_navigate(sandbox_id: str | None, url: str) -> dict:
@@ -230,15 +247,8 @@ async def browser_screenshot(sandbox_id: str | None, full_page: bool = False) ->
     return await _sandbox_code_execute(sandbox_id, script, timeout=30)
 
 
-async def _fallback_serper_search(query: str, num_results: int = 5, date_range: str | None = None) -> dict:
-    """Fallback: use Serper API directly when no sandbox is available."""
-    if not settings.serper_api_key:
-        return {
-            "error": "Web search unavailable: no sandbox and no SERPER_API_KEY configured.",
-            "query": query,
-            "results": [],
-        }
-
+async def _serper_search(query: str, num_results: int = 5, date_range: str | None = None) -> dict:
+    """Primary: use Serper API directly when configured."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             payload = {"q": query, "num": num_results}

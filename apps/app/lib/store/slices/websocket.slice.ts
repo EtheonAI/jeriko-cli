@@ -37,6 +37,7 @@ export interface WebSocketState {
   rooms: string[]; // Subscribed room IDs (session IDs, agent IDs, etc.)
   reconnectAttempts: number;
   lastConnectedAt: string | null;
+  lastPongTime: number | null;
 }
 
 const initialState: WebSocketState = {
@@ -52,6 +53,7 @@ const initialState: WebSocketState = {
   rooms: [],
   reconnectAttempts: 0,
   lastConnectedAt: null,
+  lastPongTime: null,
 };
 
 export const websocketSlice = createSlice({
@@ -63,7 +65,7 @@ export const websocketSlice = createSlice({
       if (action.payload === "connected") {
         state.lastConnectedAt = new Date().toISOString();
         state.reconnectAttempts = 0;
-        state.lastError = null;
+        state.error = null;
       }
     },
     setSocketId: (state, action: PayloadAction<string | null>) => {
@@ -91,6 +93,9 @@ export const websocketSlice = createSlice({
       if (action.payload) {
         state.status = "error";
       }
+    },
+    setLastPongTime: (state, action: PayloadAction<number>) => {
+      state.lastPongTime = action.payload;
     },
     disconnect: (state) => {
       state.status = "disconnected";
@@ -131,10 +136,7 @@ export const websocketSlice = createSlice({
     },
 
     // Task finished
-    setTaskFinished: (
-      state,
-      action: PayloadAction<{ taskId: string; finished: boolean }>
-    ) => {
+    setTaskFinished: (state, action: PayloadAction<{ taskId: string; finished: boolean }>) => {
       state.taskFinished[action.payload.taskId] = action.payload.finished;
     },
 
@@ -152,6 +154,15 @@ export const websocketSlice = createSlice({
       state.disableTimelineAutoUpdate = action.payload;
     },
   },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase("websocket/connected", (state) => {
+      state.status = "connected";
+      state.lastConnectedAt = new Date().toISOString();
+      state.reconnectAttempts = 0;
+      state.error = null;
+    });
+  },
 });
 
 export const {
@@ -163,6 +174,7 @@ export const {
   incrementReconnectAttempts,
   resetReconnectAttempts,
   setLastError,
+  setLastPongTime,
   disconnect,
   setEntity,
   removeEntity,

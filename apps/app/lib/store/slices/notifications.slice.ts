@@ -1,16 +1,23 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 export type NotificationType =
+  | "system"
+  | "session"
+  | "agent"
+  | "team"
+  | "billing"
+  | "connector"
+  | "task"
+  | "mention"
+  | "share"
+  | "comment"
   | "task_complete"
   | "task_failed"
   | "agent_update"
   | "session_update"
   | "team_invite"
   | "connector_sync"
-  | "scheduled_task"
-  | "system"
-  | "mention"
-  | "share";
+  | "scheduled_task";
 
 export type NotificationPriority = "low" | "normal" | "high" | "urgent";
 
@@ -57,7 +64,7 @@ export interface NotificationPreferences {
   pushScheduledTask: boolean;
   // Email notification settings
   emailEnabled: boolean;
-  emailDigest: "none" | "daily" | "weekly";
+  emailDigest: "none" | "instant" | "hourly" | "daily" | "weekly" | "never";
   emailTaskComplete: boolean;
   emailTaskFailed: boolean;
   // In-app settings
@@ -93,6 +100,13 @@ export interface NotificationsState {
   // Real-time updates
   hasNewNotifications: boolean;
   lastFetchedAt: string | null;
+  // Manus compatibility fields
+  connectStatus: "default" | "connecting" | "connected" | "error";
+  connectError: string | null;
+  categoryNotifications: Record<string, Notification[]>;
+  categoryHasMore: Record<string, boolean>;
+  notificationTab: number;
+  fetchNotificationLoading: boolean;
   // Error state
   error: string | null;
 }
@@ -119,6 +133,14 @@ const initialState: NotificationsState = {
   notifications: [],
   unreadCount: 0,
   unreadByType: {
+    system: 0,
+    session: 0,
+    agent: 0,
+    team: 0,
+    billing: 0,
+    connector: 0,
+    task: 0,
+    comment: 0,
     task_complete: 0,
     task_failed: 0,
     agent_update: 0,
@@ -126,7 +148,6 @@ const initialState: NotificationsState = {
     team_invite: 0,
     connector_sync: 0,
     scheduled_task: 0,
-    system: 0,
     mention: 0,
     share: 0,
   },
@@ -143,6 +164,12 @@ const initialState: NotificationsState = {
   },
   hasNewNotifications: false,
   lastFetchedAt: null,
+  connectStatus: "default",
+  connectError: null,
+  categoryNotifications: { "0": [], "1": [], "2": [] },
+  categoryHasMore: { "0": true, "1": true, "2": true },
+  notificationTab: 0,
+  fetchNotificationLoading: false,
   error: null,
 };
 
@@ -176,10 +203,7 @@ export const notificationsSlice = createSlice({
         cursor: string | null;
       }>
     ) => {
-      state.notifications = [
-        ...state.notifications,
-        ...action.payload.notifications,
-      ];
+      state.notifications = [...state.notifications, ...action.payload.notifications];
       state.hasMore = action.payload.hasMore;
       state.cursor = action.payload.cursor;
       state.isLoadingMore = false;
@@ -199,9 +223,7 @@ export const notificationsSlice = createSlice({
 
     // Mark notification as read
     markAsRead: (state, action: PayloadAction<string>) => {
-      const notification = state.notifications.find(
-        (n) => n.id === action.payload
-      );
+      const notification = state.notifications.find((n) => n.id === action.payload);
       if (notification && !notification.isRead) {
         notification.isRead = true;
         notification.readAt = new Date().toISOString();
@@ -215,23 +237,25 @@ export const notificationsSlice = createSlice({
 
     // Mark all notifications as read
     markAllAsRead: (state) => {
+      const now = new Date().toISOString();
       state.notifications.forEach((n) => {
         if (!n.isRead) {
           n.isRead = true;
-          n.readAt = new Date().toISOString();
+          n.readAt = now;
         }
       });
       state.unreadCount = 0;
-      Object.keys(state.unreadByType).forEach((key) => {
-        state.unreadByType[key as NotificationType] = 0;
-      });
+      // Reset all known notification types
+      for (const key of Object.keys(state.unreadByType)) {
+        if (key in state.unreadByType) {
+          state.unreadByType[key as NotificationType] = 0;
+        }
+      }
     },
 
     // Archive notification
     archiveNotification: (state, action: PayloadAction<string>) => {
-      const notification = state.notifications.find(
-        (n) => n.id === action.payload
-      );
+      const notification = state.notifications.find((n) => n.id === action.payload);
       if (notification) {
         notification.isArchived = true;
         if (!notification.isRead) {
@@ -248,9 +272,7 @@ export const notificationsSlice = createSlice({
 
     // Delete notification
     deleteNotification: (state, action: PayloadAction<string>) => {
-      const notification = state.notifications.find(
-        (n) => n.id === action.payload
-      );
+      const notification = state.notifications.find((n) => n.id === action.payload);
       if (notification && !notification.isRead) {
         state.unreadCount = Math.max(0, state.unreadCount - 1);
         state.unreadByType[notification.type] = Math.max(
@@ -258,9 +280,7 @@ export const notificationsSlice = createSlice({
           state.unreadByType[notification.type] - 1
         );
       }
-      state.notifications = state.notifications.filter(
-        (n) => n.id !== action.payload
-      );
+      state.notifications = state.notifications.filter((n) => n.id !== action.payload);
     },
 
     // Set unread counts
@@ -272,23 +292,20 @@ export const notificationsSlice = createSlice({
       }>
     ) => {
       state.unreadCount = action.payload.total;
-      state.unreadByType = action.payload.byType;
+      state.unreadByType = {
+        ...state.unreadByType,
+        ...action.payload.byType,
+      };
     },
 
     // Set preferences
-    setPreferences: (
-      state,
-      action: PayloadAction<NotificationPreferences>
-    ) => {
+    setPreferences: (state, action: PayloadAction<NotificationPreferences>) => {
       state.preferences = action.payload;
       state.isUpdatingPreferences = false;
     },
 
     // Update single preference
-    updatePreference: (
-      state,
-      action: PayloadAction<Partial<NotificationPreferences>>
-    ) => {
+    updatePreference: (state, action: PayloadAction<Partial<NotificationPreferences>>) => {
       state.preferences = { ...state.preferences, ...action.payload };
     },
 
@@ -333,12 +350,41 @@ export const notificationsSlice = createSlice({
     clearNotifications: (state) => {
       state.notifications = [];
       state.unreadCount = 0;
-      Object.keys(state.unreadByType).forEach((key) => {
-        state.unreadByType[key as NotificationType] = 0;
-      });
+      for (const key of Object.keys(state.unreadByType)) {
+        if (key in state.unreadByType) {
+          state.unreadByType[key as NotificationType] = 0;
+        }
+      }
       state.hasMore = false;
       state.cursor = null;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility (notification slice name)
+    builder.addCase(
+      "notification/setConnectStatus",
+      (state, action: PayloadAction<NotificationsState["connectStatus"]>) => {
+        state.connectStatus = action.payload;
+      }
+    );
+    builder.addCase(
+      "notification/setFetchNotificationListLoading",
+      (state, action: PayloadAction<boolean>) => {
+        state.fetchNotificationLoading = action.payload;
+      }
+    );
+    builder.addCase(
+      "notification/setHasMoreNotification",
+      (state, action: PayloadAction<Record<string, boolean>>) => {
+        state.categoryHasMore = action.payload ?? state.categoryHasMore;
+      }
+    );
+    builder.addCase(
+      "notification/setCategoryNotificationList",
+      (state, action: PayloadAction<Record<string, Notification[]>>) => {
+        state.categoryNotifications = action.payload ?? state.categoryNotifications;
+      }
+    );
   },
 });
 

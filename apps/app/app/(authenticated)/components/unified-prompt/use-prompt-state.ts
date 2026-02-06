@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type DragEvent } from "react";
 import { useFileUpload } from "@repo/ai/hooks";
 import type { SkillId } from "./types";
+import type { SelectedConnection } from "./connections-modal";
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -19,11 +20,20 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Focus state (for animated placeholder)
+  const [isFocused, setIsFocused] = useState(false);
+
   // Model state
   const [selectedModel, setSelectedModel] = useState(initialModel);
 
   // Skills state
   const [activeSkills, setActiveSkills] = useState<SkillId[]>([]);
+
+  // Connections state
+  const [selectedConnections, setSelectedConnections] = useState<SelectedConnection[]>([]);
+
+  // Drag-drop state
+  const [isDragging, setIsDragging] = useState(false);
 
   // File upload
   const { attachments, addFiles, removeFile, clearFiles, isUploading } = useFileUpload({
@@ -38,6 +48,14 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
     );
   }, []);
 
+  // Connection toggling
+  const toggleConnection = useCallback((connection: SelectedConnection) => {
+    setSelectedConnections((prev) => {
+      const exists = prev.some((c) => c.id === connection.id);
+      return exists ? prev.filter((c) => c.id !== connection.id) : [...prev, connection];
+    });
+  }, []);
+
   // Auto-resize textarea
   const handleTextareaResize = useCallback(() => {
     const el = textareaRef.current;
@@ -46,10 +64,69 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
+  // Focus handlers
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => setIsFocused(false), []);
+
+  // Drag-drop handlers
+  const handleDragEnter = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        addFiles(files);
+      }
+    },
+    [addFiles]
+  );
+
+  // Paste handler for images
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        const dt = new DataTransfer();
+        for (const f of imageFiles) dt.items.add(f);
+        addFiles(dt.files);
+      }
+    },
+    [addFiles]
+  );
+
   // Reset state after submit
   const reset = useCallback(() => {
     setText("");
     clearFiles();
+    setSelectedConnections([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -63,6 +140,11 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
     fileInputRef,
     handleTextareaResize,
 
+    // Focus
+    isFocused,
+    handleFocus,
+    handleBlur,
+
     // Model
     selectedModel,
     setSelectedModel,
@@ -72,12 +154,26 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
     setActiveSkills,
     toggleSkill,
 
+    // Connections
+    selectedConnections,
+    toggleConnection,
+
     // Attachments
     attachments,
     addFiles,
     removeFile,
     clearFiles,
     isUploading,
+
+    // Drag-drop
+    isDragging,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+
+    // Paste
+    handlePaste,
 
     // Actions
     reset,

@@ -9,6 +9,23 @@ export interface UserPreferences {
   language?: string;
   timezone?: string;
   notifications?: boolean;
+  communicationStyle?: "concise" | "balanced" | "detailed";
+  expertiseLevel?: "beginner" | "intermediate" | "expert";
+  customInstructions?: string;
+  defaultModel?: string;
+  bio?: string;
+  fontSize?: "small" | "medium" | "large";
+  chatDensity?: "compact" | "comfortable" | "spacious";
+  saveHistory?: boolean;
+  analyticsEnabled?: boolean;
+  crashReports?: boolean;
+  personalizedExperience?: boolean;
+  conversationRetention?: "30d" | "90d" | "1y" | "never";
+  fileRetention?: "30d" | "90d" | "1y" | "never";
+  activityLogRetention?: "30d" | "90d" | "1y" | "never";
+  enabledSkills?: Record<string, boolean>;
+  autoSummarizeEmails?: boolean;
+  autoCategorizeEmails?: boolean;
 }
 
 export interface UserSubscription {
@@ -60,6 +77,11 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  // Manus compatibility
+  clientConfig: Record<string, unknown> | null;
+  globalSettings: Record<string, unknown> | null;
+  invitationCodeList: Array<Record<string, unknown>>;
+  invitationCodeListLoading: boolean;
   // Session management
   accessToken: string | null;
   refreshToken: string | null;
@@ -92,6 +114,10 @@ const initialState: AuthState = {
   isAuthenticated: false,
   isLoading: true,
   error: null,
+  clientConfig: null,
+  globalSettings: null,
+  invitationCodeList: [],
+  invitationCodeListLoading: false,
   // Session
   accessToken: null,
   refreshToken: null,
@@ -181,10 +207,7 @@ export const authSlice = createSlice({
     },
 
     // Registration flow
-    setRegistrationStep: (
-      state,
-      action: PayloadAction<AuthState["registrationStep"]>
-    ) => {
+    setRegistrationStep: (state, action: PayloadAction<AuthState["registrationStep"]>) => {
       state.registrationStep = action.payload;
     },
 
@@ -215,10 +238,7 @@ export const authSlice = createSlice({
     },
 
     // Invitation
-    setPendingInvitation: (
-      state,
-      action: PayloadAction<AuthState["pendingInvitation"]>
-    ) => {
+    setPendingInvitation: (state, action: PayloadAction<AuthState["pendingInvitation"]>) => {
       state.pendingInvitation = action.payload;
     },
 
@@ -227,10 +247,7 @@ export const authSlice = createSlice({
     },
 
     // User preferences
-    updateUserPreferences: (
-      state,
-      action: PayloadAction<Partial<UserPreferences>>
-    ) => {
+    updateUserPreferences: (state, action: PayloadAction<Partial<UserPreferences>>) => {
       if (state.user) {
         state.user.preferences = {
           ...state.user.preferences,
@@ -273,6 +290,31 @@ export const authSlice = createSlice({
       state.passwordResetEmail = null;
       state.error = null;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility actions
+    builder.addCase("auth/setUserInfo", (state, action: PayloadAction<any>) => {
+      state.user = action.payload ?? null;
+      state.isAuthenticated = !!action.payload;
+      state.isLoading = false;
+      state.error = null;
+    });
+    builder.addCase("auth/setClientConfig", (state, action: PayloadAction<any>) => {
+      state.clientConfig = action.payload ?? null;
+    });
+    builder.addCase("auth/setGlobalSettings", (state, action: PayloadAction<any>) => {
+      state.globalSettings = action.payload ?? null;
+    });
+    builder.addCase("auth/setInvitationCodeList", (state, action: PayloadAction<any[]>) => {
+      state.invitationCodeList = action.payload ?? [];
+      state.invitationCodeListLoading = false;
+    });
+    builder.addCase(
+      "auth/setInvitationCodeListLoading",
+      (state, action: PayloadAction<boolean>) => {
+        state.invitationCodeListLoading = action.payload;
+      }
+    );
   },
 });
 

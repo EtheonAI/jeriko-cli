@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { getEnv } from "@repo/service-utils";
 import { logger } from "./lib/helpers.js";
+import { initDb } from "./lib/db.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { oauthRoutes } from "./routes/oauth.js";
 import { integrationRoutes } from "./routes/integrations.js";
@@ -9,6 +10,9 @@ import { toolRoutes } from "./routes/tools.js";
 import { syncRoutes } from "./routes/sync.js";
 
 async function main() {
+  // Initialize database (dynamic import for ESM compatibility)
+  await initDb();
+
   const port = parseInt(getEnv("PORT", "4009"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 

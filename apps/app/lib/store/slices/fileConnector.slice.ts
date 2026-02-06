@@ -98,9 +98,7 @@ export const fileConnectorSlice = createSlice({
         updates: Partial<FileConnectorApp>;
       }>
     ) => {
-      const connector = state.fileConnectorList.find(
-        (c) => c.type === action.payload.type
-      );
+      const connector = state.fileConnectorList.find((c) => c.type === action.payload.type);
       if (connector) {
         Object.assign(connector, action.payload.updates);
       }
@@ -116,9 +114,7 @@ export const fileConnectorSlice = createSlice({
         accountName?: string;
       }>
     ) => {
-      const connector = state.fileConnectorList.find(
-        (c) => c.type === action.payload.type
-      );
+      const connector = state.fileConnectorList.find((c) => c.type === action.payload.type);
       if (connector) {
         connector.connected = action.payload.connected;
         connector.accountEmail = action.payload.accountEmail;
@@ -166,9 +162,7 @@ export const fileConnectorSlice = createSlice({
         error?: string;
       }>
     ) => {
-      state.syncingConnectors = state.syncingConnectors.filter(
-        (t) => t !== action.payload.type
-      );
+      state.syncingConnectors = state.syncingConnectors.filter((t) => t !== action.payload.type);
       state.lastSyncResults[action.payload.type] = {
         success: action.payload.success,
         itemsSynced: action.payload.itemsSynced,
@@ -177,9 +171,7 @@ export const fileConnectorSlice = createSlice({
       };
 
       // Update connector lastSyncAt
-      const connector = state.fileConnectorList.find(
-        (c) => c.type === action.payload.type
-      );
+      const connector = state.fileConnectorList.find((c) => c.type === action.payload.type);
       if (connector) {
         connector.lastSyncAt = new Date().toISOString();
       }
@@ -212,6 +204,22 @@ export const fileConnectorSlice = createSlice({
     resetFileConnector: (state) => {
       Object.assign(state, initialState);
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase(
+      "fileConnector/fileConnectorList",
+      (state, action: PayloadAction<FileConnectorApp[]>) => {
+        state.fileConnectorList = action.payload ?? [];
+        state.isLoading = false;
+      }
+    );
+    builder.addCase(
+      "fileConnector/fileConnectorListLoading",
+      (state, action: PayloadAction<boolean>) => {
+        state.isLoading = action.payload;
+      }
+    );
   },
 });
 

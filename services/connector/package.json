@@ -10,10 +10,11 @@
     "seed": "tsx src/seed/connector-definitions.ts"
   },
   "dependencies": {
+    "@composio/core": "^0.1.55",
+    "@fastify/cors": "^10.0.0",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
-    "composio-core": "^0.5.0",
-    "@fastify/cors": "^10.0.0",
+    "drizzle-orm": "^0.45.1",
     "fastify": "^5.2.2",
     "fastify-plugin": "^5.0.1"
   },

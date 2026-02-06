@@ -123,6 +123,8 @@ export interface TeamState {
   isInviting: boolean;
   // Error state
   error: string | null;
+  // Manus compatibility
+  listTeamResponse: Record<string, unknown> | null;
 }
 
 const initialState: TeamState = {
@@ -142,6 +144,7 @@ const initialState: TeamState = {
   isLoadingSSO: false,
   isInviting: false,
   error: null,
+  listTeamResponse: null,
 };
 
 export const teamSlice = createSlice({
@@ -160,10 +163,7 @@ export const teamSlice = createSlice({
     },
 
     // Update a team
-    updateTeam: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<Team> }>
-    ) => {
+    updateTeam: (state, action: PayloadAction<{ id: string; updates: Partial<Team> }>) => {
       const index = state.teams.findIndex((t) => t.id === action.payload.id);
       if (index !== -1) {
         state.teams[index] = { ...state.teams[index], ...action.payload.updates };
@@ -185,8 +185,7 @@ export const teamSlice = createSlice({
     // Set current team
     setCurrentTeam: (state, action: PayloadAction<string | null>) => {
       state.currentTeamId = action.payload;
-      state.currentTeam =
-        state.teams.find((t) => t.id === action.payload) || null;
+      state.currentTeam = state.teams.find((t) => t.id === action.payload) || null;
     },
 
     // Set team members
@@ -205,10 +204,7 @@ export const teamSlice = createSlice({
     },
 
     // Update a member
-    updateMember: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<TeamMember> }>
-    ) => {
+    updateMember: (state, action: PayloadAction<{ id: string; updates: Partial<TeamMember> }>) => {
       const index = state.members.findIndex((m) => m.id === action.payload.id);
       if (index !== -1) {
         state.members[index] = {
@@ -228,10 +224,7 @@ export const teamSlice = createSlice({
     },
 
     // Update member role
-    updateMemberRole: (
-      state,
-      action: PayloadAction<{ memberId: string; role: TeamRole }>
-    ) => {
+    updateMemberRole: (state, action: PayloadAction<{ memberId: string; role: TeamRole }>) => {
       const member = state.members.find((m) => m.id === action.payload.memberId);
       if (member) {
         member.role = action.payload.role;
@@ -255,9 +248,7 @@ export const teamSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; updates: Partial<TeamInvitation> }>
     ) => {
-      const index = state.invitations.findIndex(
-        (i) => i.id === action.payload.id
-      );
+      const index = state.invitations.findIndex((i) => i.id === action.payload.id);
       if (index !== -1) {
         state.invitations[index] = {
           ...state.invitations[index],
@@ -276,9 +267,7 @@ export const teamSlice = createSlice({
 
     // Delete invitation
     deleteInvitation: (state, action: PayloadAction<string>) => {
-      state.invitations = state.invitations.filter(
-        (i) => i.id !== action.payload
-      );
+      state.invitations = state.invitations.filter((i) => i.id !== action.payload);
     },
 
     // Set access controls
@@ -293,9 +282,7 @@ export const teamSlice = createSlice({
 
     // Remove access control
     removeAccessControl: (state, action: PayloadAction<string>) => {
-      state.accessControls = state.accessControls.filter(
-        (ac) => ac.id !== action.payload
-      );
+      state.accessControls = state.accessControls.filter((ac) => ac.id !== action.payload);
     },
 
     // Set asset shares
@@ -310,10 +297,7 @@ export const teamSlice = createSlice({
     },
 
     // Renewal settings
-    setRenewalSettings: (
-      state,
-      action: PayloadAction<TeamState["renewalSettings"]>
-    ) => {
+    setRenewalSettings: (state, action: PayloadAction<TeamState["renewalSettings"]>) => {
       state.renewalSettings = action.payload;
     },
 
@@ -362,6 +346,20 @@ export const teamSlice = createSlice({
       state.assetShareList = [];
       state.ssoInfo = null;
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase("team/setListTeamResponse", (state, action: PayloadAction<any>) => {
+      state.listTeamResponse = action.payload ?? null;
+      const teams = action.payload?.teams ?? action.payload?.list ?? null;
+      if (Array.isArray(teams)) {
+        state.teams = teams;
+      }
+      state.isLoadingTeams = false;
+    });
+    builder.addCase("team/setTeamListLoading", (state, action: PayloadAction<boolean>) => {
+      state.isLoadingTeams = action.payload;
+    });
   },
 });
 

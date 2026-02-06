@@ -38,7 +38,6 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import {
-  Loader2Icon,
   PlusIcon,
   MonitorIcon,
   SmartphoneIcon,
@@ -50,7 +49,8 @@ import {
   RefreshCwIcon,
   MoreHorizontalIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useDevicesData } from "@/lib/store/hooks/useDevicesData";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -64,7 +64,10 @@ const deviceIcons: Record<string, React.ComponentType<{ className?: string }>> =
 };
 
 // Status config
-const statusConfig: Record<string, { color: string; icon: React.ComponentType<{ className?: string }> }> = {
+const statusConfig: Record<
+  string,
+  { color: string; icon: React.ComponentType<{ className?: string }> }
+> = {
   online: { color: "text-green-500", icon: WifiIcon },
   offline: { color: "text-muted-foreground", icon: WifiOffIcon },
   busy: { color: "text-amber-500", icon: WifiIcon },
@@ -83,32 +86,8 @@ export function DevicesTab() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   // Fetch devices
-  const { data: devices, isLoading, isError, refetch } = trpc.devices.list.useQuery(undefined, { retry: 1 });
-
-  // Mutations
-  const utils = trpc.useUtils();
-
-  const registerDevice = trpc.devices.register.useMutation({
-    onSuccess: () => {
-      toast.success("Device registered successfully");
-      utils.devices.list.invalidate();
-      setIsRegisterOpen(false);
-      form.reset();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to register device");
-    },
-  });
-
-  const unregisterDevice = trpc.devices.unregister.useMutation({
-    onSuccess: () => {
-      toast.success("Device removed");
-      utils.devices.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to remove device");
-    },
-  });
+  const { devices, isLoading, error, refetch } = useDevicesData();
+  const isError = !!error;
 
   // Form
   const form = useForm<RegisterDeviceForm>({
@@ -121,7 +100,17 @@ export function DevicesTab() {
   });
 
   const onSubmit = (data: RegisterDeviceForm) => {
-    registerDevice.mutate(data);
+    getTrpcClient()
+      .devices.register.mutate(data)
+      .then(() => {
+        toast.success("Device registered successfully");
+        refetch();
+        setIsRegisterOpen(false);
+        form.reset();
+      })
+      .catch((error: any) => {
+        toast.error(error?.message || "Failed to register device");
+      });
   };
 
   if (isLoading) {
@@ -130,9 +119,7 @@ export function DevicesTab() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Devices</h2>
-            <p className="text-sm text-muted-foreground">
-              Manage your connected devices.
-            </p>
+            <p className="text-sm text-muted-foreground">Manage your connected devices.</p>
           </div>
         </div>
         <Separator />
@@ -148,9 +135,7 @@ export function DevicesTab() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Devices</h2>
-            <p className="text-sm text-muted-foreground">
-              Manage your connected devices.
-            </p>
+            <p className="text-sm text-muted-foreground">Manage your connected devices.</p>
           </div>
         </div>
         <Separator />
@@ -174,12 +159,7 @@ export function DevicesTab() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => refetch()}
-            className="gap-2"
-          >
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
             <RefreshCwIcon className="h-4 w-4" />
             Refresh
           </Button>
@@ -195,22 +175,17 @@ export function DevicesTab() {
               <DialogHeader>
                 <DialogTitle>Register New Device</DialogTitle>
                 <DialogDescription>
-                  Add a new device for Rubic to control. You&apos;ll need to install the Rubic agent on the device.
+                  Add a new device for Rubic to control. You&apos;ll need to install the Rubic agent
+                  on the device.
                 </DialogDescription>
               </DialogHeader>
 
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Device Name</Label>
-                  <Input
-                    id="name"
-                    {...form.register("name")}
-                    placeholder="My MacBook Pro"
-                  />
+                  <Input id="name" {...form.register("name")} placeholder="My MacBook Pro" />
                   {form.formState.errors.name && (
-                    <p className="text-xs text-destructive">
-                      {form.formState.errors.name.message}
-                    </p>
+                    <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
                   )}
                 </div>
 
@@ -218,7 +193,9 @@ export function DevicesTab() {
                   <Label htmlFor="type">Device Type</Label>
                   <Select
                     value={form.watch("type")}
-                    onValueChange={(value) => form.setValue("type", value as RegisterDeviceForm["type"])}
+                    onValueChange={(value) =>
+                      form.setValue("type", value as RegisterDeviceForm["type"])
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -262,17 +239,10 @@ export function DevicesTab() {
                 </div>
 
                 <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsRegisterOpen(false)}
-                  >
+                  <Button type="button" variant="outline" onClick={() => setIsRegisterOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={registerDevice.isPending}>
-                    {registerDevice.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
-                    Register Device
-                  </Button>
+                  <Button type="submit">Register Device</Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -322,7 +292,10 @@ export function DevicesTab() {
                         <>
                           <span>•</span>
                           <span>
-                            Last seen {formatDistanceToNow(new Date(device.lastHeartbeat), { addSuffix: true })}
+                            Last seen{" "}
+                            {formatDistanceToNow(new Date(device.lastHeartbeat), {
+                              addSuffix: true,
+                            })}
                           </span>
                         </>
                       )}
@@ -347,7 +320,11 @@ export function DevicesTab() {
                 <div className="flex items-center gap-2">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                      >
                         <TrashIcon className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
@@ -355,17 +332,26 @@ export function DevicesTab() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Remove device?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will unregister &quot;{device.name}&quot; from your account.
-                          Any active sessions will be terminated.
+                          This will unregister &quot;{device.name}&quot; from your account. Any
+                          active sessions will be terminated.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => unregisterDevice.mutate({ id: device.id })}
+                          onClick={() => {
+                            getTrpcClient()
+                              .devices.unregister.mutate({ id: device.id })
+                              .then(() => {
+                                toast.success("Device removed");
+                                refetch();
+                              })
+                              .catch((error: any) => {
+                                toast.error(error?.message || "Failed to remove device");
+                              });
+                          }}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          {unregisterDevice.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
                           Remove
                         </AlertDialogAction>
                       </AlertDialogFooter>
@@ -396,18 +382,22 @@ export function DevicesTab() {
       <div className="rounded-lg border p-4 bg-muted/30">
         <h4 className="text-sm font-medium mb-2">Installing the Rubic Agent</h4>
         <p className="text-xs text-muted-foreground mb-3">
-          To control a device, you need to install the Rubic agent on it. The agent securely connects
-          to Rubic and executes commands on your behalf.
+          To control a device, you need to install the Rubic agent on it. The agent securely
+          connects to Rubic and executes commands on your behalf.
         </p>
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">macOS / Linux</Badge>
+            <Badge variant="outline" className="text-xs">
+              macOS / Linux
+            </Badge>
             <code className="text-xs bg-muted px-2 py-1 rounded">
               curl -sSL https://rubic.dev/install.sh | sh
             </code>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">Windows</Badge>
+            <Badge variant="outline" className="text-xs">
+              Windows
+            </Badge>
             <code className="text-xs bg-muted px-2 py-1 rounded">
               irm https://rubic.dev/install.ps1 | iex
             </code>

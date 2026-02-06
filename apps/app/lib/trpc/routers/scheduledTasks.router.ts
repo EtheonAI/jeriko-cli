@@ -154,6 +154,7 @@ export const scheduledTasksRouter = createTRPCRouter({
 
       if (task) {
         void syncTaskToSearch(task);
+        // TODO: Publish scheduledTask:new event via gateway/backend service
       }
 
       return task;
@@ -206,6 +207,7 @@ export const scheduledTasksRouter = createTRPCRouter({
 
       if (task) {
         void syncTaskToSearch(task);
+        // TODO: Publish scheduledTask:update event via gateway/backend service
       }
 
       return task;
@@ -231,6 +233,7 @@ export const scheduledTasksRouter = createTRPCRouter({
 
     if (task) {
       void syncTaskToSearch(task);
+      // TODO: Publish scheduledTask:update event via gateway/backend service
     }
 
     return task;
@@ -258,6 +261,7 @@ export const scheduledTasksRouter = createTRPCRouter({
 
       if (task) {
         void syncTaskToSearch(task);
+        // TODO: Publish scheduledTask:update event via gateway/backend service
       }
 
       return task;
@@ -285,6 +289,7 @@ export const scheduledTasksRouter = createTRPCRouter({
 
       if (task) {
         void syncTaskToSearch(task);
+        // TODO: Publish scheduledTask:update event via gateway/backend service
       }
 
       return task;
@@ -307,6 +312,7 @@ export const scheduledTasksRouter = createTRPCRouter({
       await db.delete(scheduledTasks).where(eq(scheduledTasks.id, input.id));
 
       void removeTaskFromSearch(input.id);
+      // TODO: Publish scheduledTask:deleted event via gateway/backend service
 
       return { success: true };
     }),
@@ -327,17 +333,27 @@ export const scheduledTasksRouter = createTRPCRouter({
 
       // Create execution record
       const executionId = createId();
-      await db.insert(taskExecutions).values({
-        id: executionId,
-        scheduledTaskId: input.id,
-        status: "pending",
-      });
+      const [execution] = await db
+        .insert(taskExecutions)
+        .values({
+          id: executionId,
+          scheduledTaskId: input.id,
+          status: "pending",
+        })
+        .returning();
 
       // Update task status
-      await db
+      const [task] = await db
         .update(scheduledTasks)
         .set({ status: "running" })
-        .where(eq(scheduledTasks.id, input.id));
+        .where(eq(scheduledTasks.id, input.id))
+        .returning();
+
+      if (task) {
+        // TODO: Publish scheduledTask:update event via gateway/backend service
+      }
+
+      // TODO: Publish scheduledTask:execution:new event via gateway/backend service
 
       // TODO: Trigger actual task execution via queue/worker
 

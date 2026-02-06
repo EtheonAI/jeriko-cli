@@ -18,6 +18,11 @@ import {
   ThermometerIcon,
   GaugeIcon,
   PowerIcon,
+  FanIcon,
+  LockIcon,
+  CameraIcon,
+  ShieldIcon,
+  BlindsIcon,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { RoomGroup } from "./room-group";
@@ -28,6 +33,11 @@ const domainFilters = [
   { value: "climate", label: "Climate", icon: ThermometerIcon },
   { value: "sensor", label: "Sensors", icon: GaugeIcon },
   { value: "switch", label: "Switches", icon: PowerIcon },
+  { value: "fan", label: "Fans", icon: FanIcon },
+  { value: "lock", label: "Locks", icon: LockIcon },
+  { value: "cover", label: "Covers", icon: BlindsIcon },
+  { value: "camera", label: "Cameras", icon: CameraIcon },
+  { value: "alarm_control_panel", label: "Security", icon: ShieldIcon },
 ] as const;
 
 export function SmartHomeTab() {

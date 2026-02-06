@@ -2,14 +2,14 @@
 > api@ dev /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
 > concurrently "npm:next" "npm:stripe"
 
-[stripe] 
-[stripe] > stripe
-[stripe] > stripe listen --forward-to localhost:3002/webhooks/payments
-[stripe] 
 [next] 
 [next] > next
 [next] > next dev -p 3002
 [next] 
+[stripe] 
+[stripe] > stripe
+[stripe] > stripe listen --forward-to localhost:3002/webhooks/payments
+[stripe] 
 [stripe] Checking for new versions...
 [stripe] 
 [stripe] A newer version of the Stripe CLI is available, please update to: v1.35.0

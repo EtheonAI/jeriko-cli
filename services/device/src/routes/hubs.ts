@@ -9,11 +9,22 @@ const SUPPORTED_DOMAINS = [
   "light",
   "climate",
   "sensor",
+  "binary_sensor",
   "switch",
   "media_player",
   "lock",
   "scene",
   "cover",
+  "fan",
+  "vacuum",
+  "camera",
+  "alarm_control_panel",
+  "humidifier",
+  "water_heater",
+  "remote",
+  "siren",
+  "automation",
+  "input_boolean",
 ] as const;
 
 const RegisterHubSchema = z.object({
@@ -429,6 +440,72 @@ export const hubRoutes: FastifyPluginAsync = async (fastify) => {
         .send(
           errorResponse(
             { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to list scenes" },
+            request.id
+          )
+        );
+    }
+  });
+
+  // Test hub connection
+  fastify.post("/v1/hubs/:id/test", async (request, reply) => {
+    const userId = getUserId(request);
+    const { id } = request.params as { id: string };
+
+    try {
+      const [hub] = await db
+        .select()
+        .from(smartHomeHubs)
+        .where(and(eq(smartHomeHubs.id, id), eq(smartHomeHubs.userId, userId)))
+        .limit(1);
+
+      if (!hub || !hub.config) {
+        return reply
+          .status(404)
+          .send(
+            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Hub not found" }, request.id)
+          );
+      }
+
+      const config = hub.config as { url: string; accessToken: string };
+      const client = new HomeAssistantClient(config.url, config.accessToken);
+      const test = await client.testConnection();
+
+      // Update hub status based on test result
+      const newStatus = test.ok ? "connected" : "error";
+      await db
+        .update(smartHomeHubs)
+        .set({
+          status: newStatus,
+          ...(test.version
+            ? {
+                metadata: {
+                  ...((hub.metadata as Record<string, unknown>) || {}),
+                  haVersion: test.version,
+                },
+              }
+            : {}),
+        })
+        .where(eq(smartHomeHubs.id, id));
+
+      logger.info({ hubId: id, ok: test.ok, version: test.version }, "Hub connection tested");
+
+      return reply.send(
+        successResponse(
+          {
+            ok: test.ok,
+            version: test.version || null,
+            status: newStatus,
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error(error, "Failed to test hub connection");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to test connection" },
             request.id
           )
         );

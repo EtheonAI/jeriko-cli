@@ -98,15 +98,7 @@ export interface ConnectorsState {
 const initialState: ConnectorsState = {
   availableConnectors: [],
   installedConnectors: [],
-  categories: [
-    "productivity",
-    "developer",
-    "communication",
-    "data",
-    "finance",
-    "social",
-    "custom",
-  ],
+  categories: ["productivity", "developer", "communication", "data", "finance", "social", "custom"],
   selectedConnectorId: null,
   searchQuery: "",
   selectedCategory: "all",
@@ -133,24 +125,16 @@ export const connectorsSlice = createSlice({
     },
 
     // Set user's installed connectors
-    setInstalledConnectors: (
-      state,
-      action: PayloadAction<InstalledConnector[]>
-    ) => {
+    setInstalledConnectors: (state, action: PayloadAction<InstalledConnector[]>) => {
       state.installedConnectors = action.payload;
       state.isLoadingInstalled = false;
     },
 
     // Add a new installed connector
-    addInstalledConnector: (
-      state,
-      action: PayloadAction<InstalledConnector>
-    ) => {
+    addInstalledConnector: (state, action: PayloadAction<InstalledConnector>) => {
       state.installedConnectors.push(action.payload);
       // Update available connector to show as installed
-      const availableIndex = state.availableConnectors.findIndex(
-        (c) => c.id === action.payload.id
-      );
+      const availableIndex = state.availableConnectors.findIndex((c) => c.id === action.payload.id);
       if (availableIndex !== -1) {
         state.availableConnectors[availableIndex].isInstalled = true;
       }
@@ -178,17 +162,13 @@ export const connectorsSlice = createSlice({
 
     // Remove an installed connector
     removeInstalledConnector: (state, action: PayloadAction<string>) => {
-      const connector = state.installedConnectors.find(
-        (c) => c.connectionId === action.payload
-      );
+      const connector = state.installedConnectors.find((c) => c.connectionId === action.payload);
       state.installedConnectors = state.installedConnectors.filter(
         (c) => c.connectionId !== action.payload
       );
       // Update available connector to show as not installed
       if (connector) {
-        const availableIndex = state.availableConnectors.findIndex(
-          (c) => c.id === connector.id
-        );
+        const availableIndex = state.availableConnectors.findIndex((c) => c.id === connector.id);
         if (availableIndex !== -1) {
           state.availableConnectors[availableIndex].isInstalled = false;
         }
@@ -197,12 +177,9 @@ export const connectorsSlice = createSlice({
 
     // Toggle connector enabled state
     toggleConnectorEnabled: (state, action: PayloadAction<string>) => {
-      const index = state.installedConnectors.findIndex(
-        (c) => c.connectionId === action.payload
-      );
+      const index = state.installedConnectors.findIndex((c) => c.connectionId === action.payload);
       if (index !== -1) {
-        state.installedConnectors[index].isEnabled =
-          !state.installedConnectors[index].isEnabled;
+        state.installedConnectors[index].isEnabled = !state.installedConnectors[index].isEnabled;
       }
     },
 
@@ -216,10 +193,7 @@ export const connectorsSlice = createSlice({
       state.searchQuery = action.payload;
     },
 
-    setSelectedCategory: (
-      state,
-      action: PayloadAction<ConnectorCategory | "all">
-    ) => {
+    setSelectedCategory: (state, action: PayloadAction<ConnectorCategory | "all">) => {
       state.selectedCategory = action.payload;
     },
 
@@ -288,14 +262,19 @@ export const connectorsSlice = createSlice({
       );
       if (index !== -1) {
         state.installedConnectors[index].syncStatus = action.payload.status;
-        state.installedConnectors[index].errorMessage =
-          action.payload.errorMessage;
+        state.installedConnectors[index].errorMessage = action.payload.errorMessage;
         if (action.payload.status === "idle") {
-          state.installedConnectors[index].lastSyncedAt =
-            new Date().toISOString();
+          state.installedConnectors[index].lastSyncedAt = new Date().toISOString();
         }
       }
     },
+  },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase("connectors/setConnectors", (state, action: PayloadAction<Connector[]>) => {
+      state.availableConnectors = action.payload ?? [];
+      state.isLoadingAvailable = false;
+    });
   },
 });
 

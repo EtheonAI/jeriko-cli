@@ -178,7 +178,52 @@ export class HTTPChatTransport {
     const decoder = new TextDecoder();
     let buffer = "";
     let hasStarted = false;
-    let textId = "text-0";
+    let hasTextEnded = false;
+    const textId = "text-0";
+
+    const processLine = (line: string): UIMessageStreamChunk | null => {
+      if (!line.trim()) return null;
+      // Try AI SDK data stream format first (single-char prefix: 0:"text", d:{...})
+      return parseAISDKDataStream(line) || parseSSEChunk(line);
+    };
+
+    const enqueueChunk = (
+      controller: ReadableStreamDefaultController<UIMessageStreamChunk>,
+      chunk: UIMessageStreamChunk
+    ) => {
+      // Track text lifecycle events already provided by the stream.
+      // Only text-start counts — "start" is a message-level event, not text-level.
+      if (chunk.type === "text-start") {
+        hasStarted = true;
+      }
+      if (chunk.type === "text-end") {
+        hasTextEnded = true;
+      }
+
+      // Auto-inject lifecycle events for streams that don't provide them
+      // (e.g. agent proxy sends text-delta without text-start/text-end)
+      if (!hasStarted && chunk.type === "text-delta") {
+        hasStarted = true;
+        controller.enqueue({ type: "start" });
+        controller.enqueue({ type: "text-start", id: textId });
+      }
+
+      controller.enqueue(chunk);
+
+      // Check for error chunk
+      if (chunk.type === "error") {
+        controller.close();
+        reader.cancel();
+        return false;
+      }
+
+      // On finish, inject text-end if the stream didn't already provide it
+      if (chunk.type === "finish" && hasStarted && !hasTextEnded) {
+        controller.enqueue({ type: "text-end", id: textId });
+      }
+
+      return true;
+    };
 
     return new ReadableStream<UIMessageStreamChunk>({
       async pull(controller) {
@@ -190,10 +235,10 @@ export class HTTPChatTransport {
             if (buffer.trim()) {
               const lines = buffer.split("\n");
               for (const line of lines) {
-                if (!line.trim()) continue;
-                const chunk = parseAISDKDataStream(line) || parseSSEChunk(line);
+                const chunk = processLine(line);
                 if (chunk) {
-                  controller.enqueue(chunk);
+                  const ok = enqueueChunk(controller, chunk);
+                  if (!ok) return;
                 }
               }
             }
@@ -208,37 +253,10 @@ export class HTTPChatTransport {
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (!line.trim()) continue;
-
-            // Try AI SDK data stream format first
-            let chunk = parseAISDKDataStream(line);
-
-            // Fall back to SSE format
-            if (!chunk) {
-              chunk = parseSSEChunk(line);
-            }
-
+            const chunk = processLine(line);
             if (chunk) {
-              // Send start event on first text
-              if (!hasStarted && chunk.type === "text-delta") {
-                hasStarted = true;
-                controller.enqueue({ type: "start" });
-                controller.enqueue({ type: "text-start", id: textId });
-              }
-
-              controller.enqueue(chunk);
-
-              // Check for error chunk
-              if (chunk.type === "error") {
-                controller.close();
-                reader.cancel();
-                return;
-              }
-
-              // On finish, close text part if we had text
-              if (chunk.type === "finish" && hasStarted) {
-                controller.enqueue({ type: "text-end", id: textId });
-              }
+              const ok = enqueueChunk(controller, chunk);
+              if (!ok) return;
             }
           }
         } catch (error) {

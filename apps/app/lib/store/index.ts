@@ -115,8 +115,13 @@ export const makeStore = () => {
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {
-          // Ignore these action types
-          ignoredActions: ["websocket/connect", "websocket/send"],
+          ignoredActions: [
+            "websocket/connect",
+            "websocket/disconnect",
+            "websocket/send",
+            "websocket/joinRoom",
+            "websocket/leaveRoom",
+          ],
         },
       })
         .concat(apiSlice.middleware)

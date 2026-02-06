@@ -265,6 +265,7 @@ async def agent_loop(
                 "input": block["input"],
                 "result": result,
                 "is_error": is_error,
+                "tool_use_id": block["id"],
             })
 
             # Serialize result for the tool_result content

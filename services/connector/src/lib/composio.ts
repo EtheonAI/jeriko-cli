@@ -1,4 +1,4 @@
-import { Composio } from "composio-core";
+import { Composio } from "@composio/core";
 import { requireEnv } from "@repo/service-utils";
 
 let _client: Composio | null = null;

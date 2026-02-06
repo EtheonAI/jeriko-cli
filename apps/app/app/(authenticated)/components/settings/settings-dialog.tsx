@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@repo/design-system/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@repo/design-system/components/ui/dialog";
 import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { useSettings } from "./settings-context";
 import { SettingsContent } from "./settings-content";
 import { SettingsNav } from "./settings-nav";
+import { trpc } from "@/lib/trpc/client";
+import { useEffect } from "react";
 
 type SettingsDialogProps = {
   user?: {
@@ -21,6 +19,28 @@ type SettingsDialogProps = {
 
 export function SettingsDialog({ user, isPro = false }: SettingsDialogProps) {
   const { isOpen, closeSettings } = useSettings();
+  const utils = trpc.useUtils();
+
+  useEffect(() => {
+    // Prefetch key settings data early so tabs are instant on open.
+    utils.notifications.getPreferences.prefetch();
+    utils.user.getPreferences.prefetch();
+    utils.user.getProfile.prefetch();
+    utils.billing.getSubscription.prefetch();
+    utils.billing.listPlans.prefetch();
+    utils.billing.listPaymentMethods.prefetch();
+    utils.billing.listInvoices.prefetch({ limit: 5 });
+    utils.billing.listCreditPackages.prefetch();
+    utils.billing.getCreditBalance.prefetch();
+    utils.billing.getUsageSummary.prefetch();
+    utils.billing.getUsageRecords.prefetch({ limit: 10 });
+    utils.connectors.listDefinitions.prefetch();
+    utils.connectors.list.prefetch();
+    utils.webhooks.list.prefetch();
+    utils.webhooks.getEventTypes.prefetch();
+    // webhooks.getDeliveries requires a webhookId — prefetched on-demand in the tab
+    // mail.getOrCreateMailbox depends on agent_mailboxes table — prefetched on-demand
+  }, [utils]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeSettings()}>

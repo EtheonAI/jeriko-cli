@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import {
   setSessions,
@@ -356,62 +356,65 @@ export function useSessionsIntegration() {
     refetchSessions();
   }, [refetchSessions]);
 
-  // Filter sessions based on current filters
-  const filteredSessions = sessionsState.sessions.filter((session: AgentSession) => {
-    // Search filter
-    if (
-      sessionsState.searchQuery &&
-      !session.title?.toLowerCase().includes(sessionsState.searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
+  // Filter sessions based on current filters (memoized)
+  const filteredSessions = useMemo(
+    () =>
+      sessionsState.sessions.filter((session: AgentSession) => {
+        if (
+          sessionsState.searchQuery &&
+          !session.title?.toLowerCase().includes(sessionsState.searchQuery.toLowerCase())
+        ) {
+          return false;
+        }
+        if (sessionsState.filterStatus !== "all" && session.status !== sessionsState.filterStatus) {
+          return false;
+        }
+        if (sessionsState.filterMode !== "all" && session.mode !== sessionsState.filterMode) {
+          return false;
+        }
+        if (!sessionsState.showArchived && session.status === "archived") {
+          return false;
+        }
+        return true;
+      }),
+    [
+      sessionsState.sessions,
+      sessionsState.searchQuery,
+      sessionsState.filterStatus,
+      sessionsState.filterMode,
+      sessionsState.showArchived,
+    ]
+  );
 
-    // Status filter
-    if (sessionsState.filterStatus !== "all" && session.status !== sessionsState.filterStatus) {
-      return false;
-    }
-
-    // Mode filter
-    if (sessionsState.filterMode !== "all" && session.mode !== sessionsState.filterMode) {
-      return false;
-    }
-
-    // Archived filter
-    if (!sessionsState.showArchived && session.status === "archived") {
-      return false;
-    }
-
-    return true;
-  });
-
-  // Sort sessions
-  const sortedSessions = [...filteredSessions].sort((a, b) => {
+  // Sort sessions (memoized)
+  const sortedSessions = useMemo(() => {
     const { sortBy, sortOrder } = sessionsState;
-    let comparison = 0;
-
-    switch (sortBy) {
-      case "title":
-        comparison = (a.title || "").localeCompare(b.title || "");
-        break;
-      case "createdAt":
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        break;
-      case "updatedAt":
-        comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-        break;
-      case "lastActivityAt":
-        comparison =
-          new Date(a.lastActivityAt || a.updatedAt).getTime() -
-          new Date(b.lastActivityAt || b.updatedAt).getTime();
-        break;
-    }
-
-    return sortOrder === "desc" ? -comparison : comparison;
-  });
+    return [...filteredSessions].sort((a, b) => {
+      let comparison = 0;
+      switch (sortBy) {
+        case "title":
+          comparison = (a.title || "").localeCompare(b.title || "");
+          break;
+        case "createdAt":
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+        case "updatedAt":
+          comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+          break;
+        case "lastActivityAt":
+          comparison =
+            new Date(a.lastActivityAt || a.updatedAt).getTime() -
+            new Date(b.lastActivityAt || b.updatedAt).getTime();
+          break;
+      }
+      return sortOrder === "desc" ? -comparison : comparison;
+    });
+  }, [filteredSessions, sessionsState.sortBy, sessionsState.sortOrder]);
 
   // Get current session
   const currentSession = sessionsState.currentSessionId
-    ? sessionsState.sessions.find((s: AgentSession) => s.id === sessionsState.currentSessionId) || null
+    ? sessionsState.sessions.find((s: AgentSession) => s.id === sessionsState.currentSessionId) ||
+      null
     : null;
 
   return {

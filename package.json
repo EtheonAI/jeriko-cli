@@ -59,6 +59,13 @@
   "pnpm": {
     "overrides": {
       "parse5": "^7.2.1"
+    },
+    "packageExtensions": {
+      "@hookform/resolvers": {
+        "peerDependencies": {
+          "zod": "*"
+        }
+      }
     }
   },
   "type": "module"

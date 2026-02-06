@@ -41,19 +41,24 @@ export async function connectorRoutes(app: FastifyInstance) {
     }
   });
 
-  // Sync Composio app catalog into connector_definitions
+  // Sync Composio toolkit catalog into connector_definitions
   app.post("/connectors/sync-catalog", async (_request, reply) => {
     try {
       const composio = getComposioClient();
-      const apps = await composio.apps.list();
+      const toolkits = await composio.toolkits.get({});
 
       let upserted = 0;
-      for (const app of apps) {
-        const appName = app.key;
-        const displayName = app.name;
-        const description = app.description ?? "";
+      const items =
+        (toolkits as { items?: Array<Record<string, unknown>> }).items ??
+        (Array.isArray(toolkits) ? toolkits : []);
+      for (const toolkit of items) {
+        const appName = (toolkit.slug ?? toolkit.name ?? "") as string;
+        const displayName = (toolkit.name ?? "") as string;
+        const meta = toolkit.meta as Record<string, unknown> | undefined;
+        const description = (meta?.description ?? "") as string;
 
         const category = inferCategory(appName);
+        const logo = (meta?.logo as string) ?? `https://logos.composio.dev/api/${appName}`;
 
         await db
           .insert(connectorDefinitions)
@@ -62,6 +67,7 @@ export async function connectorRoutes(app: FastifyInstance) {
             type: appName.toLowerCase(),
             name: displayName,
             description,
+            icon: logo,
             category,
             authType: "oauth2",
             isEnabled: true,
@@ -71,6 +77,7 @@ export async function connectorRoutes(app: FastifyInstance) {
             set: {
               name: displayName,
               description,
+              icon: logo,
               updatedAt: new Date(),
             },
           });

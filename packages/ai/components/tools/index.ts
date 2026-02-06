@@ -20,6 +20,14 @@ export {
   type AgentActivityTrackerProps,
 } from "./agent-activity-tracker";
 
+// Plan Window
+export {
+  PlanWindow,
+  type PlanWindowProps,
+  type PlanTodo,
+  type PlanTodoStatus,
+} from "./plan-window";
+
 // Enhanced Renderers (with animations, rich UI)
 export { WebSearchEnhanced } from "./renderers/web-search-enhanced";
 export { CodeBlockEnhanced } from "./renderers/code-block-enhanced";

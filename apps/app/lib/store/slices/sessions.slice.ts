@@ -75,6 +75,7 @@ export interface SessionsState {
   currentSessionId: string | null;
   isLoading: boolean;
   error: string | null;
+  allCollaborators: string[];
   // Session groups/folders
   groups: SessionGroup[];
   // Filtering and sorting (Manus: searchValue -> searchQuery)
@@ -111,6 +112,7 @@ const initialState: SessionsState = {
   currentSessionId: null,
   isLoading: false,
   error: null,
+  allCollaborators: [],
   groups: [],
   searchQuery: "",
   filterStatus: "all",
@@ -178,9 +180,24 @@ export const sessionsSlice = createSlice({
     },
 
     addSession: (state, action: PayloadAction<AgentSession>) => {
+      // Prevent duplicate sessions
+      if (state.sessions.some((s) => s.id === action.payload.id)) return;
       state.sessions.unshift(action.payload);
       state.totalCount += 1;
       // Add to recent sessions
+      state.recentSessionIds = [
+        action.payload.id,
+        ...state.recentSessionIds.filter((id) => id !== action.payload.id),
+      ].slice(0, 10);
+    },
+
+    // Atomic: add session + set as current in one dispatch (prevents race condition)
+    createAndSelectSession: (state, action: PayloadAction<AgentSession>) => {
+      if (!state.sessions.some((s) => s.id === action.payload.id)) {
+        state.sessions.unshift(action.payload);
+        state.totalCount += 1;
+      }
+      state.currentSessionId = action.payload.id;
       state.recentSessionIds = [
         action.payload.id,
         ...state.recentSessionIds.filter((id) => id !== action.payload.id),
@@ -204,12 +221,8 @@ export const sessionsSlice = createSlice({
     removeSession: (state, action: PayloadAction<string>) => {
       state.sessions = state.sessions.filter((s) => s.id !== action.payload);
       state.totalCount = Math.max(0, state.totalCount - 1);
-      state.selectedSessionIds = state.selectedSessionIds.filter(
-        (id) => id !== action.payload
-      );
-      state.recentSessionIds = state.recentSessionIds.filter(
-        (id) => id !== action.payload
-      );
+      state.selectedSessionIds = state.selectedSessionIds.filter((id) => id !== action.payload);
+      state.recentSessionIds = state.recentSessionIds.filter((id) => id !== action.payload);
       if (state.currentSessionId === action.payload) {
         state.currentSessionId = null;
       }
@@ -284,10 +297,7 @@ export const sessionsSlice = createSlice({
       state.groups.push(action.payload);
     },
 
-    updateGroup: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<SessionGroup> }>
-    ) => {
+    updateGroup: (state, action: PayloadAction<{ id: string; updates: Partial<SessionGroup> }>) => {
       const index = state.groups.findIndex((g) => g.id === action.payload.id);
       if (index !== -1) {
         state.groups[index] = { ...state.groups[index], ...action.payload.updates };
@@ -298,10 +308,7 @@ export const sessionsSlice = createSlice({
       state.groups = state.groups.filter((g) => g.id !== action.payload);
     },
 
-    addSessionToGroup: (
-      state,
-      action: PayloadAction<{ groupId: string; sessionId: string }>
-    ) => {
+    addSessionToGroup: (state, action: PayloadAction<{ groupId: string; sessionId: string }>) => {
       const group = state.groups.find((g) => g.id === action.payload.groupId);
       if (group && !group.sessionIds.includes(action.payload.sessionId)) {
         group.sessionIds.push(action.payload.sessionId);
@@ -314,9 +321,7 @@ export const sessionsSlice = createSlice({
     ) => {
       const group = state.groups.find((g) => g.id === action.payload.groupId);
       if (group) {
-        group.sessionIds = group.sessionIds.filter(
-          (id) => id !== action.payload.sessionId
-        );
+        group.sessionIds = group.sessionIds.filter((id) => id !== action.payload.sessionId);
       }
     },
 
@@ -333,10 +338,7 @@ export const sessionsSlice = createSlice({
       state.filterMode = action.payload;
     },
 
-    setSortBy: (
-      state,
-      action: PayloadAction<SessionsState["sortBy"]>
-    ) => {
+    setSortBy: (state, action: PayloadAction<SessionsState["sortBy"]>) => {
       state.sortBy = action.payload;
     },
 
@@ -354,11 +356,10 @@ export const sessionsSlice = createSlice({
     },
 
     toggleSessionSelection: (state, action: PayloadAction<string>) => {
-      const index = state.selectedSessionIds.indexOf(action.payload);
-      if (index === -1) {
-        state.selectedSessionIds.push(action.payload);
+      if (state.selectedSessionIds.includes(action.payload)) {
+        state.selectedSessionIds = state.selectedSessionIds.filter((id) => id !== action.payload);
       } else {
-        state.selectedSessionIds.splice(index, 1);
+        state.selectedSessionIds.push(action.payload);
       }
     },
 
@@ -389,6 +390,7 @@ export const sessionsSlice = createSlice({
       state.hasMore = false;
       state.cursor = null;
       state.totalCount = 0;
+      state.allCollaborators = [];
     },
 
     // Manus-specific reducers
@@ -458,12 +460,32 @@ export const sessionsSlice = createSlice({
       state.sharingSessionUid = action.payload;
     },
   },
+  extraReducers: (builder) => {
+    // Manus compatibility
+    builder.addCase("sessions/fetchSessionsStart", (state) => {
+      state.isLoading = true;
+    });
+    builder.addCase("sessions/fetchSessionsSuccess", (state, action: PayloadAction<any>) => {
+      const payload = action.payload ?? {};
+      const sessions = payload.sessions ?? payload ?? [];
+      state.sessions = sessions;
+      if (typeof payload.hasMore === "boolean") state.hasMore = payload.hasMore;
+      if ("cursor" in payload) state.cursor = payload.cursor ?? null;
+      if (typeof payload.totalCount === "number") state.totalCount = payload.totalCount;
+      state.isLoading = false;
+      state.error = null;
+    });
+    builder.addCase("sessions/setAllCollaborators", (state, action: PayloadAction<string[]>) => {
+      state.allCollaborators = action.payload ?? [];
+    });
+  },
 });
 
 export const {
   setSessions,
   appendSessions,
   addSession,
+  createAndSelectSession,
   updateSession,
   removeSession,
   archiveSession,

@@ -35,6 +35,15 @@ async function main() {
     genReqId: () => crypto.randomUUID(),
   });
 
+  const requireUserId = (request: any, reply: any): string | null => {
+    const userId = request.headers["x-user-id"] as string | undefined;
+    if (!userId) {
+      reply.status(401).send({ error: "Unauthorized" });
+      return null;
+    }
+    return userId;
+  };
+
   // Health check
   app.get("/health", async () => {
     return { status: "ok", service: "notification" };
@@ -67,6 +76,11 @@ async function main() {
     };
 
     try {
+      const authUserId = requireUserId(request, reply);
+      if (!authUserId) return;
+      if (authUserId !== userId) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
       // 1. Fetch user preferences
       const [prefs] = await db
         .select()
@@ -180,6 +194,11 @@ async function main() {
     const { limit = 50, cursor } = request.query as { limit?: number; cursor?: string };
 
     try {
+      const authUserId = requireUserId(request, reply);
+      if (!authUserId) return;
+      if (authUserId !== userId) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
       const pageLimit = Math.min(limit, 100);
       const conditions = [eq(notifications.userId, userId)];
       if (cursor) {
@@ -210,10 +229,12 @@ async function main() {
   app.patch("/notifications/:id/read", async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
+      const authUserId = requireUserId(request, reply);
+      if (!authUserId) return;
       const [updated] = await db
         .update(notifications)
         .set({ isRead: true, readAt: new Date() })
-        .where(eq(notifications.id, id))
+        .where(and(eq(notifications.id, id), eq(notifications.userId, authUserId)))
         .returning();
       if (!updated) {
         return reply.status(404).send({ error: "Notification not found" });

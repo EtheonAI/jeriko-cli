@@ -36,7 +36,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send, read, and manage emails from your Gmail account",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/gmail",
+    icon: "https://logos.composio.dev/api/gmail",
   },
   {
     type: "slack",
@@ -44,7 +44,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send messages, manage channels, and automate workflows in Slack",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/slack",
+    icon: "https://logos.composio.dev/api/slack",
   },
   {
     type: "discord",
@@ -52,7 +52,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send messages and manage servers on Discord",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/discord",
+    icon: "https://logos.composio.dev/api/discord",
   },
   {
     type: "teams",
@@ -60,7 +60,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Chat, meet, and collaborate with Microsoft Teams",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/microsoftteams",
+    icon: "https://logos.composio.dev/api/microsoftteams",
   },
   {
     type: "outlook",
@@ -68,7 +68,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage emails and calendar events in Microsoft Outlook",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/microsoftoutlook",
+    icon: "https://logos.composio.dev/api/microsoftoutlook",
   },
   {
     type: "twilio",
@@ -76,7 +76,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send SMS, make calls, and manage communications via Twilio",
     category: "communication",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/twilio",
+    icon: "https://logos.composio.dev/api/twilio",
   },
   {
     type: "mailchimp",
@@ -84,7 +84,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and manage email campaigns and audiences",
     category: "communication",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/mailchimp",
+    icon: "https://logos.composio.dev/api/mailchimp",
   },
   {
     type: "sendgrid",
@@ -92,7 +92,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send transactional and marketing emails at scale",
     category: "communication",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/sendgrid",
+    icon: "https://logos.composio.dev/api/sendgrid",
   },
   {
     type: "telegram",
@@ -100,7 +100,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Send messages and manage bots on Telegram",
     category: "communication",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/telegram",
+    icon: "https://logos.composio.dev/api/telegram",
   },
 
   // Storage
@@ -110,7 +110,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Store, share, and collaborate on files in Google Drive",
     category: "storage",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/googledrive",
+    icon: "https://logos.composio.dev/api/googledrive",
   },
   {
     type: "dropbox",
@@ -118,7 +118,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Sync and share files securely with Dropbox",
     category: "storage",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/dropbox",
+    icon: "https://logos.composio.dev/api/dropbox",
   },
   {
     type: "onedrive",
@@ -126,7 +126,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Store and share files with Microsoft OneDrive",
     category: "storage",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/microsoftonedrive",
+    icon: "https://logos.composio.dev/api/microsoftonedrive",
   },
   {
     type: "box",
@@ -134,7 +134,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Secure cloud content management and file sharing",
     category: "storage",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/box",
+    icon: "https://logos.composio.dev/api/box",
   },
   {
     type: "sharepoint",
@@ -142,7 +142,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Collaborate on documents and sites with SharePoint",
     category: "storage",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/microsoftsharepoint",
+    icon: "https://logos.composio.dev/api/microsoftsharepoint",
   },
 
   // Productivity
@@ -152,7 +152,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and manage docs, databases, and wikis in Notion",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/notion",
+    icon: "https://logos.composio.dev/api/notion",
   },
   {
     type: "google_calendar",
@@ -160,7 +160,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and manage events, check availability on Google Calendar",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/googlecalendar",
+    icon: "https://logos.composio.dev/api/googlecalendar",
   },
   {
     type: "asana",
@@ -168,7 +168,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Track tasks, projects, and team work in Asana",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/asana",
+    icon: "https://logos.composio.dev/api/asana",
   },
   {
     type: "trello",
@@ -176,7 +176,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Organize projects and tasks with Trello boards and cards",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/trello",
+    icon: "https://logos.composio.dev/api/trello",
   },
   {
     type: "todoist",
@@ -184,7 +184,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage personal and team tasks with Todoist",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/todoist",
+    icon: "https://logos.composio.dev/api/todoist",
   },
   {
     type: "clickup",
@@ -192,7 +192,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "All-in-one project management and productivity platform",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/clickup",
+    icon: "https://logos.composio.dev/api/clickup",
   },
   {
     type: "confluence",
@@ -200,7 +200,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and collaborate on team documentation in Confluence",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/confluence",
+    icon: "https://logos.composio.dev/api/confluence",
   },
   {
     type: "airtable",
@@ -208,7 +208,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Build flexible databases and apps with Airtable",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/airtable",
+    icon: "https://logos.composio.dev/api/airtable",
   },
   {
     type: "google_sheets",
@@ -216,7 +216,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and edit spreadsheets in Google Sheets",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/googlesheets",
+    icon: "https://logos.composio.dev/api/googlesheets",
   },
   {
     type: "google_docs",
@@ -224,7 +224,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Create and collaborate on documents in Google Docs",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/googledocs",
+    icon: "https://logos.composio.dev/api/googledocs",
   },
   {
     type: "zoom",
@@ -232,7 +232,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Schedule and manage video meetings with Zoom",
     category: "productivity",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/zoom",
+    icon: "https://logos.composio.dev/api/zoom",
   },
 
   // Development
@@ -242,7 +242,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage repos, issues, PRs, and actions on GitHub",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/github",
+    icon: "https://logos.composio.dev/api/github",
   },
   {
     type: "gitlab",
@@ -250,7 +250,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage repos, pipelines, and merge requests on GitLab",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/gitlab",
+    icon: "https://logos.composio.dev/api/gitlab",
   },
   {
     type: "bitbucket",
@@ -258,7 +258,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage repos, pull requests, and pipelines on Bitbucket",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/bitbucket",
+    icon: "https://logos.composio.dev/api/bitbucket",
   },
   {
     type: "jira",
@@ -266,7 +266,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Track issues, sprints, and project progress in Jira",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/jira",
+    icon: "https://logos.composio.dev/api/jira",
   },
   {
     type: "linear",
@@ -274,7 +274,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Plan and track software projects with Linear",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/linear",
+    icon: "https://logos.composio.dev/api/linear",
   },
   {
     type: "figma",
@@ -282,7 +282,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Access designs, components, and comments in Figma",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/figma",
+    icon: "https://logos.composio.dev/api/figma",
   },
   {
     type: "vercel",
@@ -290,7 +290,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage deployments and projects on Vercel",
     category: "development",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/vercel",
+    icon: "https://logos.composio.dev/api/vercel",
   },
   {
     type: "sentry",
@@ -298,7 +298,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Monitor errors and performance issues with Sentry",
     category: "development",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/sentry",
+    icon: "https://logos.composio.dev/api/sentry",
   },
 
   // CRM
@@ -308,7 +308,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage contacts, leads, and deals in Salesforce",
     category: "crm",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/salesforce",
+    icon: "https://logos.composio.dev/api/salesforce",
   },
   {
     type: "hubspot",
@@ -316,7 +316,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage contacts, deals, and marketing in HubSpot",
     category: "crm",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/hubspot",
+    icon: "https://logos.composio.dev/api/hubspot",
   },
   {
     type: "pipedrive",
@@ -324,7 +324,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage sales pipeline and deals with Pipedrive",
     category: "crm",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/pipedrive",
+    icon: "https://logos.composio.dev/api/pipedrive",
   },
   {
     type: "zendesk",
@@ -332,7 +332,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage support tickets and customer interactions",
     category: "crm",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/zendesk",
+    icon: "https://logos.composio.dev/api/zendesk",
   },
   {
     type: "intercom",
@@ -340,7 +340,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage customer conversations and support with Intercom",
     category: "crm",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/intercom",
+    icon: "https://logos.composio.dev/api/intercom",
   },
   {
     type: "freshdesk",
@@ -348,7 +348,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Customer support ticketing and helpdesk",
     category: "crm",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/freshdesk",
+    icon: "https://logos.composio.dev/api/freshdesk",
   },
 
   // Analytics
@@ -358,7 +358,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Track website traffic and user behavior",
     category: "analytics",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/googleanalytics",
+    icon: "https://logos.composio.dev/api/googleanalytics",
   },
   {
     type: "mixpanel",
@@ -366,7 +366,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Product analytics for user behavior tracking",
     category: "analytics",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/mixpanel",
+    icon: "https://logos.composio.dev/api/mixpanel",
   },
   {
     type: "amplitude",
@@ -374,7 +374,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Digital analytics for product and growth teams",
     category: "analytics",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/amplitude",
+    icon: "https://logos.composio.dev/api/amplitude",
   },
 
   // Other
@@ -384,7 +384,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage payments, subscriptions, and customers with Stripe",
     category: "other",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/stripe",
+    icon: "https://logos.composio.dev/api/stripe",
   },
   {
     type: "shopify",
@@ -392,7 +392,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage products, orders, and customers on Shopify",
     category: "other",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/shopify",
+    icon: "https://logos.composio.dev/api/shopify",
   },
   {
     type: "zapier",
@@ -400,7 +400,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Connect and automate workflows across 5,000+ apps",
     category: "other",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/zapier",
+    icon: "https://logos.composio.dev/api/zapier",
   },
   {
     type: "make_connector",
@@ -408,7 +408,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Visual automation platform for complex workflows",
     category: "other",
     authType: "api_key",
-    icon: "https://cdn.simpleicons.org/make",
+    icon: "https://logos.composio.dev/api/make",
   },
   {
     type: "custom_webhook",
@@ -424,7 +424,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Post tweets, read timelines, and manage your X account",
     category: "other",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/x",
+    icon: "https://logos.composio.dev/api/x",
   },
   {
     type: "reddit",
@@ -432,7 +432,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Browse, post, and interact on Reddit",
     category: "other",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/reddit",
+    icon: "https://logos.composio.dev/api/reddit",
   },
   {
     type: "spotify",
@@ -440,7 +440,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Control playback, manage playlists, and browse music",
     category: "other",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/spotify",
+    icon: "https://logos.composio.dev/api/spotify",
   },
   {
     type: "youtube",
@@ -448,7 +448,7 @@ const DEFAULT_DEFINITIONS: Array<{
     description: "Manage videos, playlists, and channels on YouTube",
     category: "other",
     authType: "oauth2",
-    icon: "https://cdn.simpleicons.org/youtube",
+    icon: "https://logos.composio.dev/api/youtube",
   },
 ];
 
@@ -756,11 +756,18 @@ export const connectorsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
 
-      const response = await fetch(`${connectorServiceUrl}/connectors/${input.type}/oauth/start`, {
-        headers: {
-          "x-user-id": ctx.user.id,
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${connectorServiceUrl}/connectors/${input.type}/oauth/start`, {
+          headers: { "x-user-id": ctx.user.id },
+        });
+      } catch (fetchError) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Connector service is not available. Make sure it is running on " + connectorServiceUrl,
+        });
+      }
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -777,6 +784,48 @@ export const connectorsRouter = createTRPCRouter({
       return data;
     }),
 
+  // Check connection status after OAuth popup closes
+  checkConnection: protectedProcedure
+    .input(z.object({ type: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+
+      try {
+        const response = await fetch(`${connectorServiceUrl}/connectors/${input.type}/status`, {
+          headers: { "x-user-id": ctx.user.id },
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as { status: string };
+          return data;
+        }
+      } catch {
+        // Connector service unavailable — check DB directly
+      }
+
+      // Fallback: check DB directly
+      const [definition] = await db
+        .select()
+        .from(connectorDefinitions)
+        .where(eq(connectorDefinitions.type, input.type))
+        .limit(1);
+
+      if (!definition) return { status: "not_found" };
+
+      const [connector] = await db
+        .select()
+        .from(userConnectors)
+        .where(
+          and(
+            eq(userConnectors.userId, ctx.user.id),
+            eq(userConnectors.connectorDefinitionId, definition.id)
+          )
+        )
+        .limit(1);
+
+      return { status: connector?.status ?? "not_found" };
+    }),
+
   // Get tools for an integration via connector service (Composio)
   getTools: protectedProcedure
     .input(
@@ -784,7 +833,7 @@ export const connectorsRouter = createTRPCRouter({
         integrationId: z.string(),
       })
     )
-    .query(async ({ ctx, input }) => {
+    .query(async ({ input }) => {
       const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
 
       const response = await fetch(

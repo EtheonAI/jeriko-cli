@@ -43,7 +43,7 @@ const App = async () => {
         )}
       </Header>
       <main className="flex flex-1 flex-col items-center justify-center p-4">
-        <div className="flex flex-col items-center gap-6 w-full max-w-xl -mt-16">
+        <div className="flex flex-col items-center gap-6 w-full max-w-3xl -mt-16">
           {/* Hero text */}
           <div className="text-center space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">What can I do for you?</h1>

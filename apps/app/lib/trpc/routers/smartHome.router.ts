@@ -157,6 +157,17 @@ export const smartHomeRouter = createTRPCRouter({
       }
     }),
 
+  // Test hub connection
+  testConnection: protectedProcedure
+    .input(z.object({ hubId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return fetchHubService<{ ok: boolean; version: string | null; status: string }>(
+        `/${input.hubId}/test`,
+        { method: "POST" },
+        ctx.user.id
+      );
+    }),
+
   // Activate a scene
   activateScene: protectedProcedure
     .input(

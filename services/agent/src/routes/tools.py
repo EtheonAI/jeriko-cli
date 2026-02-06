@@ -3,6 +3,9 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from ..config import settings
+from ..session import get_cached_session
+from ..tool_executor import ExecutionContext, execute_tool as execute_tool_router
+from .completion import setup_session_context
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Tools"])
@@ -33,6 +36,12 @@ class ToolExecutionResponse(BaseModel):
     error: str | None = None
     requires_approval: bool = False
     approval_id: str | None = None
+
+
+TOOL_NAME_MAP: dict[str, str] = {
+    "browse_url": "browser_navigate",
+    "execute_code": "code_execute",
+}
 
 
 # Available tools registry
@@ -161,6 +170,8 @@ async def execute_tool(
     request: ToolExecutionRequest,
     x_user_id: str = Header(..., alias="x-user-id"),
     x_task_id: str | None = Header(None, alias="x-task-id"),
+    x_session_id: str | None = Header(None, alias="x-session-id"),
+    x_sandbox_id: str | None = Header(None, alias="x-sandbox-id"),
 ) -> ToolExecutionResponse:
     """Execute a tool."""
     logger.info(
@@ -180,23 +191,45 @@ async def execute_tool(
         # For device-related tools, forward to device service
         return await execute_device_tool(request, x_user_id, x_task_id)
 
-    # Execute tool based on type
-    try:
-        if request.tool_name == "web_search":
-            result = await execute_web_search(request.arguments)
-        elif request.tool_name == "browse_url":
-            result = await execute_browse_url(request.arguments)
-        elif request.tool_name == "execute_code":
-            result = await execute_code(request.arguments)
-        elif request.tool_name == "create_document":
-            result = await execute_create_document(request.arguments)
-        elif request.tool_name == "generate_image":
-            result = await execute_generate_image(request.arguments)
+    # Resolve sandbox from session cache or explicit header
+    sandbox_id = x_sandbox_id
+    if not sandbox_id and x_session_id:
+        cached = get_cached_session(x_session_id)
+        if cached and cached.sandbox_id:
+            sandbox_id = cached.sandbox_id
         else:
+            try:
+                session_ctx = await setup_session_context(x_session_id, x_user_id)
+                sandbox_id = session_ctx.sandbox_id
+            except Exception as e:
+                logger.warning("tool_session_setup_failed", error=str(e))
+
+    exec_ctx = ExecutionContext(
+        user_id=x_user_id,
+        session_id=x_session_id or x_task_id or "tool",
+        sandbox_id=sandbox_id,
+    )
+
+    # Execute tool via the shared tool executor
+    try:
+        tool_name = TOOL_NAME_MAP.get(request.tool_name, request.tool_name)
+        tool_args = request.arguments or {}
+        if request.tool_name == "browse_url":
+            tool_args = {"url": tool_args.get("url", "")}
+
+        result = await execute_tool_router(tool_name, tool_args, exec_ctx)
+
+        # Normalize approval-required responses
+        if isinstance(result, dict) and result.get("status") == "approval_required":
             return ToolExecutionResponse(
                 success=False,
-                error=f"Tool implementation not found: {request.tool_name}",
+                requires_approval=True,
+                error=result.get("message"),
+                approval_id=result.get("approval_id"),
             )
+
+        if isinstance(result, dict) and "error" in result:
+            return ToolExecutionResponse(success=False, error=str(result.get("error")))
 
         return ToolExecutionResponse(success=True, result=result)
 
@@ -245,107 +278,7 @@ async def execute_device_tool(
                 error=f"Device service error: {response.status_code}",
             )
 
-        return ToolExecutionResponse(success=True, result=response.json())
-
-
-async def execute_web_search(arguments: dict) -> dict:
-    """Execute web search."""
-    # TODO: Integrate with Serper/Tavily
-    query = arguments.get("query", "")
-    return {"query": query, "results": [], "message": "Search integration pending"}
-
-
-async def execute_browse_url(arguments: dict) -> dict:
-    """Browse URL and extract content."""
-    import httpx
-
-    url = arguments.get("url", "")
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=30.0)
-        return {
-            "url": url,
-            "status_code": response.status_code,
-            "content_type": response.headers.get("content-type"),
-            "content_length": len(response.text),
-            "content": response.text[:5000],  # Truncate for safety
-        }
-
-
-async def execute_code(arguments: dict) -> dict:
-    """Execute code in E2B sandbox via the sandbox service."""
-    import httpx
-
-    code = arguments.get("code", "")
-    language = arguments.get("language", "python")
-    sandbox_url = settings.sandbox_service_url
-    sandbox_id = arguments.get("sandbox_id")
-
-    async with httpx.AsyncClient() as client:
-        # Create a sandbox if no sandbox_id provided
-        if not sandbox_id:
-            create_resp = await client.post(
-                f"{sandbox_url}/sandboxes",
-                json={"userId": "agent", "config": {"timeout": 300000}},
-                timeout=30.0,
-            )
-            if create_resp.status_code >= 400:
-                return {
-                    "language": language,
-                    "executed": False,
-                    "error": f"Failed to create sandbox: {create_resp.text}",
-                }
-            sandbox_id = create_resp.json()["id"]
-
-        # Execute code
-        exec_resp = await client.post(
-            f"{sandbox_url}/sandboxes/{sandbox_id}/execute",
-            json={"code": code, "language": language, "timeout": 60000},
-            timeout=90.0,
-        )
-
-        if exec_resp.status_code >= 400:
-            return {
-                "language": language,
-                "executed": False,
-                "sandbox_id": sandbox_id,
-                "error": f"Execution failed: {exec_resp.text}",
-            }
-
-        result = exec_resp.json()
-        return {
-            "language": language,
-            "executed": True,
-            "sandbox_id": sandbox_id,
-            "stdout": result.get("stdout", ""),
-            "stderr": result.get("stderr", ""),
-            "exit_code": result.get("exitCode", 0),
-            "error": result.get("error"),
-            "text": result.get("text"),
-            "execution_time_ms": result.get("executionTimeMs"),
-        }
-
-
-async def execute_create_document(arguments: dict) -> dict:
-    """Create a document."""
-    # TODO: Integrate document generation
-    doc_type = arguments.get("type", "pdf")
-    return {
-        "type": doc_type,
-        "created": False,
-        "message": "Document generation pending",
-    }
-
-
-async def execute_generate_image(arguments: dict) -> dict:
-    """Generate an image."""
-    # TODO: Integrate DALL-E/Stable Diffusion
-    prompt = arguments.get("prompt", "")
-    return {
-        "prompt": prompt,
-        "generated": False,
-        "message": "Image generation pending",
-    }
+    return ToolExecutionResponse(success=True, result=response.json())
 
 
 async def _fetch_composio_tools(user_id: str) -> list[ToolDefinition]:
