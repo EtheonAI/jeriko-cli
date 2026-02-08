@@ -18,7 +18,13 @@ import { setSelectedAgent, type Agent, type AgentTask } from "@/lib/store/slices
 import { updateSession as updateSessionInStore } from "@/lib/store/slices/sessions.slice";
 import { useAgentsData } from "@/lib/store/hooks/useAgentsData";
 import { useSocket } from "@/lib/socket/provider";
-import { ChatContainer, MessageList, AgentDagPanel } from "@repo/ai/components";
+import {
+  ChatContainer,
+  MessageList,
+  AgentDagPanel,
+  AgentCanvas,
+  useCanvas,
+} from "@repo/ai/components";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage as AIUIMessage } from "ai";
 import type { UIMessage, MessagePart, Attachment } from "@repo/ai/lib/types";
@@ -67,12 +73,16 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
   const [sidebarType, setSidebarType] = useState<"sources" | "agents" | null>(null);
 
   // Convert redux messages to UIMessage format
+  // If DB parts exist (with tool results/screenshots), use them for canvas restoration
   const initialUIMessages = useMemo<UIMessage[]>(() => {
     const msgs = initialMessages.length > 0 ? initialMessages : reduxMessages;
     return msgs.map((msg: Message) => ({
       id: msg.id,
       role: msg.role as "user" | "assistant" | "system",
-      parts: [{ type: "text" as const, text: msg.content }],
+      parts:
+        msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0
+          ? (msg.parts as UIMessage["parts"])
+          : [{ type: "text" as const, text: msg.content }],
       metadata: msg.metadata,
       createdAt: new Date(msg.createdAt),
     }));
@@ -130,7 +140,7 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
     transport: transportRef.current,
     experimental_throttle: 50,
     onFinish: ({ messages: finishedMessages }) => {
-      // Sync to Redux
+      // Sync to Redux — preserve full parts for canvas restoration
       const reduxMsgs: Message[] = finishedMessages.map((m) => ({
         id: m.id,
         sessionId,
@@ -139,6 +149,7 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
           .filter((p) => p.type === "text" && "text" in p)
           .map((p) => (p as { type: "text"; text: string }).text ?? "")
           .join(""),
+        parts: m.parts as unknown[],
         createdAt: new Date().toISOString(),
         metadata: m.metadata as Record<string, unknown> | undefined,
       }));
@@ -160,6 +171,20 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
   const setMessages = setRawMessages as unknown as (
     msgs: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])
   ) => void;
+
+  // Canvas state — derived from messages
+  const canvasState = useCanvas(messages);
+  const [canvasFullscreen, setCanvasFullscreen] = useState(false);
+  const [canvasOpen, setCanvasOpen] = useState(true);
+  const prevCanvasVisible = useRef(false);
+
+  // Auto-reopen canvas when new tool activity starts (user may have closed it)
+  useEffect(() => {
+    if (canvasState.isVisible && !prevCanvasVisible.current) {
+      setCanvasOpen(true);
+    }
+    prevCanvasVisible.current = canvasState.isVisible;
+  }, [canvasState.isVisible]);
 
   // Wrap sendMessage to always include chatId/sessionId in body
   const sendMessage = useCallback(
@@ -340,81 +365,128 @@ export function ChatPageClient({ sessionId, initialMessages = [], user }: ChatPa
   }, [messages]);
 
   return (
-    <ChatContainer
-      className="h-full"
-      header={
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-medium">Chat</h1>
-            <ConnectionStatus isConnected={isConnected} />
-          </div>
-          {sources.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setSidebarType("sources");
-                setSidebarOpen(!sidebarOpen || sidebarType !== "sources");
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              {sources.length} sources
-            </button>
-          )}
-        </div>
-      }
-      footer={
-        <div className="px-4 pb-4 pt-2">
-          <div className="mx-auto max-w-3xl space-y-3">
-            {/* Agent DAG (multi-agent only) */}
-            {agentData.length > 0 && (
-              <AgentDagPanel
-                agents={agentData}
-                selectedAgentId={selectedAgentId}
-                onAgentSelect={handleAgentSelect}
-                compact
-              />
-            )}
-
-            {/* Prompt */}
-            <UnifiedPrompt
-              ref={composerRef}
-              onSubmit={handleSendMessage}
-              onCancel={stop}
-              disabled={status === "submitted"}
-              isStreaming={status === "streaming"}
-              initialModel={selectedModel}
-              showAnimatedPlaceholder={false}
-            />
-          </div>
-        </div>
-      }
-      sidebar={
-        sidebarType === "sources" ? (
-          <SourcesPanel sources={sources} onClose={() => setSidebarOpen(false)} />
-        ) : undefined
-      }
-      sidebarOpen={sidebarOpen}
-      sidebarPosition="right"
-    >
-      <div className="mx-auto h-full max-w-3xl">
-        <MessageList
-          messages={messages}
-          isStreaming={status === "streaming" || status === "submitted"}
-          onMessageAction={handleMessageAction}
-          onToolApproval={handleToolApproval}
-          emptyState={
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-2xl">✨</span>
+    <div className="flex h-full overflow-hidden">
+      {/* Chat panel */}
+      <div className={canvasState.isVisible && canvasOpen ? "flex-1 min-w-0" : "w-full"}>
+        <ChatContainer
+          className="h-full"
+          header={
+            <div className="flex items-center justify-between px-4 py-2">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-medium">Chat</h1>
+                <ConnectionStatus isConnected={isConnected} />
               </div>
-              <div>
-                <h2 className="text-lg font-medium">Start a conversation</h2>
-                <p className="text-sm text-muted-foreground">Ask anything to get started</p>
+              {sources.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarType("sources");
+                    setSidebarOpen(!sidebarOpen || sidebarType !== "sources");
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {sources.length} sources
+                </button>
+              )}
+            </div>
+          }
+          footer={
+            <div className="px-4 pb-4 pt-2">
+              <div className="mx-auto max-w-3xl space-y-3">
+                {/* Agent DAG (multi-agent only) */}
+                {agentData.length > 0 && (
+                  <AgentDagPanel
+                    agents={agentData}
+                    selectedAgentId={selectedAgentId}
+                    onAgentSelect={handleAgentSelect}
+                    compact
+                  />
+                )}
+
+                {/* Prompt */}
+                <UnifiedPrompt
+                  ref={composerRef}
+                  onSubmit={handleSendMessage}
+                  onCancel={stop}
+                  disabled={status === "submitted"}
+                  isStreaming={status === "streaming"}
+                  initialModel={selectedModel}
+                  showAnimatedPlaceholder={false}
+                />
               </div>
             </div>
           }
-        />
+          sidebar={
+            sidebarType === "sources" ? (
+              <SourcesPanel sources={sources} onClose={() => setSidebarOpen(false)} />
+            ) : undefined
+          }
+          sidebarOpen={sidebarOpen}
+          sidebarPosition="right"
+        >
+          <div className="mx-auto h-full max-w-3xl">
+            <MessageList
+              messages={messages}
+              isStreaming={status === "streaming" || status === "submitted"}
+              onMessageAction={handleMessageAction}
+              onToolApproval={handleToolApproval}
+              emptyState={
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+                    <span className="text-2xl">✨</span>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-medium">Start a conversation</h2>
+                    <p className="text-sm text-muted-foreground">Ask anything to get started</p>
+                  </div>
+                </div>
+              }
+            />
+          </div>
+        </ChatContainer>
       </div>
-    </ChatContainer>
+
+      {/* Canvas panel — right side agent workspace */}
+      {canvasState.isVisible && canvasOpen && (
+        <div className="w-[480px] flex-shrink-0">
+          <AgentCanvas
+            viewType={canvasState.viewType}
+            isFullscreen={canvasFullscreen}
+            onToggleFullscreen={() => setCanvasFullscreen((f) => !f)}
+            onClose={() => setCanvasOpen(false)}
+            sandboxId={canvasState.sandboxId}
+            browserUrl={canvasState.browserUrl}
+            browserScreenshot={canvasState.browserScreenshot}
+            browserLoading={canvasState.browserLoading}
+            browserContent={canvasState.browserContent}
+            browserTitle={canvasState.browserTitle}
+            browserSearchResults={canvasState.browserSearchResults}
+            onBrowserNavigate={canvasState.onBrowserNavigate}
+            onBrowserBack={canvasState.onBrowserBack}
+            onBrowserForward={canvasState.onBrowserForward}
+            onBrowserRefresh={canvasState.onBrowserRefresh}
+            onBrowserScreenshotUpdate={canvasState.onBrowserScreenshotUpdate}
+            canGoBack={canvasState.canGoBack}
+            canGoForward={canvasState.canGoForward}
+            fileTree={canvasState.fileTree}
+            fileTabs={canvasState.fileTabs}
+            activeFileContent={canvasState.activeFileContent}
+            activeFileLanguage={canvasState.activeFileLanguage}
+            terminalOutput={canvasState.terminalOutput}
+            previewFileName={canvasState.previewFileName}
+            previewContent={canvasState.previewContent}
+            previewFileType={canvasState.previewFileType}
+            availableViews={canvasState.availableViews}
+            onSelectView={canvasState.onSelectView}
+            timelinePercentage={canvasState.timelinePercentage}
+            currentStep={canvasState.currentStep}
+            totalSteps={canvasState.totalSteps}
+            currentAction={canvasState.currentAction}
+            statusText={canvasState.statusText}
+            isWorking={canvasState.isWorking}
+          />
+        </div>
+      )}
+    </div>
   );
 }

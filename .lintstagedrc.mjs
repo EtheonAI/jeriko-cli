@@ -1,9 +1,9 @@
-function escapeGlobChars(files) {
-  return files.map((f) => f.replace(/[()[\]{}]/g, "\\$&"));
+function quoteFiles(files) {
+  return files.map((f) => `"${f}"`).join(" ");
 }
 
 export default {
-  "*.{ts,tsx,js,jsx,mjs,cjs}": (files) => [`prettier --write ${escapeGlobChars(files).join(" ")}`],
-  "*.{json,md,yml,yaml}": (files) => [`prettier --write ${escapeGlobChars(files).join(" ")}`],
+  "*.{ts,tsx,js,jsx,mjs,cjs}": (files) => [`prettier --write ${quoteFiles(files)}`],
+  "*.{json,md,yml,yaml}": (files) => [`prettier --write ${quoteFiles(files)}`],
   "*.go": ["gofmt -w"],
 };

@@ -138,6 +138,11 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
       agentResponse = null;
     }
 
+    // Save user message to DB for agent proxy path (non-blocking)
+    if (agentResponse?.body && sessionId && lastUserText) {
+      saveMessageToDB(sessionId, "user", lastUserText).catch(() => {});
+    }
+
     // Agent service proxy path — push-based streaming
     if (agentResponse?.body) {
       const agentReader = agentResponse.body.getReader();
@@ -219,7 +224,33 @@ If the knowledge context is not relevant to the user's question, ignore it.`;
             /* ignore */
           }
 
-          // DB persistence is handled by the agent service in this path.
+          // Persist assistant message with full parts (text + tool calls with screenshots)
+          if (sessionId) {
+            try {
+              // Finalize any remaining text
+              const finalText = processor.collectedText.join("");
+              if (finalText) {
+                processor.collectedParts.push({ type: "text", text: finalText });
+              }
+              const fullText = processor.collectedParts
+                .filter((p: any) => p.type === "text")
+                .map((p: any) => p.text)
+                .join("");
+
+              await db.insert(messagesTable).values({
+                id: createId(),
+                sessionId,
+                role: "assistant",
+                content: fullText || "",
+                parts: processor.collectedParts.length > 0 ? processor.collectedParts : null,
+                metadata: { model: model ?? "agent" },
+              });
+
+              await autoSetSessionTitle(sessionId, lastUserText).catch(() => {});
+            } catch (saveErr) {
+              log.error("Failed to save assistant message:", saveErr as Error);
+            }
+          }
         }
       })();
 
@@ -290,7 +321,8 @@ async function saveMessageToDB(
   sessionId: string,
   role: "user" | "assistant" | "system" | "tool",
   content: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  parts?: unknown[]
 ) {
   try {
     await db.insert(messagesTable).values({
@@ -298,6 +330,7 @@ async function saveMessageToDB(
       sessionId,
       role,
       content,
+      parts: parts ?? null,
       metadata: metadata ?? null,
     });
   } catch (err) {
@@ -348,6 +381,8 @@ class SSEProcessor {
     label: string;
     status: string;
   }> = [];
+  /** Full accumulated parts for DB persistence (text + tool calls + tool results) */
+  collectedParts: unknown[] = [];
 
   private toSSE(chunk: object) {
     return `data: ${JSON.stringify(chunk)}\n\n`;
@@ -402,7 +437,16 @@ class SSEProcessor {
 
         case "tool_start": {
           // Close any open text part before tool events
-          output += this.closeTextPart();
+          const closeOutput = this.closeTextPart();
+          if (closeOutput) {
+            // Finalize the current text part
+            const textSoFar = this.collectedText.join("");
+            if (textSoFar) {
+              this.collectedParts.push({ type: "text", text: textSoFar });
+              this.collectedText = [];
+            }
+          }
+          output += closeOutput;
 
           const toolCallId = event.toolCallId || `tool_${Date.now()}`;
           const toolName = event.tool || "unknown";
@@ -418,6 +462,14 @@ class SSEProcessor {
             toolName,
             label: toolName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
             status: "in_progress",
+          });
+          // Start collecting this tool part
+          this.collectedParts.push({
+            type: "tool-invocation",
+            toolCallId,
+            toolName,
+            input: event.input || {},
+            state: "input-available",
           });
           break;
         }
@@ -449,6 +501,14 @@ class SSEProcessor {
           const step = this.collectedToolSteps.find((s) => s.id === toolCallId);
           if (step) {
             step.status = event.success ? "completed" : "cancelled";
+          }
+          // Update the tool part with output
+          const toolPart = this.collectedParts.find(
+            (p: any) => p.type === "tool-invocation" && p.toolCallId === toolCallId
+          ) as Record<string, unknown> | undefined;
+          if (toolPart) {
+            toolPart.state = event.success ? "output-available" : "output-error";
+            toolPart.output = event.result ?? event.summary;
           }
           break;
         }

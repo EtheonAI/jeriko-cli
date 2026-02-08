@@ -45,6 +45,8 @@ export const messages = pgTable("messages", {
     enum: ["user", "assistant", "system", "tool"],
   }).notNull(),
   content: text("content").notNull(),
+  /** Structured message parts (text, tool calls, tool results with screenshots, etc.) */
+  parts: jsonb("parts").$type<unknown[]>(),
   metadata: jsonb("metadata").$type<{
     toolName?: string;
     toolCallId?: string;

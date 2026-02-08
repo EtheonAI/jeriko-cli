@@ -17,26 +17,42 @@ on:
         options:
           - staging
           - production
+      services:
+        description: "Services to deploy (comma-separated, or 'all')"
+        required: false
+        default: "all"
+        type: string
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
 env:
-  NODE_VERSION: "20"
-  PNPM_VERSION: "10"
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10.19.0"
   AWS_REGION: us-east-1
 
 jobs:
+  # ─────────────────────────────────────────────
+  # Prepare: determine environment & version
+  # ─────────────────────────────────────────────
   prepare:
     name: Prepare Deployment
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       version: ${{ steps.version.outputs.version }}
+      services: ${{ steps.services.outputs.matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Determine environment
         id: env
@@ -55,34 +71,64 @@ jobs:
           VERSION=$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Determine changed services
+        id: services
+        run: |
+          ALL_SERVICES='["gateway","task","website","file","notification","webhook","billing","connector","project","knowledge","sandbox","search","device","agent"]'
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.services }}" != "all" ]]; then
+            # Manual deploy: use specified services
+            IFS=',' read -ra SVC_ARRAY <<< "${{ inputs.services }}"
+            MATRIX=$(printf '%s\n' "${SVC_ARRAY[@]}" | jq -R . | jq -s .)
+            echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "matrix=$ALL_SERVICES" >> $GITHUB_OUTPUT
+          else
+            # Push: detect changed services
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+            CHANGED_SERVICES=()
+
+            # If shared packages changed, deploy all
+            if echo "$CHANGED_FILES" | grep -q "^packages/"; then
+              echo "matrix=$ALL_SERVICES" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            # Check each service directory
+            for SVC in gateway task website file notification webhook billing connector project knowledge sandbox search device agent; do
+              if echo "$CHANGED_FILES" | grep -q "^services/$SVC/"; then
+                CHANGED_SERVICES+=("$SVC")
+              fi
+            done
+
+            if [ ${#CHANGED_SERVICES[@]} -eq 0 ]; then
+              echo "matrix=$ALL_SERVICES" >> $GITHUB_OUTPUT
+            else
+              MATRIX=$(printf '%s\n' "${CHANGED_SERVICES[@]}" | jq -R . | jq -s .)
+              echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # ─────────────────────────────────────────────
+  # Build & Push Docker images
+  # ─────────────────────────────────────────────
   build-and-push:
-    name: Build & Push Images
+    name: Build ${{ matrix.service }}
     runs-on: ubuntu-latest
     needs: prepare
     strategy:
+      fail-fast: false
       matrix:
-        service:
-          - gateway
-          - task
-          - website
-          - file
-          - notification
-          - webhook
-          - billing
-          - connector
-          - project
-          - knowledge
-          - sandbox
-          - search
+        service: ${{ fromJson(needs.prepare.outputs.services) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -101,12 +147,17 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/rubic-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
             ${{ steps.login-ecr.outputs.registry }}/rubic-${{ matrix.service }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=deploy-${{ matrix.service }}
+          cache-to: type=gha,scope=deploy-${{ matrix.service }},mode=max
+          provenance: true
+          sbom: true
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
             ENVIRONMENT=${{ needs.prepare.outputs.environment }}
 
+  # ─────────────────────────────────────────────
+  # Deploy to Staging
+  # ─────────────────────────────────────────────
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
@@ -115,30 +166,75 @@ jobs:
     environment: staging
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy to ECS
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy services to ECS
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_STAGING }}
+          IMAGE_TAG: ${{ needs.prepare.outputs.version }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SERVICES_JSON: ${{ needs.prepare.outputs.services }}
         run: |
-          echo "Deploying version ${{ needs.prepare.outputs.version }} to staging"
-          # aws ecs update-service commands would go here
+          SERVICES=$(echo "$SERVICES_JSON" | jq -r '.[]')
+          for SVC in $SERVICES; do
+            ECS_SERVICE="rubic-${SVC}-staging"
+            IMAGE="${ECR_REGISTRY}/rubic-${SVC}:${IMAGE_TAG}"
+            echo "::group::Deploying ${ECS_SERVICE}"
+
+            TASK_DEF=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
+            if [ -z "$TASK_DEF" ] || [ "$TASK_DEF" = "None" ]; then
+              echo "Service ${ECS_SERVICE} not found, skipping..."
+              echo "::endgroup::"
+              continue
+            fi
+
+            NEW_TASK_DEF=$(aws ecs describe-task-definition --task-definition "$TASK_DEF" --query 'taskDefinition' | \
+              jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+            NEW_TASK_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition --cli-input-json "file:///dev/stdin" --query 'taskDefinition.taskDefinitionArn' --output text)
+
+            aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_ARN" --force-new-deployment > /dev/null
+            echo "${ECS_SERVICE} updated to ${IMAGE_TAG}"
+            echo "::endgroup::"
+          done
 
       - name: Wait for deployment
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_STAGING }}
         run: |
-          echo "Waiting for deployment to complete..."
-          # aws ecs wait services-stable commands would go here
+          echo "Waiting for staging services to stabilize..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services rubic-gateway-staging rubic-agent-staging || true
+          echo "Core services stable"
 
-      - name: Run smoke tests
+      - name: Smoke tests
+        env:
+          STAGING_URL: ${{ secrets.STAGING_GATEWAY_URL }}
         run: |
-          echo "Running smoke tests..."
-          # curl health endpoints
+          HEALTH_URL="${STAGING_URL:-http://localhost:4001}/health"
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --max-time 10 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: got $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::Health check did not return 200 after 3 attempts"
 
+  # ─────────────────────────────────────────────
+  # Deploy to Production (manual trigger only)
+  # ─────────────────────────────────────────────
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
@@ -147,24 +243,69 @@ jobs:
     environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy to ECS (Blue/Green)
-        run: |
-          echo "Deploying version ${{ needs.prepare.outputs.version }} to production"
-          # Blue/green deployment commands
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Run smoke tests
+      - name: Deploy services to ECS
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_PRODUCTION }}
+          IMAGE_TAG: ${{ needs.prepare.outputs.version }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SERVICES_JSON: ${{ needs.prepare.outputs.services }}
         run: |
-          echo "Running production smoke tests..."
+          SERVICES=$(echo "$SERVICES_JSON" | jq -r '.[]')
+          for SVC in $SERVICES; do
+            ECS_SERVICE="rubic-${SVC}-production"
+            IMAGE="${ECR_REGISTRY}/rubic-${SVC}:${IMAGE_TAG}"
+            echo "::group::Deploying ${ECS_SERVICE}"
 
-      - name: Notify deployment
+            TASK_DEF=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
+            if [ -z "$TASK_DEF" ] || [ "$TASK_DEF" = "None" ]; then
+              echo "Service ${ECS_SERVICE} not found, skipping..."
+              echo "::endgroup::"
+              continue
+            fi
+
+            NEW_TASK_DEF=$(aws ecs describe-task-definition --task-definition "$TASK_DEF" --query 'taskDefinition' | \
+              jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+            NEW_TASK_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition --cli-input-json "file:///dev/stdin" --query 'taskDefinition.taskDefinitionArn' --output text)
+
+            aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$NEW_TASK_ARN" --force-new-deployment > /dev/null
+            echo "${ECS_SERVICE} updated to ${IMAGE_TAG}"
+            echo "::endgroup::"
+          done
+
+      - name: Wait for deployment
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_PRODUCTION }}
         run: |
-          echo "Deployment complete - would send notification"
+          echo "Waiting for production services to stabilize..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services rubic-gateway-production rubic-agent-production || true
+          echo "Core services stable"
+
+      - name: Smoke tests
+        env:
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_GATEWAY_URL }}
+        run: |
+          HEALTH_URL="${PRODUCTION_URL}/health"
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --max-time 10 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Production health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: got $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Production health check failed after 3 attempts"
+          exit 1

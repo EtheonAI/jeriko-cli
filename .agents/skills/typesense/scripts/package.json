@@ -1,0 +1,8 @@
+{
+  "name": "typesense-skill-scripts",
+  "version": "1.0.0",
+  "description": "Helper scripts for the Typesense Cursor skill",
+  "dependencies": {
+    "typesense": "^2.0.0"
+  }
+}

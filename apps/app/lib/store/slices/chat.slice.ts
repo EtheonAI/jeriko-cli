@@ -20,6 +20,8 @@ export interface Message {
   sessionId: string;
   role: MessageRole;
   content: string;
+  /** Structured message parts (text, tool calls with results/screenshots, etc.) */
+  parts?: unknown[];
   attachments?: MessageAttachment[];
   metadata?: {
     toolName?: string;

@@ -1,0 +1,6 @@
+/api-reference.md
+/examples.md
+
+node_modules/
+.env/
+

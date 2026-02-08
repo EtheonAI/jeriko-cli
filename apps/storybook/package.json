@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "storybook dev -p 6006",
+    "dev": "echo 'Storybook disabled (swc compat issue with Next 16)'",
     "build": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
     "clean": "git clean -xdf .cache .turbo dist node_modules",

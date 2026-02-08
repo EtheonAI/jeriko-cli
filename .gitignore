@@ -11,3 +11,32 @@ node_modules/
 # Env
 .env
 .env.local
+
+# OS
+**/.DS_Store
+
+# Build output
+**/dist/
+
+# Legacy Prisma generated
+packages/database/generated/
+
+# Playwright
+**/e2e/test-results/
+**/e2e/.auth/user.json
+**/playwright-report/
+**/blob-report/
+**/playwright/.cache/
+
+# Coverage
+**/coverage/
+
+# Lighthouse CI
+.lighthouseci/
+
+# Python
+**/__pycache__/
+*.pyc
+
+# IDE / Editor
+.cursor/

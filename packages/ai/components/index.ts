@@ -6,16 +6,19 @@
  */
 
 // Chat components
-export * from './chat';
+export * from "./chat";
 
 // Message parts
-export * from './parts';
+export * from "./parts";
 
 // Tool renderers
-export * from './tools';
+export * from "./tools";
 
 // Agent visualization
-export * from './agents';
+export * from "./agents";
+
+// Canvas (agent workspace)
+export * from "./canvas";
 
 // Input components
-export * from './input';
+export * from "./input";

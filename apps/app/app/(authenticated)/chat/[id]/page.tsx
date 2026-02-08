@@ -46,6 +46,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
       sessionId: m.sessionId,
       role: m.role as Message["role"],
       content: m.content,
+      parts: (m.parts ?? undefined) as Message["parts"],
       createdAt: m.createdAt.toISOString(),
       metadata: (m.metadata ?? undefined) as Message["metadata"],
     }));
