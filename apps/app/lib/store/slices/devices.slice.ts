@@ -26,7 +26,7 @@ const initialState: DevicesState = {
   error: null,
 };
 
-export const devicesSlice = createSlice({
+const devicesSlice = createSlice({
   name: "devices",
   initialState,
   reducers: {

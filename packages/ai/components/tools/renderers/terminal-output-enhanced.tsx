@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import {
   CheckIcon,
@@ -26,110 +26,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ToolRendererProps } from "../tool-registry";
-
-// ============================================================================
-// ANSI Parser
-// ============================================================================
-
-interface AnsiSegment {
-  text: string;
-  classes: string[];
-}
-
-const ANSI_COLORS: Record<number, string> = {
-  30: "ansi-black",
-  31: "ansi-red",
-  32: "ansi-green",
-  33: "ansi-yellow",
-  34: "ansi-blue",
-  35: "ansi-magenta",
-  36: "ansi-cyan",
-  37: "ansi-white",
-  90: "ansi-bright-black",
-  91: "ansi-bright-red",
-  92: "ansi-bright-green",
-  93: "ansi-bright-yellow",
-  94: "ansi-bright-blue",
-  95: "ansi-bright-magenta",
-  96: "ansi-bright-cyan",
-  97: "ansi-bright-white",
-};
-
-const ANSI_STYLES: Record<number, string> = {
-  1: "ansi-bold",
-  2: "ansi-dim",
-  3: "ansi-italic",
-  4: "ansi-underline",
-};
-
-function parseAnsi(text: string): AnsiSegment[] {
-  const segments: AnsiSegment[] = [];
-  const regex = /\x1b\[([0-9;]*)m/g;
-  let lastIndex = 0;
-  let currentClasses: string[] = [];
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before this escape sequence
-    if (match.index > lastIndex) {
-      segments.push({
-        text: text.slice(lastIndex, match.index),
-        classes: [...currentClasses],
-      });
-    }
-
-    // Parse the escape codes
-    const codes = match[1].split(";").map(Number).filter(Boolean);
-
-    for (const code of codes) {
-      if (code === 0) {
-        // Reset
-        currentClasses = [];
-      } else if (ANSI_COLORS[code]) {
-        // Remove any existing color class
-        currentClasses = currentClasses.filter(
-          (c) =>
-            !c.startsWith("ansi-") ||
-            c.includes("bold") ||
-            c.includes("dim") ||
-            c.includes("italic") ||
-            c.includes("underline")
-        );
-        currentClasses.push(ANSI_COLORS[code]);
-      } else if (ANSI_STYLES[code]) {
-        if (!currentClasses.includes(ANSI_STYLES[code])) {
-          currentClasses.push(ANSI_STYLES[code]);
-        }
-      }
-    }
-
-    lastIndex = regex.lastIndex;
-  }
-
-  // Add remaining text
-  if (lastIndex < text.length) {
-    segments.push({
-      text: text.slice(lastIndex),
-      classes: [...currentClasses],
-    });
-  }
-
-  return segments;
-}
-
-function AnsiText({ text }: { text: string }) {
-  const segments = useMemo(() => parseAnsi(text), [text]);
-
-  return (
-    <>
-      {segments.map((segment, i) => (
-        <span key={i} className={cn(segment.classes)}>
-          {segment.text}
-        </span>
-      ))}
-    </>
-  );
-}
+import { AnsiText } from "../../../lib/ansi";
 
 // ============================================================================
 // Components

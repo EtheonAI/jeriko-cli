@@ -1,287 +1,329 @@
 # Implementation Checklist
 
-> VERIFIED against actual codebase — Feb 2026 audit
+> VERIFIED against actual codebase — Feb 6 2026
+> Aligned with Redux-State-Slice-Explanations.md (all 44 Manus slices)
 >
-> P0 = Makes the app work | P1 = Core pages | P2 = Polish
+> P0 = Launch blockers | P1 = Core UX | P2 = Power features | P3 = Polish
 
-## Verified Service Status (11/14 FULLY IMPLEMENTED)
+---
 
-| Service      | Port | DB Queries    | Status       | LOC  | Notes                                        |
-| ------------ | ---- | ------------- | ------------ | ---- | -------------------------------------------- |
-| Gateway      | 4001 | None (proxy)  | **COMPLETE** | 554  | Auth, proxy, WebSocket, SSE, Redis pub/sub   |
-| Agent        | 8000 | None (Python) | **PARTIAL**  | 776  | LLM streaming works, NO tool loop, 3 stubs   |
-| Task         | 4002 | Real Drizzle  | **COMPLETE** | 585  | Inngest functions, DB CRUD, WebSocket events |
-| File         | 4005 | Real Drizzle  | **COMPLETE** | 492  | S3 upload, versioning, webhooks, pagination  |
-| Billing      | 4008 | Real Drizzle  | **PARTIAL**  | 343  | All DB queries work, 4 Stripe TODOs          |
-| Connector    | 4009 | Real Drizzle  | **COMPLETE** | 800  | Composio SDK, OAuth, catalog sync, tools     |
-| Device       | 4001 | Real Drizzle  | **COMPLETE** | 792  | CRUD, commands, heartbeat, WebSocket, safety |
-| Notification | 4006 | Real Drizzle  | **COMPLETE** | 364  | Knock email, Web Push, in-app, quiet hours   |
-| Webhook      | 4007 | Real Drizzle  | **COMPLETE** | 289  | Event dispatch, HMAC signatures, retries     |
-| Sandbox      | 4012 | Real Drizzle  | **COMPLETE** | 682  | E2B integration, code exec, shell, files     |
-| Knowledge    | 4011 | Real Drizzle  | **COMPLETE** | 515  | RAG pipeline, embeddings, vector search      |
-| Project      | 4010 | Real Drizzle  | **COMPLETE** | 313  | CRUD, members, sessions, files               |
-| Search       | 4013 | Real Drizzle  | **COMPLETE** | 775  | Typesense + DB fallback, autocomplete        |
-| Website      | 4004 | Real Drizzle  | **COMPLETE** | 1285 | Templates, file CRUD, deploy stubs           |
+## Verified Backend Status
 
-**Total backend LOC: ~8,565 lines of working code**
+### Services (14 total — 11 complete, 3 partial)
 
-## Verified tRPC Router Status (16 routers, 160+ procedures, ALL have real queries)
+| Service | Port | Status | LOC | Notes |
+|---------|------|--------|-----|-------|
+| Gateway | 4001 | **COMPLETE** | 554 | Auth, proxy, WebSocket, SSE, Redis pub/sub |
+| Agent | 8000 | **COMPLETE** | 4877 | 32 tools, full loop, Manus-aligned prompt |
+| Task | 4002 | **COMPLETE** | 585 | Inngest + Drizzle CRUD + WebSocket events |
+| File | 4005 | **COMPLETE** | 492 | S3 upload, versioning, webhooks, pagination |
+| Billing | 4008 | **PARTIAL** | 343 | All DB queries, 4 Stripe TODOs only |
+| Connector | 4009 | **COMPLETE** | 800 | Composio SDK, OAuth, catalog sync, tools |
+| Device | 4001 | **COMPLETE** | 792 | CRUD, commands, heartbeat, WebSocket, HA E2E |
+| Notification | 4006 | **COMPLETE** | 364 | Knock email, Web Push, in-app, quiet hours |
+| Webhook | 4007 | **COMPLETE** | 289 | Event dispatch, HMAC, retries |
+| Sandbox | 4012 | **COMPLETE** | 682 | E2B integration, code/shell exec, files |
+| Knowledge | 4011 | **COMPLETE** | 515 | RAG pipeline, embeddings, vector search |
+| Project | 4010 | **COMPLETE** | 313 | CRUD, members, sessions, files |
+| Search | 4013 | **COMPLETE** | 775 | Typesense + DB ILIKE fallback |
+| Website | 4004 | **PARTIAL** | 1285 | Templates, file CRUD, AI gen stub |
 
-| Router         | Procedures                     | Status                | Lines |
-| -------------- | ------------------------------ | --------------------- | ----- |
-| sessions       | 5 (CRUD + search sync)         | **REAL DB**           | 120   |
-| messages       | 3 (list, send, add)            | **REAL DB**           | 104   |
-| agents         | 7 (CRUD + tasks)               | **REAL DB**           | 281   |
-| files          | 8 (CRUD + versions)            | **REAL DB**           | 244   |
-| connectors     | 12 (CRUD + OAuth + tools)      | **REAL DB + service** | 374   |
-| notifications  | 10 (CRUD + push + prefs)       | **REAL DB**           | 333   |
-| scheduledTasks | 10 (CRUD + exec history)       | **REAL DB**           | 379   |
-| projects       | 13 (CRUD + members + groups)   | **REAL DB**           | 548   |
-| knowledge      | 14 (groups + items + RAG)      | **REAL DB + service** | 460   |
-| billing        | 18 (plans + credits + Stripe)  | **REAL DB + Stripe**  | 608   |
-| mail           | 11 (mailbox + AgentMail SDK)   | **REAL DB + SDK**     | 296   |
-| user           | 14 (profile + prefs + export)  | **REAL DB**           | 392   |
-| search         | 7 (global + reindex)           | **Typesense**         | 203   |
-| devices        | 7 (proxies to service)         | **Service proxy**     | 178   |
-| webhooks       | 11 (CRUD + delivery + retry)   | **REAL DB**           | 344   |
-| websiteBuilder | 16 (projects + files + deploy) | **REAL DB + service** | 618   |
+### tRPC Routers (16 routers, 160+ procedures, ALL real queries)
 
-## Verified Chat Pipeline Status
+| Router | Procedures | Lines |
+|--------|-----------|-------|
+| sessions | 5 (CRUD + search sync) | 120 |
+| messages | 3 (list, send, add) | 104 |
+| agents | 7 (CRUD + tasks) | 281 |
+| files | 8 (CRUD + versions) | 244 |
+| connectors | 12 (CRUD + OAuth + tools) | 374 |
+| notifications | 10 (CRUD + push + prefs) | 333 |
+| scheduledTasks | 10 (CRUD + exec history) | 379 |
+| projects | 13 (CRUD + members + groups) | 548 |
+| knowledge | 14 (groups + items + RAG) | 460 |
+| billing | 18 (plans + credits + Stripe) | 608 |
+| mail | 11 (mailbox + AgentMail SDK) | 296 |
+| user | 14 (profile + prefs + export) | 392 |
+| search | 7 (global + reindex) | 203 |
+| devices | 7 (proxies to service) | 178 |
+| webhooks | 11 (CRUD + delivery + retry) | 344 |
+| websiteBuilder | 16 (projects + files + deploy) | 618 |
 
-**What WORKS end-to-end:**
+### Chat Pipeline (FULL FLOW — Feb 2026)
 
-1. User types in dashboard → creates session ID → stores in sessionStorage → navigates to `/chat/[id]`
-2. Chat page reads initial message → sends via `useRealTimeChat` hook → hits `/api/chat`
-3. API route (222 lines): authenticates → upserts session → persists user message → calls OpenAI/Anthropic → streams response
-4. Assistant response persisted in DB → title auto-generated via GPT-4o-mini
-5. RAG: queries knowledge service → injects context into system prompt (if knowledge groups provided)
+- [x] `/api/chat/route.ts` (490 lines) — SSE transform, agent proxy, DB persistence
+- [x] `useChat` from `@ai-sdk/react` — replaced useRealTimeChat
+- [x] Agent service proxy — transforms SSE to UIMessageStream format
+- [x] Fallback to direct AI SDK `streamText()` if agent unavailable
+- [x] DB persistence — user & assistant messages saved, session auto-titled
+- [x] Tool registry — 10+ renderers (WebSearch, CodeBlock, Terminal, etc.)
 
-**What does NOT work:**
+### Redux State (46 slices — 100% Manus coverage)
 
-- `/api/chat` is simple streaming — does NOT call the Python agent service
-- Agent service accepts `tools` param but never passes them to the LLM
-- No multi-step tool execution loop
-- No Inngest task orchestration from chat
-- No DAG workflows
-- `messages.send` tRPC has TODO for triggering AI response (line 62)
+- [x] 43 Manus-aligned slices (all defaults, types, keys verified)
+- [x] 3 Rubic-specific slices (agents, devices, search)
+- [x] 0 TypeScript errors in slice files (138 pre-existing elsewhere)
+
+---
 
 ## Frontend Page Status
 
-| Page            | Client Component | Backend      | What's Missing                                 |
-| --------------- | ---------------- | ------------ | ---------------------------------------------- |
-| Dashboard       | No (server-only) | N/A          | Session creation uses sessionStorage, not tRPC |
-| Chat            | Yes (351 lines)  | **Working**  | No tools, no agent panel, edit/delete TODOs    |
-| Files/Library   | **No**           | **Complete** | Needs entire client component                  |
-| Applications    | **No**           | **Complete** | Needs entire client component                  |
-| Devices         | Yes (412 lines)  | **Complete** | Works! Needs smart home extension              |
-| Actions         | Stub tabs        | Partial      | Task list, action templates, schedules         |
-| Settings        | Yes (12+ tabs)   | **Complete** | Most tabs wired, billing needs Stripe          |
-| Knowledge       | Exists           | **Complete** | May need deletion per instructions             |
-| Website Builder | Exists           | **Complete** | Needs agent code gen integration               |
-| Search          | Exists           | **Complete** | Functional with Typesense                      |
+| Page | Status | Backend | What's Missing |
+|------|--------|---------|----------------|
+| Dashboard | **WORKS** | N/A | Wire tRPC session creation (uses sessionStorage), example prompts |
+| Chat | **WORKS** | **Complete** | Agent workspace panel, tool approval UX |
+| Applications | **DONE** | **Complete** | — |
+| Devices | **DONE** | **Complete** | — |
+| Files/Library | **EMPTY** | **Complete** | Entire client component needed |
+| Settings | **12+ tabs** | **Complete** | Most wired, billing needs Stripe |
+| Search | **WORKS** | **Complete** | Needs Typesense running |
 
 ---
 
-## P0 — Make the App Actually Work
+## P0 — Launch Blockers
 
-### 1. Agent Tool Loop (HIGHEST PRIORITY)
+### 1. Sidebar Real Sessions
+**Slices:** sessions, navbar, configs
 
-**Why:** This is the difference between "ChatGPT clone" and "Manus.im competitor". Currently chat just streams text.
+- [ ] Replace hardcoded dummy chats → `sessions.list` tRPC
+- [ ] Group by date (Today, Yesterday, Last 7 days, Older)
+- [ ] Wire navbar tabKey, isNavBarMinimal, hover lock
+- [ ] Wire sessionListPinned from configs
+- [ ] ChatItem actions: Rename, Delete, Archive, Pin
+- [ ] New Task → sessions.create → navigate /chat/[id]
+- [ ] Remove Knowledge + Builder nav links
 
-**The problem:** `/api/chat/route.ts` calls `streamText()` directly. It never calls the Python agent service. The Python agent service has tools defined but never passes them to the LLM.
+### 2. Dashboard Session Flow
+**Slices:** sessions, chat
 
-**Fix options:**
+- [ ] `sessions.create` tRPC before navigate
+- [ ] Pass initial message via `?q=` param
+- [ ] Wire credit balance from billing
+- [ ] Wire taskMode default "agent"
 
-**Option A: Enhance `/api/chat/route.ts` to use Vercel AI SDK tools**
+### 3. Stripe Billing (4 TODOs)
+**Slice:** billing
 
-```typescript
-// In route.ts, add tools to streamText():
-const result = streamText({
-  model: resolveModel(model),
-  system: systemPrompt,
-  messages: sanitizedMessages,
-  tools: {
-    web_search: { description: "...", parameters: z.object({...}), execute: async (args) => { ... } },
-    execute_code: { ... },
-    browse_url: { ... },
-  },
-  maxSteps: 10, // Allow multi-step tool execution
-});
-```
+- [ ] createSubscriptionCheckout
+- [ ] createCreditPurchaseCheckout
+- [ ] getBillingPortalUrl
+- [ ] deletePaymentMethod
+- [ ] Webhook handler
+- [ ] Wire creditPackages, personalPlanTiers, teamPlanTiers
+- [ ] Wire trials, SSO/SCIM subscriptions
 
-**Option B: Route through Python agent service with tool loop**
+### 4. Files / Library Page
+**Slices:** library, fileManagement, filePreviewer, fileShare
 
-- Call `POST /v1/complete` on agent service with tools
-- Agent service passes tools to Anthropic/OpenAI
-- Agent service executes tool calls via service endpoints
-- Streams results back
+- [ ] Grid/list view toggle (viewType)
+- [ ] Filter by doc type (filterDocType)
+- [ ] Folders (attachmentGroupList)
+- [ ] Favorites (isFavorite)
+- [ ] Search (searchValue)
+- [ ] Upload with progress (uploadProgress)
+- [ ] Multi-format preview: PDF, image, code, markdown, slides, video, audio
+- [ ] Version history (fileHistory)
+- [ ] Share links (fileShare slice)
+- [ ] Download tracking
 
-**Recommended:** Option A (simpler, uses Vercel AI SDK's built-in tool loop)
+### 5. Agent Workspace Panel
+**Slices:** agentWorkspace, codeViewer, timeline
 
-**Files to modify:**
-
-- `apps/app/app/api/chat/route.ts` — Add tools to `streamText()` call
-- Create tool definitions that call backend services (sandbox, device, connector, knowledge)
-
-### 2. Sidebar: Real Sessions + Remove Dead Nav
-
-**Why:** Sidebar shows 8 hardcoded dummy chats. Knowledge/Builder links go to pages that should be removed.
-
-- [ ] Remove Knowledge + Builder from `nav-section.tsx` (lines 32-51)
-- [ ] Delete `apps/app/app/(authenticated)/knowledge/` directory
-- [ ] Delete `apps/app/app/(authenticated)/website-builder/` directory
-- [ ] Replace hardcoded `recentChats` in `sidebar/index.tsx` with `api.sessions.list.useQuery()`
-- [ ] Group sessions by date (Today, Yesterday, Last 7 days, Older)
-- [ ] Add Rubic logo at top
-- [ ] Wire ChatItem dropdown actions (Rename, Delete, Archive, Favorite)
-- [ ] Wire New Task button → `sessions.create` → navigate to `/chat/[id]`
-
-**See:** `.claude/frontend/sidebar/INSTRUCTIONS.md`
-
-### 3. Dashboard → Chat Session Flow
-
-**Why:** Dashboard creates session ID in sessionStorage but doesn't create it in DB. The `/api/chat` route upserts it, but this is fragile.
-
-- [ ] Dashboard prompt: call `sessions.create` tRPC mutation FIRST
-- [ ] Then navigate to `/chat/[sessionId]?q=encodedMessage`
-- [ ] Chat page: read `?q=` param and send as first message
-- [ ] Replace hardcoded credits with `billing.getCreditBalance.useQuery()`
-
-**See:** `.claude/frontend/dashboard/INSTRUCTIONS.md`
-
-### 4. Stripe Integration (4 TODOs)
-
-**Why:** Billing tRPC router (608 lines) has real Drizzle queries. Only 4 Stripe API calls are missing.
-
-- [ ] `createSubscriptionCheckout` — `stripe.checkout.sessions.create()`
-- [ ] `createCreditPurchaseCheckout` — `stripe.checkout.sessions.create()`
-- [ ] `getBillingPortalUrl` — `stripe.billingPortal.sessions.create()`
-- [ ] `deletePaymentMethod` — `stripe.paymentMethods.detach()`
-- [ ] Billing service: 4 matching Stripe TODOs (subscription create/cancel, credit purchase, webhook verify)
-- [ ] Create Stripe webhook handler
+- [ ] Workspace sidebar: agents, sources, files, computer tabs
+- [ ] Sandbox preview with drag positioning
+- [ ] Planner expand/collapse
+- [ ] Code viewer: directory tree, file tabs, syntax highlighting
+- [ ] Timeline scrubber: segment events, percentage playback
+- [ ] VNC dialog
+- [ ] Mobile layout adaptation
 
 ---
 
-## P1 — Core Frontend Pages
+## P1 — Core UX
 
-### 5. Files/Library Page
+### 6. Onboarding Wizard
+**Slice:** onboarding
 
-**Backend:** COMPLETE (file service 492 lines, storage with S3, tRPC 8 procedures)
-**Frontend:** EMPTY placeholder
+- [ ] Multi-step: welcome → persona → interests → connectors → workspace → complete
+- [ ] Persona selection (developer, designer, researcher, etc.)
+- [ ] Connector recommendations
+- [ ] Team invite suggestions
+- [ ] Skip + resume
 
-- [ ] Create `files-page-client.tsx` with grid/list views
-- [ ] Tab filtering, folder navigation, upload zone
-- [ ] File preview modal, file actions
-- [ ] Add `createFolder`, `move`, `bulkDelete`, `share` tRPC procedures
-- [ ] `fileShares` DB table for sharing
+### 7. Skills System
+**Slice:** skills
 
-**See:** `.claude/frontend/library/INSTRUCTIONS.md`
+- [ ] Official skills catalog (seed 7+)
+- [ ] User custom skills CRUD
+- [ ] Enable/disable per skill
+- [ ] Search
+- [ ] Skills in chat prompt → agent context
 
-### 6. Applications Page
+### 8. Knowledge Base
+**Slice:** knowledge
 
-**Backend:** COMPLETE (connector service 800 lines, Composio, tRPC 12 procedures)
-**Frontend:** EMPTY placeholder
+- [ ] Knowledge list + pagination
+- [ ] AI-suggested knowledge per session
+- [ ] Accept/reject suggestions
+- [ ] CRUD operations
+- [ ] Search + tag filtering
+- [ ] Wire to Knowledge Service (RAG)
+- [ ] Auto-learn setting (configs.automaticallyLearnKnowledge)
 
-- [ ] Create `applications-page-client.tsx` with Connected/Available tabs
-- [ ] Seed connectorDefinitions via `POST /connectors/sync-catalog`
-- [ ] App card with connect/connected status
-- [ ] OAuth popup flow (backend already handles it)
-- [ ] App configuration panel
+### 9. Notifications
+**Slice:** notifications
 
-**See:** `.claude/frontend/applications/INSTRUCTIONS.md`
+- [ ] Real-time feed component
+- [ ] Category grouping
+- [ ] "What's New" page
+- [ ] Read/unread + bulk actions
+- [ ] Preferences UI
+- [ ] Web Push (backend ready)
 
-### 7. Unified Prompt Component
+### 10. Session Switcher (Cmd+K)
+**Slice:** sessionSwitch
 
-- [ ] Create unified prompt with auto-resize textarea + toolbar
-- [ ] Files button, Connectors popover, Skills button, Model selector
+- [ ] Keyboard shortcut
+- [ ] Fuzzy search
+- [ ] Arrow key navigation
+- [ ] Recent sessions prioritized
 
-**See:** `.claude/frontend/prompt/INSTRUCTIONS.md`
+### 11. File Storage Connectors
+**Slice:** fileConnector
 
-### 8. Devices: Smart Home Extension
+- [ ] Connector list with status
+- [ ] OAuth flows
+- [ ] 9+ services (Google Drive, OneDrive, Dropbox, Box, Notion, Figma...)
 
-**Backend + Frontend:** COMPLETE for Rubic devices
+### 12. Example Prompts
+**Slice:** example
 
-- [ ] Add Home Assistant hub integration
-- [ ] Smart home device type cards (light, climate, sensor, media)
-- [ ] Tab layout: My Devices / Smart Home / Hubs
+- [ ] Seed 10-20 curated prompts
+- [ ] Dashboard display
+- [ ] Category grouping
+- [ ] Click → new session
 
-**See:** `.claude/frontend/devices/INSTRUCTIONS.md`
+### 13. Agent Mail
+**Slice:** agentMail
 
----
-
-## P2 — Advanced Features
-
-### 9. Chat: Rubic Computer Panel
-
-- [ ] Split-screen panel with Browser, Terminal, Preview, Files tabs
-- [ ] Browser use integration (Playwright screenshots)
-- [ ] E2B terminal (xterm.js) — sandbox service already works
-- [ ] Task segmentation display
-
-**See:** `.claude/frontend/chat/INSTRUCTIONS.md`
-
-### 10. Agent Service Stubs
-
-- [ ] `web_search` — Integrate Serper or Tavily API
-- [ ] `create_document` — PDF/Word generation
-- [ ] `generate_image` — DALL-E integration
-
-### 11. Settings Pages
-
-- [ ] Wire remaining settings tabs to their tRPC routers (most already work)
-
-### 12. Search UX
-
-- [ ] Search dialog already works (Cmd+K)
-- [ ] Needs Typesense running for full functionality
-
-### 13. Notifications
-
-- [ ] Notification service fully implemented (Knock + Web Push)
-- [ ] Need real-time notification feed component in frontend
+- [ ] Agent email info display
+- [ ] Whitelist management
+- [ ] Sub-emails
+- [ ] Unread indicator
+- [ ] Settings tab
 
 ---
 
-## Acceptance Criteria
+## P2 — Power Features
 
-### Must Work (P0)
+### 14. Web Dev IDE
+**Slices:** webDev, webDevUsage, webdevAuth
 
-- [ ] Type prompt on dashboard → creates session in DB → redirects to chat → AI responds with tools
-- [ ] Chat persists messages (ALREADY WORKS)
-- [ ] AI can use tools: web search, code execution, file operations
-- [ ] Sidebar shows real sessions grouped by date
-- [ ] Knowledge and Builder pages/links removed
-- [ ] Stripe checkout works for subscriptions and credit purchases
+- [ ] File structure browser
+- [ ] Live preview (preview/code/console/network tabs)
+- [ ] Database browser
+- [ ] Project settings
+- [ ] Deploy workflow
+- [ ] Usage tracking + budget management
 
-### Should Work (P1)
+### 15. AI Canvas
+**Slices:** aiCanvas, aiCanvasEditor
 
-- [ ] Files page: upload, download, preview, folder navigation
-- [ ] Applications page: browse marketplace, connect via OAuth
-- [ ] Prompt has file upload, connectors popover, model selector
-- [ ] Devices: smart home device cards with controls
+- [ ] Canvas CRUD + OCR cache
+- [ ] Shape tools, selection, pan/zoom
+- [ ] Brushing, marking, text editing
+- [ ] Screenshots, comments, settings
+- [ ] Fullscreen mode
 
-### Nice to Have (P2)
+### 16. Slide Editor
+**Slice:** slideEditor
 
-- [ ] Rubic Computer panel with browser + terminal
-- [ ] Notifications in real-time
-- [ ] Webhooks management
-- [ ] Agent service: document generation, image generation
+- [ ] Slide management
+- [ ] Templates (from chat.slideTemplateList)
+- [ ] AI-generated slides
+
+### 17. Community / Explore
+**Slice:** community
+
+- [ ] Shared session display
+- [ ] Group-based organization
+- [ ] Fork public sessions
+
+### 18. Map/Reduce UI
+**Slice:** mapReduce
+
+- [ ] Parallel processing flow
+- [ ] Worker status display
+- [ ] Results aggregation
+
+### 19. Timeline Replay
+**Slice:** timeline
+
+- [ ] Event visualization
+- [ ] Playback scrubber + controls
+- [ ] Segment lazy loading
+- [ ] Event type rendering
+
+### 20. Playbooks
+**Slice:** products
+
+- [ ] Creation form
+- [ ] Browse + search
+- [ ] Recommended in chat
+- [ ] One-click use
+
+### 21. Enterprise
+**Slices:** enterpriseTeam, team
+
+- [ ] API keys CRUD
+- [ ] Audit log viewer
+- [ ] SSO config
+- [ ] SCIM integration
+- [ ] Access controls
+
+---
+
+## P3 — Polish
+
+### 22. A/B Experiments
+**Slice:** experiment — Feature flag SDK + backend variants
+
+### 23. Guest Pages
+**Slice:** guestPage — Anonymous viewing + UI adaptation
+
+### 24. Login Flow State
+**Slice:** login — Wire to Better-Auth forms
+
+### 25. Meeting Features
+**Slice:** meeting — Meeting intro + scheduling
+
+### 26. Browser Extension
+**Slice:** myBrowser — Extension settings + install
+
+### 27. Image Styles
+**Source:** chat slice — Seed 15+ styles, selection UI
+
+### 28. Data Visualization
+**Source:** chat slice — In-chat charts/graphs
 
 ---
 
 ## Instruction File Index
 
-| File                                            | Covers                                                |
-| ----------------------------------------------- | ----------------------------------------------------- |
-| `.claude/frontend/dashboard/INSTRUCTIONS.md`    | Dashboard page, session creation, credits             |
-| `.claude/frontend/sidebar/INSTRUCTIONS.md`      | Sidebar, nav, real chats, filters, logo               |
-| `.claude/frontend/chat/INSTRUCTIONS.md`         | Chat pipeline, tools, Rubic Computer, E2B, browser    |
-| `.claude/frontend/prompt/INSTRUCTIONS.md`       | Unified prompt component, toolbar, connectors, skills |
-| `.claude/frontend/library/INSTRUCTIONS.md`      | Files page, upload, preview, folders, sharing         |
-| `.claude/frontend/applications/INSTRUCTIONS.md` | App marketplace, Composio, OAuth, config              |
-| `.claude/frontend/devices/INSTRUCTIONS.md`      | Device dashboard, smart home, HA, controls            |
-| `.claude/frontend/FRONTEND_MASTER.md`           | Frontend architecture overview                        |
-| `.claude/backend/BACKEND_MASTER.md`             | Backend architecture overview                         |
-| `.claude/database/DATABASE_MASTER.md`           | Database schema reference                             |
-| `.claude/business/VISION.md`                    | Business vision and product direction                 |
-| `.claude/MASTER_INSTRUCTIONS.md`                | Top-level project instructions                        |
+| File | Covers |
+|------|--------|
+| `.claude/frontend/dashboard/INSTRUCTIONS.md` | Dashboard, session creation, credits |
+| `.claude/frontend/sidebar/INSTRUCTIONS.md` | Sidebar, nav, real chats, filters |
+| `.claude/frontend/chat/INSTRUCTIONS.md` | Chat pipeline, tools, Rubic Computer |
+| `.claude/frontend/prompt/INSTRUCTIONS.md` | Unified prompt, toolbar, connectors |
+| `.claude/frontend/library/INSTRUCTIONS.md` | Files page, upload, preview, folders |
+| `.claude/frontend/applications/INSTRUCTIONS.md` | App marketplace, Composio, OAuth |
+| `.claude/frontend/devices/INSTRUCTIONS.md` | Device dashboard, smart home, HA |
+| `.claude/frontend/FRONTEND_MASTER.md` | Frontend architecture overview |
+| `.claude/backend/agent/INSTRUCTIONS.md` | Agent service (1700+ lines) |
+| `.claude/backend/BACKEND_MASTER.md` | Backend architecture overview |
+| `.claude/database/DATABASE_MASTER.md` | Database schema reference |
+| `.claude/business/VISION.md` | Business vision |
+| `docs/IMPLEMENTATION_ROADMAP.md` | Full feature roadmap (this companion) |
+| `docs/application-feature-specification.md` | Manus feature spec (1294 lines) |
+| `Redux-State-Slice-Explanations.md` | What each slice does (source of truth) |

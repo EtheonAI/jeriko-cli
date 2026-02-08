@@ -37,7 +37,7 @@ export interface SubmitOptions {
 // Component Props
 // ============================================================================
 
-export interface UnifiedPromptProps {
+export interface ChatPromptProps {
   /** Called when user submits a message */
   onSubmit: (input: string, attachments: Attachment[], options: SubmitOptions) => void;
 
@@ -91,7 +91,7 @@ export interface UnifiedPromptProps {
 // Ref Handle
 // ============================================================================
 
-export interface UnifiedPromptRef {
+export interface ChatPromptRef {
   focus: () => void;
   clear: () => void;
   setValue: (value: string) => void;

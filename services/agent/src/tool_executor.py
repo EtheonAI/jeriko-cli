@@ -40,6 +40,19 @@ def get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
+def _sandbox_headers(user_id: str) -> dict[str, str]:
+    """Headers required by the sandbox service (x-user-id for auth/ownership)."""
+    return {"x-user-id": user_id}
+
+
+def _unwrap(resp_json: dict) -> dict:
+    """Unwrap sandbox service {data: {...}, meta: {...}} envelope.
+    Returns the inner data dict, or the original if no wrapper."""
+    if isinstance(resp_json, dict) and "data" in resp_json and isinstance(resp_json["data"], dict):
+        return resp_json["data"]
+    return resp_json
+
+
 @dataclass
 class ExecutionContext:
     """Context passed to every tool execution."""
@@ -91,15 +104,15 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
 
     # ── File operations → sandbox service ──
     if name in ("file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name"):
-        return await sandbox_file_operation(ctx.sandbox_id, name, tool_input)
+        return await sandbox_file_operation(ctx.sandbox_id, ctx.user_id, name, tool_input)
 
     # ── Shell session operations → sandbox service ──
     if name in ("shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process"):
-        return await sandbox_shell_operation(ctx.sandbox_id, name, tool_input)
+        return await sandbox_shell_operation(ctx.sandbox_id, ctx.user_id, name, tool_input)
 
     # ── Code execution → sandbox service ──
     if name == "code_execute":
-        return await sandbox_code_execute(ctx.sandbox_id, tool_input)
+        return await sandbox_code_execute(ctx.sandbox_id, ctx.user_id, tool_input)
 
     # ── Web search → Serper + browser fallback ──
     if name == "web_search":
@@ -113,7 +126,7 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
     # ── Browser interactive tools → persistent browser controller in sandbox ──
     if name in BROWSER_INTERACTIVE_TOOLS:
         action = name.replace("browser_", "")
-        return await browser_action(ctx.sandbox_id, action, tool_input)
+        return await browser_action(ctx.sandbox_id, action, tool_input, user_id=ctx.user_id)
 
     # ── Deployment → sandbox port exposure or production deploy ──
     if name == "deploy_expose_port":
@@ -129,6 +142,13 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
         return await nano_banana_generate(
             ctx.sandbox_id, tool_input["prompt"], tool_input.get("filename", "generated_image.png")
         )
+
+    # ── Planning → echo back plan data (no sandbox needed) ──
+    if name == "show_plan":
+        return {
+            "title": tool_input.get("title", "Plan"),
+            "todos": tool_input.get("todos", []),
+        }
 
     # ── User communication → WebSocket via gateway ──
     if name in ("message_notify_user", "message_ask_user"):
@@ -158,29 +178,32 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
 # ============================================================
 
 
-async def sandbox_file_operation(sandbox_id: str | None, operation: str, params: dict) -> dict:
+async def sandbox_file_operation(sandbox_id: str | None, user_id: str, operation: str, params: dict) -> dict:
     """Route file operations to the sandbox service."""
     if not sandbox_id:
         return {"error": "No sandbox available. A sandbox is required for file operations."}
 
     client = get_http_client()
     base = settings.sandbox_service_url
+    headers = {"x-user-id": user_id} if user_id else {}
 
     if operation == "file_read":
         file_path = params.get("file") or params.get("path", "")
-        payload = {"path": file_path, "encoding": params.get("encoding", "utf-8")}
-        if "start_line" in params:
-            payload["startLine"] = params["start_line"]
-        if "end_line" in params:
-            payload["endLine"] = params["end_line"]
 
-        resp = await client.post(f"{base}/sandboxes/{sandbox_id}/files/read", json=payload)
+        # GET /sandboxes/:id/files?path=<path>
+        resp = await client.get(
+            f"{base}/sandboxes/{sandbox_id}/files",
+            params={"path": file_path},
+            headers=headers,
+        )
 
         if resp.status_code >= 400:
             return {"error": f"Failed to read file: {resp.text}"}
 
         data = resp.json()
-        content = data.get("content", "")
+        # Unwrap API envelope {data: {path, content}, meta, error}
+        inner = data.get("data", data)
+        content = inner.get("content", "")
 
         # Apply line range if sandbox doesn't support it natively
         if ("start_line" in params or "end_line" in params) and content:
@@ -197,12 +220,14 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
 
         # Handle append mode
         if params.get("append"):
-            read_resp = await client.post(
-                f"{base}/sandboxes/{sandbox_id}/files/read",
-                json={"path": file_path},
+            read_resp = await client.get(
+                f"{base}/sandboxes/{sandbox_id}/files",
+                params={"path": file_path},
+                headers=headers,
             )
             if read_resp.status_code == 200:
-                existing = read_resp.json().get("content", "")
+                read_data = read_resp.json()
+                existing = read_data.get("data", read_data).get("content", "")
                 if params.get("leading_newline"):
                     content = "\n" + content
                 content = existing + content
@@ -214,9 +239,11 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
         if params.get("trailing_newline") and not content.endswith("\n"):
             content += "\n"
 
+        # POST /sandboxes/:id/files  body: {path, content}
         resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/files/write",
+            f"{base}/sandboxes/{sandbox_id}/files",
             json={"path": file_path, "content": content},
+            headers=headers,
         )
 
         if resp.status_code >= 400:
@@ -225,14 +252,16 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
 
     elif operation == "file_str_replace":
         file_path = params.get("file") or params.get("path", "")
-        read_resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/files/read",
-            json={"path": file_path},
+        read_resp = await client.get(
+            f"{base}/sandboxes/{sandbox_id}/files",
+            params={"path": file_path},
+            headers=headers,
         )
         if read_resp.status_code != 200:
             return {"error": f"Failed to read file: {read_resp.text}"}
 
-        content = read_resp.json().get("content", "")
+        read_data = read_resp.json()
+        content = read_data.get("data", read_data).get("content", "")
         old_str = params.get("old_str", "")
         new_str = params.get("new_str", "")
 
@@ -241,8 +270,9 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
 
         new_content = content.replace(old_str, new_str, 1)
         resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/files/write",
+            f"{base}/sandboxes/{sandbox_id}/files",
             json={"path": file_path, "content": new_content},
+            headers=headers,
         )
         if resp.status_code >= 400:
             return {"error": f"Failed to write file: {resp.text}"}
@@ -259,12 +289,13 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
                 "command": f'grep -n -E "{regex}" "{file_path}" 2>&1 | head -50',
                 "timeout": 10000,
             },
+            headers=headers,
             timeout=15.0,
         )
         if shell_resp.status_code >= 400:
             return {"error": f"Search failed: {shell_resp.text}"}
 
-        data = shell_resp.json()
+        data = _unwrap(shell_resp.json())
         stdout = data.get("stdout", "")
         matches = []
         for line in stdout.strip().split("\n"):
@@ -284,12 +315,13 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
                 "command": f'find "{path}" -name "{glob_pattern}" -type f 2>/dev/null | head -50',
                 "timeout": 10000,
             },
+            headers=headers,
             timeout=15.0,
         )
         if shell_resp.status_code >= 400:
             return {"error": f"Find failed: {shell_resp.text}"}
 
-        data = shell_resp.json()
+        data = _unwrap(shell_resp.json())
         stdout = data.get("stdout", "")
         files = [f.strip() for f in stdout.strip().split("\n") if f.strip()]
         return {"path": path, "glob": glob_pattern, "files": files, "count": len(files)}
@@ -302,13 +334,14 @@ async def sandbox_file_operation(sandbox_id: str | None, operation: str, params:
 # ============================================================
 
 
-async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params: dict) -> dict:
+async def sandbox_shell_operation(sandbox_id: str | None, user_id: str, operation: str, params: dict) -> dict:
     """Route shell session operations to the sandbox service."""
     if not sandbox_id:
         return {"error": "No sandbox available. A sandbox is required for shell operations."}
 
     client = get_http_client()
     base = settings.sandbox_service_url
+    headers = {"x-user-id": user_id} if user_id else {}
 
     if operation == "shell_exec":
         session_id = params.get("id", "default")
@@ -325,11 +358,13 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
                 "timeout": 30000,
                 "sessionId": session_id,
             },
+            headers=headers,
             timeout=45.0,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell execution failed: {resp.text}"}
-        return resp.json()
+        data = resp.json()
+        return data.get("data", data)
 
     elif operation == "shell_view":
         session_id = params.get("id", "default")
@@ -341,11 +376,13 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
                 "timeout": 5000,
                 "sessionId": session_id,
             },
+            headers=headers,
             timeout=10.0,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell view failed: {resp.text}"}
-        return resp.json()
+        data = resp.json()
+        return data.get("data", data)
 
     elif operation == "shell_wait":
         session_id = params.get("id", "default")
@@ -358,11 +395,13 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
                 "timeout": (min(seconds, 300) + 5) * 1000,
                 "sessionId": session_id,
             },
+            headers=headers,
             timeout=min(seconds, 300) + 10,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell wait failed: {resp.text}"}
-        return resp.json()
+        data = resp.json()
+        return data.get("data", data)
 
     elif operation == "shell_write_to_process":
         session_id = params.get("id", "default")
@@ -380,11 +419,13 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
                 "timeout": 5000,
                 "sessionId": session_id,
             },
+            headers=headers,
             timeout=10.0,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell write failed: {resp.text}"}
-        return resp.json()
+        data = resp.json()
+        return data.get("data", data)
 
     elif operation == "shell_kill_process":
         session_id = params.get("id", "default")
@@ -395,11 +436,13 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
                 "command": f'pkill -f "session_{session_id}" 2>/dev/null; echo "Process terminated"',
                 "timeout": 5000,
             },
+            headers=headers,
             timeout=10.0,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell kill failed: {resp.text}"}
-        return resp.json()
+        data = resp.json()
+        return data.get("data", data)
 
     return {"error": f"Unknown shell operation: {operation}"}
 
@@ -409,13 +452,14 @@ async def sandbox_shell_operation(sandbox_id: str | None, operation: str, params
 # ============================================================
 
 
-async def sandbox_code_execute(sandbox_id: str | None, params: dict) -> dict:
+async def sandbox_code_execute(sandbox_id: str | None, user_id: str, params: dict) -> dict:
     """Execute code in the sandbox."""
     if not sandbox_id:
         return {"error": "No sandbox available. A sandbox is required for code execution."}
 
     client = get_http_client()
     timeout = params.get("timeout", 30)
+    headers = {"x-user-id": user_id} if user_id else {}
 
     resp = await client.post(
         f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/execute",
@@ -424,12 +468,14 @@ async def sandbox_code_execute(sandbox_id: str | None, params: dict) -> dict:
             "language": params.get("language", "python"),
             "timeout": timeout * 1000,
         },
+        headers=headers,
         timeout=max(timeout + 10, 60),
     )
 
     if resp.status_code >= 400:
         return {"error": f"Code execution failed: {resp.text}"}
-    return resp.json()
+    data = resp.json()
+    return data.get("data", data)
 
 
 # ============================================================
@@ -715,14 +761,16 @@ async def create_recurring_task(user_id: str, session_id: str, params: dict) -> 
 
     try:
         resp = await client.post(
-            f"{settings.task_service_url}/tasks",
+            f"{settings.task_service_url}/scheduled-tasks",
             json={
                 "name": params["name"],
-                "description": params["description"],
-                "taskType": "agent_execution",
-                "scheduleType": "recurring",
+                "description": params.get("description", ""),
+                "taskType": "agent_run",
+                "scheduleType": "cron",
                 "cronExpression": cron,
+                "timezone": "UTC",
                 "payload": {
+                    "prompt": params.get("description", params["name"]),
                     "skill_id": params.get("skill_id"),
                     "user_id": user_id,
                     "session_id": session_id,
@@ -737,9 +785,11 @@ async def create_recurring_task(user_id: str, session_id: str, params: dict) -> 
             return {"error": f"Failed to create recurring task: {resp.text}"}
 
         data = resp.json()
+        # Unwrap the response envelope if present
+        task_data = data.get("data", data)
         return {
             "created": True,
-            "task_id": data.get("id", ""),
+            "task_id": task_data.get("id", ""),
             "schedule": schedule,
             "cron": cron,
             "message": f"Recurring task '{params['name']}' created. It will run {schedule}.",

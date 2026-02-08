@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization } from "better-auth/plugins";
+import { organization } from "better-auth/plugins/organization";
 import {
   db,
   users,
@@ -46,36 +46,24 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     requireEmailVerification: true,
 
-    async sendVerificationEmail({
-      user,
-      url,
-    }: {
-      user: { email: string; name?: string | null };
-      url: string;
-    }) {
+    async sendVerificationEmail(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
       await sendEmail({
-        to: user.email,
+        to: data.user.email!,
         subject: "Verify your email address - Rubic",
         react: VerificationEmail({
-          userName: user.name || undefined,
-          verificationUrl: url,
+          userName: data.user.name || undefined,
+          verificationUrl: data.url,
         }),
       });
     },
 
-    async sendResetPassword({
-      user,
-      url,
-    }: {
-      user: { email: string; name?: string | null };
-      url: string;
-    }) {
+    async sendResetPassword(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
       await sendEmail({
-        to: user.email,
+        to: data.user.email!,
         subject: "Reset your password - Rubic",
         react: PasswordResetEmail({
-          userName: user.name || undefined,
-          resetUrl: url,
+          userName: data.user.name || undefined,
+          resetUrl: data.url,
         }),
       });
     },
@@ -84,19 +72,13 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
-    async sendVerificationEmail({
-      user,
-      url,
-    }: {
-      user: { email: string; name?: string | null };
-      url: string;
-    }) {
+    async sendVerificationEmail(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
       await sendEmail({
-        to: user.email,
+        to: data.user.email!,
         subject: "Verify your email address - Rubic",
         react: VerificationEmail({
-          userName: user.name || undefined,
-          verificationUrl: url,
+          userName: data.user.name || undefined,
+          verificationUrl: data.url,
         }),
       });
     },
@@ -124,30 +106,18 @@ export const auth = betterAuth({
       creatorRole: "owner",
       membershipLimit: 100,
 
-      async sendInvitationEmail({
-        email,
-        inviter,
-        organization: org,
-        role,
-        id,
-      }: {
-        email: string;
-        inviter: { user: { name?: string | null; email: string } };
-        organization: { name: string };
-        role: string;
-        id: string;
-      }) {
+      async sendInvitationEmail(data) {
         const baseUrl =
           process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const inviteUrl = `${baseUrl}/accept-invitation/${id}`;
+        const inviteUrl = `${baseUrl}/accept-invitation/${data.id}`;
 
         await sendEmail({
-          to: email,
-          subject: `You've been invited to join ${org.name} - Rubic`,
+          to: data.email,
+          subject: `You've been invited to join ${data.organization.name} - Rubic`,
           react: InvitationEmail({
-            inviterName: inviter.user.name || inviter.user.email,
-            organizationName: org.name,
-            role,
+            inviterName: data.inviter?.user?.name || data.email,
+            organizationName: String(data.organization.name || ""),
+            role: data.role,
             inviteUrl,
           }),
         });

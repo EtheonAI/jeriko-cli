@@ -127,7 +127,7 @@ export const smartHomeRouter = createTRPCRouter({
         hubId: z.string(),
         entityId: z.string(),
         service: z.string(),
-        data: z.record(z.unknown()).optional(),
+        data: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

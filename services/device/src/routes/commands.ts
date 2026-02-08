@@ -8,12 +8,12 @@ import * as connections from "../lib/connections.js";
 
 const SendCommandSchema = z.object({
   type: z.string().min(1),
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
 });
 
 const ToolExecutionSchema = z.object({
   tool_name: z.string().min(1),
-  arguments: z.record(z.unknown()).default({}),
+  arguments: z.record(z.string(), z.unknown()).default({}),
   device_id: z.string().min(1),
 });
 
@@ -61,7 +61,7 @@ export const commandRoutes: FastifyPluginAsync = async (fastify) => {
         if (safety.requiresApproval) {
           // Insert with pending_approval status
           const commandId = createId();
-          const [command] = await db
+          await db
             .insert(deviceCommands)
             .values({
               id: commandId,
@@ -92,7 +92,7 @@ export const commandRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Insert command record
       const commandId = createId();
-      const [command] = await db
+      await db
         .insert(deviceCommands)
         .values({
           id: commandId,

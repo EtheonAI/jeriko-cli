@@ -7,7 +7,7 @@ import {
   ErrorCodes,
   createLogger,
 } from "@repo/service-utils";
-import { db, websites as websitesTable, websitePages, eq, and, desc } from "@repo/database";
+import { db, websites as websitesTable, websitePages, eq, and, desc } from "../lib/db.js";
 
 const logger = createLogger({ service: "website-routes" });
 
@@ -25,7 +25,7 @@ const UpdateWebsiteSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   customDomain: z.string().optional(),
-  settings: z.record(z.unknown()).optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
 });
 
 const GenerateCodeSchema = z.object({

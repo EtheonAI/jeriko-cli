@@ -6,7 +6,6 @@ import authReducer from "./slices/auth.slice";
 import chatReducer from "./slices/chat.slice";
 import agentsReducer from "./slices/agents.slice";
 import sessionsReducer from "./slices/sessions.slice";
-import filesReducer from "./slices/files.slice";
 import websocketReducer from "./slices/websocket.slice";
 import uiReducer from "./slices/ui.slice";
 // New Manus-style slices
@@ -49,9 +48,12 @@ import agentWorkspaceReducer from "./slices/agentWorkspace.slice";
 import webdevAuthReducer from "./slices/webdevAuth.slice";
 import aiCanvasEditorReducer from "./slices/aiCanvasEditor.slice";
 import bizReducer from "./slices/biz.slice";
-import chatPageReducer from "./slices/chatPage.slice";
 import searchReducer from "./slices/search.slice";
 import devicesReducer from "./slices/devices.slice";
+import meetingReducer from "./slices/meeting.slice";
+// Rubic-specific slices
+import skillsReducer from "./slices/skills.slice";
+import enterpriseTeamReducer from "./slices/enterpriseTeam.slice";
 // Middleware
 import { websocketMiddleware } from "./middleware/websocket.middleware";
 
@@ -65,7 +67,6 @@ export const makeStore = () => {
       chat: chatReducer,
       agents: agentsReducer,
       sessions: sessionsReducer,
-      files: filesReducer,
       websocket: websocketReducer,
       ui: uiReducer,
       // Feature slices (Manus-style)
@@ -108,9 +109,12 @@ export const makeStore = () => {
       webdevAuth: webdevAuthReducer,
       aiCanvasEditor: aiCanvasEditorReducer,
       biz: bizReducer,
-      chatPage: chatPageReducer,
       search: searchReducer,
       devices: devicesReducer,
+      meeting: meetingReducer,
+      // Rubic-specific slices
+      skills: skillsReducer,
+      enterpriseTeam: enterpriseTeamReducer,
     },
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
@@ -147,7 +151,7 @@ export * from "./slices/auth.slice";
 export * from "./slices/chat.slice";
 export * from "./slices/agents.slice";
 export * from "./slices/sessions.slice";
-export * from "./slices/files.slice";
+// files.slice merged into library.slice
 export * from "./slices/websocket.slice";
 export * from "./slices/ui.slice";
 // Feature slices (Manus-style)
@@ -190,9 +194,13 @@ export * from "./slices/agentWorkspace.slice";
 export * from "./slices/webdevAuth.slice";
 export * from "./slices/aiCanvasEditor.slice";
 export * from "./slices/biz.slice";
-export * from "./slices/chatPage.slice";
+// chatPage.slice merged into chat.slice
 export * from "./slices/search.slice";
 export * from "./slices/devices.slice";
+export * from "./slices/meeting.slice";
+// Rubic-specific slices
+export * from "./slices/skills.slice";
+export * from "./slices/enterpriseTeam.slice";
 
 // Re-export API hooks
 export * from "./api/api.slice";
@@ -205,3 +213,11 @@ export {
   wsLeaveRoom,
   wsSend,
 } from "./middleware/websocket.middleware";
+
+// Resolve ambiguous export * collisions (multiple slices export the same action names)
+export { setLoading } from "./slices/auth.slice";
+export { setError } from "./slices/auth.slice";
+export { setSearchQuery } from "./slices/sessions.slice";
+export { setFilterStatus } from "./slices/sessions.slice";
+export { setSortBy } from "./slices/sessions.slice";
+export { setSortOrder } from "./slices/sessions.slice";

@@ -108,11 +108,15 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
     Load conversation history from the messages table.
     Returns messages in Anthropic format: [{"role": "user/assistant", "content": "..."}]
 
+    Supports two DB formats:
+    - Legacy agent-saved: metadata.toolBlocks + separate role='tool' rows
+    - Current route.ts-saved: parts column with AI SDK UIMessage parts (tool-{name})
+
     Loads the most recent `limit` messages to keep context window manageable.
     """
     try:
         rows = await fetch(
-            """SELECT role, content, metadata
+            """SELECT role, content, metadata, parts
                FROM messages
                WHERE session_id = $1
                ORDER BY created_at ASC
@@ -124,13 +128,24 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
         messages = []
         for row in rows:
             role = row["role"]
-            content = row["content"]
-            metadata = row["metadata"]
+            content = row["content"] or ""
+            metadata = row.get("metadata")
+            parts = row.get("parts")
 
-            # Map DB roles to Anthropic roles
+            # Parse metadata/parts if they're JSON strings
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except (json.JSONDecodeError, TypeError):
+                    metadata = None
+            if isinstance(parts, str):
+                try:
+                    parts = json.loads(parts)
+                except (json.JSONDecodeError, TypeError):
+                    parts = None
+
+            # Skip role='tool' rows (legacy agent-side saves)
             if role == "tool":
-                # Tool results are stored as user messages with tool_result content
-                # Reconstruct the tool_result format
                 tool_call_id = metadata.get("toolCallId", "") if metadata else ""
                 is_error = metadata.get("isError", False) if metadata else False
                 messages.append({
@@ -143,21 +158,27 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
                     }],
                 })
             elif role == "assistant":
-                # Check if assistant message has tool_use blocks in metadata
-                tool_blocks = metadata.get("toolBlocks", []) if metadata else []
-                if tool_blocks:
-                    # Reconstruct mixed text + tool_use content
-                    blocks = []
-                    if content:
-                        blocks.append({"type": "text", "text": content})
-                    blocks.extend(tool_blocks)
-                    messages.append({"role": "assistant", "content": blocks})
-                else:
+                # For history replay, we only need the text content.
+                # Tool calls were already executed — reconstructing them requires
+                # matching tool_use/tool_result pairs per-iteration which the parts
+                # column doesn't track. Omitting tools from history is safe: the
+                # agent re-plans each turn based on the new prompt + text context.
+                if parts and isinstance(parts, list):
+                    # Extract text from parts
+                    text_parts = [
+                        p.get("text", "")
+                        for p in parts
+                        if isinstance(p, dict) and p.get("type") == "text"
+                    ]
+                    combined_text = "".join(text_parts).strip() or content
+                    if combined_text:
+                        messages.append({"role": "assistant", "content": combined_text})
+                elif content:
                     messages.append({"role": "assistant", "content": content})
             elif role in ("user", "system"):
                 messages.append({"role": role, "content": content})
 
-        # Merge consecutive user messages (tool results) into single messages
+        # Merge consecutive same-role messages (Anthropic API requires alternating roles)
         merged = _merge_consecutive_tool_results(messages)
 
         logger.info(
@@ -175,8 +196,13 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
 
 def _merge_consecutive_tool_results(messages: list[dict]) -> list[dict]:
     """
-    Anthropic requires all tool_results for parallel tool calls in a SINGLE user message.
-    Merge consecutive user messages that contain tool_result blocks.
+    Anthropic API forbids consecutive messages with the same role.
+    Merge any consecutive user messages into a single user message.
+
+    This handles:
+    - Multiple tool_result blocks from parallel tool calls
+    - A tool_result user message followed by a plain-text user message
+    - Any other consecutive user messages
     """
     if not messages:
         return messages
@@ -184,16 +210,20 @@ def _merge_consecutive_tool_results(messages: list[dict]) -> list[dict]:
     merged = [messages[0]]
     for msg in messages[1:]:
         prev = merged[-1]
-        # If both are user messages with tool_result content, merge them
-        if (
-            msg["role"] == "user"
-            and prev["role"] == "user"
-            and isinstance(msg["content"], list)
-            and isinstance(prev["content"], list)
-            and all(b.get("type") == "tool_result" for b in msg["content"])
-            and all(b.get("type") == "tool_result" for b in prev["content"])
-        ):
-            prev["content"].extend(msg["content"])
+        if msg["role"] == "user" and prev["role"] == "user":
+            # Merge into a single user message with combined content blocks
+            prev_content = prev["content"]
+            msg_content = msg["content"]
+
+            # Normalize both to list-of-blocks format
+            if isinstance(prev_content, str):
+                prev["content"] = [{"type": "text", "text": prev_content}]
+            if isinstance(msg_content, str):
+                msg_content = [{"type": "text", "text": msg_content}]
+            elif not isinstance(msg_content, list):
+                msg_content = [{"type": "text", "text": str(msg_content)}]
+
+            prev["content"].extend(msg_content)
         else:
             merged.append(msg)
 

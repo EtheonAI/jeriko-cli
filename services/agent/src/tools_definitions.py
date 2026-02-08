@@ -13,6 +13,51 @@ are loaded once per session and cached to preserve KV-cache.
 
 CORE_TOOLS = [
     # ─────────────────────────────────────────────────────────
+    # Planning
+    # ─────────────────────────────────────────────────────────
+    {
+        "name": "show_plan",
+        "description": (
+            "Create or update a plan to display progress to the user. "
+            "Call this at the start of multi-step tasks to show the plan, "
+            "then call it again to update step statuses as you progress. "
+            "Each call replaces the previous plan display."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Short title for the plan",
+                },
+                "todos": {
+                    "type": "array",
+                    "description": "List of plan steps",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Unique identifier for this step",
+                            },
+                            "label": {
+                                "type": "string",
+                                "description": "Human-readable step title",
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": ["pending", "in_progress", "completed", "cancelled"],
+                                "description": "Current status of this step",
+                            },
+                        },
+                        "required": ["id", "label", "status"],
+                    },
+                },
+            },
+            "required": ["title", "todos"],
+        },
+    },
+    # ─────────────────────────────────────────────────────────
     # Communication
     # ─────────────────────────────────────────────────────────
     {

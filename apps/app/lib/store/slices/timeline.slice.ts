@@ -2,84 +2,120 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Timeline Slice
- * Manages timeline/history view for sessions and events
+ * Session timeline / replay of agent actions:
+ * - Playback scrubber
+ * - Segment-based event grouping
+ * - Event types tracking
  */
+
+export type TimelineEventType =
+  | "message"
+  | "tool_call"
+  | "tool_result"
+  | "file_create"
+  | "file_edit"
+  | "file_delete"
+  | "browser_navigate"
+  | "browser_click"
+  | "browser_input"
+  | "shell_exec"
+  | "deploy"
+  | "error"
+  | "status_change";
 
 export interface TimelineEvent {
   id: string;
-  type: "message" | "action" | "file" | "agent" | "system";
+  sessionId: string;
+  segmentId: string;
+  type: TimelineEventType;
   title: string;
   description?: string;
+  data?: Record<string, unknown>;
   timestamp: string;
-  metadata?: Record<string, unknown>;
-  isHighlighted?: boolean;
+  durationMs?: number;
 }
 
 export interface TimelineSegment {
   id: string;
+  sessionId: string;
+  label: string;
   startTime: string;
-  endTime: string;
-  events: TimelineEvent[];
-  label?: string;
+  endTime?: string;
+  eventCount: number;
 }
 
 export interface TimelineState {
-  // Segment events map (segmentId -> events)
-  segmentEventsMap: Record<string, TimelineEvent[]>;
-
-  // Loading state per segment
-  segmentEventsLoadingMap: Record<string, boolean>;
-
   // Playback
   percentage: number;
   isPlaying: boolean;
   playbackSpeed: number;
-  currentEventId: string | null;
 
-  // View
-  zoomLevel: number;
-  scrollPosition: number;
-  selectedSegmentId: string | null;
+  // Segments
+  segments: TimelineSegment[];
 
-  // Filters
-  filterTypes: string[];
-  searchQuery: string;
+  // Events by segment
+  segmentEventsMap: Record<string, TimelineEvent[]>;
+  segmentEventsLoadingMap: Record<string, boolean>;
 
-  // Time range
-  startTime: string | null;
-  endTime: string | null;
+  // Current session
+  sessionId: string | null;
 
-  // UI State
-  isExpanded: boolean;
-  showMinimap: boolean;
+  // Selected event
+  selectedEventId: string | null;
 
-  // Error
+  // Loading
+  isLoading: boolean;
   error: string | null;
 }
 
 const initialState: TimelineState = {
-  segmentEventsMap: {},
-  segmentEventsLoadingMap: {},
   percentage: 100,
   isPlaying: false,
   playbackSpeed: 1,
-  currentEventId: null,
-  zoomLevel: 1,
-  scrollPosition: 0,
-  selectedSegmentId: null,
-  filterTypes: [],
-  searchQuery: "",
-  startTime: null,
-  endTime: null,
-  isExpanded: false,
-  showMinimap: true,
+
+  segments: [],
+
+  segmentEventsMap: {},
+  segmentEventsLoadingMap: {},
+
+  sessionId: null,
+  selectedEventId: null,
+
+  isLoading: false,
   error: null,
 };
 
-export const timelineSlice = createSlice({
+const timelineSlice = createSlice({
   name: "timeline",
   initialState,
   reducers: {
+    // Playback
+    setPercentage: (state, action: PayloadAction<number>) => {
+      state.percentage = Math.max(0, Math.min(100, action.payload));
+    },
+
+    setIsPlaying: (state, action: PayloadAction<boolean>) => {
+      state.isPlaying = action.payload;
+    },
+
+    togglePlayback: (state) => {
+      state.isPlaying = !state.isPlaying;
+    },
+
+    setPlaybackSpeed: (state, action: PayloadAction<number>) => {
+      state.playbackSpeed = action.payload;
+    },
+
+    // Segments
+    setSegments: (state, action: PayloadAction<TimelineSegment[]>) => {
+      state.segments = action.payload;
+      state.isLoading = false;
+    },
+
+    addSegment: (state, action: PayloadAction<TimelineSegment>) => {
+      state.segments.push(action.payload);
+    },
+
     // Segment events
     setSegmentEvents: (
       state,
@@ -89,185 +125,43 @@ export const timelineSlice = createSlice({
       state.segmentEventsLoadingMap[action.payload.segmentId] = false;
     },
 
-    addEventToSegment: (
+    addSegmentEvent: (
       state,
       action: PayloadAction<{ segmentId: string; event: TimelineEvent }>
     ) => {
-      if (!state.segmentEventsMap[action.payload.segmentId]) {
-        state.segmentEventsMap[action.payload.segmentId] = [];
+      const { segmentId, event } = action.payload;
+      if (!state.segmentEventsMap[segmentId]) {
+        state.segmentEventsMap[segmentId] = [];
       }
-      state.segmentEventsMap[action.payload.segmentId].push(action.payload.event);
+      state.segmentEventsMap[segmentId].push(event);
     },
 
-    removeEventFromSegment: (
-      state,
-      action: PayloadAction<{ segmentId: string; eventId: string }>
-    ) => {
-      if (state.segmentEventsMap[action.payload.segmentId]) {
-        state.segmentEventsMap[action.payload.segmentId] = state.segmentEventsMap[
-          action.payload.segmentId
-        ].filter((e) => e.id !== action.payload.eventId);
-      }
-    },
-
-    clearSegmentEvents: (state, action: PayloadAction<string>) => {
-      delete state.segmentEventsMap[action.payload];
-      delete state.segmentEventsLoadingMap[action.payload];
-    },
-
-    // Loading
-    setSegmentLoading: (
+    setSegmentEventsLoading: (
       state,
       action: PayloadAction<{ segmentId: string; loading: boolean }>
     ) => {
       state.segmentEventsLoadingMap[action.payload.segmentId] = action.payload.loading;
     },
 
-    // Playback
-    setPercentage: (state, action: PayloadAction<number>) => {
-      state.percentage = Math.min(100, Math.max(0, action.payload));
+    // Session
+    setTimelineSessionId: (state, action: PayloadAction<string | null>) => {
+      state.sessionId = action.payload;
     },
 
-    setIsPlaying: (state, action: PayloadAction<boolean>) => {
-      state.isPlaying = action.payload;
+    // Selection
+    setSelectedEventId: (state, action: PayloadAction<string | null>) => {
+      state.selectedEventId = action.payload;
     },
 
-    play: (state) => {
-      state.isPlaying = true;
-    },
-
-    pause: (state) => {
-      state.isPlaying = false;
-    },
-
-    togglePlay: (state) => {
-      state.isPlaying = !state.isPlaying;
-    },
-
-    setPlaybackSpeed: (state, action: PayloadAction<number>) => {
-      state.playbackSpeed = action.payload;
-    },
-
-    setCurrentEventId: (state, action: PayloadAction<string | null>) => {
-      state.currentEventId = action.payload;
-    },
-
-    // View
-    setZoomLevel: (state, action: PayloadAction<number>) => {
-      state.zoomLevel = Math.min(5, Math.max(0.5, action.payload));
-    },
-
-    zoomIn: (state) => {
-      state.zoomLevel = Math.min(5, state.zoomLevel + 0.25);
-    },
-
-    zoomOut: (state) => {
-      state.zoomLevel = Math.max(0.5, state.zoomLevel - 0.25);
-    },
-
-    resetZoom: (state) => {
-      state.zoomLevel = 1;
-    },
-
-    setScrollPosition: (state, action: PayloadAction<number>) => {
-      state.scrollPosition = action.payload;
-    },
-
-    setSelectedSegmentId: (state, action: PayloadAction<string | null>) => {
-      state.selectedSegmentId = action.payload;
-    },
-
-    // Filters
-    setFilterTypes: (state, action: PayloadAction<string[]>) => {
-      state.filterTypes = action.payload;
-    },
-
-    toggleFilterType: (state, action: PayloadAction<string>) => {
-      const index = state.filterTypes.indexOf(action.payload);
-      if (index === -1) {
-        state.filterTypes.push(action.payload);
-      } else {
-        state.filterTypes.splice(index, 1);
-      }
-    },
-
-    clearFilterTypes: (state) => {
-      state.filterTypes = [];
-    },
-
-    setSearchQuery: (state, action: PayloadAction<string>) => {
-      state.searchQuery = action.payload;
-    },
-
-    // Time range
-    setTimeRange: (
-      state,
-      action: PayloadAction<{ startTime: string | null; endTime: string | null }>
-    ) => {
-      state.startTime = action.payload.startTime;
-      state.endTime = action.payload.endTime;
-    },
-
-    clearTimeRange: (state) => {
-      state.startTime = null;
-      state.endTime = null;
-    },
-
-    // UI State
-    setIsExpanded: (state, action: PayloadAction<boolean>) => {
-      state.isExpanded = action.payload;
-    },
-
-    toggleExpanded: (state) => {
-      state.isExpanded = !state.isExpanded;
-    },
-
-    setShowMinimap: (state, action: PayloadAction<boolean>) => {
-      state.showMinimap = action.payload;
-    },
-
-    toggleMinimap: (state) => {
-      state.showMinimap = !state.showMinimap;
-    },
-
-    // Highlight event
-    highlightEvent: (
-      state,
-      action: PayloadAction<{ segmentId: string; eventId: string }>
-    ) => {
-      const events = state.segmentEventsMap[action.payload.segmentId];
-      if (events) {
-        const event = events.find((e) => e.id === action.payload.eventId);
-        if (event) {
-          event.isHighlighted = true;
-        }
-      }
-    },
-
-    unhighlightEvent: (
-      state,
-      action: PayloadAction<{ segmentId: string; eventId: string }>
-    ) => {
-      const events = state.segmentEventsMap[action.payload.segmentId];
-      if (events) {
-        const event = events.find((e) => e.id === action.payload.eventId);
-        if (event) {
-          event.isHighlighted = false;
-        }
-      }
-    },
-
-    clearHighlights: (state) => {
-      Object.values(state.segmentEventsMap).forEach((events) => {
-        events.forEach((event) => {
-          event.isHighlighted = false;
-        });
-      });
+    // Loading
+    setTimelineLoading: (state, action: PayloadAction<boolean>) => {
+      state.isLoading = action.payload;
     },
 
     // Error
-    setError: (state, action: PayloadAction<string | null>) => {
+    setTimelineError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
+      state.isLoading = false;
     },
 
     // Reset
@@ -278,38 +172,19 @@ export const timelineSlice = createSlice({
 });
 
 export const {
-  setSegmentEvents,
-  addEventToSegment,
-  removeEventFromSegment,
-  clearSegmentEvents,
-  setSegmentLoading,
   setPercentage,
   setIsPlaying,
-  play,
-  pause,
-  togglePlay,
+  togglePlayback,
   setPlaybackSpeed,
-  setCurrentEventId,
-  setZoomLevel,
-  zoomIn,
-  zoomOut,
-  resetZoom,
-  setScrollPosition,
-  setSelectedSegmentId,
-  setFilterTypes,
-  toggleFilterType,
-  clearFilterTypes,
-  setSearchQuery,
-  setTimeRange,
-  clearTimeRange,
-  setIsExpanded,
-  toggleExpanded,
-  setShowMinimap,
-  toggleMinimap,
-  highlightEvent,
-  unhighlightEvent,
-  clearHighlights,
-  setError,
+  setSegments,
+  addSegment,
+  setSegmentEvents,
+  addSegmentEvent,
+  setSegmentEventsLoading,
+  setTimelineSessionId,
+  setSelectedEventId,
+  setTimelineLoading,
+  setTimelineError,
   resetTimeline,
 } = timelineSlice.actions;
 

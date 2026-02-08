@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev:services": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@knocklabs/node": "^1.20.0",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
+    "drizzle-orm": "^0.38.3",
     "fastify": "^5.2.2",
     "fastify-plugin": "^5.0.1",
     "web-push": "^3.6.7"

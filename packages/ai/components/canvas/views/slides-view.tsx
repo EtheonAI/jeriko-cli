@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { PresentationIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import {
+  PresentationIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 
 // ============================================================================
@@ -28,7 +32,9 @@ export function SlidesView({ slides, currentIndex = 0 }: SlidesViewProps) {
       <div className="flex items-center justify-between border-b border-border/10 bg-canvas-surface px-3 py-2">
         <div className="flex items-center gap-2">
           <PresentationIcon className="size-3.5 text-purple-400" />
-          <span className="text-xs font-medium text-muted-foreground/70">Slide Editor</span>
+          <span className="text-xs font-medium text-muted-foreground/70">
+            Slide Editor
+          </span>
         </div>
         <span className="text-xs text-muted-foreground/50">
           {total > 0 ? `${index + 1} / ${total}` : "No slides"}

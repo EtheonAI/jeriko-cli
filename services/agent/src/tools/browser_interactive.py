@@ -65,6 +65,18 @@ def sync_handler_factory():
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e), "traceback": traceback.format_exc()}).encode())
 
+        def do_GET(self):
+            if self.path.strip("/") == "health":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode())
+            else:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "not found"}).encode())
+
         def log_message(self, format, *args):
             pass  # Suppress HTTP logs
 
@@ -149,8 +161,21 @@ async def get_page_content():
     }
 
 
+async def capture_screenshot_base64():
+    """Capture a screenshot and return base64 string. Returns None on failure."""
+    global page
+    if not page:
+        return None
+    try:
+        import base64
+        img_bytes = await page.screenshot()
+        return base64.b64encode(img_bytes).decode()
+    except Exception:
+        return None
+
+
 async def dispatch(action, body):
-    """Dispatch browser action."""
+    """Dispatch browser action. Visual actions auto-include a screenshot."""
     global page, browser, playwright_instance, console_logs
 
     if action == "navigate":
@@ -158,7 +183,9 @@ async def dispatch(action, body):
         url = body.get("url", "about:blank")
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(1000)  # Let JS settle
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "restart":
         # Kill existing browser, start fresh
@@ -174,11 +201,17 @@ async def dispatch(action, body):
         url = body.get("url", "about:blank")
         await page.goto(url, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(1000)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "view":
         await ensure_browser()
-        return await get_page_content()
+        result = await get_page_content()
+        # Include screenshot for view action too (so canvas always refreshes)
+        if body.get("include_screenshot", True):
+            result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "click":
         await ensure_browser()
@@ -196,7 +229,9 @@ async def dispatch(action, body):
         elif "coordinate_x" in body and "coordinate_y" in body:
             await page.mouse.click(body["coordinate_x"], body["coordinate_y"])
         await page.wait_for_timeout(500)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "input":
         await ensure_browser()
@@ -224,7 +259,9 @@ async def dispatch(action, body):
         if body.get("press_enter"):
             await page.keyboard.press("Enter")
         await page.wait_for_timeout(300)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "move_mouse":
         await ensure_browser()
@@ -236,7 +273,9 @@ async def dispatch(action, body):
         key = body.get("key", "Enter")
         await page.keyboard.press(key)
         await page.wait_for_timeout(300)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "select_option":
         await ensure_browser()
@@ -255,7 +294,9 @@ async def dispatch(action, body):
             }}
         }}""")
         await page.wait_for_timeout(300)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "scroll_up":
         await ensure_browser()
@@ -264,7 +305,9 @@ async def dispatch(action, body):
         else:
             await page.evaluate("window.scrollBy(0, -window.innerHeight)")
         await page.wait_for_timeout(300)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "scroll_down":
         await ensure_browser()
@@ -273,7 +316,9 @@ async def dispatch(action, body):
         else:
             await page.evaluate("window.scrollBy(0, window.innerHeight)")
         await page.wait_for_timeout(300)
-        return await get_page_content()
+        result = await get_page_content()
+        result["screenshot"] = await capture_screenshot_base64()
+        return result
 
     elif action == "console_exec":
         await ensure_browser()
@@ -316,32 +361,40 @@ if __name__ == "__main__":
 ''')
 
 
-async def _sandbox_shell(sandbox_id: str, command: str, timeout: int = 30) -> dict:
+async def _sandbox_shell(sandbox_id: str, command: str, timeout: int = 30, user_id: str = "") -> dict:
     """Execute a shell command in the sandbox."""
+    headers = {"x-user-id": user_id} if user_id else {}
     async with httpx.AsyncClient(timeout=timeout + 10) as client:
         resp = await client.post(
             f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/shell",
             json={"command": command, "timeout": timeout * 1000},
+            headers=headers,
         )
         if resp.status_code >= 400:
             return {"error": f"Shell failed: {resp.text}"}
-        return resp.json()
+        body = resp.json()
+        return body.get("data", body)  # Unwrap service envelope
 
 
-async def _sandbox_write_file(sandbox_id: str, path: str, content: str) -> dict:
+async def _sandbox_write_file(sandbox_id: str, path: str, content: str, user_id: str = "") -> dict:
     """Write a file to the sandbox."""
+    headers = {"x-user-id": user_id} if user_id else {}
     async with httpx.AsyncClient(timeout=15) as client:
+        # POST /sandboxes/:id/files  body: {path, content}
         resp = await client.post(
-            f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/files/write",
+            f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/files",
             json={"path": path, "content": content},
+            headers=headers,
         )
         if resp.status_code >= 400:
             return {"error": f"Write failed: {resp.text}"}
-        return resp.json()
+        body = resp.json()
+        return body.get("data", body)  # Unwrap service envelope
 
 
-async def _ensure_controller_running(sandbox_id: str) -> bool:
+async def _ensure_controller_running(sandbox_id: str, user_id: str = "") -> bool:
     """Ensure the browser controller is running in the sandbox."""
+    headers = {"x-user-id": user_id} if user_id else {}
     # Check if already running
     try:
         async with httpx.AsyncClient(timeout=5) as client:
@@ -352,9 +405,12 @@ async def _ensure_controller_running(sandbox_id: str) -> bool:
                     "command": f"curl -s http://localhost:{BROWSER_CONTROLLER_PORT}/health 2>/dev/null || echo NOTRUNNING",
                     "timeout": 5000,
                 },
+                headers=headers,
             )
             if resp.status_code == 200:
-                stdout = resp.json().get("stdout", "")
+                body = resp.json()
+                inner = body.get("data", body)  # Unwrap service envelope
+                stdout = inner.get("stdout", "")
                 if "ok" in stdout:
                     return True
     except Exception:
@@ -364,15 +420,16 @@ async def _ensure_controller_running(sandbox_id: str) -> bool:
     logger.info("browser_controller_starting", sandbox_id=sandbox_id)
 
     # Write controller script
-    await _sandbox_write_file(sandbox_id, "/tmp/browser_controller.py", BROWSER_CONTROLLER_SCRIPT)
+    await _sandbox_write_file(sandbox_id, "/tmp/browser_controller.py", BROWSER_CONTROLLER_SCRIPT, user_id=user_id)
 
     # Install playwright if needed & start controller in background
     startup_cmd = (
         "pip install playwright -q 2>/dev/null; "
         "python -m playwright install chromium 2>/dev/null; "
+        "playwright install-deps chromium 2>/dev/null; "
         f"nohup python /tmp/browser_controller.py > /tmp/browser_controller.log 2>&1 &"
     )
-    await _sandbox_shell(sandbox_id, startup_cmd, timeout=120)
+    await _sandbox_shell(sandbox_id, startup_cmd, timeout=120, user_id=user_id)
 
     # Wait for controller to be ready
     import asyncio
@@ -383,6 +440,7 @@ async def _ensure_controller_running(sandbox_id: str) -> bool:
                 sandbox_id,
                 f"curl -s http://localhost:{BROWSER_CONTROLLER_PORT}/health 2>/dev/null",
                 timeout=5,
+                user_id=user_id,
             )
             stdout = check_resp.get("stdout", "")
             if "ok" in stdout:
@@ -395,7 +453,7 @@ async def _ensure_controller_running(sandbox_id: str) -> bool:
     return False
 
 
-async def browser_action(sandbox_id: str | None, action: str, params: dict) -> dict:
+async def browser_action(sandbox_id: str | None, action: str, params: dict, user_id: str = "") -> dict:
     """
     Execute a browser action via the controller.
     This is the unified entry point for all interactive browser tools.
@@ -404,7 +462,7 @@ async def browser_action(sandbox_id: str | None, action: str, params: dict) -> d
         return {"error": "No sandbox available. Browser tools require a sandbox."}
 
     # Ensure controller is running
-    ready = await _ensure_controller_running(sandbox_id)
+    ready = await _ensure_controller_running(sandbox_id, user_id=user_id)
     if not ready:
         return {"error": "Browser controller failed to start in sandbox."}
 
@@ -416,7 +474,7 @@ async def browser_action(sandbox_id: str | None, action: str, params: dict) -> d
         f"-d '{params_json}'"
     )
 
-    result = await _sandbox_shell(sandbox_id, curl_cmd, timeout=45)
+    result = await _sandbox_shell(sandbox_id, curl_cmd, timeout=45, user_id=user_id)
     stdout = result.get("stdout", "")
 
     if stdout.strip():

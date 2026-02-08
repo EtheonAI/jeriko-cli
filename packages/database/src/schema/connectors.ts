@@ -69,6 +69,7 @@ export const connectorDefinitions = pgTable("connector_definitions", {
     tokenUrl: string;
     scopes: string[];
     clientId?: string;
+    composioAuthConfigId?: string;
   }>(),
   capabilities: jsonb("capabilities").$type<string[]>(),
   isEnabled: boolean("is_enabled").default(true).notNull(),

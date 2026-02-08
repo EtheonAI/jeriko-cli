@@ -3,11 +3,11 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
-import { createLogger, createHealthCheck, getEnv, requireEnv } from "@repo/service-utils";
+import { createLogger, getEnv } from "@repo/service-utils";
 import { authPlugin } from "./plugins/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { proxyRoutes } from "./routes/proxy.js";
-import { websocketRoutes } from "./routes/websocket.js";
+import { websocketRoutes, closeAllConnections, metrics as wsMetrics } from "./routes/websocket.js";
 
 const logger = createLogger({ service: "gateway" });
 
@@ -19,12 +19,21 @@ async function main() {
     logger: false, // We use our own logger
     requestIdHeader: "x-request-id",
     genReqId: () => crypto.randomUUID(),
+    bodyLimit: 10 * 1024 * 1024, // 10MB — explicit limit to prevent memory exhaustion
+    trustProxy: true, // Behind reverse proxy; needed for correct IP in rate limiting
   });
 
-  // Register plugins
+  // Register plugins — CORS locked to explicit origins (no wildcard in production)
+  const allowedOrigins = getEnv("ALLOWED_ORIGINS", "http://localhost:3000")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   await app.register(cors, {
-    origin: getEnv("CORS_ORIGIN", "*"),
+    origin: allowedOrigins,
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-request-id"],
   });
 
   await app.register(helmet, {
@@ -102,11 +111,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Graceful shutdown
+  // Graceful shutdown — close WebSocket connections before server
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
   for (const signal of signals) {
     process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
+      logger.info({ signal, wsMetrics }, "Received shutdown signal");
+      closeAllConnections("Server shutting down");
       await app.close();
       process.exit(0);
     });

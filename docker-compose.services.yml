@@ -1,12 +1,10 @@
-version: "3.8"
-
 services:
   # ===========================================
   # Infrastructure Services
   # ===========================================
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: rubic-postgres
     restart: unless-stopped
     environment:
@@ -37,6 +35,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===========================================
+  # Inngest (Workflow Orchestration)
+  # ===========================================
+
+  inngest:
+    image: inngest/inngest:latest
+    container_name: rubic-inngest
+    restart: unless-stopped
+    ports:
+      - "8288:8288"
+    environment:
+      INNGEST_EVENT_KEY: local-dev-event-key
+      INNGEST_SIGNING_KEY: signkey-test-12345678
+    command: inngest dev -u http://task:3002/inngest --no-discovery
 
   # ===========================================
   # Node.js Services
@@ -85,8 +98,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://rubic:rubic_dev_password@postgres:5432/rubic
-      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-}
-      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-}
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-local-dev-event-key}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-signkey-test-12345678}
+      INNGEST_BASE_URL: http://inngest:8288
+      AGENT_SERVICE_URL: http://agent:8000
+      DEVICE_SERVICE_URL: http://device:4001
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-}
     ports:
       - "3002:3002"
     depends_on:
@@ -94,6 +111,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      inngest:
+        condition: service_started
     volumes:
       - ./services/task:/app/services/task
       - ./packages:/app/packages

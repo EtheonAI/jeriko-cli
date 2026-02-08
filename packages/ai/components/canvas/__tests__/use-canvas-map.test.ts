@@ -54,7 +54,9 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
 
   it("should map every expected browser tool to 'browser'", () => {
     for (const tool of EXPECTED_BROWSER_TOOLS) {
-      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "browser"`).toBe("browser");
+      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "browser"`).toBe(
+        "browser"
+      );
     }
   });
 
@@ -85,7 +87,9 @@ describe("TOOL_VIEW_MAP — terminal tools", () => {
 
   it("should map every expected terminal tool to 'terminal'", () => {
     for (const tool of EXPECTED_TERMINAL_TOOLS) {
-      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "terminal"`).toBe("terminal");
+      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "terminal"`).toBe(
+        "terminal"
+      );
     }
   });
 
@@ -139,9 +143,12 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
     "track_analytics",
   ];
 
-  it.each(INLINE_ONLY_TOOLS)("%s should NOT appear in TOOL_VIEW_MAP", (tool) => {
-    expect(TOOL_VIEW_MAP[tool]).toBeUndefined();
-  });
+  it.each(INLINE_ONLY_TOOLS)(
+    "%s should NOT appear in TOOL_VIEW_MAP",
+    (tool) => {
+      expect(TOOL_VIEW_MAP[tool]).toBeUndefined();
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------

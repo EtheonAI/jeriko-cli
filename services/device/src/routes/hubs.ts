@@ -38,7 +38,7 @@ const RegisterHubSchema = z.object({
 
 const CommandSchema = z.object({
   service: z.string().min(1),
-  data: z.record(z.unknown()).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const hubRoutes: FastifyPluginAsync = async (fastify) => {
@@ -302,7 +302,7 @@ export const hubRoutes: FastifyPluginAsync = async (fastify) => {
         .from(smartHomeEntities)
         .where(
           domain
-            ? and(eq(smartHomeEntities.hubId, id), eq(smartHomeEntities.domain, domain))
+            ? and(eq(smartHomeEntities.hubId, id), eq(smartHomeEntities.domain, domain as typeof smartHomeEntities.domain.enumValues[number]))
             : eq(smartHomeEntities.hubId, id)
         );
 

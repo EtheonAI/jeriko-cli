@@ -1,4 +1,4 @@
-import { db, webhookDeliveries, sql, eq } from "@repo/database";
+import { db, webhookDeliveries, sql } from "./db.js";
 import { createLogger } from "@repo/service-utils";
 import { processDelivery } from "./deliver.js";
 

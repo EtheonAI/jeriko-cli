@@ -2,47 +2,58 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Navbar Slice
- * Manages the navigation bar state
+ * Controls the left navigation sidebar:
+ * - Active tab tracking
+ * - Minimal/expanded mode
+ * - Hover state with lock
  */
 
-export type NavbarTab =
+export type NavTabKey =
+  | "task"
   | "newTask"
+  | "chat"
   | "sessions"
   | "projects"
-  | "library"
-  | "settings"
-  | "help";
+  | "files"
+  | "devices"
+  | "applications"
+  | "scheduled"
+  | "settings";
 
 export interface NavbarState {
-  tabKey: NavbarTab;
-  isNavbarHovering: boolean;
+  // Active tab
+  tabKey: NavTabKey;
+
+  // Navigation mode
   isNavBarMinimal: boolean;
+
+  // Hover state
+  isNavbarHovering: boolean;
   isNavBarHoveringLocked: boolean;
-  // Tasks folded in sidebar
+
+  // Tasks section (collapsed/expanded)
   navTasksFolded: boolean;
 }
 
 const initialState: NavbarState = {
-  tabKey: "newTask",
-  isNavbarHovering: false,
+  tabKey: "task",
   isNavBarMinimal: false,
+  isNavbarHovering: false,
   isNavBarHoveringLocked: false,
-  navTasksFolded: true,
+  navTasksFolded: false,
 };
 
-export const navbarSlice = createSlice({
+const navbarSlice = createSlice({
   name: "navbar",
   initialState,
   reducers: {
-    setTabKey: (state, action: PayloadAction<NavbarTab>) => {
+    // Active tab
+    setTabKey: (state, action: PayloadAction<NavTabKey>) => {
       state.tabKey = action.payload;
     },
 
-    setNavbarHovering: (state, action: PayloadAction<boolean>) => {
-      state.isNavbarHovering = action.payload;
-    },
-
-    setNavBarMinimal: (state, action: PayloadAction<boolean>) => {
+    // Navigation mode
+    setIsNavBarMinimal: (state, action: PayloadAction<boolean>) => {
       state.isNavBarMinimal = action.payload;
     },
 
@@ -50,7 +61,12 @@ export const navbarSlice = createSlice({
       state.isNavBarMinimal = !state.isNavBarMinimal;
     },
 
-    setNavBarHoveringLocked: (state, action: PayloadAction<boolean>) => {
+    // Hover state
+    setIsNavbarHovering: (state, action: PayloadAction<boolean>) => {
+      state.isNavbarHovering = action.payload;
+    },
+
+    setIsNavBarHoveringLocked: (state, action: PayloadAction<boolean>) => {
       state.isNavBarHoveringLocked = action.payload;
     },
 
@@ -58,6 +74,7 @@ export const navbarSlice = createSlice({
       state.isNavBarHoveringLocked = !state.isNavBarHoveringLocked;
     },
 
+    // Tasks section
     setNavTasksFolded: (state, action: PayloadAction<boolean>) => {
       state.navTasksFolded = action.payload;
     },
@@ -65,23 +82,18 @@ export const navbarSlice = createSlice({
     toggleNavTasksFolded: (state) => {
       state.navTasksFolded = !state.navTasksFolded;
     },
-
-    resetNavbar: (state) => {
-      Object.assign(state, initialState);
-    },
   },
 });
 
 export const {
   setTabKey,
-  setNavbarHovering,
-  setNavBarMinimal,
+  setIsNavBarMinimal,
   toggleNavBarMinimal,
-  setNavBarHoveringLocked,
+  setIsNavbarHovering,
+  setIsNavBarHoveringLocked,
   toggleNavBarHoveringLocked,
   setNavTasksFolded,
   toggleNavTasksFolded,
-  resetNavbar,
 } = navbarSlice.actions;
 
 export default navbarSlice.reducer;

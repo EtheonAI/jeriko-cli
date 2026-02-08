@@ -4,6 +4,8 @@ export * from "./logger/index.js";
 export * from "./redis/index.js";
 export * from "./auth/index.js";
 export * from "./webhooks/index.js";
+export * from "./factory/index.js";
+export { createEventBus, type EventBus, type ServiceEvent, type EventMap } from "./events/index.js";
 
 // Re-export commonly used utilities
 export { createId } from "@paralleldrive/cuid2";

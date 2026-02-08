@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:services": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup",
     "start": "node dist/index.js"
   },
   "dependencies": {
@@ -14,7 +14,8 @@
     "@repo/service-utils": "workspace:*",
     "@repo/storage": "workspace:*",
     "drizzle-orm": "^0.38.3",
-    "fastify": "^5.2.2"
+    "fastify": "^5.2.2",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",

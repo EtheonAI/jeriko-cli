@@ -102,8 +102,8 @@ export interface SessionsState {
   swapSessionDetailMap: Record<string, SwapSessionDetail>;
   loadTopSegmentsLoading: boolean;
   loadBottomSegmentsLoading: boolean;
-  segmentEndpoints: Record<string, SegmentEndpoint>;
-  scheduledTaskSessions: string[];
+  segmentEndpoints: SegmentEndpoint[];
+  scheduledTaskSessions: string[] | null;
   sharingSessionUid: string | null;
 }
 
@@ -134,12 +134,12 @@ const initialState: SessionsState = {
   swapSessionDetailMap: {},
   loadTopSegmentsLoading: false,
   loadBottomSegmentsLoading: false,
-  segmentEndpoints: {},
-  scheduledTaskSessions: [],
+  segmentEndpoints: [],
+  scheduledTaskSessions: null,
   sharingSessionUid: null,
 };
 
-export const sessionsSlice = createSlice({
+const sessionsSlice = createSlice({
   name: "sessions",
   initialState,
   reducers: {
@@ -433,27 +433,29 @@ export const sessionsSlice = createSlice({
       state.loadBottomSegmentsLoading = action.payload;
     },
 
-    setSegmentEndpoints: (
-      state,
-      action: PayloadAction<{ sessionId: string; endpoints: SegmentEndpoint }>
-    ) => {
-      state.segmentEndpoints[action.payload.sessionId] = action.payload.endpoints;
+    setSegmentEndpoints: (state, action: PayloadAction<SegmentEndpoint[]>) => {
+      state.segmentEndpoints = action.payload;
     },
 
-    setScheduledTaskSessions: (state, action: PayloadAction<string[]>) => {
+    setScheduledTaskSessions: (state, action: PayloadAction<string[] | null>) => {
       state.scheduledTaskSessions = action.payload;
     },
 
     addScheduledTaskSession: (state, action: PayloadAction<string>) => {
+      if (!state.scheduledTaskSessions) {
+        state.scheduledTaskSessions = [];
+      }
       if (!state.scheduledTaskSessions.includes(action.payload)) {
         state.scheduledTaskSessions.push(action.payload);
       }
     },
 
     removeScheduledTaskSession: (state, action: PayloadAction<string>) => {
-      state.scheduledTaskSessions = state.scheduledTaskSessions.filter(
-        (id) => id !== action.payload
-      );
+      if (state.scheduledTaskSessions) {
+        state.scheduledTaskSessions = state.scheduledTaskSessions.filter(
+          (id) => id !== action.payload
+        );
+      }
     },
 
     setSharingSessionUid: (state, action: PayloadAction<string | null>) => {
@@ -465,8 +467,8 @@ export const sessionsSlice = createSlice({
     builder.addCase("sessions/fetchSessionsStart", (state) => {
       state.isLoading = true;
     });
-    builder.addCase("sessions/fetchSessionsSuccess", (state, action: PayloadAction<any>) => {
-      const payload = action.payload ?? {};
+    builder.addCase("sessions/fetchSessionsSuccess", (state, action) => {
+      const payload = (action as any).payload ?? {};
       const sessions = payload.sessions ?? payload ?? [];
       state.sessions = sessions;
       if (typeof payload.hasMore === "boolean") state.hasMore = payload.hasMore;
@@ -475,8 +477,8 @@ export const sessionsSlice = createSlice({
       state.isLoading = false;
       state.error = null;
     });
-    builder.addCase("sessions/setAllCollaborators", (state, action: PayloadAction<string[]>) => {
-      state.allCollaborators = action.payload ?? [];
+    builder.addCase("sessions/setAllCollaborators", (state, action) => {
+      state.allCollaborators = (action as any).payload ?? [];
     });
   },
 });

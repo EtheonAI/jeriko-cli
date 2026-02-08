@@ -2,16 +2,28 @@
   "name": "@repo/next-config",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./keys": {
+      "types": "./keys.ts",
+      "default": "./keys.ts"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
+  "peerDependencies": {
+    "next": ">=16.0.0"
+  },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
-    "next": "16.0.0"
+    "@repo/typescript-config": "workspace:*"
   },
   "dependencies": {
-    "@next/bundle-analyzer": "16.0.0",
+    "@next/bundle-analyzer": "16.1.5",
     "@t3-oss/env-core": "^0.13.8",
     "@t3-oss/env-nextjs": "^0.13.8",
     "zod": "^4.1.12"

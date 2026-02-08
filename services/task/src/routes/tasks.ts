@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { db, eq, desc, and, agentSessions, agents, agentTasks, sql } from "@repo/database";
+import { db, eq, desc, and, agentSessions, agents, agentTasks, sql } from "../lib/db.js";
 import {
   createId,
   successResponse,
@@ -12,6 +12,7 @@ import {
   TaskStatusSchema,
   TaskPrioritySchema,
 } from "@repo/service-utils";
+import { inngest } from "../lib/inngest-client.js";
 
 const logger = createLogger({ service: "task-routes" });
 
@@ -24,14 +25,14 @@ const CreateTaskSchema = z.object({
   targetDeviceId: z.string().optional(),
   targetPlatform: z.string().optional(),
   requiredCapabilities: z.array(z.string()).optional().default([]),
-  metadata: z.record(z.unknown()).optional().default({}),
+  metadata: z.record(z.string(), z.any()).optional().default({}),
 });
 
 const UpdateTaskSchema = z.object({
   title: z.string().optional(),
   status: TaskStatusSchema.optional(),
   priority: TaskPrioritySchema.optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const ListTasksSchema = z.object({
@@ -51,6 +52,36 @@ function getUserId(request: { headers: Record<string, string | string[] | undefi
     throw error;
   }
   return userId;
+}
+
+/** Verify the user owns the task (via agent → session chain) */
+async function verifyTaskOwnership(taskId: string, userId: string): Promise<typeof agentTasks.$inferSelect> {
+  const result = await db
+    .select({
+      task: agentTasks,
+      sessionUserId: agentSessions.userId,
+    })
+    .from(agentTasks)
+    .innerJoin(agents, eq(agents.id, agentTasks.agentId))
+    .innerJoin(agentSessions, eq(agentSessions.id, agents.sessionId))
+    .where(eq(agentTasks.id, taskId))
+    .limit(1);
+
+  if (!result.length) {
+    const error = new Error("Task not found") as Error & { statusCode: number; code: string };
+    error.statusCode = 404;
+    error.code = ErrorCodes.NOT_FOUND;
+    throw error;
+  }
+
+  if (result[0]!.sessionUserId !== userId) {
+    const error = new Error("Not authorized to access this task") as Error & { statusCode: number; code: string };
+    error.statusCode = 403;
+    error.code = ErrorCodes.FORBIDDEN;
+    throw error;
+  }
+
+  return result[0]!.task;
 }
 
 export const taskRoutes: FastifyPluginAsync = async (fastify) => {
@@ -82,7 +113,6 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const taskId = createId();
-      const now = new Date();
 
       const [task] = await db
         .insert(agentTasks)
@@ -127,6 +157,21 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
         userId,
       });
 
+      // Fire Inngest event to execute the task (non-fatal)
+      try {
+        await inngest.send({
+          name: "task/execute",
+          data: {
+            taskId: task!.id,
+            userId,
+            prompt: input.prompt,
+            targetDeviceId: input.targetDeviceId,
+          },
+        });
+      } catch (inngestErr) {
+        logger.warn({ taskId: task!.id, error: inngestErr }, "Failed to send Inngest event (non-fatal)");
+      }
+
       logger.info({ taskId: task!.id, userId }, "Task created");
 
       return reply.status(201).send(successResponse(responseTask, request.id));
@@ -150,25 +195,48 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       const conditions = [];
+
+      // Only return tasks belonging to the requesting user's sessions
+      const userAgentIds = await db
+        .select({ id: agents.id })
+        .from(agents)
+        .innerJoin(agentSessions, eq(agentSessions.id, agents.sessionId))
+        .where(eq(agentSessions.userId, userId));
+
+      if (userAgentIds.length === 0) {
+        return reply.send(successResponse({ items: [], total: 0, hasMore: false }, request.id));
+      }
+
+      const agentIds = userAgentIds.map((a) => a.id);
+      conditions.push(
+        sql`${agentTasks.agentId} IN (${sql.join(
+          agentIds.map((id) => sql`${id}`),
+          sql`, `
+        )})`
+      );
+
       if (query.sessionId) {
-        // Get agents for this session, then get their tasks
+        // Further narrow by session-specific agents
         const sessionAgents = await db
           .select({ id: agents.id })
           .from(agents)
-          .where(eq(agents.sessionId, query.sessionId));
+          .where(and(eq(agents.sessionId, query.sessionId), sql`${agents.id} IN (${sql.join(agentIds.map((id) => sql`${id}`), sql`, `)})`));
 
         if (sessionAgents.length === 0) {
           return reply.send(successResponse({ items: [], total: 0, hasMore: false }, request.id));
         }
 
-        const agentIds = sessionAgents.map((a) => a.id);
+        const sessionAgentIds = sessionAgents.map((a) => a.id);
+        // Replace the broad user agent filter with session-specific one
+        conditions.length = 0;
         conditions.push(
           sql`${agentTasks.agentId} IN (${sql.join(
-            agentIds.map((id) => sql`${id}`),
+            sessionAgentIds.map((id) => sql`${id}`),
             sql`, `
           )})`
         );
       }
+
       if (query.status) {
         conditions.push(eq(agentTasks.status, query.status as any));
       }
@@ -214,27 +282,15 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
 
     try {
-      const [task] = await db.select().from(agentTasks).where(eq(agentTasks.id, id)).limit(1);
-
-      if (!task) {
-        return reply
-          .status(404)
-          .send(
-            errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id)
-          );
-      }
-
+      const task = await verifyTaskOwnership(id, userId);
       return reply.send(successResponse(task, request.id));
     } catch (error) {
       logger.error(error, "Failed to get task");
-      return reply
-        .status(500)
-        .send(
-          errorResponse(
-            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to get task" },
-            request.id
-          )
-        );
+      const err = error as Error & { statusCode?: number; code?: string };
+      const status = err.statusCode || 500;
+      const code = err.code || ErrorCodes.INTERNAL_ERROR;
+      const message = err.statusCode ? err.message : "Failed to get task";
+      return reply.status(status).send(errorResponse({ code, message }, request.id));
     }
   });
 
@@ -245,6 +301,8 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const input = UpdateTaskSchema.parse(request.body);
 
     try {
+      await verifyTaskOwnership(id, userId); // Verify ownership before allowing update
+
       const updateValues: Record<string, unknown> = {};
       if (input.title) updateValues.title = input.title;
       if (input.status) updateValues.status = input.status;
@@ -293,6 +351,8 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
 
     try {
+      await verifyTaskOwnership(id, userId); // Verify ownership before allowing delete
+
       const [deleted] = await db.delete(agentTasks).where(eq(agentTasks.id, id)).returning();
 
       if (!deleted) {
@@ -340,6 +400,8 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string };
 
     try {
+      await verifyTaskOwnership(id, userId); // Verify ownership before allowing cancel
+
       await db.update(agentTasks).set({ status: "cancelled" }).where(eq(agentTasks.id, id));
 
       // Publish cancel event
@@ -347,6 +409,16 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
         type: "task:cancelled",
         data: { taskId: id },
       });
+
+      // Send Inngest cancellation event (triggers cancelOn in approval workflow)
+      try {
+        await inngest.send({
+          name: "task/cancelled",
+          data: { taskId: id, userId },
+        });
+      } catch (inngestErr) {
+        logger.warn({ taskId: id, error: inngestErr }, "Failed to send Inngest cancel event (non-fatal)");
+      }
 
       logger.info({ taskId: id, userId }, "Task cancelled");
 

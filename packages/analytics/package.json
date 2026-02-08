@@ -2,12 +2,34 @@
   "name": "@repo/analytics",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./keys": {
+      "types": "./keys.ts",
+      "default": "./keys.ts"
+    },
+    "./server": {
+      "types": "./server.ts",
+      "default": "./server.ts"
+    },
+    "./provider": {
+      "types": "./provider.tsx",
+      "default": "./provider.tsx"
+    },
+    "./instrumentation-client": {
+      "types": "./instrumentation-client.ts",
+      "default": "./instrumentation-client.ts"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@next/third-parties": "16.0.0",
+    "@next/third-parties": "16.1.5",
     "@t3-oss/env-nextjs": "^0.13.8",
     "@vercel/analytics": "^1.5.0",
     "posthog-js": "^1.280.1",
@@ -16,10 +38,13 @@
     "server-only": "^0.0.1",
     "zod": "^4.1.12"
   },
+  "peerDependencies": {
+    "next": ">=15.0.0"
+  },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5"
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3"
   }
 }

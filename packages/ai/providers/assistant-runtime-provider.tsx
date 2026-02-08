@@ -17,7 +17,6 @@ import {
   type ExternalStoreAdapter,
 } from "@assistant-ui/react";
 
-import type { UseRealTimeChatReturn } from "../hooks/use-realtime-chat";
 import type {
   UIMessage,
   UIMessagePart,
@@ -25,6 +24,15 @@ import type {
   StaticToolUIPart,
   DynamicToolUIPart,
 } from "../lib/types/ui-message";
+
+// Inline type for the chat hook interface (was UseRealTimeChatReturn)
+interface UseRealTimeChatReturn {
+  messages: UIMessage[];
+  status: "idle" | "streaming" | "submitted" | "error";
+  sendMessage: (opts: { text: string }) => Promise<void>;
+  stop: () => void;
+  regenerate: (opts: { messageId: string }) => Promise<void>;
+}
 
 // ============================================================================
 // Message Conversion

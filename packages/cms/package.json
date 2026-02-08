@@ -2,6 +2,20 @@
   "name": "@repo/cms",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./keys": {
+      "types": "./keys.ts",
+      "default": "./keys.ts"
+    },
+    "./next-config": {
+      "types": "./next-config.ts",
+      "default": "./next-config.ts"
+    }
+  },
   "scripts": {
     "dev": "basehub dev",
     "build": "basehub build",
@@ -18,8 +32,8 @@
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5",
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3",
     "next": "16.0.0"
   }
 }

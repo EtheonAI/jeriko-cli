@@ -2,57 +2,59 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * File Previewer Slice
- * Manages file preview and editing state
+ * Controls the file preview panel:
+ * - Multi-format preview (PDF, image, code, markdown)
+ * - File version history
+ * - In-place editing
+ * - Download progress
  */
 
-export type PreviewMode = "preview" | "edit" | "split";
-export type SaveStatus = "default" | "saving" | "saved" | "error";
+export type PreviewMode = "preview" | "pdf" | "image" | "code" | "markdown" | "slide" | "html" | "video" | "audio" | "unknown";
+export type SaveStatus = "default" | "idle" | "saving" | "saved" | "error";
 
-export interface FilePreviewData {
+export interface FileHistoryEntry {
   id: string;
-  name: string;
-  path: string;
-  mimeType: string;
-  size: number;
-  content?: string;
+  version: number;
+  description: string | null;
+  size: number | null;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface PreviewData {
   url?: string;
-  thumbnailUrl?: string;
+  content?: string;
+  mimeType: string;
+  fileName: string;
+  fileSize?: number;
   metadata?: Record<string, unknown>;
 }
 
-export interface FileHistoryVersion {
-  id: string;
-  version: number;
-  createdAt: string;
-  createdBy?: string;
-  changeDescription?: string;
-  size: number;
-}
-
 export interface FilePreviewerState {
-  // Preview state
+  // Preview mode
   mode: PreviewMode;
-  previewData: FilePreviewData | null;
-  loading: boolean;
-  downloading: boolean;
   fullscreen: boolean;
+  loading: boolean;
 
-  // Edit state
-  saveStatus: SaveStatus;
-  syncingFile: boolean;
-  exitEditLock: boolean;
+  // File data
+  previewData: PreviewData | null;
+  currentSlideId: string | null;
 
   // History
-  fileHistory: FileHistoryVersion[] | null;
+  fileHistory: FileHistoryEntry[] | null;
   currentHistoryVersionUid: string | null;
-  isLoadingHistory: boolean;
 
-  // Share
+  // Editing
+  exitEditLock: boolean;
+  saveStatus: SaveStatus;
+  syncingFile: boolean;
+
+  // Sharing
   autoOpenSharePopover: boolean;
+  sharePopoverVisible: boolean;
 
-  // Slide-specific (for presentations)
-  currentSlideId: string | null;
-  slideCount: number;
+  // Download
+  downloading: boolean;
 
   // Error
   error: string | null;
@@ -60,60 +62,36 @@ export interface FilePreviewerState {
 
 const initialState: FilePreviewerState = {
   mode: "preview",
-  previewData: null,
+  fullscreen: false,
   loading: false,
-  downloading: false,
-  fullscreen: true,
-  saveStatus: "default",
-  syncingFile: false,
-  exitEditLock: false,
+
+  previewData: null,
+  currentSlideId: null,
+
   fileHistory: null,
   currentHistoryVersionUid: null,
-  isLoadingHistory: false,
+
+  exitEditLock: false,
+  saveStatus: "default",
+  syncingFile: false,
+
   autoOpenSharePopover: false,
-  currentSlideId: null,
-  slideCount: 0,
+  sharePopoverVisible: false,
+
+  downloading: false,
+
   error: null,
 };
 
-export const filePreviewerSlice = createSlice({
+const filePreviewerSlice = createSlice({
   name: "filePreviewer",
   initialState,
   reducers: {
-    // Mode
+    // Preview mode
     setPreviewMode: (state, action: PayloadAction<PreviewMode>) => {
       state.mode = action.payload;
     },
 
-    // Preview data
-    setPreviewData: (state, action: PayloadAction<FilePreviewData | null>) => {
-      state.previewData = action.payload;
-      state.loading = false;
-      state.error = null;
-    },
-
-    updatePreviewData: (state, action: PayloadAction<Partial<FilePreviewData>>) => {
-      if (state.previewData) {
-        state.previewData = { ...state.previewData, ...action.payload };
-      }
-    },
-
-    clearPreviewData: (state) => {
-      state.previewData = null;
-      state.fileHistory = null;
-      state.currentHistoryVersionUid = null;
-    },
-
-    // Loading states
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.loading = action.payload;
-    },
-
-    setDownloading: (state, action: PayloadAction<boolean>) => {
-      state.downloading = action.payload;
-    },
-
-    // Fullscreen
     setFullscreen: (state, action: PayloadAction<boolean>) => {
       state.fullscreen = action.payload;
     },
@@ -122,7 +100,60 @@ export const filePreviewerSlice = createSlice({
       state.fullscreen = !state.fullscreen;
     },
 
-    // Save status
+    setPreviewLoading: (state, action: PayloadAction<boolean>) => {
+      state.loading = action.payload;
+    },
+
+    // Preview data
+    setPreviewData: (state, action: PayloadAction<PreviewData | null>) => {
+      state.previewData = action.payload;
+      state.loading = false;
+      // Auto-detect mode from mimeType
+      if (action.payload) {
+        const mime = action.payload.mimeType;
+        if (mime.startsWith("image/")) {
+          state.mode = "image";
+        } else if (mime === "application/pdf") {
+          state.mode = "pdf";
+        } else if (mime.startsWith("video/")) {
+          state.mode = "video";
+        } else if (mime.startsWith("audio/")) {
+          state.mode = "audio";
+        } else if (mime === "text/html") {
+          state.mode = "html";
+        } else if (mime === "text/markdown" || action.payload.fileName.endsWith(".md")) {
+          state.mode = "markdown";
+        } else if (
+          mime.startsWith("text/") ||
+          mime === "application/json" ||
+          mime === "application/javascript" ||
+          mime === "application/typescript"
+        ) {
+          state.mode = "code";
+        } else {
+          state.mode = "unknown";
+        }
+      }
+    },
+
+    setCurrentSlideId: (state, action: PayloadAction<string | null>) => {
+      state.currentSlideId = action.payload;
+    },
+
+    // History
+    setFileHistory: (state, action: PayloadAction<FileHistoryEntry[]>) => {
+      state.fileHistory = action.payload;
+    },
+
+    setCurrentHistoryVersion: (state, action: PayloadAction<string | null>) => {
+      state.currentHistoryVersionUid = action.payload;
+    },
+
+    // Editing
+    setExitEditLock: (state, action: PayloadAction<boolean>) => {
+      state.exitEditLock = action.payload;
+    },
+
     setSaveStatus: (state, action: PayloadAction<SaveStatus>) => {
       state.saveStatus = action.payload;
     },
@@ -131,49 +162,22 @@ export const filePreviewerSlice = createSlice({
       state.syncingFile = action.payload;
     },
 
-    setExitEditLock: (state, action: PayloadAction<boolean>) => {
-      state.exitEditLock = action.payload;
-    },
-
-    // History
-    setFileHistory: (state, action: PayloadAction<FileHistoryVersion[] | null>) => {
-      state.fileHistory = action.payload;
-      state.isLoadingHistory = false;
-    },
-
-    setCurrentHistoryVersion: (state, action: PayloadAction<string | null>) => {
-      state.currentHistoryVersionUid = action.payload;
-    },
-
-    setLoadingHistory: (state, action: PayloadAction<boolean>) => {
-      state.isLoadingHistory = action.payload;
-    },
-
-    // Share
+    // Sharing
     setAutoOpenSharePopover: (state, action: PayloadAction<boolean>) => {
       state.autoOpenSharePopover = action.payload;
     },
 
-    // Slides
-    setCurrentSlideId: (state, action: PayloadAction<string | null>) => {
-      state.currentSlideId = action.payload;
+    setSharePopoverVisible: (state, action: PayloadAction<boolean>) => {
+      state.sharePopoverVisible = action.payload;
     },
 
-    setSlideCount: (state, action: PayloadAction<number>) => {
-      state.slideCount = action.payload;
-    },
-
-    nextSlide: (state) => {
-      // Logic to move to next slide would update currentSlideId
-      // This is a placeholder for the actual implementation
-    },
-
-    prevSlide: (state) => {
-      // Logic to move to previous slide would update currentSlideId
+    // Download
+    setDownloading: (state, action: PayloadAction<boolean>) => {
+      state.downloading = action.payload;
     },
 
     // Error
-    setError: (state, action: PayloadAction<string | null>) => {
+    setPreviewerError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
       state.loading = false;
     },
@@ -182,31 +186,37 @@ export const filePreviewerSlice = createSlice({
     resetFilePreviewer: (state) => {
       Object.assign(state, initialState);
     },
+
+    // Close preview (reset but keep history)
+    closePreview: (state) => {
+      state.previewData = null;
+      state.fullscreen = false;
+      state.mode = "unknown";
+      state.currentSlideId = null;
+      state.exitEditLock = false;
+      state.saveStatus = "idle";
+    },
   },
 });
 
 export const {
   setPreviewMode,
-  setPreviewData,
-  updatePreviewData,
-  clearPreviewData,
-  setLoading,
-  setDownloading,
   setFullscreen,
   toggleFullscreen,
-  setSaveStatus,
-  setSyncingFile,
-  setExitEditLock,
+  setPreviewLoading,
+  setPreviewData,
+  setCurrentSlideId,
   setFileHistory,
   setCurrentHistoryVersion,
-  setLoadingHistory,
+  setExitEditLock,
+  setSaveStatus,
+  setSyncingFile,
   setAutoOpenSharePopover,
-  setCurrentSlideId,
-  setSlideCount,
-  nextSlide,
-  prevSlide,
-  setError,
+  setSharePopoverVisible,
+  setDownloading,
+  setPreviewerError,
   resetFilePreviewer,
+  closePreview,
 } = filePreviewerSlice.actions;
 
 export default filePreviewerSlice.reducer;

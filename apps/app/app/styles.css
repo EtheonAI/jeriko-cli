@@ -1,2 +1,4 @@
 @import "tailwindcss";
 @import "@repo/design-system/styles/globals.css";
+@import "@repo/ai/components/tools/tool-animations.css";
+@source "../../../packages/ai/**/*.{ts,tsx}";

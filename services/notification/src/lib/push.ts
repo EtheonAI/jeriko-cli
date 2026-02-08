@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { db, pushSubscriptions, eq } from "@repo/database";
+import { db, pushSubscriptions, eq } from "./db.js";
 import { createLogger } from "@repo/service-utils";
 
 const logger = createLogger({ service: "notification-push" });

@@ -6,6 +6,7 @@ export * from "./schema";
 // Re-export drizzle helpers
 export {
   eq,
+  ne,
   and,
   or,
   not,

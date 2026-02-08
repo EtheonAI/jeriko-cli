@@ -4,6 +4,7 @@
 
 // Core Components
 export { ToolCard, type ToolCardProps } from "./tool-card";
+export { ToolCompact, type ToolCompactProps } from "./tool-compact";
 export {
   ToolRegistry,
   useToolRegistry,

@@ -1,57 +1,52 @@
-# Dependencies
-node_modules
+# Dependencies (re-installed inside Docker)
 **/node_modules
+**/.pnpm-store
 
-# Build outputs
-dist
+# Build outputs (rebuilt inside Docker)
 **/dist
-.next
 **/.next
-.turbo
+**/storybook-static
+**/.react-email
+
+# Caches
 **/.turbo
+**/.cache
+**/coverage
+**/__pycache__
+**/*.pyc
 
-# Development files
-*.log
+# Git & IDE
+.git
+.github
+.claude
+.cursor
+.agents
+.changeset
+.husky
+
+# Documentation
+docs/
 *.md
-!README.md
-.env*
-!.env.example
-
-# IDE
-.idea
-.vscode
-*.swp
-*.swo
+!pnpm-workspace.yaml
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Git
-.git
-.gitignore
+# Env files (secrets — never bake into images)
+.env
+.env.*
+!.env.example
+**/services/*/.env
+**/services/*/.env.*
 
-# Test files
+# Tests & dev tooling
 **/*.test.ts
 **/*.spec.ts
-**/coverage
-**/__tests__
-
-# Documentation
-docs
-*.md
-
-# Config files not needed in production
-.editorconfig
-.eslintrc*
-.prettierrc*
-commitlint.config.js
-.husky
-.lintstagedrc*
-vitest.config.ts
-tsconfig*.json
-turbo.json
-
-# Storybook
-.storybook
-storybook-static
+**/*.test.tsx
+**/*.spec.tsx
+**/e2e/
+**/playwright-report/
+**/vitest.config.*
+**/playwright.config.*
+**/__tests__/

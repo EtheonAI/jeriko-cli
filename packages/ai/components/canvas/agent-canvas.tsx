@@ -27,6 +27,7 @@ import {
   PlayIcon,
   PauseIcon,
   SkipForwardIcon,
+  ArrowLeftIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
@@ -82,8 +83,11 @@ export interface AgentCanvasProps {
   onSelectTab?: (id: string) => void;
   onCloseTab?: (id: string) => void;
 
-  // Preview (deployed app)
+  // Preview URL (deployed sandbox app)
   previewUrl?: string;
+
+  // All file contents (for preview rendering)
+  fileContents?: Record<string, string>;
 
   // Terminal view
   terminalOutput?: string[];
@@ -108,6 +112,12 @@ export interface AgentCanvasProps {
   // View switching
   availableViews?: Set<CanvasViewType>;
   onSelectView?: (view: CanvasViewType) => void;
+
+  // Pinned state — historical tool state recall
+  /** When set, canvas is showing a pinned historical tool, not live state */
+  pinnedToolCallId?: string;
+  /** Callback to return to live (latest) tool state */
+  onUnpin?: () => void;
 
   // Common
   currentAction?: ToolAction;
@@ -135,7 +145,10 @@ const ACTION_ICONS: Record<ToolActionType, LucideIcon> = {
 // View metadata
 // ============================================================================
 
-const VIEW_INFO: Record<CanvasViewType, { label: string; icon: LucideIcon; color: string }> = {
+const VIEW_INFO: Record<
+  CanvasViewType,
+  { label: string; icon: LucideIcon; color: string }
+> = {
   browser: { label: "Browser", icon: GlobeIcon, color: "text-blue-400" },
   code: { label: "Code Editor", icon: CodeIcon, color: "text-green-400" },
   terminal: {
@@ -233,7 +246,11 @@ function TimelineScrubber({
         className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted/20"
         onClick={() => setIsPlaying(!isPlaying)}
       >
-        {isPlaying ? <PauseIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+        {isPlaying ? (
+          <PauseIcon className="size-3.5" />
+        ) : (
+          <PlayIcon className="size-3.5" />
+        )}
       </button>
       <div
         ref={trackRef}
@@ -294,6 +311,7 @@ export function AgentCanvas({
   onSelectTab,
   onCloseTab,
   previewUrl,
+  fileContents,
   terminalOutput,
   previewFileName,
   previewContent,
@@ -302,6 +320,8 @@ export function AgentCanvas({
   currentSlideIndex,
   availableViews,
   onSelectView,
+  pinnedToolCallId,
+  onUnpin,
   timelinePercentage = 0,
   onTimelineChange,
   currentStep,
@@ -320,6 +340,8 @@ export function AgentCanvas({
 
   const canvasContent = (
     <div
+      data-testid="agent-canvas"
+      data-view-type={viewType}
       className={cn(
         "flex flex-col overflow-hidden",
         isFullscreen
@@ -335,14 +357,19 @@ export function AgentCanvas({
           {/* Title */}
           <div className="flex items-center gap-2">
             <MonitorIcon className="size-4 text-muted-foreground/60" />
-            <h2 className="text-sm font-semibold text-foreground">Rubic&apos;s Computer</h2>
+            <h2 className="text-sm font-semibold text-foreground">
+              Rubic&apos;s Computer
+            </h2>
           </div>
 
           {/* Status line */}
           <div className="flex flex-wrap items-center gap-2">
             {viewType !== "empty" && (
               <span className="text-xs text-muted-foreground/60">
-                Using <span className={cn("font-medium", viewInfo.color)}>{viewInfo.label}</span>
+                Using{" "}
+                <span className={cn("font-medium", viewInfo.color)}>
+                  {viewInfo.label}
+                </span>
               </span>
             )}
             {currentAction && <ActionBadge action={currentAction} />}
@@ -388,6 +415,21 @@ export function AgentCanvas({
       )}
 
       {/* ================================================================= */}
+      {/* Pinned "Back to Live" banner                                      */}
+      {/* ================================================================= */}
+      {pinnedToolCallId && onUnpin && (
+        <button
+          type="button"
+          onClick={onUnpin}
+          className="flex w-full items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+        >
+          <ArrowLeftIcon className="size-3.5" />
+          <span className="font-medium">Viewing pinned tool state</span>
+          <span className="ml-auto text-amber-500/60">Click to return to live</span>
+        </button>
+      )}
+
+      {/* ================================================================= */}
       {/* Content                                                           */}
       {/* ================================================================= */}
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -420,18 +462,6 @@ export function AgentCanvas({
             onCloseTab={onCloseTab}
           />
         )}
-        {previewUrl && viewType === "browser" && (
-          <div className="border-t border-border/20 bg-canvas-surface px-3 py-2">
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-400 hover:underline"
-            >
-              Preview: {previewUrl}
-            </a>
-          </div>
-        )}
         {viewType === "terminal" && <TerminalView output={terminalOutput} />}
         {viewType === "filePreview" && (
           <FilePreviewView
@@ -440,7 +470,12 @@ export function AgentCanvas({
             fileType={previewFileType}
           />
         )}
-        {viewType === "slides" && <SlidesView slides={slides} currentIndex={currentSlideIndex} />}
+        {viewType === "slides" && (
+          <SlidesView
+            slides={slides}
+            currentIndex={currentSlideIndex}
+          />
+        )}
         {viewType === "aiCanvas" && <AICanvasView />}
         {viewType === "webDevIDE" && (
           <WebDevIDEView
@@ -452,6 +487,7 @@ export function AgentCanvas({
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
             previewUrl={previewUrl}
+            fileContents={fileContents}
           />
         )}
         {viewType === "mapReduce" && <MapReduceView />}
@@ -461,14 +497,19 @@ export function AgentCanvas({
       {/* ================================================================= */}
       {/* Timeline Scrubber                                                 */}
       {/* ================================================================= */}
-      <TimelineScrubber percentage={timelinePercentage} onChange={onTimelineChange} />
+      <TimelineScrubber
+        percentage={timelinePercentage}
+        onChange={onTimelineChange}
+      />
 
       {/* ================================================================= */}
       {/* Status Bar                                                        */}
       {/* ================================================================= */}
       {(isWorking || statusText) && (
         <div className="flex items-center gap-2 border-t border-border/20 bg-canvas-deep px-3 py-2">
-          {isWorking && <div className="size-2 animate-pulse rounded-full bg-blue-500" />}
+          {isWorking && (
+            <div className="size-2 animate-pulse rounded-full bg-blue-500" />
+          )}
           <span className="flex-1 truncate text-xs text-muted-foreground/60">
             {statusText || "Rubic is working..."}
           </span>
@@ -478,7 +519,9 @@ export function AgentCanvas({
             </span>
           )}
           {currentAction && (
-            <span className="text-xs text-muted-foreground/40">{currentAction.label}</span>
+            <span className="text-xs text-muted-foreground/40">
+              {currentAction.label}
+            </span>
           )}
         </div>
       )}

@@ -1,3 +1,7 @@
+import os
+import hmac
+import time
+
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +27,9 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+GATEWAY_SECRET = os.getenv("GATEWAY_SECRET", "")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Rubic Agent Service",
@@ -30,14 +37,37 @@ app = FastAPI(
     version="0.0.1",
 )
 
-# CORS middleware
+# CORS middleware — locked to explicit origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in ALLOWED_ORIGINS if o.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "x-request-id", "x-user-id", "x-gateway-secret"],
 )
+
+
+# Gateway secret verification middleware
+@app.middleware("http")
+async def verify_gateway_secret(request: Request, call_next):
+    # Skip auth for health endpoints
+    if request.url.path.startswith("/health"):
+        return await call_next(request)
+
+    # Verify gateway secret if configured
+    if GATEWAY_SECRET:
+        provided = request.headers.get("x-gateway-secret", "")
+        if not hmac.compare_digest(provided, GATEWAY_SECRET):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "data": None,
+                    "meta": {"request_id": request.headers.get("x-request-id", "unknown")},
+                    "error": {"code": "UNAUTHORIZED", "message": "Invalid or missing gateway secret"},
+                },
+            )
+
+    return await call_next(request)
 
 
 # Request logging middleware
@@ -45,6 +75,7 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     request_id = request.headers.get("x-request-id", "unknown")
     user_id = request.headers.get("x-user-id", "anonymous")
+    start_time = time.monotonic()
 
     logger.info(
         "request_started",
@@ -56,11 +87,17 @@ async def log_requests(request: Request, call_next):
 
     response = await call_next(request)
 
+    duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+
     logger.info(
         "request_completed",
         request_id=request_id,
         status_code=response.status_code,
+        duration_ms=duration_ms,
     )
+
+    # Propagate correlation ID in response
+    response.headers["x-request-id"] = request_id
 
     return response
 
@@ -89,7 +126,12 @@ app.include_router(tools.router, prefix="/v1")
 
 @app.on_event("startup")
 async def startup():
-    logger.info("agent_service_starting", environment=settings.environment)
+    logger.info(
+        "agent_service_starting",
+        environment=settings.environment,
+        cors_origins=ALLOWED_ORIGINS,
+        gateway_auth="enabled" if GATEWAY_SECRET else "disabled",
+    )
     try:
         await init_db()
     except Exception as e:

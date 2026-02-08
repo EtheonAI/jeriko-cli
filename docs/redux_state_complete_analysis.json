@@ -1,0 +1,1727 @@
+{
+  "_meta": {
+    "description": "Complete analysis of the Redux state from state(9).json. Every property, key, type, and example value is documented.",
+    "totalTopLevelSlices": 44,
+    "rtkQuerySlices": ["api"],
+    "regularSlices": [
+      "_persist", "agentWorkspace", "aiCanvas", "aiCanvasEditor", "auth", "biz", "chat",
+      "codeViewer", "community", "configs", "connectors", "enterpriseTeam", "example",
+      "experiment", "fileConnector", "fileManagement", "filePreviewer", "fileShare",
+      "guestPage", "knowledge", "library", "login", "mailManus", "mapReduce", "meeting",
+      "myBrowser", "navbar", "notification", "onboarding", "products", "project",
+      "scheduledTask", "sessionSwitch", "sessions", "skills", "slideEditor", "team",
+      "timeline", "ui", "webDev", "webDevUsage", "webdevAuth", "websocket"
+    ]
+  },
+
+  "slices": {
+
+    "_persist": {
+      "_sliceType": "regular",
+      "_description": "Redux Persist metadata for rehydration state.",
+      "version": { "type": "number", "example": 8 },
+      "rehydrated": { "type": "boolean", "example": true }
+    },
+
+    "agentWorkspace": {
+      "_sliceType": "regular",
+      "_description": "Controls the agent workspace UI layout, sidebar, VNC dialog, computer position, and chat search.",
+      "sidebarType": { "type": "string | null", "example": null },
+      "isSidebarPreviewFullscreen": { "type": "boolean", "example": false },
+      "isSidebarVisibleInMobile": { "type": "boolean", "example": false },
+      "animationLock": { "type": "boolean", "example": false },
+      "isTimelinePlaying": { "type": "boolean", "example": false },
+      "vncDialogVisible": { "type": "boolean", "example": false },
+      "initialComputerPosition": {
+        "type": "object",
+        "properties": {
+          "top": { "type": "number", "example": 0 },
+          "left": { "type": "number", "example": 0 },
+          "width": { "type": "number", "example": 0 },
+          "height": { "type": "number", "example": 0 }
+        }
+      },
+      "chatReplySearchMetadata": { "type": "object | null", "example": null },
+      "chatReplySearchResults": { "type": "object", "example": {} },
+      "isPlannerExpanded": { "type": "boolean", "example": false },
+      "prevAutoOpenedSidebarType": { "type": "string | null", "example": null },
+      "fileHistoryVisible": { "type": "boolean", "example": false },
+      "chatComputerDialogVisible": { "type": "boolean", "example": false },
+      "disableChatWorkspaceInitAnimation": { "type": "boolean | null", "example": null },
+      "disableSidebarInitAnimation": { "type": "boolean", "example": false }
+    },
+
+    "aiCanvas": {
+      "_sliceType": "regular",
+      "_description": "Stores all AI canvas instances and OCR cache data.",
+      "allAiCanvas": { "type": "object (dynamic map)", "example": {} },
+      "ocrCache": { "type": "object (dynamic map)", "example": {} }
+    },
+
+    "aiCanvasEditor": {
+      "_sliceType": "regular",
+      "_description": "Full state for the AI canvas editor: shapes, camera, tools, brushing, marking, context menu, screenshots, text editing, settings, comments.",
+      "shapes": { "type": "object (dynamic map of shape objects)", "example": {} },
+      "camera": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "number", "example": 0 },
+          "y": { "type": "number", "example": 0 },
+          "z": { "type": "number (zoom level)", "example": 0.24 }
+        }
+      },
+      "selectedShapeIds": { "type": "array<string>", "example": [] },
+      "hoveredShapeId": { "type": "string | null", "example": null },
+      "previewSelectedId": { "type": "string | null", "example": null },
+      "altDragCloneIds": { "type": "array<string>", "example": [] },
+      "isAltPressed": { "type": "boolean", "example": false },
+      "isFullscreen": { "type": "boolean", "example": false },
+      "guides": { "type": "array", "example": [] },
+      "interaction": {
+        "type": "object",
+        "properties": {
+          "activeTool": { "type": "string", "example": "select" },
+          "rightMouseDown": { "type": "boolean", "example": false },
+          "isImageDragging": { "type": "boolean", "example": false },
+          "temporaryPanMode": { "type": "boolean", "example": false },
+          "temporaryMarkMode": { "type": "boolean", "example": false },
+          "panning": { "type": "boolean", "example": false }
+        }
+      },
+      "brushing": {
+        "type": "object",
+        "properties": {
+          "isBrushing": { "type": "boolean", "example": false },
+          "startPoint": { "type": "object | null", "example": null },
+          "currentPoint": { "type": "object | null", "example": null }
+        }
+      },
+      "marking": {
+        "type": "object",
+        "properties": {
+          "isMarking": { "type": "boolean", "example": false },
+          "startPoint": { "type": "object | null", "example": null },
+          "currentPoint": { "type": "object | null", "example": null },
+          "imageShapeId": { "type": "string | null", "example": null }
+        }
+      },
+      "contextMenu": {
+        "type": "object",
+        "properties": {
+          "position": { "type": "object | null", "example": null },
+          "target": { "type": "object | null", "example": null }
+        }
+      },
+      "screenshots": {
+        "type": "object",
+        "properties": {
+          "markScreenshots": { "type": "object (dynamic map)", "example": {} },
+          "markedImages": { "type": "object (dynamic map)", "example": {} }
+        }
+      },
+      "editTextMode": {
+        "type": "object",
+        "properties": {
+          "imageId": { "type": "string | null", "example": null },
+          "annotations": { "type": "array", "example": [] },
+          "selectedAnnotationIndex": { "type": "number | null", "example": null },
+          "hoveredAnnotationIndex": { "type": "number | null", "example": null },
+          "editedTexts": { "type": "array", "example": [] },
+          "isOcrLoading": { "type": "boolean", "example": false }
+        }
+      },
+      "settings": {
+        "type": "object",
+        "properties": {
+          "useScrollWheelZoom": { "type": "boolean", "example": false },
+          "rightClickDragToPan": { "type": "boolean", "example": false },
+          "gridState": { "type": "boolean", "example": false }
+        }
+      },
+      "commentHistory": {
+        "type": "object",
+        "properties": {
+          "past": { "type": "array", "example": [] },
+          "future": { "type": "array", "example": [] }
+        }
+      },
+      "commentPopup": {
+        "type": "object",
+        "properties": {
+          "commentId": { "type": "string", "example": "" },
+          "isOpen": { "type": "boolean", "example": false }
+        }
+      }
+    },
+
+    "api": {
+      "_sliceType": "RTK Query (createApi)",
+      "_description": "RTK Query API slice. Contains cached query/mutation results, subscriptions, cache invalidation tags, and config. This is the ONLY RTK Query slice in the entire store.",
+      "_rtkQueryConfig": {
+        "reducerPath": "api",
+        "online": true,
+        "focused": true,
+        "middlewareRegistered": true,
+        "refetchOnFocus": false,
+        "refetchOnReconnect": false,
+        "refetchOnMountOrArgChange": false,
+        "keepUnusedDataFor": 60,
+        "invalidationBehavior": "delayed"
+      },
+      "queries": {
+        "type": "object (dynamic map keyed by endpointName + serialized args)",
+        "_observedEndpoints": ["getSessionFiles", "getSessionV2", "getPresignedUrl"],
+        "_queryEntrySchema": {
+          "status": { "type": "string", "example": "fulfilled", "possibleValues": ["pending", "fulfilled", "rejected"] },
+          "endpointName": { "type": "string", "example": "getSessionFiles" },
+          "requestId": { "type": "string", "example": "SxronqSR5tnEn4Z0j28yz" },
+          "originalArgs": { "type": "object", "example": { "sessionId": "RTI3WrlJ8LavQM0v4geXkF", "type": "private" } },
+          "startedTimeStamp": { "type": "number (epoch ms)", "example": 1770457376822 },
+          "data": { "type": "any (response payload)", "example": "varies per endpoint" },
+          "fulfilledTimeStamp": { "type": "number (epoch ms)", "example": 1770457377080 }
+        },
+        "_queryDataExamples": {
+          "getSessionFiles": {
+            "data": {
+              "files": [
+                {
+                  "raw": [
+                    {
+                      "type": "string (e.g. 'tool_call_text_edit_file')",
+                      "eventId": "string",
+                      "path": "string",
+                      "filename": "string",
+                      "fileContent": "string",
+                      "url": "string (CDN URL)"
+                    }
+                  ],
+                  "id": "string (sessionId-path)",
+                  "category": "string (e.g. 'code')",
+                  "displayFilename": "string",
+                  "iconType": "string",
+                  "lastUpdatedAt": "number (epoch ms)",
+                  "chatLocationEventId": "string",
+                  "isSynced": "boolean",
+                  "isBlocked": "boolean",
+                  "sharedAt": "number"
+                }
+              ]
+            }
+          },
+          "getSessionV2": {
+            "data": {
+              "id": "string",
+              "createdAt": "number (epoch ms)",
+              "updatedAt": "number (epoch ms)",
+              "title": "string",
+              "iconInfo": {
+                "$typeName": "string",
+                "url": "string",
+                "bgColorLight": "string",
+                "bgColorDark": "string"
+              },
+              "userStatus": "number",
+              "isInvited": "boolean",
+              "isShared": "boolean",
+              "agentTaskMode": "number",
+              "segments": "array of segment objects",
+              "taskMode": "string (e.g. 'lite_concord')",
+              "segmentEndpoints": "array"
+            }
+          },
+          "getPresignedUrl": {
+            "data": {
+              "uploadUrl": "string (S3 presigned URL)",
+              "id": "string"
+            }
+          }
+        }
+      },
+      "mutations": {
+        "type": "object (dynamic map keyed by requestId)",
+        "_observedEndpoints": ["uploadToS3", "completeUpload"],
+        "_mutationEntrySchema": {
+          "requestId": { "type": "string", "example": "8vJfVoxywZ3VDpQ1wmM3x" },
+          "status": { "type": "string", "example": "fulfilled" },
+          "endpointName": { "type": "string", "example": "uploadToS3" },
+          "startedTimeStamp": { "type": "number (epoch ms)", "example": 1770457416059 },
+          "data": { "type": "any", "example": "\"ok\" or { fileUrl: string }" },
+          "fulfilledTimeStamp": { "type": "number (epoch ms)", "example": 1770457434687 }
+        },
+        "_mutationDataExamples": {
+          "uploadToS3": {
+            "data": "ok"
+          },
+          "completeUpload": {
+            "data": {
+              "fileUrl": "string (CDN URL to uploaded file)"
+            }
+          }
+        }
+      },
+      "provided": { "type": "object (cache tag invalidation map)", "example": {} },
+      "subscriptions": {
+        "type": "object (dynamic map keyed by endpointName + serialized args)",
+        "_description": "Maps each active query to its subscriber IDs and their polling config.",
+        "_subscriptionEntrySchema": {
+          "<subscriberId>": {
+            "pollingInterval": { "type": "number", "example": 0 },
+            "skipPollingIfUnfocused": { "type": "boolean", "example": false }
+          }
+        }
+      },
+      "config": {
+        "type": "object",
+        "properties": {
+          "online": { "type": "boolean", "example": true },
+          "focused": { "type": "boolean", "example": true },
+          "middlewareRegistered": { "type": "boolean", "example": true },
+          "refetchOnFocus": { "type": "boolean", "example": false },
+          "refetchOnReconnect": { "type": "boolean", "example": false },
+          "refetchOnMountOrArgChange": { "type": "boolean", "example": false },
+          "keepUnusedDataFor": { "type": "number (seconds)", "example": 60 },
+          "reducerPath": { "type": "string", "example": "api" },
+          "invalidationBehavior": { "type": "string", "example": "delayed" }
+        }
+      }
+    },
+
+    "auth": {
+      "_sliceType": "regular",
+      "_description": "User authentication, profile info, usage/credits, global settings, client config, region, invitation codes.",
+      "userInfo": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.UserInfoResponse" },
+          "userId": { "type": "string", "example": "310519663323253630" },
+          "email": { "type": "string", "example": "tattarifi@fxcc.co" },
+          "firstname": { "type": "string", "example": "Thayer" },
+          "lastname": { "type": "string", "example": "Attarifi" },
+          "displayname": { "type": "string", "example": "Thayer Attarifi" },
+          "nickname": { "type": "string", "example": "Thayer Attarifi" },
+          "avatar": { "type": "string (URL)", "example": "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c" },
+          "isAlpha": { "type": "boolean", "example": true },
+          "inWaitlist": { "type": "boolean", "example": false },
+          "currentPeriodEnd": { "type": "number", "example": 0 },
+          "cancelAtPeriodEnd": { "type": "boolean", "example": false },
+          "isBeta": { "type": "boolean", "example": false },
+          "paymentPlatform": { "type": "string", "example": "" },
+          "uid": { "type": "string", "example": "93Q6jjptqKGLXnMhyRh83S" },
+          "concurrentSessions": { "type": "number", "example": 1 },
+          "platformList": { "type": "array<string>", "example": ["google"] },
+          "canReceiveExtraCreditsForSubscribe": { "type": "boolean", "example": true },
+          "canReceiveExtraCreditsForUpgrade": { "type": "boolean", "example": false },
+          "subscriptionStatus": { "type": "number", "example": 0 },
+          "trialAvailable": { "type": "boolean", "example": true },
+          "membershipVersion": { "type": "string", "example": "free" },
+          "membershipInterval": { "type": "string", "example": "" },
+          "nextMembershipVersion": { "type": "string", "example": "" },
+          "userType": { "type": "number", "example": 1 },
+          "isMembershipTrial": { "type": "boolean", "example": false },
+          "smsVerified": { "type": "boolean", "example": true },
+          "nextMembershipInterval": { "type": "string", "example": "" },
+          "perks": { "type": "boolean", "example": false },
+          "concurrentScheduleTaskLimit": { "type": "number", "example": 2 },
+          "area": { "type": "number", "example": 2 },
+          "membershipTier": { "type": "number", "example": 0 },
+          "nextMembershipTier": { "type": "number", "example": 0 },
+          "onboardingStepStatus": { "type": "number", "example": 0 },
+          "isWorkEmail": { "type": "boolean", "example": true },
+          "emailStatus": { "type": "number", "example": 0 },
+          "teamInfo": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string", "example": "user.v1.TeamInfo" },
+              "count": { "type": "number", "example": 0 },
+              "originalUserId": { "type": "string", "example": "310519663323253630" },
+              "originalUserUid": { "type": "string", "example": "93Q6jjptqKGLXnMhyRh83S" }
+            }
+          },
+          "registeredAt": {
+            "type": "object (google.protobuf.Timestamp)",
+            "properties": {
+              "$typeName": { "type": "string", "example": "google.protobuf.Timestamp" },
+              "seconds": { "type": "number", "example": 1769682960 },
+              "nanos": { "type": "number", "example": 0 }
+            }
+          },
+          "fileUploadQuota": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string", "example": "user.v1.FileUploadQuota" },
+              "usedCount": { "type": "number", "example": 2 },
+              "maxCount": { "type": "number", "example": 4 },
+              "isLimited": { "type": "boolean", "example": true },
+              "oneEventMaxFileCount": { "type": "number", "example": 1 },
+              "resetTime": {
+                "type": "object (google.protobuf.Timestamp)",
+                "properties": {
+                  "$typeName": { "type": "string", "example": "google.protobuf.Timestamp" },
+                  "seconds": { "type": "number", "example": 1770542978 },
+                  "nanos": { "type": "number", "example": 789991974 }
+                }
+              },
+              "resetTtl": { "type": "number", "example": 85533 }
+            }
+          },
+          "membershipInfo": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string", "example": "user.v1.MembershipInfo" },
+              "membershipVersion": { "type": "string", "example": "free" },
+              "currentPeriodEnd": { "type": "number", "example": 0 },
+              "paymentPlatform": { "type": "string", "example": "" },
+              "isMembershipTrial": { "type": "boolean", "example": false },
+              "membershipInterval": { "type": "string", "example": "" },
+              "membershipTier": { "type": "number", "example": 0 }
+            }
+          }
+        }
+      },
+      "modifying": { "type": "boolean", "example": false },
+      "avatarUploading": { "type": "boolean", "example": false },
+      "authLoading": { "type": "boolean", "example": false },
+      "invitationCodeListLoading": { "type": "boolean", "example": false },
+      "invitationCodeList": {
+        "type": "array",
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.PersonalInvitationCodeInfo" },
+          "id": { "type": "number", "example": 26495043 },
+          "kind": { "type": "number", "example": 9 },
+          "inviteCode": { "type": "string", "example": "C8RWMEPW71NJQ" },
+          "maxUses": { "type": "number", "example": 999999999 },
+          "usedCount": { "type": "number", "example": 0 },
+          "pending": { "type": "boolean", "example": false },
+          "createdAt": {
+            "type": "object (google.protobuf.Timestamp)",
+            "properties": {
+              "$typeName": { "type": "string", "example": "google.protobuf.Timestamp" },
+              "seconds": { "type": "number", "example": 1769682959 },
+              "nanos": { "type": "number", "example": 642000000 }
+            }
+          }
+        }
+      },
+      "invitationCodeRedDotVisible": { "type": "boolean", "example": true },
+      "globalSettings": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.GetGlobalSettingsResponse" },
+          "disablingPayments": { "type": "boolean", "example": false },
+          "freeMapreduceCount": { "type": "number", "example": 1 }
+        }
+      },
+      "usageInfo": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.GetAvailableCreditsResponse" },
+          "totalCredits": { "type": "number", "example": 69 },
+          "freeCredits": { "type": "number", "example": 0 },
+          "periodicCredits": { "type": "number", "example": 0 },
+          "addonCredits": { "type": "number", "example": 0 },
+          "proMonthlyCredits": { "type": "number", "example": 0 },
+          "eventCredits": { "type": "number", "example": 0 },
+          "refreshCredits": { "type": "number", "example": 69 },
+          "maxRefreshCredits": { "type": "number", "example": 300 },
+          "refreshInterval": { "type": "string", "example": "daily" },
+          "consumeStatus": { "type": "number", "example": 0 },
+          "cooldownStatus": { "type": "number", "example": 0 },
+          "qualityTrial": { "type": "number", "example": 0 },
+          "nanoBananaTrial": { "type": "number", "example": 0 },
+          "nextRefreshTime": {
+            "type": "object",
+            "properties": {
+              "seconds": { "type": "number", "example": 1770505200 },
+              "nanos": { "type": "number", "example": 0 }
+            }
+          },
+          "userFlag": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string", "example": "user.v1.UserFlag" },
+              "drc16": { "type": "boolean", "example": false }
+            }
+          },
+          "cdTime": { "type": "string (ISO 8601)", "example": "1970-01-01T00:00:00Z" },
+          "event_credits": { "type": "number", "example": 0 },
+          "liveEventId": { "type": "string", "example": "" },
+          "qualityCredits": { "type": "number", "example": 0 },
+          "refresh_credits": { "type": "number", "example": 69 },
+          "speedCredits": { "type": "number", "example": 0 },
+          "totalPaidCredits": { "type": "number", "example": 0 }
+        }
+      },
+      "usageInfoReady": { "type": "boolean", "example": true },
+      "clientConfig": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.GetUserClientConfigResponse" },
+          "recvMarketingEmail": { "type": "boolean", "example": true },
+          "hasInterest": { "type": "boolean", "example": false },
+          "sessionWaitDoneEmail": { "type": "boolean", "example": true },
+          "autoAgentDeploySpace": { "type": "boolean", "example": false },
+          "hasShownEduTeamJoinPopup": { "type": "boolean", "example": false },
+          "lastUpdateLogTime": { "type": "number", "example": 1769575799 },
+          "enableManusBrowser": { "type": "boolean", "example": false },
+          "agentMode": { "type": "number", "example": 0 },
+          "cookieOptIn": { "type": "number", "example": 1 },
+          "autoWideResearch": { "type": "boolean", "example": false },
+          "locale": { "type": "string", "example": "en" }
+        }
+      },
+      "userRegion": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.CheckRegionResponse" },
+          "isUnsupported": { "type": "boolean", "example": false },
+          "isUnsupportedV2": { "type": "boolean", "example": false },
+          "iso": { "type": "string", "example": "HR" },
+          "code": { "type": "string", "example": "+385" },
+          "needCookieOptIn": { "type": "boolean", "example": true },
+          "highValueForTeam": { "type": "boolean", "example": true }
+        }
+      },
+      "creditAnimateInfo": { "type": "object | null", "example": null },
+      "refreshKey": { "type": "string", "example": "bK5pwPtljxFP1NmrR37WLd" },
+      "profileCardVisible": { "type": "boolean", "example": false },
+      "shareHistoryCache": { "type": "object | null", "example": null },
+      "cookieOptIn": { "type": "number", "example": 1 }
+    },
+
+    "biz": {
+      "_sliceType": "regular",
+      "_description": "Business/billing data: credit packages, plan tiers (personal and team), trials, SSO/SCIM subscriptions, auto top-up.",
+      "loadingKey": { "type": "string | null", "example": null },
+      "creditPackages": {
+        "type": "array",
+        "itemCount": 5,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.AddonCreditInfo" },
+          "plan": { "type": "number", "example": 101 },
+          "price": { "type": "number", "example": 20 },
+          "credits": { "type": "number", "example": 2000 }
+        }
+      },
+      "personalPlanTiers": {
+        "type": "array",
+        "itemCount": 39,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.MembershipTier" },
+          "plan": { "type": "number", "example": 0 },
+          "price": { "type": "number", "example": 0 },
+          "discountPrice": { "type": "number", "example": 0 },
+          "credits": { "type": "number", "example": 0 },
+          "interval": { "type": "string", "example": "" }
+        }
+      },
+      "teamPlanTiers": {
+        "type": "array",
+        "itemCount": 31,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.MembershipTier" },
+          "plan": { "type": "number", "example": 0 },
+          "price": { "type": "number", "example": 0 },
+          "discountPrice": { "type": "number", "example": 0 },
+          "credits": { "type": "number", "example": 0 },
+          "interval": { "type": "string", "example": "" }
+        }
+      },
+      "teamSSOSubscription": {
+        "type": "object",
+        "properties": {
+          "plan": { "type": "number", "example": 205 },
+          "price": { "type": "number", "example": 150 },
+          "discountPrice": { "type": "number", "example": 0 },
+          "credits": { "type": "number", "example": 0 }
+        }
+      },
+      "teamSCIMSubscription": {
+        "type": "object",
+        "properties": {
+          "plan": { "type": "number", "example": 250 },
+          "price": { "type": "number", "example": 150 },
+          "discountPrice": { "type": "number", "example": 0 },
+          "credits": { "type": "number", "example": 0 }
+        }
+      },
+      "trials": {
+        "type": "array",
+        "itemCount": 4,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.TrialInfo" },
+          "plan": { "type": "number", "example": 5 },
+          "days": { "type": "number", "example": 7 },
+          "credits": { "type": "number", "example": 500 }
+        }
+      },
+      "freeRefreshCredits": { "type": "number", "example": 1500 },
+      "stripeBillingLoading": { "type": "boolean", "example": false },
+      "userAutoTopupInfo": { "type": "object | null", "example": null },
+      "isSubscriptionLoading": { "type": "boolean", "example": false },
+      "selectedPlanKeyIndex": { "type": "number | null", "example": null },
+      "planPreviewDataLoadingMapForUpgrade": { "type": "object | null", "example": null },
+      "planPreviewDataMapForUpgrade": { "type": "object | null", "example": null },
+      "selectedPlanKeyForUpgrade": { "type": "string | null", "example": null }
+    },
+
+    "chat": {
+      "_sliceType": "regular",
+      "_description": "Chat input state, file attachments, slide templates, image styles, playbooks, editor content, data visualization, debug overrides.",
+      "files": { "type": "array", "example": [] },
+      "showSharePopover": { "type": "boolean", "example": false },
+      "taskMode": { "type": "string", "example": "agent" },
+      "inputMode": { "type": "string", "example": "text" },
+      "chatExtData": { "type": "object | null", "example": null },
+      "sendQuestionBehavior": { "type": "string | null", "example": null },
+      "slideTemplateList": {
+        "type": "array",
+        "itemCount": 27,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "session.v1.SlideTemplate" },
+          "uid": { "type": "string", "example": "vinyl_837a6d52-2e81-4abf-96cb-255ec70598c7" },
+          "official": { "type": "boolean", "example": true },
+          "isFree": { "type": "boolean", "example": true },
+          "name": { "type": "string", "example": "Vinyl" },
+          "cover": { "type": "string (URL)", "example": "https://files.manuscdn.com/slides_screenshots/..." },
+          "previewUrls": { "type": "array", "example": [] },
+          "imagePreviewUrls": {
+            "type": "array",
+            "itemSchema": {
+              "$typeName": { "type": "string", "example": "session.v1.ImagePreviewUrl" },
+              "thumbnail": { "type": "string (URL)" },
+              "raw": { "type": "string (URL)" }
+            }
+          },
+          "status": { "type": "number", "example": 1 },
+          "error": { "type": "string", "example": "" },
+          "isTeamShared": { "type": "boolean", "example": false },
+          "isOwner": { "type": "boolean", "example": false },
+          "slidesGenerateMode": { "type": "string", "example": "image" }
+        }
+      },
+      "slideTemplateListLoading": { "type": "boolean", "example": false },
+      "recommendedPlaybooksV2": {
+        "type": "object",
+        "properties": {
+          "playbooks": { "type": "array | null", "example": null },
+          "loading": { "type": "boolean", "example": false },
+          "total": { "type": "number", "example": 0 },
+          "currentPage": { "type": "number", "example": 0 }
+        }
+      },
+      "dataVisualization": { "type": "object | null", "example": null },
+      "debugModelOverride": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "example": false },
+          "config": { "type": "object | null", "example": null },
+          "configText": { "type": "string", "example": "" }
+        }
+      },
+      "isPageVisible": { "type": "boolean", "example": true },
+      "fileSuggestions": { "type": "array", "example": [] },
+      "inputPlaybookId": { "type": "string | null", "example": null },
+      "inputPlaybookTemplate": { "type": "string | null", "example": null },
+      "isAppBannerVisible": { "type": "boolean", "example": false },
+      "imageStyleList": {
+        "type": "array",
+        "itemCount": 15,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "session.v1.SessionTemplate" },
+          "uid": { "type": "string", "example": "NgBLuHEYAyFX6Hod3d89Pa" },
+          "templateId": { "type": "string", "example": "image-figurine-3d-template" },
+          "title": { "type": "string", "example": "3D Figurine" },
+          "description": { "type": "string", "example": "image" },
+          "official": { "type": "boolean", "example": true },
+          "templateType": { "type": "number", "example": 1 },
+          "cover": { "type": "string (URL)" },
+          "isFree": { "type": "boolean", "example": true },
+          "version": { "type": "number", "example": 1 },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "style": { "type": "string", "example": "figurine-3d" }
+            }
+          },
+          "prompt": { "type": "string", "example": "Create a 1/7 scale commercialized figurine..." },
+          "category": { "type": "string", "example": "" }
+        }
+      },
+      "imageStyleListLoading": { "type": "boolean", "example": false },
+      "agentModeIntroduceScene": { "type": "string | null", "example": null },
+      "pinnedSlideTemplateId": { "type": "string | null", "example": null },
+      "textContentLength": { "type": "number", "example": 0 },
+      "editorContent": {
+        "type": "object (TipTap/ProseMirror doc)",
+        "properties": {
+          "type": { "type": "string", "example": "doc" },
+          "content": {
+            "type": "array",
+            "itemSchema": {
+              "type": { "type": "string", "example": "paragraph" }
+            }
+          }
+        }
+      }
+    },
+
+    "codeViewer": {
+      "_sliceType": "regular",
+      "_description": "Code viewer/editor state: directory tree, file tabs, file data, active tab.",
+      "rootDirectory": { "type": "string | null", "example": null },
+      "directoryList": { "type": "array", "example": [] },
+      "directoryMetaData": {
+        "type": "object (dynamic map keyed by directory path)",
+        "example": {
+          "client/": { "expanded": true },
+          "client/src/": { "expanded": true }
+        }
+      },
+      "loadDirectoryLoading": { "type": "boolean", "example": true },
+      "fileLoadingMap": { "type": "object (dynamic map)", "example": {} },
+      "fileDataSource": { "type": "object (dynamic map)", "example": {} },
+      "fileTabList": { "type": "array", "example": [] },
+      "activeTabId": { "type": "string | null", "example": null },
+      "userClickedFileTab": { "type": "boolean", "example": false }
+    },
+
+    "community": {
+      "_sliceType": "regular",
+      "_description": "Community/explore page data source and grouping.",
+      "dataSource": { "type": "array", "example": [] },
+      "isDataSourceLoading": { "type": "boolean", "example": true },
+      "groupedTotalMap": { "type": "object (dynamic map)", "example": {} },
+      "groupedIds": { "type": "object (dynamic map)", "example": {} }
+    },
+
+    "configs": {
+      "_sliceType": "regular",
+      "_description": "User-level client configuration and preferences persisted locally.",
+      "sessionListPinned": { "type": "boolean", "example": true },
+      "agentWorkspaceAutoExpanded": { "type": "boolean", "example": true },
+      "automaticallyLearnKnowledge": { "type": "boolean", "example": true },
+      "theme": { "type": "string", "example": "system", "possibleValues": ["system", "light", "dark"] },
+      "clientId": { "type": "string", "example": "ZlqkI7Enf0NaqoJnBN0vG5" },
+      "gotoComputerTipsShowed": { "type": "boolean", "example": false },
+      "disableContextExpensiveErrorSessions": { "type": "array<string>", "example": [] },
+      "invitationCodeLength": { "type": "number", "example": 1 },
+      "mailManusCardShowed": { "type": "boolean", "example": true },
+      "chatSidebarMode": { "type": "string", "example": "sidebar" },
+      "firstClickWorkflowEmailAddButton": { "type": "boolean", "example": true }
+    },
+
+    "connectors": {
+      "_sliceType": "regular",
+      "_description": "Installed/available connectors (integrations), GitHub repos, temporary overrides, search, email/calendar confirmation.",
+      "connectors": {
+        "type": "array",
+        "itemCount": 78,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "connectors.v1.Connector" },
+          "userId": { "type": "string", "example": "" },
+          "uid": { "type": "string (UUID)", "example": "be268223-40b2-4f3c-a907-c12eb1699283" },
+          "type": { "type": "number", "example": 1 },
+          "name": { "type": "string", "example": "My Browser" },
+          "iconUrl": { "type": "string (URL)" },
+          "brief": { "type": "string", "example": "Access the web on your own browser" },
+          "order": { "type": "number", "example": 8 },
+          "category": { "type": "string", "example": "Developer" },
+          "connectorInfo": {
+            "type": "array",
+            "itemSchema": {
+              "$typeName": { "type": "string", "example": "connectors.v1.ConnectorInfoItem" },
+              "label": { "type": "string", "example": "Author" },
+              "value": { "type": "string", "example": "Manus" },
+              "link": { "type": "string", "example": "" }
+            }
+          },
+          "isInstalled": { "type": "boolean", "example": false },
+          "isEnabled": { "type": "boolean", "example": false },
+          "displayGroup": { "type": "number", "example": 1 },
+          "isPublished": { "type": "boolean", "example": true },
+          "isTranslated": { "type": "boolean", "example": true },
+          "scopes": { "type": "array", "example": [] },
+          "iconUrlDark": { "type": "string (URL)" },
+          "description": { "type": "string" },
+          "createdAt": { "type": "object (google.protobuf.Timestamp)" },
+          "updatedAt": { "type": "object (google.protobuf.Timestamp)" },
+          "builtConfig": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string", "example": "connectors.v1.BuiltinConfig" },
+              "builtIn": { "type": "number", "example": 10 },
+              "githubRepo": { "type": "array", "example": [] }
+            }
+          }
+        }
+      },
+      "githubRepositories": { "type": "array", "example": [] },
+      "githubRepositoriesLoading": { "type": "boolean", "example": false },
+      "temporaryEnabledOverrides": { "type": "object (dynamic map)", "example": {} },
+      "temporaryGithubRepositories": { "type": "object (dynamic map)", "example": {} },
+      "searchQuery": { "type": "string", "example": "" },
+      "multipleEmailConfirmedInfo": { "type": "object (dynamic map)", "example": {} },
+      "multipleCalendarConfirmedInfo": { "type": "object (dynamic map)", "example": {} }
+    },
+
+    "enterpriseTeam": {
+      "_sliceType": "regular",
+      "_description": "Enterprise team management: API keys and audit logs.",
+      "apiKeys": { "type": "array | null", "example": null },
+      "auditLogs": { "type": "array | null", "example": null }
+    },
+
+    "example": {
+      "_sliceType": "regular",
+      "_description": "Example/template prompts list for the homepage.",
+      "exampleList": { "type": "array", "example": [] },
+      "exampleListLoading": { "type": "boolean", "example": false }
+    },
+
+    "experiment": {
+      "_sliceType": "regular",
+      "_description": "A/B experiment feature flags. Frontend variants (from SDK) and backend variants (from server).",
+      "variants": {
+        "type": "object (dynamic map keyed by experiment name)",
+        "_observedKeys": [
+          "agent_feature_v7", "agent_feature_v13", "agent_feature_v15", "agent_feature_v16",
+          "agent_feature_v17", "agent_feature_v22", "agent_feature_v24", "agent_feature_v25",
+          "agent_feature_v31", "agent_feature_v32", "agent_feature_v35", "agent_feature_v38",
+          "agent_feature_v44", "agent_feature_v48", "agent_feature_v49", "agent_feature_v53",
+          "agent_feature_v54", "agent_feature_v56", "agent_feature_v57", "agent_feature_v58",
+          "agent_feature_v59", "agent_feature_v60", "agent_feature_v61", "agent_feature_v62",
+          "agent_feature_v63", "agent_feature_v66", "agent_feature_v68", "agent_feature_v71",
+          "agent_feature_v72"
+        ],
+        "itemSchema": {
+          "key": { "type": "string", "example": "treatment", "possibleValues": ["treatment", "control", "off", "parallel", "<custom hash>"] },
+          "value": { "type": "string | null", "example": "treatment" },
+          "expKey": { "type": "string", "example": "exp-1" },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "evaluationId": { "type": "string", "example": "1462734336398_1770456489774_9805" },
+              "experimentKey": { "type": "string", "example": "exp-1" }
+            }
+          }
+        }
+      },
+      "backendVariants": {
+        "type": "object (dynamic map keyed by experiment name)",
+        "_observedKeys": [
+          "202510v10", "202510v5", "202511v3", "202512v1", "202512v6", "202512v7",
+          "202601v2", "agent_feature_v46", "agent_feature_v50", "agent_feature_v51",
+          "agent_feature_v55", "agent_feature_v67", "agent_feature_v69"
+        ],
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.ExperimentVar" },
+          "key": { "type": "string", "example": "off" },
+          "value": { "type": "string", "example": "" },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "default": { "type": "boolean (optional)", "example": true },
+              "evaluationId": { "type": "string", "example": "1462734336398_1770457445729_8020" },
+              "experimentKey": { "type": "string (optional)", "example": "exp-1" },
+              "testInstrumentation": { "type": "boolean (optional)", "example": true }
+            }
+          }
+        }
+      }
+    },
+
+    "fileConnector": {
+      "_sliceType": "regular",
+      "_description": "File storage connectors (Google Drive, OneDrive, Gmail, Calendar, GitHub, Figma, Outlook).",
+      "fileConnectorList": {
+        "type": "array",
+        "itemCount": 9,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "app_oauth.v1.ConnectAPP" },
+          "type": { "type": "string", "example": "google_drive", "observedValues": ["google_drive", "one_drive_personal", "one_drive_business", "google_gmail", "google_calendar", "github", "figma", "microsoft_outlook", "microsoft_calendar"] },
+          "connected": { "type": "boolean", "example": false },
+          "appType": { "type": "number", "example": 1 },
+          "errCode": { "type": "number", "example": 1 }
+        }
+      },
+      "fileConnectorListLoading": { "type": "boolean", "example": false }
+    },
+
+    "fileManagement": {
+      "_sliceType": "regular",
+      "_description": "File management panel: spaces, session file list, download mode, Google Drive picker, space editing.",
+      "spaces": { "type": "array", "example": [] },
+      "spacesLoading": { "type": "boolean", "example": false },
+      "fileTab": { "type": "string", "example": "all" },
+      "isDownloadMode": { "type": "boolean", "example": false },
+      "selectedFiles": { "type": "array", "example": [] },
+      "sessionFileList": {
+        "type": "array",
+        "itemCount": 11,
+        "itemSchema": {
+          "raw": {
+            "type": "array",
+            "itemSchema": {
+              "type": { "type": "string", "example": "tool_call_text_edit_file" },
+              "eventId": { "type": "string", "example": "ccFtgBqM2whOYEAGQlr4WE" },
+              "path": { "type": "string", "example": "/home/ubuntu/upload/state(7).json" },
+              "filename": { "type": "string", "example": "state(7).json" },
+              "fileContent": { "type": "string" },
+              "url": { "type": "string (CDN URL)" }
+            }
+          },
+          "category": { "type": "string", "example": "code" },
+          "displayFilename": { "type": "string", "example": "state(7).json" },
+          "iconType": { "type": "string", "example": "code" },
+          "id": { "type": "string", "example": "RTI3WrlJ8LavQM0v4geXkF-/home/ubuntu/upload/state(7).json" },
+          "chatLocationEventId": { "type": "string" },
+          "lastUpdatedAt": { "type": "number (epoch ms)", "example": 1770456582000 },
+          "isSynced": { "type": "boolean", "example": true },
+          "isBlocked": { "type": "boolean", "example": false },
+          "sharedAt": { "type": "number", "example": 0 }
+        }
+      },
+      "initSessionFileListLoading": { "type": "boolean", "example": false },
+      "showGoogleDrivePicker": { "type": "boolean", "example": false },
+      "googleDrivePickerOptions": { "type": "object | null", "example": null },
+      "spaceEditCode": { "type": "string", "example": "bJcCNiPrToY9GxBiM44EAx" },
+      "spacePreviewerEditMode": { "type": "boolean", "example": false },
+      "tempActiveDeployId": { "type": "string | null", "example": null },
+      "tempSpaceId": { "type": "string | null", "example": null }
+    },
+
+    "filePreviewer": {
+      "_sliceType": "regular",
+      "_description": "File previewer/editor state: preview data, save status, file history, sharing, fullscreen, slides.",
+      "mode": { "type": "string", "example": "preview" },
+      "previewData": { "type": "object | null", "example": null },
+      "loading": { "type": "boolean", "example": false },
+      "saveStatus": { "type": "string", "example": "default" },
+      "downloading": { "type": "boolean", "example": false },
+      "fileHistory": { "type": "array | null", "example": null },
+      "currentHistoryVersionUid": { "type": "string | null", "example": null },
+      "syncingFile": { "type": "boolean", "example": false },
+      "exitEditLock": { "type": "boolean", "example": false },
+      "autoOpenSharePopover": { "type": "boolean", "example": false },
+      "sharePopoverVisible": { "type": "boolean", "example": false },
+      "fullscreen": { "type": "boolean", "example": false },
+      "currentSlideId": { "type": "string | null", "example": null }
+    },
+
+    "fileShare": {
+      "_sliceType": "regular",
+      "_description": "Public file sharing state.",
+      "shareId": { "type": "string", "example": "" },
+      "shareInfo": { "type": "object | null", "example": null },
+      "loading": { "type": "boolean", "example": true },
+      "error": { "type": "string", "example": "" },
+      "fileInfo": { "type": "object | null", "example": null },
+      "downloading": { "type": "boolean", "example": false }
+    },
+
+    "guestPage": {
+      "_sliceType": "regular",
+      "_description": "Guest/unauthenticated page flag.",
+      "isInGuestPage": { "type": "boolean", "example": false }
+    },
+
+    "knowledge": {
+      "_sliceType": "regular",
+      "_description": "User knowledge base: list, loading state, suggested knowledge map.",
+      "userKnowledgeListLoading": { "type": "boolean", "example": false },
+      "suggestedKnowledgeMap": { "type": "object (dynamic map)", "example": {} },
+      "userKnowledgeList": { "type": "array", "example": [] },
+      "userKnowledgeTotal": { "type": "number", "example": 0 }
+    },
+
+    "library": {
+      "_sliceType": "regular",
+      "_description": "Attachment library: filters, lists, groups, favorites, search, view type.",
+      "filterDocType": { "type": "number", "example": 0 },
+      "attachmentList": { "type": "array", "example": [] },
+      "attachmentListTotal": { "type": "number", "example": 0 },
+      "attachmentListLoading": { "type": "boolean", "example": false },
+      "attachmentGroupListLoading": { "type": "boolean", "example": false },
+      "attachmentGroupListTotal": { "type": "number", "example": 0 },
+      "attachmentGroupList": { "type": "array", "example": [] },
+      "isFavorite": { "type": "boolean", "example": false },
+      "searchValue": { "type": "string", "example": "" },
+      "viewType": { "type": "string", "example": "grid" }
+    },
+
+    "login": {
+      "_sliceType": "regular",
+      "_description": "Login/registration flow state: email, password, captcha, verification code, team/edu invitations.",
+      "step": { "type": "string", "example": "emailCheck" },
+      "email": { "type": "string", "example": "" },
+      "emailError": { "type": "string", "example": "" },
+      "password": { "type": "string", "example": "" },
+      "passwordError": { "type": "string", "example": "" },
+      "captchaData": { "type": "object | null", "example": null },
+      "tempToken": { "type": "string", "example": "" },
+      "loadingEmailCheck": { "type": "boolean", "example": false },
+      "loadingEmailLogin": { "type": "boolean", "example": false },
+      "loadingEmailRegister": { "type": "boolean", "example": false },
+      "loadingEmailCodeCheck": { "type": "boolean", "example": false },
+      "loginPlatform": { "type": "string | null", "example": null },
+      "verifyCode": { "type": "string", "example": "" },
+      "verifyCodeError": { "type": "string", "example": "" },
+      "verifyCodeTimeout": { "type": "number", "example": 60 },
+      "lastSendTime": { "type": "number", "example": 0 },
+      "focused": { "type": "boolean", "example": false },
+      "teamInvitationInfo": { "type": "object | null", "example": null },
+      "invitationInfo": { "type": "object | null", "example": null },
+      "eduInfo": { "type": "object | null", "example": null }
+    },
+
+    "mailManus": {
+      "_sliceType": "regular",
+      "_description": "Manus agent email configuration: agent email info, whitelist, sub-emails, unread status.",
+      "agentEmailInfo": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "user.v1.AgentEmailInfo" },
+          "email": { "type": "string", "example": "tattarifi165@manus.bot" },
+          "prompt": { "type": "string", "example": "" },
+          "emailType": { "type": "number", "example": 0 },
+          "canEditAgentEmail": { "type": "boolean", "example": true },
+          "createdAt": { "type": "object (google.protobuf.Timestamp)" },
+          "canEditTime": { "type": "object (google.protobuf.Timestamp)" }
+        }
+      },
+      "emailWhiteList": {
+        "type": "array",
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "user.v1.AgentEmailWhiteListInfo" },
+          "email": { "type": "string", "example": "tattarifi@fxcc.co" },
+          "createdAt": { "type": "object (google.protobuf.Timestamp)" }
+        }
+      },
+      "canEditAgentEmail": { "type": "boolean", "example": true },
+      "canEditTime": { "type": "object (google.protobuf.Timestamp)" },
+      "agentSubEmails": { "type": "array", "example": [] },
+      "hasUnreadUnknownEmail": { "type": "boolean", "example": false },
+      "initTab": { "type": "string", "example": "settings" }
+    },
+
+    "mapReduce": {
+      "_sliceType": "regular",
+      "_description": "Map/reduce (parallel processing) UI state.",
+      "startLoading": { "type": "boolean", "example": false },
+      "isFullscreen": { "type": "boolean", "example": false }
+    },
+
+    "meeting": {
+      "_sliceType": "regular",
+      "_description": "Meeting feature introduction flag.",
+      "shouldShowMeetingIntro": { "type": "boolean", "example": false }
+    },
+
+    "myBrowser": {
+      "_sliceType": "regular",
+      "_description": "User's personal browser extension settings.",
+      "browserSettings": { "type": "object | null", "example": null },
+      "allowInstall": { "type": "boolean", "example": true }
+    },
+
+    "navbar": {
+      "_sliceType": "regular",
+      "_description": "Navigation bar state: active tab, hover, minimal mode.",
+      "tabKey": { "type": "string", "example": "task" },
+      "isNavbarHovering": { "type": "boolean", "example": false },
+      "isNavBarMinimal": { "type": "boolean", "example": false },
+      "isNavBarHoveringLocked": { "type": "boolean", "example": false }
+    },
+
+    "notification": {
+      "_sliceType": "regular",
+      "_description": "Notification system: connection status, categorized notifications, update page, read/unread state.",
+      "connectStatus": { "type": "string", "example": "connected" },
+      "connectError": { "type": "string | null", "example": null },
+      "isNotificationListVisible": { "type": "boolean", "example": false },
+      "categoryNotifications": {
+        "type": "object (map keyed by category number: 0, 1, 2)",
+        "properties": {
+          "0": {
+            "type": "array (general/product notifications)",
+            "itemSchema": {
+              "$typeName": { "type": "string", "example": "notifier.v1.NotificationItemV2" },
+              "uid": { "type": "string", "example": "R59zXYxTtJTxHvQzmYfkET" },
+              "type": { "type": "number", "example": 1 },
+              "interactionItems": { "type": "array", "example": [] },
+              "notificationCategory": { "type": "number", "example": 2 },
+              "templateUid": { "type": "string", "example": "skills" },
+              "isPopupUpdateLog": { "type": "boolean", "example": true },
+              "detail": {
+                "type": "object",
+                "properties": {
+                  "$typeName": { "type": "string", "example": "notifier.v1.NotificationItemDetail" },
+                  "title": { "type": "string", "example": "Introducing Manus Skills" },
+                  "content": { "type": "string", "example": "Turn your AI into any expert you need..." },
+                  "data": { "type": "array", "example": [] },
+                  "button": {
+                    "type": "object",
+                    "properties": {
+                      "$typeName": { "type": "string", "example": "notifier.v1.ButtonInfo" },
+                      "buttonText": { "type": "string", "example": "" },
+                      "type": { "type": "string", "example": "" },
+                      "target": { "type": "string", "example": "" },
+                      "prompt": { "type": "string", "example": "" },
+                      "tool": { "type": "number", "example": 0 },
+                      "showInFrontend": { "type": "boolean", "example": false }
+                    }
+                  },
+                  "media": {
+                    "type": "object",
+                    "properties": {
+                      "$typeName": { "type": "string", "example": "notifier.v1.MediaInfo" },
+                      "type": { "type": "string", "example": "video" },
+                      "url": { "type": "string (URL)" },
+                      "coverUrl": { "type": "string (URL)" }
+                    }
+                  },
+                  "cancelButton": {
+                    "type": "object (same schema as button)"
+                  }
+                }
+              },
+              "createAt": { "type": "object (google.protobuf.Timestamp)" }
+            }
+          },
+          "1": { "type": "array", "example": [] },
+          "2": { "type": "array", "example": [] }
+        }
+      },
+      "categoryHasMore": {
+        "type": "object",
+        "properties": {
+          "0": { "type": "boolean", "example": true },
+          "1": { "type": "boolean", "example": true },
+          "2": { "type": "boolean", "example": true }
+        }
+      },
+      "notificationTab": { "type": "number", "example": 0 },
+      "fetchNotificationLoading": { "type": "boolean", "example": false },
+      "hasNew": { "type": "boolean", "example": false },
+      "updatePageNotificationList": { "type": "array", "example": [] },
+      "updatePageHasMore": { "type": "boolean", "example": false },
+      "updatePageHasNew": { "type": "boolean", "example": false },
+      "updatePageLoading": { "type": "boolean", "example": true }
+    },
+
+    "onboarding": {
+      "_sliceType": "regular",
+      "_description": "User onboarding flow state.",
+      "currentStep": { "type": "string | null", "example": null },
+      "userType": { "type": "string | null", "example": null },
+      "teamCandidateList": { "type": "array<string>", "example": ["", "", ""] }
+    },
+
+    "products": {
+      "_sliceType": "regular",
+      "_description": "Product/playbook creation state.",
+      "files": { "type": "array", "example": [] },
+      "inputValue": { "type": "string", "example": "" },
+      "playbookInfo": { "type": "object | null", "example": null }
+    },
+
+    "project": {
+      "_sliceType": "regular",
+      "_description": "Project management: list, current project, loading states.",
+      "projectList": { "type": "array", "example": [] },
+      "currentProjectId": { "type": "string | null", "example": null },
+      "initProjectLoading": { "type": "boolean", "example": false },
+      "currentProjectSessionLoading": { "type": "boolean", "example": false },
+      "currentProjectSessionTotal": { "type": "number", "example": 0 }
+    },
+
+    "scheduledTask": {
+      "_sliceType": "regular",
+      "_description": "Scheduled/recurring task management.",
+      "allScheduleList": { "type": "array", "example": [] },
+      "chatScheduledTaskIds": { "type": "array<string>", "example": [] }
+    },
+
+    "sessionSwitch": {
+      "_sliceType": "regular",
+      "_description": "Quick session switcher (Cmd+K style) state.",
+      "keyword": { "type": "string", "example": "" },
+      "sessions": { "type": "array", "example": [] }
+    },
+
+    "sessions": {
+      "_sliceType": "regular",
+      "_description": "Core session management: current session, session list (normalized entity adapter), grouped sessions, collaborators, segments, sharing.",
+      "currentSessionId": { "type": "string", "example": "RTI3WrlJ8LavQM0v4geXkF" },
+      "navTab": { "type": "string", "example": "all" },
+      "searchValue": { "type": "string", "example": "" },
+      "isSearchMode": { "type": "boolean", "example": false },
+      "isShareMode": { "type": "boolean", "example": false },
+      "sessions": {
+        "type": "object (RTK EntityAdapter normalized state)",
+        "properties": {
+          "ids": { "type": "array<string>", "example": ["VnC5qrRUgYcYAWERIqUR1y", "RTI3WrlJ8LavQM0v4geXkF"] },
+          "entities": {
+            "type": "object (map keyed by session uid)",
+            "itemSchema": {
+              "$typeName": { "type": "string", "example": "session.v1.AgentSession" },
+              "uid": { "type": "string", "example": "VnC5qrRUgYcYAWERIqUR1y" },
+              "userId": { "type": "string", "example": "310519663323253630" },
+              "title": { "type": "string", "example": "Is Manus.im Using a Framework or Library for UI?" },
+              "icon": { "type": "string", "example": "" },
+              "lastDisplayMessage": { "type": "string" },
+              "status": { "type": "number", "example": 8 },
+              "unreadMessageCount": { "type": "number", "example": 0 },
+              "isFavorite": { "type": "boolean", "example": false },
+              "isShared": { "type": "boolean", "example": false },
+              "agentTaskMode": { "type": "number", "example": 1 },
+              "costedCredits": { "type": "number", "example": 1164 },
+              "feedbackSubmitted": { "type": "boolean", "example": false },
+              "publishedToCommunity": { "type": "boolean", "example": false },
+              "auditStatus": { "type": "number", "example": 0 },
+              "isBlocked": { "type": "boolean", "example": false },
+              "feedbackEventIds": { "type": "array", "example": [] },
+              "collaborators": {
+                "type": "array",
+                "itemSchema": {
+                  "$typeName": { "type": "string", "example": "session.v1.Collaborator" },
+                  "email": { "type": "string", "example": "tattarifi@fxcc.co" },
+                  "permission": { "type": "number", "example": 2 },
+                  "isOwner": { "type": "boolean", "example": true },
+                  "status": { "type": "number", "example": 0 },
+                  "isTeamMember": { "type": "boolean", "example": false },
+                  "sessionUid": { "type": "string" },
+                  "userId": { "type": "string" },
+                  "name": { "type": "string", "example": "Thayer Attarifi" },
+                  "avatar": { "type": "string (URL)" },
+                  "createdAt": { "type": "object (google.protobuf.Timestamp)" }
+                }
+              },
+              "lastMessageTime": { "type": "object (google.protobuf.Timestamp)" },
+              "lastReadAt": { "type": "object (google.protobuf.Timestamp)" },
+              "createdAt": { "type": "object (google.protobuf.Timestamp)" },
+              "updatedAt": { "type": "object (google.protobuf.Timestamp)" },
+              "iconInfo": {
+                "type": "object",
+                "properties": {
+                  "$typeName": { "type": "string", "example": "session.v1.IconInfo" },
+                  "url": { "type": "string (URL)" },
+                  "bgColorLight": { "type": "string", "example": "#7D4D4D" },
+                  "bgColorDark": { "type": "string", "example": "#36B023" }
+                }
+              },
+              "displayContent": { "type": "string", "example": "" },
+              "displayEventId": { "type": "string", "example": "" },
+              "displayTitle": { "type": "string", "example": "" },
+              "scheduledTask": { "type": "boolean", "example": false },
+              "createFrom": {
+                "type": "object",
+                "properties": {
+                  "$typeName": { "type": "string", "example": "session.v1.CreateFrom" },
+                  "source": { "type": "number", "example": 1 },
+                  "deleted": { "type": "boolean", "example": false }
+                }
+              },
+              "slidesImages": { "type": "array", "example": [] },
+              "webpageScreenshots": { "type": "object", "example": {} },
+              "newMessageCount": { "type": "number", "example": 0 }
+            }
+          }
+        }
+      },
+      "loadSessionLoading": { "type": "boolean", "example": false },
+      "isShareFileMode": { "type": "boolean", "example": false },
+      "loadSessionDetailLoading": { "type": "boolean", "example": false },
+      "swapSessionDetailMap": {
+        "type": "object (dynamic map keyed by session uid)",
+        "itemSchema": {
+          "uid": { "type": "string" },
+          "title": { "type": "string" },
+          "iconInfo": {
+            "type": "object",
+            "properties": {
+              "$typeName": { "type": "string" },
+              "url": { "type": "string" },
+              "bgColorLight": { "type": "string" },
+              "bgColorDark": { "type": "string" }
+            }
+          }
+        }
+      },
+      "groupedSessionState": {
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "object",
+            "properties": {
+              "ids": { "type": "array<string>" },
+              "initialized": { "type": "boolean", "example": true },
+              "loading": { "type": "boolean", "example": false },
+              "total": { "type": "number", "example": 2 }
+            }
+          },
+          "noProject": {
+            "type": "object",
+            "properties": {
+              "ids": { "type": "array<string>" },
+              "loading": { "type": "boolean", "example": false },
+              "initialized": { "type": "boolean", "example": false },
+              "total": { "type": "number", "example": 0 }
+            }
+          },
+          "favorites": {
+            "type": "object (same schema as noProject)"
+          },
+          "scheduled": {
+            "type": "object (same schema as noProject)"
+          },
+          "shared": {
+            "type": "object (same schema as noProject)"
+          }
+        }
+      },
+      "allCollaborators": {
+        "type": "object (RTK EntityAdapter normalized state)",
+        "properties": {
+          "ids": { "type": "array<string>", "example": ["310519663323253630"] },
+          "entities": {
+            "type": "object (map keyed by userId)",
+            "itemSchema": {
+              "$typeName": { "type": "string", "example": "session.v1.Collaborator" },
+              "email": { "type": "string" },
+              "permission": { "type": "number" },
+              "isOwner": { "type": "boolean" },
+              "status": { "type": "number" },
+              "isTeamMember": { "type": "boolean" },
+              "sessionUid": { "type": "string" },
+              "userId": { "type": "string" },
+              "name": { "type": "string" },
+              "avatar": { "type": "string (URL)" },
+              "createdAt": { "type": "object (google.protobuf.Timestamp)" }
+            }
+          }
+        }
+      },
+      "loadTopSegmentsLoading": { "type": "boolean", "example": false },
+      "loadBottomSegmentsLoading": { "type": "boolean", "example": false },
+      "segmentEndpoints": { "type": "array", "example": [] },
+      "scheduledTaskSessions": { "type": "array | null", "example": null },
+      "sharingSessionUid": { "type": "string | null", "example": null },
+      "unreadMessageIndex": { "type": "number | null", "example": null },
+      "isSharePopoverVisible": { "type": "boolean", "example": false }
+    },
+
+    "skills": {
+      "_sliceType": "regular",
+      "_description": "User and official skills/plugins management.",
+      "userAddedSkills": {
+        "type": "array",
+        "itemCount": 4,
+        "itemSchema": {
+          "$typeName": { "type": "string", "example": "skill.v1.Skill" },
+          "id": { "type": "string", "example": "EL5yBdm22CwMBYRKvv2NHg" },
+          "name": { "type": "string", "example": "video-generator" },
+          "description": { "type": "string" },
+          "enabled": { "type": "boolean", "example": false },
+          "version": { "type": "string", "example": "NjdyvTjjS6kLTvVDsfXheX" },
+          "ownerType": { "type": "number", "example": 2 },
+          "type": { "type": "number", "example": 3 },
+          "displayName": { "type": "string", "example": "video-generator" },
+          "translations": { "type": "array", "example": [] },
+          "sortOrder": { "type": "string", "example": "n6" },
+          "defaultEnable": { "type": "boolean", "example": false },
+          "defaultAdd": { "type": "boolean", "example": true },
+          "updatedAt": { "type": "object (google.protobuf.Timestamp)" },
+          "added": { "type": "boolean (optional)", "example": true }
+        },
+        "_observedSkills": ["video-generator", "skill-creator", "stock-analysis", "similarweb-analytics"]
+      },
+      "officialSkills": {
+        "type": "array",
+        "itemCount": 7,
+        "itemSchema": "(same as userAddedSkills itemSchema)",
+        "_observedSkills": ["skill-creator", "github-gem-seeker", "internet-skill-finder", "similarweb-analytics", "stock-analysis", "excel-generator", "video-generator"]
+      },
+      "isLoading": { "type": "boolean", "example": false },
+      "searchQuery": { "type": "string", "example": "" }
+    },
+
+    "slideEditor": {
+      "_sliceType": "regular",
+      "_description": "Slide editor state for presentation editing.",
+      "slides": { "type": "array", "example": [] },
+      "sessionUid": { "type": "string | null", "example": null }
+    },
+
+    "team": {
+      "_sliceType": "regular",
+      "_description": "Team management: team list, members, renewal settings, SSO/SCIM, access controls, asset sharing, enterprise banner.",
+      "listTeamResponse": {
+        "type": "object",
+        "properties": {
+          "$typeName": { "type": "string", "example": "team.v1.ListTeamResponse" },
+          "teams": { "type": "array", "example": [] },
+          "totalCount": { "type": "number", "example": 0 },
+          "userId": { "type": "string", "example": "310519663323253630" },
+          "userName": { "type": "string", "example": "Thayer Attarifi" },
+          "userAvatar": { "type": "string (URL)" }
+        }
+      },
+      "initTeamLoading": { "type": "boolean", "example": false },
+      "teamListLoading": { "type": "boolean", "example": false },
+      "currentTeam": { "type": "object | null", "example": null },
+      "teamMemberList": { "type": "array", "example": [] },
+      "teamRenewalSettings": { "type": "object | null", "example": null },
+      "teamRenewalSettingsLoading": { "type": "boolean", "example": false },
+      "ssoInfo": {
+        "type": "object",
+        "properties": {
+          "ssoId": { "type": "string", "example": "" },
+          "enabled": { "type": "boolean", "example": false },
+          "expired": { "type": "boolean", "example": false },
+          "connection": { "type": "boolean", "example": false },
+          "domains": { "type": "array", "example": [] },
+          "memberAddPolicy": { "type": "number", "example": 1 },
+          "howMemberCanLogin": { "type": "number", "example": 1 }
+        }
+      },
+      "ssoInfoLoading": { "type": "boolean", "example": false },
+      "scimUnmanagedAccounts": { "type": "array", "example": [] },
+      "accessControls": { "type": "object | null", "example": null },
+      "assetShareList": { "type": "array", "example": [] },
+      "enterpriseTeamBanner": { "type": "object | null", "example": null }
+    },
+
+    "timeline": {
+      "_sliceType": "regular",
+      "_description": "Timeline/replay state: segment events map, loading map, playback percentage.",
+      "segmentEventsMap": { "type": "object (dynamic map keyed by segment ID)", "example": {} },
+      "segmentEventsLoadingMap": { "type": "object (dynamic map keyed by segment ID)", "example": {} },
+      "percentage": { "type": "number", "example": 100 }
+    },
+
+    "ui": {
+      "_sliceType": "regular",
+      "_description": "Global UI state: responsive layout, sidebar dimensions, window width, feature introductions.",
+      "isMobile": { "type": "boolean", "example": false },
+      "chatSidebarPercentage": { "type": "number | null", "example": null },
+      "chatSidebarWidth": { "type": "number", "example": 746 },
+      "windowWidth": { "type": "number", "example": 1792 },
+      "showAppDownloadMask": { "type": "boolean", "example": false },
+      "isShowMaxModeIntroduce": { "type": "boolean", "example": false },
+      "isWebDevSidebarFullscreen": { "type": "boolean", "example": false }
+    },
+
+    "webDev": {
+      "_sliceType": "regular",
+      "_description": "Web development workspace: project, preview, database, settings, storage, webview, mobile publishing, git sync, iOS publishing, code editor tabs.",
+      "isFullscreenMode": { "type": "boolean", "example": false },
+      "userClickedTab": { "type": "boolean", "example": false },
+      "activeTab": { "type": "string", "example": "preview" },
+      "settingSubTab": { "type": "string | null", "example": null },
+      "mountedTabs": {
+        "type": "object",
+        "properties": {
+          "preview": { "type": "boolean", "example": true },
+          "database": { "type": "boolean", "example": false },
+          "settings": { "type": "boolean", "example": false },
+          "dashboard": { "type": "boolean", "example": false },
+          "code": { "type": "boolean", "example": false },
+          "file": { "type": "boolean", "example": false }
+        }
+      },
+      "publishPopoverVisible": { "type": "boolean", "example": false },
+      "initServerProjectLoading": { "type": "boolean", "example": false },
+      "publishButtonLoading": { "type": "boolean", "example": false },
+      "previewOldVersion": { "type": "object | null", "example": null },
+      "previewOldVersionLoading": { "type": "boolean", "example": false },
+      "editMode": { "type": "boolean", "example": false },
+      "project": { "type": "object | null", "example": null },
+      "initPreviewPath": { "type": "string", "example": "" },
+      "cachedInviteUsers": { "type": "array", "example": [] },
+      "currentProjectInviteUsers": { "type": "array", "example": [] },
+      "projectInited": { "type": "boolean", "example": false },
+      "preview": {
+        "type": "object",
+        "properties": {
+          "isHistoricalVersion": { "type": "boolean", "example": false }
+        }
+      },
+      "database": {
+        "type": "object",
+        "properties": {
+          "tableList": { "type": "array", "example": [] },
+          "activeTableId": { "type": "string | null", "example": null },
+          "isLoadingTableList": { "type": "boolean", "example": true },
+          "tableData": {
+            "type": "object",
+            "properties": {
+              "data": { "type": "array", "example": [] },
+              "hasMoreData": { "type": "boolean", "example": false },
+              "totalRows": { "type": "number", "example": 0 },
+              "isLoading": { "type": "boolean", "example": false },
+              "isLoadingMore": { "type": "boolean", "example": false }
+            }
+          }
+        }
+      },
+      "setting": {
+        "type": "object",
+        "properties": {
+          "customDomains": { "type": "array", "example": [] },
+          "purchasedDomains": { "type": "array", "example": [] },
+          "selectedPurchasedDomainName": { "type": "string | null", "example": null },
+          "pendingPurchasedDomain": { "type": "object | null", "example": null },
+          "selectedDomainProviderId": { "type": "string | null", "example": null }
+        }
+      },
+      "storage": {
+        "type": "object",
+        "properties": {
+          "tableDataLoading": { "type": "boolean", "example": true },
+          "files": { "type": "array", "example": [] },
+          "originalFiles": { "type": "array", "example": [] },
+          "currentPath": { "type": "string", "example": "" },
+          "selectedRows": { "type": "array", "example": [] },
+          "continuationToken": { "type": "string", "example": "" },
+          "hasMore": { "type": "boolean", "example": false },
+          "tableOrderBy": { "type": "object | null", "example": null }
+        }
+      },
+      "webview": {
+        "type": "object",
+        "properties": {
+          "isInWebView": { "type": "boolean", "example": false },
+          "projectDetailFromAgent": { "type": "object | null", "example": null },
+          "webdevHomepageUpdated": { "type": "boolean", "example": false },
+          "needHiddenHeader": { "type": "boolean", "example": false }
+        }
+      },
+      "lastFeatureConfirm": {
+        "type": "object",
+        "properties": {
+          "features": { "type": "array", "example": [] }
+        }
+      },
+      "fullStyleSelections": { "type": "array", "example": [] },
+      "mobilePreviewOnPhoneHidden": { "type": "boolean", "example": false },
+      "currentAppBuildingProgress": { "type": "object", "example": {} },
+      "iosBuildLogs": { "type": "string", "example": "" },
+      "iosBuildErrorMessage": { "type": "string | null", "example": null },
+      "updateCurrentApkVersion": { "type": "string | null", "example": null },
+      "updateCurrentAabVersion": { "type": "string | null", "example": null },
+      "updateCurrentIpaVersion": { "type": "string | null", "example": null },
+      "mobilePublishActiveTab": { "type": "string", "example": "android" },
+      "userExplicitlySetMobilePublishTab": { "type": "boolean", "example": false },
+      "previewerBadgeClosedList": { "type": "array", "example": [] },
+      "keepPublishPopoverOpen": { "type": "boolean", "example": false },
+      "gitSyncStatus": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string | null", "example": null },
+          "isLoading": { "type": "boolean", "example": false }
+        }
+      },
+      "gitRepoCreation": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "idle" }
+        }
+      },
+      "iosPublishFormData": {
+        "type": "object",
+        "properties": {
+          "appleAccount": {
+            "type": "object",
+            "properties": {
+              "email": { "type": "string", "example": "" },
+              "password": { "type": "string", "example": "" }
+            }
+          },
+          "expoToken": { "type": "string", "example": "" }
+        }
+      },
+      "iosFirstPublishStep": { "type": "string", "example": "checklist" }
+    },
+
+    "webDevUsage": {
+      "_sliceType": "regular",
+      "_description": "Web development usage/billing tracking.",
+      "usageInfo": { "type": "object | null", "example": null },
+      "usageDetail": { "type": "object | null", "example": null },
+      "usageDetailLoading": { "type": "boolean", "example": false },
+      "usageDetailExpandedProjects": { "type": "array", "example": [] },
+      "projectUsageStatus": { "type": "object | null", "example": null },
+      "manageBudgetLoading": { "type": "boolean", "example": false }
+    },
+
+    "webdevAuth": {
+      "_sliceType": "regular",
+      "_description": "Web development authentication state. Currently empty.",
+      "_note": "Empty object with 0 keys in the current state snapshot."
+    },
+
+    "websocket": {
+      "_sliceType": "regular",
+      "_description": "WebSocket connection and real-time event stream. Uses RTK EntityAdapter for normalized event storage. Contains all chat messages, tool calls, status updates, plan steps, etc.",
+      "ids": { "type": "array<string> (event IDs, 172 items in snapshot)", "example": ["ccFtgBqM2whOYEAGQlr4WE"] },
+      "entities": {
+        "type": "object (RTK EntityAdapter normalized map keyed by event ID)",
+        "_description": "Each entity wraps a real-time event from the WebSocket stream.",
+        "itemSchema": {
+          "type": { "type": "string", "example": "event" },
+          "timestamp": { "type": "number (epoch ms)", "example": 1770456578370 },
+          "event": {
+            "type": "object",
+            "_description": "The actual event payload. Structure varies by event type.",
+            "_observedEventTypes": ["chat", "explanation", "liveStatus", "newPlanStep", "planUpdate", "queueStatusChange", "sandboxUpdate", "statusUpdate", "taskModeChanged", "toolUsed"],
+            "commonProperties": {
+              "type": { "type": "string", "example": "chat" },
+              "timestamp": { "type": "number", "example": 1770456578370 },
+              "id": { "type": "string", "example": "ccFtgBqM2whOYEAGQlr4WE" }
+            },
+            "chatEventProperties": {
+              "sender": { "type": "string", "example": "user", "possibleValues": ["user", "agent"] },
+              "qualityMode": { "type": "string", "example": "user" },
+              "senderId": { "type": "string", "example": "310519663323253630" },
+              "messageType": { "type": "string", "example": "text" },
+              "content": { "type": "string" },
+              "contents": {
+                "type": "array",
+                "itemSchema": {
+                  "type": { "type": "string", "example": "text" },
+                  "value": { "type": "string" }
+                }
+              },
+              "attachments": {
+                "type": "array",
+                "itemSchema": {
+                  "contentLength": { "type": "number" },
+                  "contentType": { "type": "string" },
+                  "filename": { "type": "string" },
+                  "id": { "type": "string" },
+                  "path": { "type": "string" },
+                  "type": { "type": "string", "example": "file" },
+                  "url": { "type": "string (URL)" }
+                }
+              },
+              "extData": {
+                "type": "object",
+                "properties": {
+                  "capabilities": {
+                    "type": "object",
+                    "properties": {
+                      "enabledConnectors": { "type": "array" },
+                      "enabledSkills": {
+                        "type": "array",
+                        "itemSchema": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" }
+                        }
+                      }
+                    }
+                  },
+                  "mode": { "type": "string", "example": "lite" }
+                }
+              },
+              "taskMode": { "type": "string", "example": "standard" }
+            }
+          },
+          "messageStatus": { "type": "string", "example": "confirmed" },
+          "id": { "type": "string", "example": "ccFtgBqM2whOYEAGQlr4WE" },
+          "sessionId": { "type": "string", "example": "RTI3WrlJ8LavQM0v4geXkF" }
+        }
+      },
+      "status": { "type": "string", "example": "connected" },
+      "error": { "type": "string | null", "example": null },
+      "contextLengthStatus": { "type": "string", "example": "normal" },
+      "taskFinished": { "type": "boolean", "example": false },
+      "isVNCConnected": { "type": "boolean | null", "example": null },
+      "disableTimelineAutoUpdate": { "type": "boolean | null", "example": null }
+    }
+  },
+
+  "_summary": {
+    "rtkQueryAnalysis": {
+      "totalRtkQuerySlices": 1,
+      "sliceName": "api",
+      "reducerPath": "api",
+      "observedQueryEndpoints": ["getSessionFiles", "getSessionV2", "getPresignedUrl"],
+      "observedMutationEndpoints": ["uploadToS3", "completeUpload"],
+      "cacheConfig": {
+        "keepUnusedDataFor": 60,
+        "refetchOnFocus": false,
+        "refetchOnReconnect": false,
+        "refetchOnMountOrArgChange": false,
+        "invalidationBehavior": "delayed"
+      },
+      "providedTags": "empty (no cache tags observed)",
+      "activeSubscriptions": 3
+    },
+    "regularSliceAnalysis": {
+      "totalRegularSlices": 43,
+      "slicesUsingEntityAdapter": ["sessions (sessions.sessions)", "sessions (allCollaborators)", "websocket"],
+      "slicesWithProtobufTypes": ["auth", "biz", "connectors", "experiment", "fileConnector", "mailManus", "notification", "sessions", "skills", "team"],
+      "emptySlices": ["webdevAuth"],
+      "largestSlicesByKeyCount": {
+        "webDev": 38,
+        "chat": 22,
+        "login": 20,
+        "sessions": 19,
+        "aiCanvasEditor": 18,
+        "auth": 17,
+        "biz": 15,
+        "agentWorkspace": 15
+      }
+    },
+    "totalUniqueProperties": "700+ unique property paths across all slices",
+    "protobufTypeNames": [
+      "user.v1.UserInfoResponse",
+      "user.v1.TeamInfo",
+      "user.v1.FileUploadQuota",
+      "user.v1.MembershipInfo",
+      "user.v1.PersonalInvitationCodeInfo",
+      "user.v1.GetGlobalSettingsResponse",
+      "user.v1.GetAvailableCreditsResponse",
+      "user.v1.UserFlag",
+      "user.v1.GetUserClientConfigResponse",
+      "user.v1.CheckRegionResponse",
+      "user.v1.AddonCreditInfo",
+      "user.v1.MembershipTier",
+      "user.v1.TrialInfo",
+      "user.v1.AgentEmailInfo",
+      "user.v1.AgentEmailWhiteListInfo",
+      "user.v1.ExperimentVar",
+      "app_oauth.v1.ConnectAPP",
+      "connectors.v1.Connector",
+      "connectors.v1.ConnectorInfoItem",
+      "connectors.v1.BuiltinConfig",
+      "session.v1.AgentSession",
+      "session.v1.Collaborator",
+      "session.v1.IconInfo",
+      "session.v1.CreateFrom",
+      "session.v1.SlideTemplate",
+      "session.v1.ImagePreviewUrl",
+      "session.v1.SessionTemplate",
+      "skill.v1.Skill",
+      "team.v1.ListTeamResponse",
+      "notifier.v1.NotificationItemV2",
+      "notifier.v1.NotificationItemDetail",
+      "notifier.v1.ButtonInfo",
+      "notifier.v1.MediaInfo",
+      "google.protobuf.Timestamp"
+    ],
+    "websocketEventTypes": [
+      "chat",
+      "explanation",
+      "liveStatus",
+      "newPlanStep",
+      "planUpdate",
+      "queueStatusChange",
+      "sandboxUpdate",
+      "statusUpdate",
+      "taskModeChanged",
+      "toolUsed"
+    ]
+  }
+}

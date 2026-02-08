@@ -1,6 +1,7 @@
-import Fastify from "fastify";
 import Typesense from "typesense";
-import { createLogger, getEnv } from "@repo/service-utils";
+import { createService, typedRoute, getEnv } from "@repo/service-utils";
+import { AuthorizationError } from "@repo/service-utils/errors";
+import { z } from "zod";
 import {
   db,
   projects,
@@ -13,9 +14,8 @@ import {
   desc,
   ilike,
   or,
-} from "@repo/database";
-
-const logger = createLogger({ service: "search" });
+  initDb,
+} from "./lib/db.js";
 
 // Collection names (mirroring @repo/search types)
 const COLLECTION_NAMES = {
@@ -109,158 +109,219 @@ function mapHits<T extends Record<string, unknown>>(
   });
 }
 
+// --- Zod Schemas ---
+
+const SearchTypesEnum = z.enum(["projects", "sessions", "files", "knowledge", "messages"]);
+
+const UniversalSearchBody = z.object({
+  query: z.string().min(1),
+  types: z.array(SearchTypesEnum).optional(),
+  userId: z.string().min(1),
+  organizationId: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).optional(),
+});
+
+const ProjectSearchBody = z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  filters: z.record(z.string(), z.unknown()).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const SessionSearchBody = z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  projectId: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const MessageSearchBody = z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  sessionId: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const FileSearchBody = z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  projectId: z.string().optional(),
+  mimeType: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const SemanticSearchBody = z.object({
+  query: z.string().min(1),
+  userId: z.string().min(1),
+  scope: z
+    .object({
+      projectIds: z.array(z.string()).optional(),
+      knowledgeGroupIds: z.array(z.string()).optional(),
+    })
+    .optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const SuggestQuery = z.object({
+  q: z.string().min(1),
+  types: z.string().optional(),
+  userId: z.string().min(1),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
+
+const IndexBody = z.object({
+  type: z.string().min(1),
+  id: z.string().min(1),
+  data: z.record(z.string(), z.unknown()),
+});
+
+const IndexDeleteParams = z.object({
+  type: z.string().min(1),
+  id: z.string().min(1),
+});
+
 async function main() {
-  const port = parseInt(getEnv("PORT", "4013"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
+  await initDb();
 
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
-  });
-
-  // Health check
-  app.get("/health", async () => {
-    const tsAvailable = await isTypesenseAvailable();
-    return { status: "ok", service: "search", typesense: tsAvailable };
+  const { app, logger, start } = await createService({
+    name: "search",
   });
 
   // Universal search across all entities
-  app.post("/search", async (request, reply) => {
-    const { query, types, userId, organizationId, limit, offset } = request.body as {
-      query: string;
-      types?: Array<"projects" | "sessions" | "files" | "knowledge" | "messages">;
-      userId: string;
-      organizationId?: string;
-      limit?: number;
-      offset?: number;
-    };
+  app.post(
+    "/search",
+    typedRoute({ body: UniversalSearchBody }, async (request, reply) => {
+      const { query, types, userId, organizationId: _organizationId, limit, offset } = request.body;
 
-    const searchLimit = Math.min(limit || 20, 100);
-    const searchOffset = offset || 0;
-    const searchTypes = types || ["projects", "sessions", "files", "knowledge", "messages"];
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
+      }
 
-    try {
-      // Try Typesense first
-      if (await isTypesenseAvailable()) {
-        const results: Array<{
-          type: string;
-          id: string;
-          title: string;
-          preview?: string | null;
-          score: number;
-        }> = [];
+      const searchLimit = Math.min(limit || 20, 100);
+      const searchOffset = offset || 0;
+      const searchTypes = types || ["projects", "sessions", "files", "knowledge", "messages"];
 
-        const searchPromises: Array<Promise<void>> = [];
+      try {
+        // Try Typesense first
+        if (await isTypesenseAvailable()) {
+          const results: Array<{
+            type: string;
+            id: string;
+            title: string;
+            preview?: string | null;
+            score: number;
+          }> = [];
 
-        if (searchTypes.includes("projects")) {
-          searchPromises.push(
-            typesenseSearch({
-              collection: COLLECTION_NAMES.PROJECTS,
-              query,
-              queryBy: "name,description",
-              filterBy: `userId:=${userId}`,
-              limit: searchLimit,
-            }).then((res) => {
-              results.push(...mapHits(res.hits || [], "project", "name", "description"));
-            })
-          );
-        }
+          const searchPromises: Array<Promise<void>> = [];
 
-        if (searchTypes.includes("sessions")) {
-          searchPromises.push(
-            typesenseSearch({
-              collection: COLLECTION_NAMES.SESSIONS,
-              query,
-              queryBy: "title",
-              filterBy: `userId:=${userId}`,
-              limit: searchLimit,
-            }).then((res) => {
-              results.push(...mapHits(res.hits || [], "session", "title"));
-            })
-          );
-        }
-
-        if (searchTypes.includes("files")) {
-          searchPromises.push(
-            typesenseSearch({
-              collection: COLLECTION_NAMES.FILES,
-              query,
-              queryBy: "name,path",
-              filterBy: `userId:=${userId}`,
-              limit: searchLimit,
-            }).then((res) => {
-              results.push(...mapHits(res.hits || [], "file", "name", "path"));
-            })
-          );
-        }
-
-        await Promise.allSettled(searchPromises);
-
-        // Knowledge and messages are not in Typesense yet - fall back to DB for those
-        if (searchTypes.includes("messages")) {
-          const searchPattern = `%${query}%`;
-          const messageResults = await db
-            .select()
-            .from(messages)
-            .where(ilike(messages.content, searchPattern))
-            .limit(searchLimit);
-          for (const m of messageResults) {
-            results.push({
-              type: "message",
-              id: m.id,
-              title: m.content.slice(0, 100),
-              preview: m.content.slice(0, 200),
-              score: 1,
-            });
+          if (searchTypes.includes("projects")) {
+            searchPromises.push(
+              typesenseSearch({
+                collection: COLLECTION_NAMES.PROJECTS,
+                query,
+                queryBy: "name,description",
+                filterBy: `userId:=${userId}`,
+                limit: searchLimit,
+              }).then((res) => {
+                results.push(...mapHits(res.hits || [], "project", "name", "description"));
+              })
+            );
           }
-        }
 
-        if (searchTypes.includes("knowledge")) {
-          const searchPattern = `%${query}%`;
-          const knowledgeResults = await db
-            .select()
-            .from(knowledgeItems)
-            .where(
-              and(
-                eq(knowledgeItems.userId, userId),
-                or(
-                  ilike(knowledgeItems.name, searchPattern),
-                  ilike(knowledgeItems.content, searchPattern)
+          if (searchTypes.includes("sessions")) {
+            searchPromises.push(
+              typesenseSearch({
+                collection: COLLECTION_NAMES.SESSIONS,
+                query,
+                queryBy: "title",
+                filterBy: `userId:=${userId}`,
+                limit: searchLimit,
+              }).then((res) => {
+                results.push(...mapHits(res.hits || [], "session", "title"));
+              })
+            );
+          }
+
+          if (searchTypes.includes("files")) {
+            searchPromises.push(
+              typesenseSearch({
+                collection: COLLECTION_NAMES.FILES,
+                query,
+                queryBy: "name,path",
+                filterBy: `userId:=${userId}`,
+                limit: searchLimit,
+              }).then((res) => {
+                results.push(...mapHits(res.hits || [], "file", "name", "path"));
+              })
+            );
+          }
+
+          await Promise.allSettled(searchPromises);
+
+          // Knowledge and messages are not in Typesense yet - fall back to DB for those
+          if (searchTypes.includes("messages")) {
+            const searchPattern = `%${query}%`;
+            const messageResults = await db
+              .select()
+              .from(messages)
+              .where(ilike(messages.content, searchPattern))
+              .limit(searchLimit);
+            for (const m of messageResults) {
+              results.push({
+                type: "message",
+                id: m.id,
+                title: m.content.slice(0, 100),
+                preview: m.content.slice(0, 200),
+                score: 1,
+              });
+            }
+          }
+
+          if (searchTypes.includes("knowledge")) {
+            const searchPattern = `%${query}%`;
+            const knowledgeResults = await db
+              .select()
+              .from(knowledgeItems)
+              .where(
+                and(
+                  eq(knowledgeItems.userId, userId),
+                  or(
+                    ilike(knowledgeItems.name, searchPattern),
+                    ilike(knowledgeItems.content, searchPattern)
+                  )
                 )
               )
-            )
-            .limit(searchLimit);
-          for (const k of knowledgeResults) {
-            results.push({
-              type: "knowledge",
-              id: k.id,
-              title: k.name,
-              preview: k.contentPreview,
-              score: 1,
-            });
+              .limit(searchLimit);
+            for (const k of knowledgeResults) {
+              results.push({
+                type: "knowledge",
+                id: k.id,
+                title: k.name,
+                preview: k.contentPreview,
+                score: 1,
+              });
+            }
           }
+
+          logger.info(
+            { query, types, userId, resultCount: results.length, source: "typesense" },
+            "Search executed"
+          );
+
+          return reply.success({
+            query,
+            results: results.slice(searchOffset, searchOffset + searchLimit),
+            total: results.length,
+            limit: searchLimit,
+            offset: searchOffset,
+          });
         }
-
-        logger.info(
-          { query, types, userId, resultCount: results.length, source: "typesense" },
-          "Search executed"
-        );
-
-        return {
-          query,
-          results: results.slice(searchOffset, searchOffset + searchLimit),
-          total: results.length,
-          limit: searchLimit,
-          offset: searchOffset,
-        };
+      } catch (error) {
+        logger.warn(error, "Typesense search failed, falling back to DB");
       }
-    } catch (error) {
-      logger.warn(error, "Typesense search failed, falling back to DB");
-    }
 
-    // DB ILIKE fallback
-    try {
+      // DB ILIKE fallback
       const searchPattern = `%${query}%`;
       const results: Array<{
         type: string;
@@ -367,45 +428,42 @@ async function main() {
         "Search executed"
       );
 
-      return {
+      return reply.success({
         query,
         results: results.slice(searchOffset, searchOffset + searchLimit),
         total: results.length,
         limit: searchLimit,
         offset: searchOffset,
-      };
-    } catch (error) {
-      logger.error(error, "Failed to execute search");
-      return reply.status(500).send({ error: "Failed to execute search" });
-    }
-  });
+      });
+    })
+  );
 
   // Search projects
-  app.post("/search/projects", async (request, reply) => {
-    const { query, userId, filters, limit } = request.body as {
-      query: string;
-      userId: string;
-      filters?: Record<string, unknown>;
-      limit?: number;
-    };
+  app.post(
+    "/search/projects",
+    typedRoute({ body: ProjectSearchBody }, async (request, reply) => {
+      const { query, userId, filters: _filters, limit } = request.body;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        const res = await typesenseSearch({
-          collection: COLLECTION_NAMES.PROJECTS,
-          query,
-          queryBy: "name,description",
-          filterBy: `userId:=${userId}`,
-          limit: limit || 20,
-        });
-        const results = mapHits(res.hits || [], "project", "name", "description");
-        return { results, total: res.found };
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
       }
-    } catch (error) {
-      logger.warn(error, "Typesense project search failed, falling back to DB");
-    }
 
-    try {
+      try {
+        if (await isTypesenseAvailable()) {
+          const res = await typesenseSearch({
+            collection: COLLECTION_NAMES.PROJECTS,
+            query,
+            queryBy: "name,description",
+            filterBy: `userId:=${userId}`,
+            limit: limit || 20,
+          });
+          const results = mapHits(res.hits || [], "project", "name", "description");
+          return reply.success({ results, total: res.found });
+        }
+      } catch (error) {
+        logger.warn(error, "Typesense project search failed, falling back to DB");
+      }
+
       const searchPattern = `%${query}%`;
       const results = await db
         .select()
@@ -418,39 +476,37 @@ async function main() {
         )
         .orderBy(desc(projects.updatedAt))
         .limit(limit || 20);
-      return { results, total: results.length };
-    } catch (error) {
-      logger.error(error, "Failed to search projects");
-      return reply.status(500).send({ error: "Failed to search projects" });
-    }
-  });
+
+      return reply.success({ results, total: results.length });
+    })
+  );
 
   // Search sessions
-  app.post("/search/sessions", async (request, reply) => {
-    const { query, userId, projectId, limit } = request.body as {
-      query: string;
-      userId: string;
-      projectId?: string;
-      limit?: number;
-    };
+  app.post(
+    "/search/sessions",
+    typedRoute({ body: SessionSearchBody }, async (request, reply) => {
+      const { query, userId, projectId: _projectId, limit } = request.body;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        const res = await typesenseSearch({
-          collection: COLLECTION_NAMES.SESSIONS,
-          query,
-          queryBy: "title",
-          filterBy: `userId:=${userId}`,
-          limit: limit || 20,
-        });
-        const results = mapHits(res.hits || [], "session", "title");
-        return { results, total: res.found };
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
       }
-    } catch (error) {
-      logger.warn(error, "Typesense session search failed, falling back to DB");
-    }
 
-    try {
+      try {
+        if (await isTypesenseAvailable()) {
+          const res = await typesenseSearch({
+            collection: COLLECTION_NAMES.SESSIONS,
+            query,
+            queryBy: "title",
+            filterBy: `userId:=${userId}`,
+            limit: limit || 20,
+          });
+          const results = mapHits(res.hits || [], "session", "title");
+          return reply.success({ results, total: res.found });
+        }
+      } catch (error) {
+        logger.warn(error, "Typesense session search failed, falling back to DB");
+      }
+
       const searchPattern = `%${query}%`;
       const conditions = [
         eq(agentSessions.userId, userId),
@@ -463,23 +519,21 @@ async function main() {
         .where(and(...conditions))
         .orderBy(desc(agentSessions.updatedAt))
         .limit(limit || 20);
-      return { results, total: results.length };
-    } catch (error) {
-      logger.error(error, "Failed to search sessions");
-      return reply.status(500).send({ error: "Failed to search sessions" });
-    }
-  });
+
+      return reply.success({ results, total: results.length });
+    })
+  );
 
   // Search messages (no Typesense collection for messages yet - DB only)
-  app.post("/search/messages", async (request, reply) => {
-    const { query, userId, sessionId, limit } = request.body as {
-      query: string;
-      userId: string;
-      sessionId?: string;
-      limit?: number;
-    };
+  app.post(
+    "/search/messages",
+    typedRoute({ body: MessageSearchBody }, async (request, reply) => {
+      const { query, userId, sessionId, limit } = request.body;
 
-    try {
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
+      }
+
       const searchPattern = `%${query}%`;
       const conditions = [ilike(messages.content, searchPattern)];
       if (sessionId) {
@@ -492,44 +546,41 @@ async function main() {
         .where(and(...conditions))
         .orderBy(desc(messages.createdAt))
         .limit(limit || 20);
-      return { results, total: results.length };
-    } catch (error) {
-      logger.error(error, "Failed to search messages");
-      return reply.status(500).send({ error: "Failed to search messages" });
-    }
-  });
+
+      return reply.success({ results, total: results.length });
+    })
+  );
 
   // Search files
-  app.post("/search/files", async (request, reply) => {
-    const { query, userId, projectId, mimeType, limit } = request.body as {
-      query: string;
-      userId: string;
-      projectId?: string;
-      mimeType?: string;
-      limit?: number;
-    };
+  app.post(
+    "/search/files",
+    typedRoute({ body: FileSearchBody }, async (request, reply) => {
+      const { query, userId, projectId: _projectId2, mimeType, limit } = request.body;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        let filterBy = `userId:=${userId}`;
-        if (mimeType) {
-          filterBy += ` && mimeType:=${mimeType}`;
-        }
-        const res = await typesenseSearch({
-          collection: COLLECTION_NAMES.FILES,
-          query,
-          queryBy: "name,path",
-          filterBy,
-          limit: limit || 20,
-        });
-        const results = mapHits(res.hits || [], "file", "name", "path");
-        return { results, total: res.found };
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
       }
-    } catch (error) {
-      logger.warn(error, "Typesense file search failed, falling back to DB");
-    }
 
-    try {
+      try {
+        if (await isTypesenseAvailable()) {
+          let filterBy = `userId:=${userId}`;
+          if (mimeType) {
+            filterBy += ` && mimeType:=${mimeType}`;
+          }
+          const res = await typesenseSearch({
+            collection: COLLECTION_NAMES.FILES,
+            query,
+            queryBy: "name,path",
+            filterBy,
+            limit: limit || 20,
+          });
+          const results = mapHits(res.hits || [], "file", "name", "path");
+          return reply.success({ results, total: res.found });
+        }
+      } catch (error) {
+        logger.warn(error, "Typesense file search failed, falling back to DB");
+      }
+
       const searchPattern = `%${query}%`;
       const conditions = [eq(files.userId, userId), ilike(files.name, searchPattern)];
       if (mimeType) {
@@ -542,109 +593,106 @@ async function main() {
         .where(and(...conditions))
         .orderBy(desc(files.updatedAt))
         .limit(limit || 20);
-      return { results, total: results.length };
-    } catch (error) {
-      logger.error(error, "Failed to search files");
-      return reply.status(500).send({ error: "Failed to search files" });
-    }
-  });
+
+      return reply.success({ results, total: results.length });
+    })
+  );
 
   // Semantic search (vector similarity)
-  app.post("/search/semantic", async (request, reply) => {
-    const { query, userId, scope, limit } = request.body as {
-      query: string;
-      userId: string;
-      scope?: {
-        projectIds?: string[];
-        knowledgeGroupIds?: string[];
-      };
-      limit?: number;
-    };
+  app.post(
+    "/search/semantic",
+    typedRoute({ body: SemanticSearchBody }, async (request, reply) => {
+      const { userId } = request.body;
 
-    // TODO: Generate embedding and search vector store (Typesense)
-    return {
-      results: [],
-      total: 0,
-    };
-  });
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
+      }
+
+      // TODO: Generate embedding and search vector store (Typesense)
+      return reply.success({
+        results: [],
+        total: 0,
+      });
+    })
+  );
 
   // Autocomplete/suggestions
-  app.get("/suggest", async (request, reply) => {
-    const { q, types, userId, limit } = request.query as {
-      q: string;
-      types?: string;
-      userId: string;
-      limit?: number;
-    };
+  app.get(
+    "/suggest",
+    typedRoute({ query: SuggestQuery }, async (request, reply) => {
+      const { q, types: _types, userId, limit } = request.query;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        const suggestions: Array<{ type: string; id: string; title: string }> = [];
-
-        const searchPromises: Array<Promise<void>> = [];
-
-        searchPromises.push(
-          typesenseSearch({
-            collection: COLLECTION_NAMES.PROJECTS,
-            query: q,
-            queryBy: "name",
-            filterBy: `userId:=${userId}`,
-            limit: 5,
-          }).then((res) => {
-            for (const hit of res.hits || []) {
-              const doc = hit.document as Record<string, unknown>;
-              suggestions.push({
-                type: "project",
-                id: doc.id as string,
-                title: doc.name as string,
-              });
-            }
-          })
-        );
-
-        searchPromises.push(
-          typesenseSearch({
-            collection: COLLECTION_NAMES.SESSIONS,
-            query: q,
-            queryBy: "title",
-            filterBy: `userId:=${userId}`,
-            limit: 5,
-          }).then((res) => {
-            for (const hit of res.hits || []) {
-              const doc = hit.document as Record<string, unknown>;
-              suggestions.push({
-                type: "session",
-                id: doc.id as string,
-                title: (doc.title as string) || "Untitled",
-              });
-            }
-          })
-        );
-
-        searchPromises.push(
-          typesenseSearch({
-            collection: COLLECTION_NAMES.FILES,
-            query: q,
-            queryBy: "name",
-            filterBy: `userId:=${userId}`,
-            limit: 5,
-          }).then((res) => {
-            for (const hit of res.hits || []) {
-              const doc = hit.document as Record<string, unknown>;
-              suggestions.push({ type: "file", id: doc.id as string, title: doc.name as string });
-            }
-          })
-        );
-
-        await Promise.allSettled(searchPromises);
-
-        return { suggestions: suggestions.slice(0, limit || 10) };
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Cannot search on behalf of another user");
       }
-    } catch (error) {
-      logger.warn(error, "Typesense suggest failed, falling back to DB");
-    }
 
-    try {
+      try {
+        if (await isTypesenseAvailable()) {
+          const suggestions: Array<{ type: string; id: string; title: string }> = [];
+
+          const searchPromises: Array<Promise<void>> = [];
+
+          searchPromises.push(
+            typesenseSearch({
+              collection: COLLECTION_NAMES.PROJECTS,
+              query: q,
+              queryBy: "name",
+              filterBy: `userId:=${userId}`,
+              limit: 5,
+            }).then((res) => {
+              for (const hit of res.hits || []) {
+                const doc = hit.document as Record<string, unknown>;
+                suggestions.push({
+                  type: "project",
+                  id: doc.id as string,
+                  title: doc.name as string,
+                });
+              }
+            })
+          );
+
+          searchPromises.push(
+            typesenseSearch({
+              collection: COLLECTION_NAMES.SESSIONS,
+              query: q,
+              queryBy: "title",
+              filterBy: `userId:=${userId}`,
+              limit: 5,
+            }).then((res) => {
+              for (const hit of res.hits || []) {
+                const doc = hit.document as Record<string, unknown>;
+                suggestions.push({
+                  type: "session",
+                  id: doc.id as string,
+                  title: (doc.title as string) || "Untitled",
+                });
+              }
+            })
+          );
+
+          searchPromises.push(
+            typesenseSearch({
+              collection: COLLECTION_NAMES.FILES,
+              query: q,
+              queryBy: "name",
+              filterBy: `userId:=${userId}`,
+              limit: 5,
+            }).then((res) => {
+              for (const hit of res.hits || []) {
+                const doc = hit.document as Record<string, unknown>;
+                suggestions.push({ type: "file", id: doc.id as string, title: doc.name as string });
+              }
+            })
+          );
+
+          await Promise.allSettled(searchPromises);
+
+          return reply.success({ suggestions: suggestions.slice(0, limit || 10) });
+        }
+      } catch (error) {
+        logger.warn(error, "Typesense suggest failed, falling back to DB");
+      }
+
       const searchPattern = `%${q}%`;
       const suggestions: Array<{ type: string; id: string; title: string }> = [];
 
@@ -658,118 +706,79 @@ async function main() {
         suggestions.push({ type: "project", id: p.id, title: p.name });
       }
 
-      return { suggestions: suggestions.slice(0, limit || 10) };
-    } catch (error) {
-      logger.error(error, "Failed to generate suggestions");
-      return reply.status(500).send({ error: "Failed to generate suggestions" });
-    }
-  });
+      return reply.success({ suggestions: suggestions.slice(0, limit || 10) });
+    })
+  );
 
   // Index entity (internal) - upserts document into Typesense
-  app.post("/internal/index", async (request, reply) => {
-    const { type, id, data } = request.body as {
-      type: string;
-      id: string;
-      data: Record<string, unknown>;
-    };
+  app.post(
+    "/internal/index",
+    typedRoute({ body: IndexBody }, async (request, reply) => {
+      const { type, id, data } = request.body;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        const collectionMap: Record<string, string> = {
-          project: COLLECTION_NAMES.PROJECTS,
-          session: COLLECTION_NAMES.SESSIONS,
-          file: COLLECTION_NAMES.FILES,
-          task: COLLECTION_NAMES.TASKS,
-          action: COLLECTION_NAMES.ACTIONS,
-        };
+      try {
+        if (await isTypesenseAvailable()) {
+          const collectionMap: Record<string, string> = {
+            project: COLLECTION_NAMES.PROJECTS,
+            session: COLLECTION_NAMES.SESSIONS,
+            file: COLLECTION_NAMES.FILES,
+            task: COLLECTION_NAMES.TASKS,
+            action: COLLECTION_NAMES.ACTIONS,
+          };
 
-        const collectionName = collectionMap[type];
-        if (collectionName) {
-          const client = getClient();
-          await client
-            .collections(collectionName)
-            .documents()
-            .upsert({ id, ...data });
-          logger.info({ type, id }, "Entity indexed in Typesense");
-          return { indexed: true };
+          const collectionName = collectionMap[type];
+          if (collectionName) {
+            const client = getClient();
+            await client
+              .collections(collectionName)
+              .documents()
+              .upsert({ id, ...data });
+            logger.info({ type, id }, "Entity indexed in Typesense");
+            return reply.success({ indexed: true });
+          }
         }
+      } catch (error) {
+        logger.warn({ type, id, error }, "Failed to index in Typesense");
       }
-    } catch (error) {
-      logger.warn({ type, id, error }, "Failed to index in Typesense");
-    }
 
-    logger.info({ type, id }, "Entity indexed (no-op, Typesense unavailable)");
-    return { indexed: true };
-  });
+      logger.info({ type, id }, "Entity indexed (no-op, Typesense unavailable)");
+      return reply.success({ indexed: true });
+    })
+  );
 
   // Remove from index (internal) - deletes document from Typesense
-  app.delete("/internal/index/:type/:id", async (request, reply) => {
-    const { type, id } = request.params as { type: string; id: string };
+  app.delete(
+    "/internal/index/:type/:id",
+    typedRoute({ params: IndexDeleteParams }, async (request, reply) => {
+      const { type, id } = request.params;
 
-    try {
-      if (await isTypesenseAvailable()) {
-        const collectionMap: Record<string, string> = {
-          project: COLLECTION_NAMES.PROJECTS,
-          session: COLLECTION_NAMES.SESSIONS,
-          file: COLLECTION_NAMES.FILES,
-          task: COLLECTION_NAMES.TASKS,
-          action: COLLECTION_NAMES.ACTIONS,
-        };
+      try {
+        if (await isTypesenseAvailable()) {
+          const collectionMap: Record<string, string> = {
+            project: COLLECTION_NAMES.PROJECTS,
+            session: COLLECTION_NAMES.SESSIONS,
+            file: COLLECTION_NAMES.FILES,
+            task: COLLECTION_NAMES.TASKS,
+            action: COLLECTION_NAMES.ACTIONS,
+          };
 
-        const collectionName = collectionMap[type];
-        if (collectionName) {
-          const client = getClient();
-          await client.collections(collectionName).documents(id).delete();
-          logger.info({ type, id }, "Entity removed from Typesense");
-          return { removed: true };
+          const collectionName = collectionMap[type];
+          if (collectionName) {
+            const client = getClient();
+            await client.collections(collectionName).documents(id).delete();
+            logger.info({ type, id }, "Entity removed from Typesense");
+            return reply.success({ removed: true });
+          }
         }
+      } catch (error) {
+        logger.warn({ type, id, error }, "Failed to remove from Typesense");
       }
-    } catch (error) {
-      logger.warn({ type, id, error }, "Failed to remove from Typesense");
-    }
 
-    return { removed: true };
-  });
+      return reply.success({ removed: true });
+    })
+  );
 
-  // Request logging
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
-
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "Search service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
-
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
-      await app.close();
-      process.exit(0);
-    });
-  }
+  await start();
 }
 
 main();

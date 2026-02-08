@@ -22,14 +22,20 @@ export function AICanvasView({ content }: AICanvasViewProps) {
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/10 bg-canvas-surface px-3 py-2">
         <PaintbrushIcon className="size-3.5 text-pink-400" />
-        <span className="text-xs font-medium text-muted-foreground/70">AI Canvas</span>
+        <span className="text-xs font-medium text-muted-foreground/70">
+          AI Canvas
+        </span>
       </div>
 
       {/* Content */}
       <div className="flex flex-1 items-center justify-center bg-canvas-deep">
         {content ? (
           <div className="p-6">
-            <img src={content} alt="AI Canvas" className="max-h-full max-w-full rounded-lg" />
+            <img
+              src={content}
+              alt="AI Canvas"
+              className="max-h-full max-w-full rounded-lg"
+            />
           </div>
         ) : (
           <div className="text-center text-muted-foreground/40">

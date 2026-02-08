@@ -1,0 +1,94 @@
+# Deleted Redux Slices — February 2026 Cleanup
+
+## Summary
+28 unused Redux slices were deleted from `apps/app/lib/store/slices/`, removing ~8,000+ lines of dead code. These slices were scaffolded during early Manus-style planning but never wired to any frontend components.
+
+## Deleted Slice Files
+
+| # | Slice File | Purpose (unused) |
+|---|---|---|
+| 1 | `mapReduce.slice.ts` | Map/reduce task orchestration |
+| 2 | `slideEditor.slice.ts` | Slide/presentation editor |
+| 3 | `community.slice.ts` | Community features |
+| 4 | `codeViewer.slice.ts` | Code viewer panel |
+| 5 | `webDev.slice.ts` | Web development workspace |
+| 6 | `myBrowser.slice.ts` | Embedded browser state |
+| 7 | `fileShare.slice.ts` | File sharing |
+| 8 | `timeline.slice.ts` | Timeline/activity feed |
+| 9 | `filePreviewer.slice.ts` | File preview panel |
+| 10 | `aiCanvas.slice.ts` | AI canvas/drawing |
+| 11 | `biz.slice.ts` | Business/enterprise features |
+| 12 | `example.slice.ts` | Example/demo state |
+| 13 | `experiment.slice.ts` | Feature flags/experiments |
+| 14 | `guestPage.slice.ts` | Guest/public page state |
+| 15 | `webDevUsage.slice.ts` | Web dev usage tracking |
+| 16 | `mailAgent.slice.ts` | Mail agent state |
+| 17 | `fileConnector.slice.ts` | File connector state |
+| 18 | `aiCanvasEditor.slice.ts` | AI canvas editor |
+| 19 | `webdevAuth.slice.ts` | Web dev authentication |
+| 20 | `agentWorkspace.slice.ts` | Agent workspace panel |
+| 21 | `products.slice.ts` | Product catalog |
+| 22 | `knowledge.slice.ts` | Knowledge base/library |
+| 23 | `login.slice.ts` | Login flow state |
+| 24 | `library.slice.ts` | Content library |
+| 25 | `sessionSwitch.slice.ts` | Session switcher |
+| 26 | `workspace.slice.ts` | Workspace layout |
+| 27 | `navbar.slice.ts` | Navigation bar state |
+| 28 | `onboarding.slice.ts` | Onboarding flow |
+
+## Slices Kept (18)
+
+| Slice | Reason |
+|---|---|
+| `auth.slice.ts` | Authentication state |
+| `chat.slice.ts` | Chat/messaging state |
+| `agents.slice.ts` | Agent management |
+| `sessions.slice.ts` | Session management |
+| `files.slice.ts` | File management |
+| `websocket.slice.ts` | WebSocket connection |
+| `ui.slice.ts` | UI state (toasts, modals, sidebar, theme) |
+| `connectors.slice.ts` | App connectors/integrations |
+| `notifications.slice.ts` | Notification system |
+| `scheduledTasks.slice.ts` | Scheduled task management |
+| `team.slice.ts` | Team management |
+| `projects.slice.ts` | Project management |
+| `configs.slice.ts` | Client configuration |
+| `billing.slice.ts` | Billing/subscription state |
+| `fileManagement.slice.ts` | File management panel |
+| `chatPage.slice.ts` | Chat page-specific state |
+| `search.slice.ts` | Search state |
+| `devices.slice.ts` | Device/smart home state |
+
+## Files Modified
+
+- `apps/app/lib/store/index.ts` — Removed 28 imports, reducer registrations, and re-exports
+- `apps/app/lib/store/hooks.ts` — Removed all selectors for deleted slices (knowledge, experiment, workspace, navbar, webDev, codeViewer, filePreviewer, slideEditor, aiCanvas, onboarding, sessionSwitch, community, fileConnector, products, fileShare, mapReduce, mailAgent, webDevUsage, library, timeline, login, example, guestPage, myBrowser, agentWorkspace, webdevAuth, aiCanvasEditor, biz)
+- `apps/app/lib/store/api/api.slice.ts` — Inlined knowledge types (Attachment, AttachmentGroup, KnowledgeBase) that were previously imported from deleted knowledge.slice
+
+## Additional Cleanup (same session)
+
+### AI Package Dead Code
+- Deleted: `packages/ai/lib/demo/` (4 files), `packages/ai/lib/orchestration/` (4 files), `packages/ai/lib/middleware/` (4 files), `packages/ai/lib/providers/` (3 files)
+- Deleted: `packages/ai/lib/agents/dag-agent.ts`, `router-agent.ts`, `cached-agent.ts`
+- Deleted: `packages/ai/hooks/use-realtime-chat.ts` (1085 LOC), `use-redux-chat.ts`
+- Cleaned: `packages/ai/index.ts` (removed re-exports), `packages/ai/hooks/index.ts`, `packages/ai/lib/agents/index.ts`, `packages/ai/package.json`
+
+### Demo Pages & Knowledge Frontend
+- Deleted: `apps/app/app/(authenticated)/chat/demo/` directory
+- Deleted: `apps/app/app/(authenticated)/components/unified-prompt/model-selector.tsx`
+- Deleted: `apps/app/lib/trpc/routers/knowledge.router.ts`
+- Deleted: `apps/app/app/api/chat/knowledge.ts`
+- Modified: `apps/app/lib/trpc/routers/index.ts` (removed knowledgeRouter)
+- Modified: `apps/app/app/(authenticated)/components/header/profile-dropdown.tsx` (removed /knowledge link)
+- Modified: `apps/app/app/api/chat/route.ts` (removed queryKnowledge import/usage)
+
+### Legacy Prisma Artifacts
+- Deleted: `packages/database/prisma/` directory (schema.prisma)
+- Deleted: `packages/database/prisma.config.ts`
+- Deleted: `packages/database/generated/` directory (27 files including .dylib.node and .wasm binaries)
+
+### Build Artifacts Untracked from Git
+- `packages/service-utils/dist/` (48 files)
+- 17 `.DS_Store` files across the repo
+- 7 `.turbo/turbo-*.log` files
+- Updated `.gitignore` with: `**/.DS_Store`, `**/dist/`, `packages/database/generated/`

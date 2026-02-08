@@ -156,7 +156,7 @@ export function ScheduledTasksTab() {
   const editScheduleType = editForm.watch("scheduleType");
 
   const onCreateSubmit = async (data: TaskFormValues) => {
-    const submitData = {
+    const submitData: Record<string, any> = {
       name: data.name,
       description: data.description,
       taskType: data.taskType,
@@ -177,7 +177,7 @@ export function ScheduledTasksTab() {
 
     try {
       setPendingAction({ type: "create" });
-      const created = await getTrpcClient().scheduledTasks.create.mutate(submitData);
+      const created = await getTrpcClient().scheduledTasks.create.mutate(submitData as any);
       dispatch(addScheduledTask(normalizeScheduledTask(created)));
       toast.success("Task scheduled successfully");
       setIsCreateOpen(false);
@@ -193,7 +193,7 @@ export function ScheduledTasksTab() {
   const onEditSubmit = async (data: TaskFormValues) => {
     if (!editingTask) return;
 
-    const submitData = {
+    const submitData: Record<string, any> = {
       id: editingTask.id,
       name: data.name,
       description: data.description,
@@ -210,7 +210,7 @@ export function ScheduledTasksTab() {
 
     try {
       setPendingAction({ type: "update", id: editingTask.id });
-      const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData);
+      const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData as any);
       dispatch(updateScheduledTask({ id: updated.id, updates: normalizeScheduledTask(updated) }));
       toast.success("Task updated");
       setEditingTask(null);
@@ -445,7 +445,7 @@ export function ScheduledTasksTab() {
       {/* Task List */}
       {tasks && tasks.length > 0 ? (
         <div className="space-y-3">
-          {tasks.map((task) => {
+          {tasks.map((task: any) => {
             const status = statusConfig[task.status] || statusConfig.pending;
             const StatusIcon = status.icon;
 

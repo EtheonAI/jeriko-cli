@@ -21,16 +21,16 @@ export interface WebSocketState {
   error: string | null;
 
   // Context length tracking (for AI)
-  contextLengthStatus: Record<string, ContextLengthStatus>;
+  contextLengthStatus: ContextLengthStatus;
 
   // Task completion
-  taskFinished: Record<string, boolean>;
+  taskFinished: boolean;
 
   // VNC connection status
-  isVNCConnected: boolean;
+  isVNCConnected: boolean | null;
 
   // Timeline auto-update
-  disableTimelineAutoUpdate: boolean;
+  disableTimelineAutoUpdate: boolean | null;
 
   // Our additions
   socketId: string | null;
@@ -45,10 +45,10 @@ const initialState: WebSocketState = {
   entities: {},
   status: "disconnected",
   error: null,
-  contextLengthStatus: {},
-  taskFinished: {},
-  isVNCConnected: false,
-  disableTimelineAutoUpdate: false,
+  contextLengthStatus: "normal",
+  taskFinished: false,
+  isVNCConnected: null,
+  disableTimelineAutoUpdate: null,
   socketId: null,
   rooms: [],
   reconnectAttempts: 0,
@@ -56,7 +56,7 @@ const initialState: WebSocketState = {
   lastPongTime: null,
 };
 
-export const websocketSlice = createSlice({
+const websocketSlice = createSlice({
   name: "websocket",
   initialState,
   reducers: {
@@ -124,33 +124,22 @@ export const websocketSlice = createSlice({
     },
 
     // Context length status
-    setContextLengthStatus: (
-      state,
-      action: PayloadAction<{ sessionId: string; status: ContextLengthStatus }>
-    ) => {
-      state.contextLengthStatus[action.payload.sessionId] = action.payload.status;
-    },
-
-    clearContextLengthStatus: (state, action: PayloadAction<string>) => {
-      delete state.contextLengthStatus[action.payload];
+    setContextLengthStatus: (state, action: PayloadAction<ContextLengthStatus>) => {
+      state.contextLengthStatus = action.payload;
     },
 
     // Task finished
-    setTaskFinished: (state, action: PayloadAction<{ taskId: string; finished: boolean }>) => {
-      state.taskFinished[action.payload.taskId] = action.payload.finished;
-    },
-
-    clearTaskFinished: (state, action: PayloadAction<string>) => {
-      delete state.taskFinished[action.payload];
+    setTaskFinished: (state, action: PayloadAction<boolean>) => {
+      state.taskFinished = action.payload;
     },
 
     // VNC
-    setIsVNCConnected: (state, action: PayloadAction<boolean>) => {
+    setIsVNCConnected: (state, action: PayloadAction<boolean | null>) => {
       state.isVNCConnected = action.payload;
     },
 
     // Timeline auto-update
-    setDisableTimelineAutoUpdate: (state, action: PayloadAction<boolean>) => {
+    setDisableTimelineAutoUpdate: (state, action: PayloadAction<boolean | null>) => {
       state.disableTimelineAutoUpdate = action.payload;
     },
   },
@@ -180,9 +169,7 @@ export const {
   removeEntity,
   clearEntities,
   setContextLengthStatus,
-  clearContextLengthStatus,
   setTaskFinished,
-  clearTaskFinished,
   setIsVNCConnected,
   setDisableTimelineAutoUpdate,
 } = websocketSlice.actions;

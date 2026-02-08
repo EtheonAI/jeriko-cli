@@ -1,4 +1,5 @@
-import type { SearchResponse, MultiSearchResponse } from "typesense/lib/Typesense/Documents";
+import type { SearchResponse } from "typesense/lib/Typesense/Documents";
+import type { MultiSearchResponse } from "typesense/lib/Typesense/MultiSearch";
 
 // Collection names
 export const COLLECTION_NAMES = {

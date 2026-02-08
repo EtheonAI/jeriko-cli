@@ -1,7 +1,8 @@
-import Fastify from "fastify";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
-import { eq, and, desc, inArray, count, sql } from "drizzle-orm";
-import { extractText, extractFromPdf, extractFromUrl } from "./lib/extract.js";
+import { createService, typedRoute, createId } from "@repo/service-utils";
+import { NotFoundError } from "@repo/service-utils/errors";
+import { z } from "zod";
+import { eq, desc, count, sql } from "drizzle-orm";
+import { extractText, extractFromUrl } from "./lib/extract.js";
 import { chunkText } from "./lib/chunk.js";
 import { generateEmbeddings, generateEmbedding, EMBEDDING_MODEL } from "./lib/embed.js";
 
@@ -12,58 +13,77 @@ let knowledgeItems: any;
 let knowledgeChunks: any;
 
 async function initDb() {
-  const database = await import("@repo/database/service-index");
+  const rawDatabase = await import("@repo/database/service-index");
+  const database = (rawDatabase as any).default ?? rawDatabase;
   db = database.db;
   knowledgeGroups = database.knowledgeGroups;
   knowledgeItems = database.knowledgeItems;
   knowledgeChunks = database.knowledgeChunks;
 }
 
-const logger = createLogger({ service: "knowledge" });
+// --- Zod Schemas ---
+
+const UserIdParams = z.object({
+  userId: z.string().min(1),
+});
+
+const IdParams = z.object({
+  id: z.string().min(1),
+});
+
+const GroupIdParams = z.object({
+  groupId: z.string().min(1),
+});
+
+const CreateGroupBody = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  userId: z.string().min(1),
+  projectId: z.string().optional(),
+});
+
+const AddItemBody = z.object({
+  type: z.enum(["text", "file", "url"]),
+  title: z.string().min(1),
+  content: z.string().optional(),
+  sourceUrl: z.string().optional(),
+  fileId: z.string().optional(),
+});
+
+const QueryBody = z.object({
+  query: z.string().min(1),
+  groupIds: z.array(z.string()).optional(),
+  userId: z.string().min(1),
+  limit: z.number().int().min(1).max(50).optional(),
+});
 
 async function main() {
   await initDb();
 
-  const port = parseInt(getEnv("PORT", "4011"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
-
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
-  });
-
-  // Health check
-  app.get("/health", async () => {
-    return { status: "ok", service: "knowledge" };
+  const { app, logger, start } = await createService({
+    name: "knowledge",
   });
 
   // List knowledge groups
-  app.get("/users/:userId/groups", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    try {
+  app.get(
+    "/users/:userId/groups",
+    typedRoute({ params: UserIdParams }, async (request, reply) => {
+      const { userId } = request.params;
       const groups = await db
         .select()
         .from(knowledgeGroups)
         .where(eq(knowledgeGroups.userId, userId))
         .orderBy(knowledgeGroups.sortOrder);
-      return { groups };
-    } catch (error) {
-      logger.error(error, "Failed to fetch knowledge groups");
-      return reply.status(500).send({ error: "Failed to fetch groups" });
-    }
-  });
+      return reply.success({ groups });
+    })
+  );
 
   // Create knowledge group
-  app.post("/groups", async (request, reply) => {
-    const { name, description, userId, projectId } = request.body as {
-      name: string;
-      description?: string;
-      userId: string;
-      projectId?: string;
-    };
+  app.post(
+    "/groups",
+    typedRoute({ body: CreateGroupBody }, async (request, reply) => {
+      const { name, description, userId, projectId: _projectId } = request.body;
 
-    try {
       const [group] = await db
         .insert(knowledgeGroups)
         .values({
@@ -74,24 +94,29 @@ async function main() {
         })
         .returning();
 
-      return { id: group!.id, name: group!.name, description: group!.description, itemCount: 0 };
-    } catch (error) {
-      logger.error(error, "Failed to create knowledge group");
-      return reply.status(500).send({ error: "Failed to create group" });
-    }
-  });
+      return reply.success({
+        id: group!.id,
+        name: group!.name,
+        description: group!.description,
+        itemCount: 0,
+      });
+    })
+  );
 
   // Get knowledge group
-  app.get("/groups/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.get(
+    "/groups/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [group] = await db
         .select()
         .from(knowledgeGroups)
         .where(eq(knowledgeGroups.id, id))
         .limit(1);
+
       if (!group) {
-        return reply.status(404).send({ error: "Group not found" });
+        throw new NotFoundError("Group");
       }
 
       const [itemCount] = await db
@@ -99,44 +124,36 @@ async function main() {
         .from(knowledgeItems)
         .where(eq(knowledgeItems.groupId, id));
 
-      return { ...group, itemCount: itemCount?.count || 0 };
-    } catch (error) {
-      logger.error(error, "Failed to fetch knowledge group");
-      return reply.status(500).send({ error: "Failed to fetch group" });
-    }
-  });
+      return reply.success({ ...group, itemCount: itemCount?.count || 0 });
+    })
+  );
 
   // Delete knowledge group
-  app.delete("/groups/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.delete(
+    "/groups/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [deleted] = await db
         .delete(knowledgeGroups)
         .where(eq(knowledgeGroups.id, id))
         .returning();
+
       if (!deleted) {
-        return reply.status(404).send({ error: "Group not found" });
+        throw new NotFoundError("Group");
       }
-      return { deleted: true };
-    } catch (error) {
-      logger.error(error, "Failed to delete knowledge group");
-      return reply.status(500).send({ error: "Failed to delete group" });
-    }
-  });
+
+      return reply.success({ deleted: true });
+    })
+  );
 
   // Add item to knowledge group — with full processing pipeline
-  app.post("/groups/:groupId/items", async (request, reply) => {
-    const { groupId } = request.params as { groupId: string };
-    const { type, title, content, sourceUrl, fileId } = request.body as {
-      type: "text" | "file" | "url";
-      title: string;
-      content?: string;
-      sourceUrl?: string;
-      fileId?: string;
-    };
-
-    try {
-      const userId = (request.headers["x-user-id"] as string) || "";
+  app.post(
+    "/groups/:groupId/items",
+    typedRoute({ params: GroupIdParams, body: AddItemBody }, async (request, reply) => {
+      const { groupId } = request.params;
+      const { type, title, content, sourceUrl, fileId: _fileId } = request.body;
+      const userId = request.userId || "";
 
       const typeMap: Record<string, string> = {
         text: "note",
@@ -165,76 +182,71 @@ async function main() {
 
       logger.info({ groupId, itemId: item!.id, type }, "Knowledge item added");
 
-      return { id: item!.id, groupId, type, title, status: "processing" };
-    } catch (error) {
-      logger.error(error, "Failed to add knowledge item");
-      return reply.status(500).send({ error: "Failed to add item" });
-    }
-  });
+      return reply.success({ id: item!.id, groupId, type, title, status: "processing" });
+    })
+  );
 
   // Get knowledge item
-  app.get("/items/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.get(
+    "/items/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [item] = await db
         .select()
         .from(knowledgeItems)
         .where(eq(knowledgeItems.id, id))
         .limit(1);
+
       if (!item) {
-        return reply.status(404).send({ error: "Item not found" });
+        throw new NotFoundError("Item");
       }
-      return item;
-    } catch (error) {
-      logger.error(error, "Failed to fetch knowledge item");
-      return reply.status(500).send({ error: "Failed to fetch item" });
-    }
-  });
+
+      return reply.success(item);
+    })
+  );
 
   // List items for a group
-  app.get("/groups/:groupId/items", async (request, reply) => {
-    const { groupId } = request.params as { groupId: string };
-    try {
+  app.get(
+    "/groups/:groupId/items",
+    typedRoute({ params: GroupIdParams }, async (request, reply) => {
+      const { groupId } = request.params;
+
       const items = await db
         .select()
         .from(knowledgeItems)
         .where(eq(knowledgeItems.groupId, groupId))
         .orderBy(desc(knowledgeItems.createdAt));
-      return { items };
-    } catch (error) {
-      logger.error(error, "Failed to fetch items for group");
-      return reply.status(500).send({ error: "Failed to fetch items" });
-    }
-  });
+
+      return reply.success({ items });
+    })
+  );
 
   // Delete knowledge item (chunks cascade via FK)
-  app.delete("/items/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.delete(
+    "/items/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [deleted] = await db
         .delete(knowledgeItems)
         .where(eq(knowledgeItems.id, id))
         .returning();
+
       if (!deleted) {
-        return reply.status(404).send({ error: "Item not found" });
+        throw new NotFoundError("Item");
       }
-      return { deleted: true };
-    } catch (error) {
-      logger.error(error, "Failed to delete knowledge item");
-      return reply.status(500).send({ error: "Failed to delete item" });
-    }
-  });
+
+      return reply.success({ deleted: true });
+    })
+  );
 
   // Query knowledge base (vector semantic search)
-  app.post("/query", async (request, reply) => {
-    const { query, groupIds, userId, limit } = request.body as {
-      query: string;
-      groupIds?: string[];
-      userId: string;
-      limit?: number;
-    };
+  app.post(
+    "/query",
+    typedRoute({ body: QueryBody }, async (request, reply) => {
+      const { query, groupIds, userId, limit } = request.body;
 
-    try {
       // Generate embedding for the query
       const queryEmbedding = await generateEmbedding(query);
       const queryVector = `[${queryEmbedding.join(",")}]`;
@@ -269,33 +281,32 @@ async function main() {
         LIMIT ${resultLimit}
       `);
 
-      return { results: results.rows, query };
-    } catch (error) {
-      logger.error(error, "Failed to query knowledge base");
-      return reply.status(500).send({ error: "Failed to query" });
-    }
-  });
+      return reply.success({ results: results.rows, query });
+    })
+  );
 
   // Get chunks for an item
-  app.get("/items/:id/chunks", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.get(
+    "/items/:id/chunks",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const chunks = await db
         .select()
         .from(knowledgeChunks)
         .where(eq(knowledgeChunks.itemId, id))
         .orderBy(knowledgeChunks.chunkIndex);
-      return { chunks };
-    } catch (error) {
-      logger.error(error, "Failed to fetch chunks");
-      return reply.status(500).send({ error: "Failed to fetch chunks" });
-    }
-  });
+
+      return reply.success({ chunks });
+    })
+  );
 
   // Process a knowledge item (called by tRPC after creating an item in DB)
-  app.post("/items/:id/process", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.post(
+    "/items/:id/process",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [item] = await db
         .select()
         .from(knowledgeItems)
@@ -303,7 +314,7 @@ async function main() {
         .limit(1);
 
       if (!item) {
-        return reply.status(404).send({ error: "Item not found" });
+        throw new NotFoundError("Item");
       }
 
       const typeToProcessType: Record<string, string> = {
@@ -322,17 +333,16 @@ async function main() {
         }
       );
 
-      return { id, status: "processing" };
-    } catch (error) {
-      logger.error(error, "Failed to start processing item");
-      return reply.status(500).send({ error: "Failed to process item" });
-    }
-  });
+      return reply.success({ id, status: "processing" });
+    })
+  );
 
   // Reprocess knowledge item — delete old chunks, re-extract, re-chunk, re-embed
-  app.post("/items/:id/reprocess", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.post(
+    "/items/:id/reprocess",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [item] = await db
         .select()
         .from(knowledgeItems)
@@ -340,7 +350,7 @@ async function main() {
         .limit(1);
 
       if (!item) {
-        return reply.status(404).send({ error: "Item not found" });
+        throw new NotFoundError("Item");
       }
 
       // Set status to processing
@@ -369,146 +379,109 @@ async function main() {
         }
       );
 
-      return { id, status: "processing" };
-    } catch (error) {
-      logger.error(error, "Failed to reprocess item");
-      return reply.status(500).send({ error: "Failed to reprocess item" });
-    }
-  });
+      return reply.success({ id, status: "processing" });
+    })
+  );
 
-  // Request logging
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
+  await start();
 
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
+  // -------------------------------------------------------
+  // Background processing function (defined outside routes)
+  // -------------------------------------------------------
 
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "Knowledge service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
+  /**
+   * Process a knowledge item: extract text -> chunk -> embed -> store chunks
+   */
+  async function processItem(
+    itemId: string,
+    type: string,
+    content?: string,
+    sourceUrl?: string
+  ): Promise<void> {
+    try {
+      // 1. Extract text
+      let text: string;
+      if (type === "url" && sourceUrl) {
+        text = await extractFromUrl(sourceUrl);
+      } else if (content) {
+        text = await extractText(content, "text/plain");
+      } else {
+        throw new Error("No content or sourceUrl provided");
+      }
 
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
-      await app.close();
-      process.exit(0);
-    });
-  }
-}
+      if (!text || text.trim().length === 0) {
+        throw new Error("Extracted text is empty");
+      }
 
-/**
- * Process a knowledge item: extract text → chunk → embed → store chunks
- */
-async function processItem(
-  itemId: string,
-  type: string,
-  content?: string,
-  sourceUrl?: string
-): Promise<void> {
-  try {
-    // 1. Extract text
-    let text: string;
-    if (type === "url" && sourceUrl) {
-      text = await extractFromUrl(sourceUrl);
-    } else if (content) {
-      text = await extractText(content, "text/plain");
-    } else {
-      throw new Error("No content or sourceUrl provided");
-    }
+      // Update item content if extracted from URL
+      if (type === "url") {
+        await db
+          .update(knowledgeItems)
+          .set({
+            content: text,
+            contentPreview: text.slice(0, 500),
+          })
+          .where(eq(knowledgeItems.id, itemId));
+      }
 
-    if (!text || text.trim().length === 0) {
-      throw new Error("Extracted text is empty");
-    }
+      // 2. Chunk the text
+      const chunks = chunkText(text);
+      if (chunks.length === 0) {
+        throw new Error("No chunks produced from text");
+      }
 
-    // Update item content if extracted from URL
-    if (type === "url") {
+      logger.info({ itemId, chunkCount: chunks.length }, "Text chunked");
+
+      // 3. Generate embeddings for all chunks
+      const chunkTexts = chunks.map((c: { content: string }) => c.content);
+      const embeddings = await generateEmbeddings(chunkTexts);
+
+      logger.info({ itemId, embeddingCount: embeddings.length }, "Embeddings generated");
+
+      // 4. Insert chunks with embeddings
+      const chunkValues = chunks.map(
+        (
+          chunk: { content: string; chunkIndex: number; startOffset: number; endOffset: number },
+          i: number
+        ) => ({
+          id: createId(),
+          itemId,
+          content: chunk.content,
+          chunkIndex: chunk.chunkIndex,
+          startOffset: chunk.startOffset,
+          endOffset: chunk.endOffset,
+          embedding: embeddings[i]!,
+          embeddingModel: EMBEDDING_MODEL,
+        })
+      );
+
+      await db.insert(knowledgeChunks).values(chunkValues);
+
+      // 5. Update item status to ready
       await db
         .update(knowledgeItems)
         .set({
-          content: text,
-          contentPreview: text.slice(0, 500),
+          status: "ready",
+          embeddingModel: EMBEDDING_MODEL,
+          metadata: {
+            wordCount: text.split(/\s+/).length,
+            chunkCount: chunks.length,
+          },
+        })
+        .where(eq(knowledgeItems.id, itemId));
+
+      logger.info({ itemId }, "Item processing complete");
+    } catch (error) {
+      logger.error(error, "Failed to process item %s", itemId);
+      // Mark item as failed
+      await db
+        .update(knowledgeItems)
+        .set({
+          status: "failed",
+          processingError: error instanceof Error ? error.message : "Unknown error",
         })
         .where(eq(knowledgeItems.id, itemId));
     }
-
-    // 2. Chunk the text
-    const chunks = chunkText(text);
-    if (chunks.length === 0) {
-      throw new Error("No chunks produced from text");
-    }
-
-    logger.info({ itemId, chunkCount: chunks.length }, "Text chunked");
-
-    // 3. Generate embeddings for all chunks
-    const chunkTexts = chunks.map((c: { content: string }) => c.content);
-    const embeddings = await generateEmbeddings(chunkTexts);
-
-    logger.info({ itemId, embeddingCount: embeddings.length }, "Embeddings generated");
-
-    // 4. Insert chunks with embeddings
-    const chunkValues = chunks.map(
-      (
-        chunk: { content: string; chunkIndex: number; startOffset: number; endOffset: number },
-        i: number
-      ) => ({
-        id: createId(),
-        itemId,
-        content: chunk.content,
-        chunkIndex: chunk.chunkIndex,
-        startOffset: chunk.startOffset,
-        endOffset: chunk.endOffset,
-        embedding: embeddings[i]!,
-        embeddingModel: EMBEDDING_MODEL,
-      })
-    );
-
-    await db.insert(knowledgeChunks).values(chunkValues);
-
-    // 5. Update item status to ready
-    await db
-      .update(knowledgeItems)
-      .set({
-        status: "ready",
-        embeddingModel: EMBEDDING_MODEL,
-        metadata: {
-          wordCount: text.split(/\s+/).length,
-          chunkCount: chunks.length,
-        },
-      })
-      .where(eq(knowledgeItems.id, itemId));
-
-    logger.info({ itemId }, "Item processing complete");
-  } catch (error) {
-    logger.error(error, "Failed to process item %s", itemId);
-    // Mark item as failed
-    await db
-      .update(knowledgeItems)
-      .set({
-        status: "failed",
-        processingError: error instanceof Error ? error.message : "Unknown error",
-      })
-      .where(eq(knowledgeItems.id, itemId));
   }
 }
 

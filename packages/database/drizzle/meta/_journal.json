@@ -15,6 +15,13 @@
       "when": 1770301838890,
       "tag": "0001_daily_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770553579657,
+      "tag": "0002_lonely_korath",
+      "breakpoints": true
     }
   ]
 }

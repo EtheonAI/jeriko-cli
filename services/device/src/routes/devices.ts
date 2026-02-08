@@ -9,16 +9,16 @@ const RegisterDeviceSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(["browser", "desktop", "mobile", "server"]),
   capabilities: z.array(z.string()).optional().default([]),
-  config: z.record(z.unknown()).optional().default({}),
+  config: z.record(z.string(), z.unknown()).optional().default({}),
   browserType: z.string().optional(),
-  metadata: z.record(z.unknown()).optional().default({}),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 const UpdateDeviceSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   capabilities: z.array(z.string()).optional(),
-  config: z.record(z.unknown()).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const deviceRoutes: FastifyPluginAsync = async (fastify) => {
@@ -69,7 +69,7 @@ export const deviceRoutes: FastifyPluginAsync = async (fastify) => {
       const userDevices = await db.select().from(devices).where(eq(devices.userId, userId));
 
       // Enrich with connection status
-      const enriched = userDevices.map((d) => ({
+      const enriched = userDevices.map((d: { id: string; [key: string]: unknown }) => ({
         ...d,
         isConnected: connections.isConnected(d.id),
       }));

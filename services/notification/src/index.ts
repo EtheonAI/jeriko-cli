@@ -1,5 +1,5 @@
-import Fastify from "fastify";
-import { createLogger, getEnv, createId, publish } from "@repo/service-utils";
+import { createService, typedRoute, createId, publish, z } from "@repo/service-utils";
+import { NotFoundError, AuthorizationError, AuthenticationError } from "@repo/service-utils/errors";
 import {
   db,
   notifications,
@@ -9,78 +9,98 @@ import {
   and,
   desc,
   sql,
-} from "@repo/database";
+  initDb,
+} from "./lib/db.js";
 import { Knock } from "@knocklabs/node";
 import { getActiveChannels, applyQuietHours, type ChannelPreferences } from "./lib/channels.js";
 import { configurePush, sendWebPush } from "./lib/push.js";
-
-const logger = createLogger({ service: "notification" });
 
 // Initialize Knock conditionally
 const knock = process.env.KNOCK_SECRET_API_KEY
   ? new Knock({ apiKey: process.env.KNOCK_SECRET_API_KEY })
   : null;
 
-if (!knock) {
-  logger.warn("KNOCK_SECRET_API_KEY not set - email delivery via Knock disabled");
-}
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const UserIdParams = z.object({ userId: z.string().min(1) });
+const IdParams = z.object({ id: z.string().min(1) });
+
+const SendNotificationBody = z.object({
+  userId: z.string().min(1),
+  type: z.string().min(1),
+  title: z.string().min(1),
+  message: z.string().min(1),
+  data: z.record(z.string(), z.unknown()).optional(),
+  priority: z.string().default("normal"),
+  actionUrl: z.string().optional(),
+  actionLabel: z.string().optional(),
+  entityType: z.string().optional(),
+  entityId: z.string().optional(),
+});
+
+const NotificationsQuery = z.object({
+  limit: z.coerce.number().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+});
+
+const PushSubscribeBody = z.object({
+  userId: z.string().min(1),
+  subscription: z.object({
+    endpoint: z.string().url(),
+    keys: z.object({
+      p256dh: z.string().min(1),
+      auth: z.string().min(1),
+    }),
+  }),
+});
+
+const UpdatePreferencesBody = z.object({
+  emailEnabled: z.boolean().optional(),
+  pushEnabled: z.boolean().optional(),
+  inAppEnabled: z.boolean().optional(),
+  inAppSound: z.boolean().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Bootstrap
+// ---------------------------------------------------------------------------
 
 async function main() {
-  const port = parseInt(getEnv("PORT", "4006"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
+  await initDb();
 
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
-  });
+  const { app, logger, start } = await createService({ name: "notification" });
 
-  const requireUserId = (request: any, reply: any): string | null => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      reply.status(401).send({ error: "Unauthorized" });
-      return null;
-    }
-    return userId;
-  };
+  if (!knock) {
+    logger.warn("KNOCK_SECRET_API_KEY not set - email delivery via Knock disabled");
+  }
 
-  // Health check
-  app.get("/health", async () => {
-    return { status: "ok", service: "notification" };
-  });
+  // Configure web push (VAPID keys)
+  configurePush();
 
+  // ---------------------------------------------------------------------------
   // Send notification
-  app.post("/send", async (request, reply) => {
-    const {
-      userId,
-      type,
-      title,
-      message,
-      data,
-      priority = "normal",
-      actionUrl,
-      actionLabel,
-      entityType,
-      entityId,
-    } = request.body as {
-      userId: string;
-      type: string;
-      title: string;
-      message: string;
-      data?: Record<string, unknown>;
-      priority?: string;
-      actionUrl?: string;
-      actionLabel?: string;
-      entityType?: string;
-      entityId?: string;
-    };
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/send",
+    typedRoute({ body: SendNotificationBody }, async (request, reply) => {
+      const {
+        userId,
+        type,
+        title,
+        message,
+        data,
+        priority,
+        actionUrl,
+        actionLabel,
+        entityType,
+        entityId,
+      } = request.body;
 
-    try {
-      const authUserId = requireUserId(request, reply);
-      if (!authUserId) return;
-      if (authUserId !== userId) {
-        return reply.status(403).send({ error: "Forbidden" });
-      }
+      if (!request.userId) throw new AuthenticationError();
+      if (request.userId !== userId) throw new AuthorizationError();
+
       // 1. Fetch user preferences
       const [prefs] = await db
         .select()
@@ -178,32 +198,29 @@ async function main() {
 
       logger.info(
         { userId, type, notificationId, channels: deliveredChannels },
-        "Notification sent"
+        "Notification sent",
       );
 
-      return { id: notificationId, status: "sent", channels: deliveredChannels };
-    } catch (error) {
-      logger.error(error, "Failed to send notification");
-      return reply.status(500).send({ error: "Failed to send notification" });
-    }
-  });
+      return reply.success({ id: notificationId, status: "sent", channels: deliveredChannels });
+    }),
+  );
 
+  // ---------------------------------------------------------------------------
   // Get user notifications
-  app.get("/users/:userId/notifications", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    const { limit = 50, cursor } = request.query as { limit?: number; cursor?: string };
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/users/:userId/notifications",
+    typedRoute({ params: UserIdParams, query: NotificationsQuery }, async (request, reply) => {
+      const { userId } = request.params;
+      const { limit, cursor } = request.query;
 
-    try {
-      const authUserId = requireUserId(request, reply);
-      if (!authUserId) return;
-      if (authUserId !== userId) {
-        return reply.status(403).send({ error: "Forbidden" });
-      }
-      const pageLimit = Math.min(limit, 100);
+      if (!request.userId) throw new AuthenticationError();
+      if (request.userId !== userId) throw new AuthorizationError();
+
       const conditions = [eq(notifications.userId, userId)];
       if (cursor) {
         conditions.push(
-          sql`${notifications.createdAt} < (SELECT created_at FROM notifications WHERE id = ${cursor})`
+          sql`${notifications.createdAt} < (SELECT created_at FROM notifications WHERE id = ${cursor})`,
         );
       }
 
@@ -212,33 +229,33 @@ async function main() {
         .from(notifications)
         .where(and(...conditions))
         .orderBy(desc(notifications.createdAt))
-        .limit(pageLimit + 1);
+        .limit(limit + 1);
 
-      const hasMore = results.length > pageLimit;
-      const items = hasMore ? results.slice(0, pageLimit) : results;
+      const hasMore = results.length > limit;
+      const items = hasMore ? results.slice(0, limit) : results;
       const nextCursor = hasMore ? items[items.length - 1]!.id : null;
 
-      return { notifications: items, cursor: nextCursor };
-    } catch (error) {
-      logger.error(error, "Failed to fetch notifications");
-      return reply.status(500).send({ error: "Failed to fetch notifications" });
-    }
-  });
+      return reply.success({ notifications: items, cursor: nextCursor });
+    }),
+  );
 
+  // ---------------------------------------------------------------------------
   // Mark notification as read
-  app.patch("/notifications/:id/read", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      const authUserId = requireUserId(request, reply);
-      if (!authUserId) return;
+  // ---------------------------------------------------------------------------
+  app.patch(
+    "/notifications/:id/read",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
+      if (!request.userId) throw new AuthenticationError();
+
       const [updated] = await db
         .update(notifications)
         .set({ isRead: true, readAt: new Date() })
-        .where(and(eq(notifications.id, id), eq(notifications.userId, authUserId)))
+        .where(and(eq(notifications.id, id), eq(notifications.userId, request.userId)))
         .returning();
-      if (!updated) {
-        return reply.status(404).send({ error: "Notification not found" });
-      }
+
+      if (!updated) throw new NotFoundError("Notification");
 
       // Publish read event via WebSocket
       try {
@@ -250,21 +267,21 @@ async function main() {
         logger.error(err, "Failed to publish notification:read event");
       }
 
-      return { id: updated.id, read: true };
-    } catch (error) {
-      logger.error(error, "Failed to mark notification as read");
-      return reply.status(500).send({ error: "Failed to update notification" });
-    }
-  });
+      return reply.success({ id: updated.id, read: true });
+    }),
+  );
 
+  // ---------------------------------------------------------------------------
   // Register push subscription
-  app.post("/push/subscribe", async (request, reply) => {
-    const { userId, subscription } = request.body as {
-      userId: string;
-      subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
-    };
+  // ---------------------------------------------------------------------------
+  app.post(
+    "/push/subscribe",
+    typedRoute({ body: PushSubscribeBody }, async (request, reply) => {
+      const { userId, subscription } = request.body;
 
-    try {
+      if (!request.userId) throw new AuthenticationError();
+      if (request.userId !== userId) throw new AuthorizationError();
+
       await db.insert(pushSubscriptions).values({
         id: createId(),
         userId,
@@ -272,34 +289,45 @@ async function main() {
         p256dh: subscription.keys.p256dh,
         auth: subscription.keys.auth,
       });
-      return { subscribed: true };
-    } catch (error) {
-      logger.error(error, "Failed to save push subscription");
-      return reply.status(500).send({ error: "Failed to save push subscription" });
-    }
-  });
 
+      return reply.success({ subscribed: true });
+    }),
+  );
+
+  // ---------------------------------------------------------------------------
   // Get notification preferences
-  app.get("/users/:userId/preferences", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    try {
+  // ---------------------------------------------------------------------------
+  app.get(
+    "/users/:userId/preferences",
+    typedRoute({ params: UserIdParams }, async (request, reply) => {
+      const { userId } = request.params;
+
+      if (!request.userId) throw new AuthenticationError();
+      if (request.userId !== userId) throw new AuthorizationError();
+
       const [prefs] = await db
         .select()
         .from(notificationPreferences)
         .where(eq(notificationPreferences.userId, userId))
         .limit(1);
-      return { userId, preferences: prefs || {} };
-    } catch (error) {
-      logger.error(error, "Failed to fetch notification preferences");
-      return reply.status(500).send({ error: "Failed to fetch preferences" });
-    }
-  });
 
+      return reply.success({ userId, preferences: prefs || {} });
+    }),
+  );
+
+  // ---------------------------------------------------------------------------
   // Update notification preferences
-  app.put("/users/:userId/preferences", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    const preferences = request.body as Record<string, boolean>;
-    try {
+  // ---------------------------------------------------------------------------
+  app.put(
+    "/users/:userId/preferences",
+    typedRoute({ params: UserIdParams, body: UpdatePreferencesBody }, async (request, reply) => {
+      const { userId } = request.params;
+
+      if (!request.userId) throw new AuthenticationError();
+      if (request.userId !== userId) throw new AuthorizationError();
+
+      const preferences = request.body;
+
       const [existing] = await db
         .select()
         .from(notificationPreferences)
@@ -317,7 +345,7 @@ async function main() {
           })
           .where(eq(notificationPreferences.userId, userId))
           .returning();
-        return { userId, preferences: updated, updated: true };
+        return reply.success({ userId, preferences: updated, updated: true });
       } else {
         const [created] = await db
           .insert(notificationPreferences)
@@ -330,56 +358,15 @@ async function main() {
             inAppSound: preferences.inAppSound ?? true,
           })
           .returning();
-        return { userId, preferences: created, updated: true };
+        return reply.success({ userId, preferences: created, updated: true });
       }
-    } catch (error) {
-      logger.error(error, "Failed to update notification preferences");
-      return reply.status(500).send({ error: "Failed to update preferences" });
-    }
-  });
+    }),
+  );
 
-  // Request logging
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
-
-  // Configure web push (VAPID keys)
-  configurePush();
-
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "Notification service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
-
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
-      await app.close();
-      process.exit(0);
-    });
-  }
+  // ---------------------------------------------------------------------------
+  // Start
+  // ---------------------------------------------------------------------------
+  await start();
 }
 
 main();

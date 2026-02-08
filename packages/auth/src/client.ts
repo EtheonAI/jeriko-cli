@@ -25,37 +25,12 @@ export const {
   $Infer,
 } = authClient;
 
-// Forgot password - calls API directly since better-auth client doesn't expose it
-export async function forgetPassword(options: {
+// forgetPassword exists at runtime but TypeScript can't infer it when plugins are added.
+// Access it directly from the client instance.
+export const forgetPassword = (authClient as any).forgetPassword as (options: {
   email: string;
   redirectTo?: string;
-}): Promise<{ data: unknown; error: { message: string } | null }> {
-  const baseURL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-  try {
-    const response = await fetch(`${baseURL}/api/auth/forget-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(options),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return {
-        data: null,
-        error: { message: errorData.message || "Failed to send reset email" },
-      };
-    }
-
-    const data = await response.json().catch(() => ({}));
-    return { data, error: null };
-  } catch {
-    return {
-      data: null,
-      error: { message: "An error occurred. Please try again." },
-    };
-  }
-}
+}) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 // Type exports
 export type Session = typeof authClient.$Infer.Session;

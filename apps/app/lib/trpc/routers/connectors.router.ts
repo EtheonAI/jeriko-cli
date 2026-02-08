@@ -544,12 +544,24 @@ export const connectorsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Check if connector definition exists
-      const [definition] = await db
-        .select()
-        .from(connectorDefinitions)
-        .where(eq(connectorDefinitions.id, input.connectorDefinitionId))
-        .limit(1);
+      // Check definition exists AND if already installed in parallel
+      const [[definition], [existing]] = await Promise.all([
+        db
+          .select()
+          .from(connectorDefinitions)
+          .where(eq(connectorDefinitions.id, input.connectorDefinitionId))
+          .limit(1),
+        db
+          .select()
+          .from(userConnectors)
+          .where(
+            and(
+              eq(userConnectors.userId, ctx.user.id),
+              eq(userConnectors.connectorDefinitionId, input.connectorDefinitionId)
+            )
+          )
+          .limit(1),
+      ]);
 
       if (!definition) {
         throw new TRPCError({
@@ -557,18 +569,6 @@ export const connectorsRouter = createTRPCRouter({
           message: "Connector definition not found",
         });
       }
-
-      // Check if already installed
-      const [existing] = await db
-        .select()
-        .from(userConnectors)
-        .where(
-          and(
-            eq(userConnectors.userId, ctx.user.id),
-            eq(userConnectors.connectorDefinitionId, input.connectorDefinitionId)
-          )
-        )
-        .limit(1);
 
       if (existing) {
         throw new TRPCError({
@@ -597,7 +597,7 @@ export const connectorsRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        config: z.record(z.unknown()).optional(),
+        config: z.record(z.string(), z.unknown()).optional(),
         syncEnabled: z.boolean().optional(),
         syncInterval: z.number().optional(),
       })

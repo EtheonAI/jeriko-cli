@@ -1,73 +1,38 @@
-# Build stage
-FROM node:20-alpine AS builder
-
-# Install pnpm
+FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+RUN apk add --no-cache wget
 
-# Set working directory
+FROM base AS pruner
 WORKDIR /app
+COPY . .
+RUN npx turbo prune @rubic/file --docker
 
-# Copy workspace configuration
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
+FROM base AS installer
+WORKDIR /app
+COPY --from=pruner /app/out/json/ .
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
-# Copy package files for dependency installation
-COPY packages/typescript-config/package.json packages/typescript-config/
-COPY packages/database/package.json packages/database/
-COPY packages/service-utils/package.json packages/service-utils/
-COPY services/file/package.json services/file/
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile --filter=@rubic/file...
-
-# Copy source files
-COPY packages/typescript-config packages/typescript-config/
-COPY packages/database packages/database/
-COPY packages/service-utils packages/service-utils/
-COPY services/file services/file/
-
-# Build packages and service
+COPY --from=pruner /app/out/full/ .
 RUN pnpm turbo build --filter=@rubic/file
+RUN pnpm deploy --filter=@rubic/file --prod /deployed
 
-# Production stage
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
+RUN apk add --no-cache wget
+RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D rubic
 
-# Add labels
-LABEL org.opencontainers.image.source="https://github.com/etheon/rubic"
-LABEL org.opencontainers.image.description="Rubic File Service"
-LABEL org.opencontainers.image.licenses="MIT"
-
-# Install security updates
-RUN corepack enable && corepack prepare pnpm@10.19.0 --activate \
-    && apk update && apk upgrade --no-cache
-
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 rubic
-
-# Set working directory
 WORKDIR /app
 
-# Copy production dependencies
-COPY --from=builder --chown=rubic:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=rubic:nodejs /app/packages/service-utils/dist ./packages/service-utils/dist
-COPY --from=builder --chown=rubic:nodejs /app/packages/service-utils/package.json ./packages/service-utils/
-COPY --from=builder --chown=rubic:nodejs /app/services/file/dist ./services/file/dist
-COPY --from=builder --chown=rubic:nodejs /app/services/file/package.json ./services/file/
+COPY --from=installer /deployed/node_modules ./node_modules
+COPY --from=installer /deployed/package.json ./
+COPY --from=installer /app/services/file/dist ./dist
 
-# Set environment
-ENV NODE_ENV=production
-ENV PORT=4005
-
-# Switch to non-root user
 USER rubic
 
-# Expose port
+ENV NODE_ENV=production
 EXPOSE 4005
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:4005/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4005/health || exit 1
 
-# Start the service
-WORKDIR /app/services/file
 CMD ["node", "dist/index.js"]

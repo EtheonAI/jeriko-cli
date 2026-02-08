@@ -1,11 +1,27 @@
-import Fastify from "fastify";
 import { Sandbox as E2BSandbox } from "@e2b/code-interpreter";
-import { createLogger, getEnv, createId } from "@repo/service-utils";
-import { db, sandboxes, sandboxExecutions, sandboxFiles, eq, and, desc } from "@repo/database";
+import { createService, typedRoute, getEnv, createId } from "@repo/service-utils";
+import {
+  NotFoundError,
+  AppError,
+  AuthorizationError,
+  BadGatewayError,
+  ServiceUnavailableError,
+} from "@repo/service-utils/errors";
+import { z } from "zod";
+import {
+  initDb,
+  db,
+  sandboxes,
+  sandboxExecutions,
+  sandboxFiles,
+  eq,
+  and,
+  desc,
+} from "./lib/db.js";
 
-const logger = createLogger({ service: "sandbox" });
-
+// ---------------------------------------------------------------------------
 // In-memory map of active E2B sandbox instances keyed by our DB sandbox ID
+// ---------------------------------------------------------------------------
 const sandboxMap = new Map<string, E2BSandbox>();
 
 const E2B_API_KEY = getEnv("E2B_API_KEY", "");
@@ -28,15 +44,19 @@ async function getE2BSandbox(dbSandboxId: string): Promise<E2BSandbox> {
     .limit(1);
 
   if (!record) {
-    throw new Error(`Sandbox ${dbSandboxId} not found in database`);
+    throw new AppError(`Sandbox ${dbSandboxId} not found in database`, 410, "SANDBOX_GONE");
   }
 
   if (!record.e2bSandboxId) {
-    throw new Error(`Sandbox ${dbSandboxId} has no E2B sandbox ID`);
+    throw new AppError(`Sandbox ${dbSandboxId} has no E2B sandbox ID`, 410, "SANDBOX_GONE");
   }
 
   if (record.status === "stopped" || record.status === "terminated") {
-    throw new Error(`Sandbox ${dbSandboxId} is ${record.status}`);
+    throw new AppError(
+      `Sandbox ${dbSandboxId} is ${record.status}`,
+      410,
+      "SANDBOX_GONE",
+    );
   }
 
   // Reconnect to the E2B sandbox
@@ -48,51 +68,147 @@ async function getE2BSandbox(dbSandboxId: string): Promise<E2BSandbox> {
   return e2bSandbox;
 }
 
-async function main() {
-  const port = parseInt(getEnv("PORT", "4012"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
+/** Verify the requesting user owns this sandbox */
+async function verifySandboxOwner(sandboxId: string, userId: string): Promise<void> {
+  const [record] = await db
+    .select({ userId: sandboxes.userId })
+    .from(sandboxes)
+    .where(eq(sandboxes.id, sandboxId))
+    .limit(1);
 
-  if (!E2B_API_KEY) {
-    logger.warn("E2B_API_KEY not set — sandbox creation will fail");
+  if (!record) {
+    throw new NotFoundError("Sandbox");
   }
 
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
+  if (record.userId !== userId) {
+    throw new AuthorizationError("Not authorized to access this sandbox");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+const IdParams = z.object({ id: z.string().min(1) });
+const UserIdParams = z.object({ userId: z.string().min(1) });
+
+const CreateSandboxBody = z.object({
+  projectId: z.string().optional(),
+  template: z.string().optional(),
+  config: z
+    .object({
+      timeout: z.number().positive().optional(),
+      memory: z.number().positive().optional(),
+      env: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
+});
+
+const ExecuteCodeBody = z.object({
+  code: z.string().min(1),
+  language: z.string().optional(),
+  timeout: z.number().positive().optional(),
+});
+
+const ShellCommandBody = z.object({
+  command: z.string().min(1),
+  timeout: z.number().positive().optional(),
+});
+
+const BrowserActionBody = z.object({
+  action: z.string().min(1),
+  params: z.record(z.string(), z.unknown()).optional(),
+});
+
+const WriteFileBody = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+});
+
+const ReadFileQuery = z.object({
+  path: z.string().min(1),
+});
+
+const ListFilesQuery = z.object({
+  path: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Browser action allowlist
+// ---------------------------------------------------------------------------
+const ALLOWED_BROWSER_ACTIONS = new Set([
+  "navigate", "view", "click", "input", "scroll", "scroll_up", "scroll_down",
+  "key_press", "press_key", "move_mouse", "select_option",
+  "console_exec", "console_view", "screenshot", "take_screenshot",
+  "restart", "health",
+]);
+
+// ---------------------------------------------------------------------------
+// Service bootstrap
+// ---------------------------------------------------------------------------
+async function main() {
+  // Initialize database (dynamic import to work around ESM + pnpm resolution)
+  await initDb();
+
+  if (!E2B_API_KEY) {
+    console.warn("E2B_API_KEY not set — sandbox creation will fail");
+  }
+
+  const { app, logger, start } = await createService({
+    name: "sandbox",
+    port: parseInt(getEnv("PORT", "4012"), 10),
+    onShutdown: [
+      async () => {
+        logger.info({ activeSandboxes: sandboxMap.size }, "Killing active E2B sandboxes");
+        const killPromises = Array.from(sandboxMap.entries()).map(
+          async ([dbId, e2bSandbox]) => {
+            try {
+              await e2bSandbox.kill();
+              logger.info({ sandboxId: dbId }, "Killed E2B sandbox on shutdown");
+            } catch (err) {
+              logger.warn(
+                { sandboxId: dbId, error: err },
+                "Failed to kill E2B sandbox on shutdown",
+              );
+            }
+          },
+        );
+        await Promise.allSettled(killPromises);
+        sandboxMap.clear();
+      },
+    ],
   });
 
-  // Health check
-  app.get("/health", async () => {
-    return { status: "ok", service: "sandbox" };
-  });
+  // -------------------------------------------------------------------------
+  // Routes
+  // -------------------------------------------------------------------------
 
   // Create sandbox
-  app.post("/sandboxes", async (request, reply) => {
-    const { userId, projectId, template, config } = request.body as {
-      userId: string;
-      projectId?: string;
-      template?: string;
-      config?: {
-        timeout?: number;
-        memory?: number;
-        env?: Record<string, string>;
-      };
-    };
+  app.post(
+    "/sandboxes",
+    typedRoute({ body: CreateSandboxBody }, async (request, reply) => {
+      const { projectId, template, config } = request.body;
+      const userId = request.userId;
 
-    if (!E2B_API_KEY) {
-      return reply.status(503).send({ error: "E2B_API_KEY not configured" });
-    }
+      if (!E2B_API_KEY) {
+        throw new ServiceUnavailableError("E2B_API_KEY not configured");
+      }
 
-    try {
       const timeoutMs = config?.timeout || 300_000; // 5 minutes default
 
       // Create E2B sandbox
-      const e2bSandbox = await E2BSandbox.create({
-        apiKey: E2B_API_KEY,
-        timeoutMs,
-        envs: config?.env,
-      });
+      let e2bSandbox: E2BSandbox;
+      try {
+        e2bSandbox = await E2BSandbox.create({
+          apiKey: E2B_API_KEY,
+          timeoutMs,
+          envs: config?.env,
+        });
+      } catch (error) {
+        logger.error(error, "Failed to create E2B sandbox");
+        const message =
+          error instanceof Error ? error.message : "Failed to create sandbox";
+        throw new BadGatewayError(message);
+      }
 
       const dbId = createId();
 
@@ -120,68 +236,71 @@ async function main() {
 
       logger.info(
         { sandboxId: dbId, e2bSandboxId: e2bSandbox.sandboxId, userId, template },
-        "Sandbox created"
+        "Sandbox created",
       );
 
-      return {
+      return reply.success({
         id: sandbox!.id,
         status: "running",
         e2bSandboxId: e2bSandbox.sandboxId,
         hostname: e2bSandbox.getHost(80),
         template: template || "default",
-      };
-    } catch (error) {
-      logger.error(error, "Failed to create sandbox");
-      const message = error instanceof Error ? error.message : "Failed to create sandbox";
-      return reply.status(502).send({ error: message });
-    }
-  });
+      });
+    }),
+  );
 
   // Get sandbox
-  app.get("/sandboxes/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      const [sandbox] = await db.select().from(sandboxes).where(eq(sandboxes.id, id)).limit(1);
+  app.get(
+    "/sandboxes/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
+      const [sandbox] = await db
+        .select()
+        .from(sandboxes)
+        .where(eq(sandboxes.id, id))
+        .limit(1);
+
       if (!sandbox) {
-        return reply.status(404).send({ error: "Sandbox not found" });
+        throw new NotFoundError("Sandbox");
       }
-      return sandbox;
-    } catch (error) {
-      logger.error(error, "Failed to fetch sandbox");
-      return reply.status(500).send({ error: "Failed to fetch sandbox" });
-    }
-  });
+
+      return reply.success(sandbox);
+    }),
+  );
 
   // List user sandboxes
-  app.get("/users/:userId/sandboxes", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    try {
+  app.get(
+    "/users/:userId/sandboxes",
+    typedRoute({ params: UserIdParams }, async (request, reply) => {
+      const { userId } = request.params;
+      if (request.userId !== userId) {
+        throw new AuthorizationError("Not authorized to list another user's sandboxes");
+      }
+
       const results = await db
         .select()
         .from(sandboxes)
         .where(eq(sandboxes.userId, userId))
         .orderBy(desc(sandboxes.createdAt));
-      return { sandboxes: results };
-    } catch (error) {
-      logger.error(error, "Failed to list sandboxes");
-      return reply.status(500).send({ error: "Failed to list sandboxes" });
-    }
-  });
+
+      return reply.success({ sandboxes: results });
+    }),
+  );
 
   // Execute code in sandbox (synchronous — waits for result)
-  app.post("/sandboxes/:id/execute", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { code, language, timeout } = request.body as {
-      code: string;
-      language?: string;
-      timeout?: number;
-    };
+  app.post(
+    "/sandboxes/:id/execute",
+    typedRoute({ params: IdParams, body: ExecuteCodeBody }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { code, language, timeout } = request.body;
 
-    const execId = createId();
-    const timeoutMs = timeout || 30_000;
-    const startedAt = new Date();
+      const execId = createId();
+      const timeoutMs = timeout || 30_000;
+      const startedAt = new Date();
 
-    try {
       // Insert execution record
       await db.insert(sandboxExecutions).values({
         id: execId,
@@ -204,108 +323,131 @@ async function main() {
           .update(sandboxExecutions)
           .set({ status: "failed", error: errorMsg, completedAt: new Date() })
           .where(eq(sandboxExecutions.id, execId));
-        return reply.status(410).send({ error: errorMsg });
+        throw new AppError(errorMsg, 410, "SANDBOX_GONE");
       }
 
-      // Run code in E2B
-      const execution = await e2bSandbox.runCode(code, {
-        language: language || "python",
-        timeoutMs,
-      });
+      try {
+        // Run code in E2B
+        const execution = await e2bSandbox.runCode(code, {
+          language: language || "python",
+          timeoutMs,
+        });
 
-      const completedAt = new Date();
-      const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-      const stdout = execution.logs.stdout.join("\n");
-      const stderr = execution.logs.stderr.join("\n");
-      const hasError = !!execution.error;
-      const status = hasError ? "failed" : "completed";
+        const completedAt = new Date();
+        const executionTimeMs = completedAt.getTime() - startedAt.getTime();
+        const stdout = execution.logs.stdout.join("\n");
+        const stderr = execution.logs.stderr.join("\n");
+        const hasError = !!execution.error;
+        const status = hasError ? "failed" : "completed";
 
-      // Update execution record
-      await db
-        .update(sandboxExecutions)
-        .set({
+        // Update execution record
+        await db
+          .update(sandboxExecutions)
+          .set({
+            status,
+            stdout,
+            stderr,
+            exitCode: hasError ? 1 : 0,
+            result: execution.toJSON(),
+            error: execution.error
+              ? `${execution.error.name}: ${execution.error.value}`
+              : null,
+            completedAt,
+            executionTimeMs,
+          })
+          .where(eq(sandboxExecutions.id, execId));
+
+        // Update sandbox last activity
+        await db
+          .update(sandboxes)
+          .set({ lastActivityAt: completedAt })
+          .where(eq(sandboxes.id, id));
+
+        logger.info(
+          { sandboxId: id, executionId: execId, language, status, executionTimeMs },
+          "Execution completed",
+        );
+
+        return reply.success({
+          id: execId,
           status,
           stdout,
           stderr,
           exitCode: hasError ? 1 : 0,
-          result: execution.toJSON(),
-          error: execution.error ? `${execution.error.name}: ${execution.error.value}` : null,
-          completedAt,
-          executionTimeMs,
-        })
-        .where(eq(sandboxExecutions.id, execId));
-
-      // Update sandbox last activity
-      await db.update(sandboxes).set({ lastActivityAt: completedAt }).where(eq(sandboxes.id, id));
-
-      logger.info(
-        { sandboxId: id, executionId: execId, language, status, executionTimeMs },
-        "Execution completed"
-      );
-
-      return {
-        id: execId,
-        status,
-        stdout,
-        stderr,
-        exitCode: hasError ? 1 : 0,
-        error: execution.error
-          ? {
-              name: execution.error.name,
-              value: execution.error.value,
-              traceback: execution.error.traceback,
-            }
-          : null,
-        results: execution.results.map((r) => r.toJSON()),
-        text: execution.text,
-        executionTimeMs,
-      };
-    } catch (error) {
-      const completedAt = new Date();
-      const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-      const errorMsg = error instanceof Error ? error.message : "Execution failed";
-
-      // Check if it's a timeout
-      const isTimeout = error instanceof Error && error.message.toLowerCase().includes("timeout");
-
-      await db
-        .update(sandboxExecutions)
-        .set({
-          status: isTimeout ? "timeout" : "failed",
-          error: errorMsg,
-          completedAt,
-          executionTimeMs,
-        })
-        .where(eq(sandboxExecutions.id, execId));
-
-      logger.error(error, "Failed to execute code");
-
-      if (isTimeout) {
-        return reply.status(408).send({
-          id: execId,
-          status: "timeout",
-          error: errorMsg,
+          error: execution.error
+            ? {
+                name: execution.error.name,
+                value: execution.error.value,
+                traceback: execution.error.traceback,
+              }
+            : null,
+          results: execution.results.map((r) => r.toJSON()),
+          text: execution.text,
           executionTimeMs,
         });
-      }
+      } catch (error) {
+        const completedAt = new Date();
+        const executionTimeMs = completedAt.getTime() - startedAt.getTime();
+        const errorMsg =
+          error instanceof Error ? error.message : "Execution failed";
 
-      return reply.status(502).send({ error: errorMsg });
-    }
-  });
+        // Check if it's a timeout
+        const isTimeout =
+          error instanceof Error &&
+          error.message.toLowerCase().includes("timeout");
+
+        await db
+          .update(sandboxExecutions)
+          .set({
+            status: isTimeout ? "timeout" : "failed",
+            error: errorMsg,
+            completedAt,
+            executionTimeMs,
+          })
+          .where(eq(sandboxExecutions.id, execId));
+
+        logger.error(error, "Failed to execute code");
+
+        if (isTimeout) {
+          throw new AppError(errorMsg, 408, "EXECUTION_TIMEOUT", true, {
+            id: execId,
+            status: "timeout",
+            executionTimeMs,
+          });
+        }
+
+        throw new BadGatewayError(errorMsg);
+      }
+    }),
+  );
 
   // Get execution result
-  app.get("/executions/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.get(
+    "/executions/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+
       const [execution] = await db
         .select()
         .from(sandboxExecutions)
         .where(eq(sandboxExecutions.id, id))
         .limit(1);
+
       if (!execution) {
-        return reply.status(404).send({ error: "Execution not found" });
+        throw new NotFoundError("Execution");
       }
-      return {
+
+      // Verify sandbox ownership
+      const [sbx] = await db
+        .select({ userId: sandboxes.userId })
+        .from(sandboxes)
+        .where(eq(sandboxes.id, execution.sandboxId))
+        .limit(1);
+      if (!sbx || sbx.userId !== request.userId) {
+        throw new AuthorizationError("Not authorized to access this execution");
+      }
+
+      return reply.success({
         id: execution.id,
         status: execution.status,
         stdout: execution.stdout || "",
@@ -314,26 +456,22 @@ async function main() {
         error: execution.error || null,
         result: execution.result || null,
         executionTimeMs: execution.executionTimeMs || null,
-      };
-    } catch (error) {
-      logger.error(error, "Failed to fetch execution");
-      return reply.status(500).send({ error: "Failed to fetch execution" });
-    }
-  });
+      });
+    }),
+  );
 
   // Run shell command in sandbox (synchronous)
-  app.post("/sandboxes/:id/shell", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { command, timeout } = request.body as {
-      command: string;
-      timeout?: number;
-    };
+  app.post(
+    "/sandboxes/:id/shell",
+    typedRoute({ params: IdParams, body: ShellCommandBody }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { command, timeout } = request.body;
 
-    const execId = createId();
-    const timeoutMs = timeout || 30_000;
-    const startedAt = new Date();
+      const execId = createId();
+      const timeoutMs = timeout || 30_000;
+      const startedAt = new Date();
 
-    try {
       await db.insert(sandboxExecutions).values({
         id: execId,
         sandboxId: id,
@@ -354,113 +492,155 @@ async function main() {
           .update(sandboxExecutions)
           .set({ status: "failed", error: errorMsg, completedAt: new Date() })
           .where(eq(sandboxExecutions.id, execId));
-        return reply.status(410).send({ error: errorMsg });
+        throw new AppError(errorMsg, 410, "SANDBOX_GONE");
       }
 
-      // Run shell command
-      const result = await e2bSandbox.commands.run(command, { timeoutMs });
+      try {
+        // Run shell command
+        const result = await e2bSandbox.commands.run(command, { timeoutMs });
 
-      const completedAt = new Date();
-      const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-      const status = result.exitCode === 0 ? "completed" : "failed";
+        const completedAt = new Date();
+        const executionTimeMs = completedAt.getTime() - startedAt.getTime();
+        const status = result.exitCode === 0 ? "completed" : "failed";
 
-      await db
-        .update(sandboxExecutions)
-        .set({
-          status,
+        await db
+          .update(sandboxExecutions)
+          .set({
+            status,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            completedAt,
+            executionTimeMs,
+          })
+          .where(eq(sandboxExecutions.id, execId));
+
+        await db
+          .update(sandboxes)
+          .set({ lastActivityAt: completedAt })
+          .where(eq(sandboxes.id, id));
+
+        logger.info(
+          { sandboxId: id, executionId: execId, exitCode: result.exitCode },
+          "Shell command completed",
+        );
+
+        return reply.success({
+          id: execId,
           stdout: result.stdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
-          completedAt,
           executionTimeMs,
-        })
-        .where(eq(sandboxExecutions.id, execId));
+        });
+      } catch (error) {
+        const completedAt = new Date();
+        const executionTimeMs = completedAt.getTime() - startedAt.getTime();
+        const errorMsg =
+          error instanceof Error ? error.message : "Command failed";
 
-      await db.update(sandboxes).set({ lastActivityAt: completedAt }).where(eq(sandboxes.id, id));
+        await db
+          .update(sandboxExecutions)
+          .set({
+            status: "failed",
+            error: errorMsg,
+            completedAt,
+            executionTimeMs,
+          })
+          .where(eq(sandboxExecutions.id, execId));
 
-      logger.info(
-        { sandboxId: id, executionId: execId, exitCode: result.exitCode },
-        "Shell command completed"
-      );
+        logger.error(error, "Failed to run shell command");
+        throw new BadGatewayError(errorMsg);
+      }
+    }),
+  );
 
-      return {
-        id: execId,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        executionTimeMs,
-      };
-    } catch (error) {
-      const completedAt = new Date();
-      const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-      const errorMsg = error instanceof Error ? error.message : "Command failed";
+  // Browser control — proxy actions to the Playwright controller (port 9821) inside the sandbox
+  app.post(
+    "/sandboxes/:id/browser",
+    typedRoute({ params: IdParams, body: BrowserActionBody }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { action, params } = request.body;
 
-      await db
-        .update(sandboxExecutions)
-        .set({
-          status: "failed",
-          error: errorMsg,
-          completedAt,
-          executionTimeMs,
-        })
-        .where(eq(sandboxExecutions.id, execId));
+      // Validate action against allowlist
+      if (!ALLOWED_BROWSER_ACTIONS.has(action)) {
+        throw new AppError(`Invalid browser action: ${action}`, 400, "INVALID_ACTION");
+      }
 
-      logger.error(error, "Failed to run shell command");
-      return reply.status(502).send({ error: errorMsg });
-    }
-  });
+      // Get E2B sandbox instance (throws AppError 410 if unavailable)
+      const e2bSandbox = await getE2BSandbox(id);
+
+      // Write payload to temp file to avoid shell injection
+      const payloadFile = `/tmp/bp_${Date.now()}.json`;
+      await e2bSandbox.files.write(payloadFile, JSON.stringify(params || {}));
+      const curlCmd = `curl -s -X POST http://localhost:9821/${action} -H 'Content-Type: application/json' -d @${payloadFile}; rm -f ${payloadFile}`;
+
+      const result = await e2bSandbox.commands.run(curlCmd, { timeoutMs: 45_000 });
+
+      if (result.stdout.trim()) {
+        try {
+          const parsed = JSON.parse(result.stdout.trim());
+          return reply.success(parsed);
+        } catch {
+          return reply.success({ output: result.stdout, raw: true });
+        }
+      }
+
+      if (result.stderr) {
+        throw new BadGatewayError(result.stderr);
+      }
+
+      throw new BadGatewayError("No response from browser controller");
+    }),
+  );
 
   // Write file to sandbox
-  app.post("/sandboxes/:id/files", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { path, content } = request.body as {
-      path: string;
-      content: string;
-    };
+  app.post(
+    "/sandboxes/:id/files",
+    typedRoute({ params: IdParams, body: WriteFileBody }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { path, content } = request.body;
 
-    try {
-      // Get E2B sandbox and write file
-      let e2bSandbox: E2BSandbox;
-      try {
-        e2bSandbox = await getE2BSandbox(id);
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : "Sandbox unavailable";
-        return reply.status(410).send({ error: errorMsg });
-      }
+      // Get E2B sandbox instance (throws AppError 410 if unavailable)
+      const e2bSandbox = await getE2BSandbox(id);
 
       await e2bSandbox.files.write(path, content);
 
-      // Track in DB
-      const fileName = path.split("/").pop() || path;
-      await db.insert(sandboxFiles).values({
-        id: createId(),
-        sandboxId: id,
-        path,
-        name: fileName,
-        content,
-        size: Buffer.byteLength(content, "utf-8"),
-      });
+      // Track in DB (best effort — don't fail the write if DB insert fails)
+      try {
+        const fileName = path.split("/").pop() || path;
+        await db.insert(sandboxFiles).values({
+          id: createId(),
+          sandboxId: id,
+          path,
+          name: fileName,
+          content: content.length > 100_000 ? null : content, // Skip large content
+          size: Buffer.byteLength(content, "utf-8"),
+        });
+      } catch (dbErr) {
+        logger.warn({ sandboxId: id, path, error: dbErr }, "Failed to track file in DB");
+      }
 
       logger.info({ sandboxId: id, path }, "File written");
-      return { path, written: true };
-    } catch (error) {
-      logger.error(error, "Failed to upload file");
-      const message = error instanceof Error ? error.message : "Failed to upload file";
-      return reply.status(502).send({ error: message });
-    }
-  });
+      return reply.success({ path, written: true });
+    }),
+  );
 
   // Read file from sandbox
-  app.get("/sandboxes/:id/files", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { path } = request.query as { path: string };
+  app.get(
+    "/sandboxes/:id/files",
+    typedRoute({ params: IdParams, query: ReadFileQuery }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { path } = request.query;
 
-    try {
-      // Read directly from E2B sandbox
-      let e2bSandbox: E2BSandbox;
       try {
-        e2bSandbox = await getE2BSandbox(id);
-      } catch (err) {
+        // Read directly from E2B sandbox
+        const e2bSandbox = await getE2BSandbox(id);
+        const content = await e2bSandbox.files.read(path, { format: "text" });
+        return reply.success({ path, content });
+      } catch {
         // Fall back to DB if sandbox is unavailable
         const [file] = await db
           .select()
@@ -469,30 +649,35 @@ async function main() {
           .limit(1);
 
         if (!file) {
-          return reply.status(404).send({ error: "File not found" });
+          throw new NotFoundError("File");
         }
-        return { path: file.path, content: file.content || "" };
+        return reply.success({ path: file.path, content: file.content || "" });
       }
-
-      const content = await e2bSandbox.files.read(path, { format: "text" });
-      return { path, content };
-    } catch (error) {
-      logger.error(error, "Failed to read file");
-      const message = error instanceof Error ? error.message : "Failed to read file";
-      return reply.status(502).send({ error: message });
-    }
-  });
+    }),
+  );
 
   // List files in sandbox
-  app.get("/sandboxes/:id/files/list", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { path } = request.query as { path?: string };
+  app.get(
+    "/sandboxes/:id/files/list",
+    typedRoute({ params: IdParams, query: ListFilesQuery }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { path } = request.query;
 
-    try {
-      let e2bSandbox: E2BSandbox;
       try {
-        e2bSandbox = await getE2BSandbox(id);
-      } catch (err) {
+        const e2bSandbox = await getE2BSandbox(id);
+        const dirPath = path || "/home/user";
+        const entries = await e2bSandbox.files.list(dirPath);
+
+        return reply.success({
+          files: entries.map((entry) => ({
+            name: entry.name,
+            path: entry.path,
+            type: entry.type,
+            size: entry.size,
+          })),
+        });
+      } catch {
         // Fall back to DB listing
         const conditions = [eq(sandboxFiles.sandboxId, id)];
         if (path) {
@@ -508,31 +693,18 @@ async function main() {
           .from(sandboxFiles)
           .where(and(...conditions));
 
-        return { files: filesList };
+        return reply.success({ files: filesList });
       }
-
-      const dirPath = path || "/home/user";
-      const entries = await e2bSandbox.files.list(dirPath);
-
-      return {
-        files: entries.map((entry) => ({
-          name: entry.name,
-          path: entry.path,
-          type: entry.type,
-          size: entry.size,
-        })),
-      };
-    } catch (error) {
-      logger.error(error, "Failed to list files");
-      const message = error instanceof Error ? error.message : "Failed to list files";
-      return reply.status(502).send({ error: message });
-    }
-  });
+    }),
+  );
 
   // Stop sandbox
-  app.post("/sandboxes/:id/stop", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.post(
+    "/sandboxes/:id/stop",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
       // Kill E2B sandbox if available
       const cached = sandboxMap.get(id);
       if (cached) {
@@ -541,7 +713,7 @@ async function main() {
         } catch (err) {
           logger.warn(
             { sandboxId: id, error: err },
-            "Failed to kill E2B sandbox (may already be stopped)"
+            "Failed to kill E2B sandbox (may already be stopped)",
           );
         }
         sandboxMap.delete(id);
@@ -560,7 +732,10 @@ async function main() {
             });
             await e2b.kill();
           } catch (err) {
-            logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on stop");
+            logger.warn(
+              { sandboxId: id, error: err },
+              "Failed to kill E2B sandbox on stop",
+            );
           }
         }
       }
@@ -570,28 +745,33 @@ async function main() {
         .set({ status: "stopped" })
         .where(eq(sandboxes.id, id))
         .returning();
+
       if (!updated) {
-        return reply.status(404).send({ error: "Sandbox not found" });
+        throw new NotFoundError("Sandbox");
       }
+
       logger.info({ sandboxId: id }, "Sandbox stopped");
-      return { id, status: "stopped" };
-    } catch (error) {
-      logger.error(error, "Failed to stop sandbox");
-      return reply.status(500).send({ error: "Failed to stop sandbox" });
-    }
-  });
+      return reply.success({ id, status: "stopped" });
+    }),
+  );
 
   // Delete sandbox
-  app.delete("/sandboxes/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
+  app.delete(
+    "/sandboxes/:id",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
       // Kill E2B sandbox if available
       const cached = sandboxMap.get(id);
       if (cached) {
         try {
           await cached.kill();
         } catch (err) {
-          logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on delete");
+          logger.warn(
+            { sandboxId: id, error: err },
+            "Failed to kill E2B sandbox on delete",
+          );
         }
         sandboxMap.delete(id);
       } else {
@@ -608,75 +788,31 @@ async function main() {
             });
             await e2b.kill();
           } catch (err) {
-            logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on delete");
+            logger.warn(
+              { sandboxId: id, error: err },
+              "Failed to kill E2B sandbox on delete",
+            );
           }
         }
       }
 
-      const [deleted] = await db.delete(sandboxes).where(eq(sandboxes.id, id)).returning();
+      const [deleted] = await db
+        .delete(sandboxes)
+        .where(eq(sandboxes.id, id))
+        .returning();
+
       if (!deleted) {
-        return reply.status(404).send({ error: "Sandbox not found" });
+        throw new NotFoundError("Sandbox");
       }
-      return { deleted: true };
-    } catch (error) {
-      logger.error(error, "Failed to delete sandbox");
-      return reply.status(500).send({ error: "Failed to delete sandbox" });
-    }
-  });
 
-  // Request logging
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
+      return reply.success({ deleted: true });
+    }),
+  );
 
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
-
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "Sandbox service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
-
-  // Graceful shutdown — kill all active E2B sandboxes
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal, activeSandboxes: sandboxMap.size }, "Received shutdown signal");
-
-      // Kill all active E2B sandboxes
-      const killPromises = Array.from(sandboxMap.entries()).map(async ([dbId, e2bSandbox]) => {
-        try {
-          await e2bSandbox.kill();
-          logger.info({ sandboxId: dbId }, "Killed E2B sandbox on shutdown");
-        } catch (err) {
-          logger.warn({ sandboxId: dbId, error: err }, "Failed to kill E2B sandbox on shutdown");
-        }
-      });
-      await Promise.allSettled(killPromises);
-      sandboxMap.clear();
-
-      await app.close();
-      process.exit(0);
-    });
-  }
+  // -------------------------------------------------------------------------
+  // Start
+  // -------------------------------------------------------------------------
+  await start();
 }
 
 main();

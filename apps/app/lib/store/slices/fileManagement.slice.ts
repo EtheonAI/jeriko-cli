@@ -85,7 +85,7 @@ export interface FileManagementState {
 
 const initialState: FileManagementState = {
   spaces: [],
-  spacesLoading: true,
+  spacesLoading: false,
   currentSpaceId: null,
   fileTab: "all",
   isDownloadMode: false,
@@ -103,7 +103,7 @@ const initialState: FileManagementState = {
   error: null,
 };
 
-export const fileManagementSlice = createSlice({
+const fileManagementSlice = createSlice({
   name: "fileManagement",
   initialState,
   reducers: {

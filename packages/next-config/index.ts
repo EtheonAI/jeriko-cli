@@ -1,10 +1,69 @@
 import withBundleAnalyzer from "@next/bundle-analyzer";
 import type { NextConfig } from "next";
 
+const securityHeaders = [
+  {
+    key: "X-DNS-Prefetch-Control",
+    value: "on",
+  },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+  {
+    key: "X-Frame-Options",
+    value: "SAMEORIGIN",
+  },
+  {
+    key: "X-Content-Type-Options",
+    value: "nosniff",
+  },
+  {
+    key: "X-XSS-Protection",
+    value: "1; mode=block",
+  },
+  {
+    key: "Referrer-Policy",
+    value: "strict-origin-when-cross-origin",
+  },
+  {
+    key: "Permissions-Policy",
+    value:
+      "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+  },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://us-assets.i.posthog.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' blob: data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.sentry.io wss: ws:",
+      "frame-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self'",
+      "upgrade-insecure-requests",
+    ].join("; "),
+  },
+];
+
 export const config: NextConfig = {
   // React Compiler for automatic memoization (React 19+)
-  // Automatically memoizes components, reducing unnecessary re-renders
   reactCompiler: true,
+
+  // Auto-transform barrel imports to direct imports at build time.
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "lodash-es",
+      "@radix-ui/react-icons",
+      "react-icons",
+    ],
+  },
 
   // Transpile workspace packages and ai package for proper resolution
   transpilePackages: [
@@ -28,12 +87,16 @@ export const config: NextConfig = {
 
   images: {
     formats: ["image/avif", "image/webp"],
-    remotePatterns: [
+    remotePatterns: [],
+  },
+
+  async headers() {
+    return [
       {
-        protocol: "https",
-        hostname: "img.clerk.com",
+        source: "/(.*)",
+        headers: securityHeaders,
       },
-    ],
+    ];
   },
 
   // biome-ignore lint/suspicious/useAwait: rewrites is async

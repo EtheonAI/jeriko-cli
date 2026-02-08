@@ -2,214 +2,112 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Agent Workspace Slice
- * Manages the agent workspace UI state (Manus-style agentWorkspace)
- *
- * Manus keys:
- * - sidebarType
- * - isSidebarPreviewFullscreen
- * - isSidebarVisibleInMobile
- * - animationLock
- * - isTimelinePlaying
- * - vncDialogVisible
- * - chatReplySearchMetadata
- * - chatReplySearchResults
- * - isPlannerExpanded
- * - prevAutoOpenedSidebarType
- * - fileHistoryVisible
- * - chatComputerDialogVisible
- * - disableChatWorkspaceInitAnimation
- * - disableSidebarInitAnimation
+ * Controls the workspace layout when an agent is running:
+ * - Computer view (live sandbox preview)
+ * - Planner panel
+ * - Sidebar panels (agents, sources, files, computer)
+ * - File history
+ * - Chat reply search
  */
 
-export type SidebarType =
-  | "none"
-  | "browser"
-  | "code"
+export type WorkspaceSidebarType =
+  | "agents"
+  | "sources"
   | "files"
-  | "terminal"
-  | "preview"
-  | "vnc"
-  | "planner"
-  | "timeline"
+  | "computer"
   | null;
+
+export interface ComputerPosition {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
 
 export interface ChatReplySearchMetadata {
   query: string;
-  totalResults: number;
-  currentIndex: number;
-  sessionId: string;
-}
-
-export interface ChatReplySearchResult {
-  messageId: string;
-  content: string;
-  matchStart: number;
-  matchEnd: number;
+  totalMatches: number;
+  currentMatch: number;
 }
 
 export interface AgentWorkspaceState {
-  // Sidebar
-  sidebarType: SidebarType;
-  isSidebarPreviewFullscreen: boolean;
-  isSidebarVisibleInMobile: boolean;
-  prevAutoOpenedSidebarType: SidebarType;
-
-  // Animation
-  animationLock: boolean;
-  disableChatWorkspaceInitAnimation: boolean;
-  disableSidebarInitAnimation: boolean;
-
-  // Timeline
-  isTimelinePlaying: boolean;
-
-  // VNC (Virtual Network Computing - remote desktop)
+  // Computer view (live sandbox preview)
+  chatComputerDialogVisible: boolean;
   vncDialogVisible: boolean;
-
-  // Chat reply search
-  chatReplySearchMetadata: ChatReplySearchMetadata | null;
-  chatReplySearchResults: ChatReplySearchResult[];
+  initialComputerPosition: ComputerPosition;
 
   // Planner
   isPlannerExpanded: boolean;
+  isTimelinePlaying: boolean;
+
+  // Sidebar
+  sidebarType: WorkspaceSidebarType;
+  isSidebarVisibleInMobile: boolean;
+  isSidebarPreviewFullscreen: boolean;
+  prevAutoOpenedSidebarType: WorkspaceSidebarType;
 
   // File history
   fileHistoryVisible: boolean;
 
-  // Computer dialog
-  chatComputerDialogVisible: boolean;
+  // Animations
+  animationLock: boolean;
+  disableChatWorkspaceInitAnimation: boolean | null;
+  disableSidebarInitAnimation: boolean;
+
+  // Chat reply search
+  chatReplySearchResults: Record<string, unknown>;
+  chatReplySearchMetadata: ChatReplySearchMetadata | null;
 }
 
 const initialState: AgentWorkspaceState = {
-  sidebarType: null,
-  isSidebarPreviewFullscreen: false,
-  isSidebarVisibleInMobile: false,
-  prevAutoOpenedSidebarType: null,
-  animationLock: false,
-  disableChatWorkspaceInitAnimation: false,
-  disableSidebarInitAnimation: false,
-  isTimelinePlaying: false,
-  vncDialogVisible: false,
-  chatReplySearchMetadata: null,
-  chatReplySearchResults: [],
-  isPlannerExpanded: false,
-  fileHistoryVisible: false,
   chatComputerDialogVisible: false,
+  vncDialogVisible: false,
+  initialComputerPosition: {
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+  },
+
+  isPlannerExpanded: false,
+  isTimelinePlaying: false,
+
+  sidebarType: null,
+  isSidebarVisibleInMobile: false,
+  isSidebarPreviewFullscreen: false,
+  prevAutoOpenedSidebarType: null,
+
+  fileHistoryVisible: false,
+
+  animationLock: false,
+  disableChatWorkspaceInitAnimation: null,
+  disableSidebarInitAnimation: false,
+
+  chatReplySearchResults: {},
+  chatReplySearchMetadata: null,
 };
 
-export const agentWorkspaceSlice = createSlice({
+const agentWorkspaceSlice = createSlice({
   name: "agentWorkspace",
   initialState,
   reducers: {
-    // Sidebar
-    setSidebarType: (state, action: PayloadAction<SidebarType>) => {
-      state.prevAutoOpenedSidebarType = state.sidebarType;
-      state.sidebarType = action.payload;
+    // Computer view
+    setChatComputerDialogVisible: (state, action: PayloadAction<boolean>) => {
+      state.chatComputerDialogVisible = action.payload;
     },
 
-    setIsSidebarPreviewFullscreen: (state, action: PayloadAction<boolean>) => {
-      state.isSidebarPreviewFullscreen = action.payload;
-    },
-
-    toggleSidebarPreviewFullscreen: (state) => {
-      state.isSidebarPreviewFullscreen = !state.isSidebarPreviewFullscreen;
-    },
-
-    setIsSidebarVisibleInMobile: (state, action: PayloadAction<boolean>) => {
-      state.isSidebarVisibleInMobile = action.payload;
-    },
-
-    toggleSidebarVisibleInMobile: (state) => {
-      state.isSidebarVisibleInMobile = !state.isSidebarVisibleInMobile;
-    },
-
-    setPrevAutoOpenedSidebarType: (state, action: PayloadAction<SidebarType>) => {
-      state.prevAutoOpenedSidebarType = action.payload;
-    },
-
-    // Animation
-    setAnimationLock: (state, action: PayloadAction<boolean>) => {
-      state.animationLock = action.payload;
-    },
-
-    setDisableChatWorkspaceInitAnimation: (state, action: PayloadAction<boolean>) => {
-      state.disableChatWorkspaceInitAnimation = action.payload;
-    },
-
-    setDisableSidebarInitAnimation: (state, action: PayloadAction<boolean>) => {
-      state.disableSidebarInitAnimation = action.payload;
-    },
-
-    // Timeline
-    setIsTimelinePlaying: (state, action: PayloadAction<boolean>) => {
-      state.isTimelinePlaying = action.payload;
-    },
-
-    toggleTimelinePlaying: (state) => {
-      state.isTimelinePlaying = !state.isTimelinePlaying;
-    },
-
-    // VNC
     setVncDialogVisible: (state, action: PayloadAction<boolean>) => {
       state.vncDialogVisible = action.payload;
     },
 
-    openVncDialog: (state) => {
-      state.vncDialogVisible = true;
-    },
-
-    closeVncDialog: (state) => {
-      state.vncDialogVisible = false;
-    },
-
-    // Chat reply search
-    setChatReplySearchMetadata: (
+    setInitialComputerPosition: (
       state,
-      action: PayloadAction<ChatReplySearchMetadata | null>
+      action: PayloadAction<Partial<ComputerPosition>>
     ) => {
-      state.chatReplySearchMetadata = action.payload;
-    },
-
-    setChatReplySearchResults: (
-      state,
-      action: PayloadAction<ChatReplySearchResult[]>
-    ) => {
-      state.chatReplySearchResults = action.payload;
-    },
-
-    startChatReplySearch: (
-      state,
-      action: PayloadAction<{ query: string; sessionId: string }>
-    ) => {
-      state.chatReplySearchMetadata = {
-        query: action.payload.query,
-        sessionId: action.payload.sessionId,
-        totalResults: 0,
-        currentIndex: 0,
+      state.initialComputerPosition = {
+        ...state.initialComputerPosition,
+        ...action.payload,
       };
-      state.chatReplySearchResults = [];
-    },
-
-    clearChatReplySearch: (state) => {
-      state.chatReplySearchMetadata = null;
-      state.chatReplySearchResults = [];
-    },
-
-    goToNextSearchResult: (state) => {
-      if (state.chatReplySearchMetadata && state.chatReplySearchResults.length > 0) {
-        state.chatReplySearchMetadata.currentIndex =
-          (state.chatReplySearchMetadata.currentIndex + 1) %
-          state.chatReplySearchResults.length;
-      }
-    },
-
-    goToPrevSearchResult: (state) => {
-      if (state.chatReplySearchMetadata && state.chatReplySearchResults.length > 0) {
-        state.chatReplySearchMetadata.currentIndex =
-          (state.chatReplySearchMetadata.currentIndex -
-            1 +
-            state.chatReplySearchResults.length) %
-          state.chatReplySearchResults.length;
-      }
     },
 
     // Planner
@@ -221,26 +119,71 @@ export const agentWorkspaceSlice = createSlice({
       state.isPlannerExpanded = !state.isPlannerExpanded;
     },
 
+    setIsTimelinePlaying: (state, action: PayloadAction<boolean>) => {
+      state.isTimelinePlaying = action.payload;
+    },
+
+    // Sidebar
+    setWorkspaceSidebarType: (state, action: PayloadAction<WorkspaceSidebarType>) => {
+      state.prevAutoOpenedSidebarType = state.sidebarType;
+      state.sidebarType = action.payload;
+    },
+
+    setIsSidebarVisibleInMobile: (state, action: PayloadAction<boolean>) => {
+      state.isSidebarVisibleInMobile = action.payload;
+    },
+
+    setIsSidebarPreviewFullscreen: (state, action: PayloadAction<boolean>) => {
+      state.isSidebarPreviewFullscreen = action.payload;
+    },
+
+    toggleWorkspaceSidebar: (state, action: PayloadAction<WorkspaceSidebarType>) => {
+      if (state.sidebarType === action.payload) {
+        state.prevAutoOpenedSidebarType = state.sidebarType;
+        state.sidebarType = null;
+      } else {
+        state.prevAutoOpenedSidebarType = state.sidebarType;
+        state.sidebarType = action.payload;
+      }
+    },
+
     // File history
     setFileHistoryVisible: (state, action: PayloadAction<boolean>) => {
       state.fileHistoryVisible = action.payload;
     },
 
-    toggleFileHistoryVisible: (state) => {
+    toggleFileHistory: (state) => {
       state.fileHistoryVisible = !state.fileHistoryVisible;
     },
 
-    // Computer dialog
-    setChatComputerDialogVisible: (state, action: PayloadAction<boolean>) => {
-      state.chatComputerDialogVisible = action.payload;
+    // Animation
+    setAnimationLock: (state, action: PayloadAction<boolean>) => {
+      state.animationLock = action.payload;
     },
 
-    openChatComputerDialog: (state) => {
-      state.chatComputerDialogVisible = true;
+    setDisableChatWorkspaceInitAnimation: (state, action: PayloadAction<boolean | null>) => {
+      state.disableChatWorkspaceInitAnimation = action.payload;
     },
 
-    closeChatComputerDialog: (state) => {
-      state.chatComputerDialogVisible = false;
+    setDisableSidebarInitAnimation: (state, action: PayloadAction<boolean>) => {
+      state.disableSidebarInitAnimation = action.payload;
+    },
+
+    // Chat reply search
+    setChatReplySearchResults: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.chatReplySearchResults = action.payload;
+    },
+
+    setChatReplySearchMetadata: (
+      state,
+      action: PayloadAction<ChatReplySearchMetadata | null>
+    ) => {
+      state.chatReplySearchMetadata = action.payload;
+    },
+
+    clearChatReplySearch: (state) => {
+      state.chatReplySearchResults = {};
+      state.chatReplySearchMetadata = null;
     },
 
     // Reset
@@ -251,33 +194,24 @@ export const agentWorkspaceSlice = createSlice({
 });
 
 export const {
-  setSidebarType,
-  setIsSidebarPreviewFullscreen,
-  toggleSidebarPreviewFullscreen,
+  setChatComputerDialogVisible,
+  setVncDialogVisible,
+  setInitialComputerPosition,
+  setIsPlannerExpanded,
+  togglePlannerExpanded,
+  setIsTimelinePlaying,
+  setWorkspaceSidebarType,
   setIsSidebarVisibleInMobile,
-  toggleSidebarVisibleInMobile,
-  setPrevAutoOpenedSidebarType,
+  setIsSidebarPreviewFullscreen,
+  toggleWorkspaceSidebar,
+  setFileHistoryVisible,
+  toggleFileHistory,
   setAnimationLock,
   setDisableChatWorkspaceInitAnimation,
   setDisableSidebarInitAnimation,
-  setIsTimelinePlaying,
-  toggleTimelinePlaying,
-  setVncDialogVisible,
-  openVncDialog,
-  closeVncDialog,
-  setChatReplySearchMetadata,
   setChatReplySearchResults,
-  startChatReplySearch,
+  setChatReplySearchMetadata,
   clearChatReplySearch,
-  goToNextSearchResult,
-  goToPrevSearchResult,
-  setIsPlannerExpanded,
-  togglePlannerExpanded,
-  setFileHistoryVisible,
-  toggleFileHistoryVisible,
-  setChatComputerDialogVisible,
-  openChatComputerDialog,
-  closeChatComputerDialog,
   resetAgentWorkspace,
 } = agentWorkspaceSlice.actions;
 

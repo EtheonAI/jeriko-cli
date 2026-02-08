@@ -2,6 +2,20 @@
   "name": "@repo/seo",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./metadata.ts",
+      "default": "./metadata.ts"
+    },
+    "./metadata": {
+      "types": "./metadata.ts",
+      "default": "./metadata.ts"
+    },
+    "./json-ld": {
+      "types": "./json-ld.tsx",
+      "default": "./json-ld.tsx"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
@@ -15,8 +29,8 @@
     "@repo/typescript-config": "workspace:*",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5",
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3",
     "next": "16.0.0"
   }
 }

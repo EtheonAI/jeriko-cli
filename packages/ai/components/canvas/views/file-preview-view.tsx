@@ -17,7 +17,11 @@ export interface FilePreviewViewProps {
 // Component
 // ============================================================================
 
-export function FilePreviewView({ fileName, content, fileType }: FilePreviewViewProps) {
+export function FilePreviewView({
+  fileName,
+  content,
+  fileType,
+}: FilePreviewViewProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -31,7 +35,11 @@ export function FilePreviewView({ fileName, content, fileType }: FilePreviewView
       {/* Content */}
       <div className="flex-1 overflow-auto bg-canvas-deep p-4">
         {fileType === "image" && content ? (
-          <img src={content} alt={fileName} className="mx-auto max-w-full rounded" />
+          <img
+            src={content}
+            alt={fileName}
+            className="mx-auto max-w-full rounded"
+          />
         ) : (
           <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground/80">
             {content || "No content to preview"}

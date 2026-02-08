@@ -15,7 +15,7 @@ const publicRoutes = [
 // Auth-related paths that should redirect authenticated users
 const authPages = ["/login", "/register"];
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow all auth API routes
@@ -24,7 +24,11 @@ export function proxy(request: NextRequest) {
   }
 
   // Allow static files and images
-  if (pathname.startsWith("/_next") || pathname.startsWith("/static") || pathname.includes(".")) {
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/static") ||
+    pathname.includes(".")
+  ) {
     return NextResponse.next();
   }
 
@@ -49,13 +53,19 @@ export function proxy(request: NextRequest) {
 
   // Redirect unauthenticated users to login
   if (!isLoggedIn && !isPublicRoute) {
-    const callbackUrl = encodeURIComponent(pathname + request.nextUrl.search);
-    return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}`, request.url));
+    const callbackUrl = encodeURIComponent(
+      pathname + request.nextUrl.search
+    );
+    return NextResponse.redirect(
+      new URL(`/login?callbackUrl=${callbackUrl}`, request.url)
+    );
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

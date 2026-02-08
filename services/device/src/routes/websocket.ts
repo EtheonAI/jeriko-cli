@@ -42,7 +42,7 @@ export const websocketRoutes: FastifyPluginAsync = async (fastify) => {
           data: { deviceId, status: "online", lastHeartbeat: new Date().toISOString() },
         });
       })
-      .catch((err) => logger.error(err, "Failed to update device status on connect"));
+      .catch((err: unknown) => logger.error(err, "Failed to update device status on connect"));
 
     socket.on("message", async (raw) => {
       try {
@@ -135,7 +135,7 @@ export const websocketRoutes: FastifyPluginAsync = async (fastify) => {
             data: { deviceId, status: "offline" },
           });
         })
-        .catch((err) => logger.error(err, "Failed to update device status on disconnect"));
+        .catch((err: unknown) => logger.error(err, "Failed to update device status on disconnect"));
     });
 
     socket.on("error", (err) => {

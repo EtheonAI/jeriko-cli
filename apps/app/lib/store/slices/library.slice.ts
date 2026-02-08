@@ -2,326 +2,366 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Library Slice
- * Manages attachment library, templates, and assets
+ * Manages the attachment library / files page:
+ * - Attachment list with pagination
+ * - Attachment groups/folders
+ * - Filtering and search
+ * - View mode (grid/list)
  */
 
-export type DocType = 0 | 1 | 2 | 3 | 4 | 5; // 0: all, 1: documents, 2: images, 3: videos, 4: audio, 5: other
-export type ViewType = "grid" | "list";
+// Manus uses numeric doc types: 0=all, 1=document, 2=pdf, 3=image, 4=video, 5=audio, 6=code, 7=other
+export type LibraryDocType = number;
 
-export interface AttachmentItem {
+export type LibraryViewType = "grid" | "list";
+
+export interface LibraryAttachment {
   id: string;
+  userId: string;
+  groupId?: string;
   name: string;
-  type: string;
+  description?: string;
   mimeType: string;
   size: number;
-  url: string;
+  docType: string;
+  source: "upload" | "web" | "connector" | "agent";
+  url?: string;
   thumbnailUrl?: string;
+  isProcessed: boolean;
   isFavorite: boolean;
-  tags: string[];
-  groupId?: string;
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface AttachmentGroup {
+export interface LibraryAttachmentGroup {
   id: string;
+  userId: string;
   name: string;
   description?: string;
   icon?: string;
   color?: string;
-  itemCount: number;
+  attachmentCount: number;
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface LibraryState {
-  // Filters
-  filterDocType: DocType;
-  isFavorite: boolean;
-  searchValue: string;
-  selectedGroupId: string | null;
-  selectedTags: string[];
+// --- Merged from files.slice.ts ---
 
-  // Attachments
-  attachmentList: AttachmentItem[];
+export interface FileItem {
+  id: string;
+  sessionId: string | null;
+  userId: string;
+  name: string;
+  path: string;
+  mimeType: string | null;
+  size: number | null;
+  storageKey: string | null;
+  storageProvider: "local" | "s3" | "r2" | "vercel_blob";
+  isPublic: boolean;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number;
+    encoding?: string;
+    [key: string]: unknown;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FileVersion {
+  id: string;
+  fileId: string;
+  version: number;
+  storageKey: string;
+  size: number | null;
+  changeDescription: string | null;
+  createdAt: string;
+}
+
+// --- End files types ---
+
+export interface LibraryState {
+  // Attachment list
+  attachmentList: LibraryAttachment[];
   attachmentListTotal: number;
   attachmentListLoading: boolean;
 
-  // Groups
-  attachmentGroupList: AttachmentGroup[];
+  // Attachment groups
+  attachmentGroupList: LibraryAttachmentGroup[];
   attachmentGroupListTotal: number;
   attachmentGroupListLoading: boolean;
 
-  // View
-  viewType: ViewType;
+  // Selected group
+  selectedGroupId: string | null;
 
-  // Selection
-  selectedItems: string[];
-  isSelectionMode: boolean;
+  // Filters
+  filterDocType: LibraryDocType;
+  searchValue: string;
+  isFavorite: boolean;
+
+  // View
+  viewType: LibraryViewType;
 
   // Pagination
-  page: number;
-  pageSize: number;
+  cursor: string | null;
   hasMore: boolean;
 
-  // Sorting
-  sortBy: "name" | "date" | "size" | "type";
-  sortOrder: "asc" | "desc";
-
-  // Upload
-  isUploading: boolean;
-  uploadProgress: number;
+  // --- Merged from files ---
+  // File items with versions
+  files: FileItem[];
+  versions: Record<string, FileVersion[]>;
+  selectedFileId: string | null;
+  uploadProgress: Record<string, number>;
+  isFilesLoading: boolean;
 
   // Error
   error: string | null;
 }
 
 const initialState: LibraryState = {
-  filterDocType: 0,
-  isFavorite: false,
-  searchValue: "",
-  selectedGroupId: null,
-  selectedTags: [],
   attachmentList: [],
   attachmentListTotal: 0,
   attachmentListLoading: false,
+
   attachmentGroupList: [],
   attachmentGroupListTotal: 0,
   attachmentGroupListLoading: false,
+
+  selectedGroupId: null,
+
+  filterDocType: 0,
+  searchValue: "",
+  isFavorite: false,
+
   viewType: "grid",
-  selectedItems: [],
-  isSelectionMode: false,
-  page: 1,
-  pageSize: 20,
-  hasMore: true,
-  sortBy: "date",
-  sortOrder: "desc",
-  isUploading: false,
-  uploadProgress: 0,
+
+  cursor: null,
+  hasMore: false,
+
+  // --- Merged from files ---
+  files: [],
+  versions: {},
+  selectedFileId: null,
+  uploadProgress: {},
+  isFilesLoading: false,
+
   error: null,
 };
 
-export const librarySlice = createSlice({
+const librarySlice = createSlice({
   name: "library",
   initialState,
   reducers: {
-    // Filters
-    setFilterDocType: (state, action: PayloadAction<DocType>) => {
-      state.filterDocType = action.payload;
-      state.page = 1;
-    },
-
-    setIsFavorite: (state, action: PayloadAction<boolean>) => {
-      state.isFavorite = action.payload;
-      state.page = 1;
-    },
-
-    setSearchValue: (state, action: PayloadAction<string>) => {
-      state.searchValue = action.payload;
-      state.page = 1;
-    },
-
-    setSelectedGroupId: (state, action: PayloadAction<string | null>) => {
-      state.selectedGroupId = action.payload;
-      state.page = 1;
-    },
-
-    setSelectedTags: (state, action: PayloadAction<string[]>) => {
-      state.selectedTags = action.payload;
-      state.page = 1;
-    },
-
-    toggleTag: (state, action: PayloadAction<string>) => {
-      const index = state.selectedTags.indexOf(action.payload);
-      if (index === -1) {
-        state.selectedTags.push(action.payload);
-      } else {
-        state.selectedTags.splice(index, 1);
+    // Attachment list
+    setAttachmentList: (
+      state,
+      action: PayloadAction<{
+        attachments: LibraryAttachment[];
+        total: number;
+        hasMore?: boolean;
+        cursor?: string | null;
+      }>
+    ) => {
+      state.attachmentList = action.payload.attachments;
+      state.attachmentListTotal = action.payload.total;
+      if (action.payload.hasMore !== undefined) {
+        state.hasMore = action.payload.hasMore;
       }
-      state.page = 1;
-    },
-
-    clearFilters: (state) => {
-      state.filterDocType = 0;
-      state.isFavorite = false;
-      state.searchValue = "";
-      state.selectedGroupId = null;
-      state.selectedTags = [];
-      state.page = 1;
-    },
-
-    // Attachments
-    setAttachmentList: (state, action: PayloadAction<AttachmentItem[]>) => {
-      state.attachmentList = action.payload;
+      if (action.payload.cursor !== undefined) {
+        state.cursor = action.payload.cursor;
+      }
       state.attachmentListLoading = false;
     },
 
-    appendAttachmentList: (state, action: PayloadAction<AttachmentItem[]>) => {
-      state.attachmentList = [...state.attachmentList, ...action.payload];
+    appendAttachmentList: (
+      state,
+      action: PayloadAction<{
+        attachments: LibraryAttachment[];
+        hasMore: boolean;
+        cursor: string | null;
+      }>
+    ) => {
+      state.attachmentList = [...state.attachmentList, ...action.payload.attachments];
+      state.hasMore = action.payload.hasMore;
+      state.cursor = action.payload.cursor;
       state.attachmentListLoading = false;
     },
 
-    setAttachmentListTotal: (state, action: PayloadAction<number>) => {
-      state.attachmentListTotal = action.payload;
-      state.hasMore = state.attachmentList.length < action.payload;
-    },
-
-    setAttachmentListLoading: (state, action: PayloadAction<boolean>) => {
-      state.attachmentListLoading = action.payload;
-    },
-
-    addAttachment: (state, action: PayloadAction<AttachmentItem>) => {
+    addAttachment: (state, action: PayloadAction<LibraryAttachment>) => {
       state.attachmentList.unshift(action.payload);
       state.attachmentListTotal += 1;
     },
 
     updateAttachment: (
       state,
-      action: PayloadAction<{ id: string; updates: Partial<AttachmentItem> }>
+      action: PayloadAction<{ id: string; updates: Partial<LibraryAttachment> }>
     ) => {
-      const item = state.attachmentList.find((a) => a.id === action.payload.id);
-      if (item) {
-        Object.assign(item, action.payload.updates);
+      const index = state.attachmentList.findIndex((a) => a.id === action.payload.id);
+      if (index !== -1) {
+        state.attachmentList[index] = {
+          ...state.attachmentList[index],
+          ...action.payload.updates,
+        };
       }
     },
 
     removeAttachment: (state, action: PayloadAction<string>) => {
-      state.attachmentList = state.attachmentList.filter(
-        (a) => a.id !== action.payload
-      );
-      state.attachmentListTotal -= 1;
-      state.selectedItems = state.selectedItems.filter(
-        (id) => id !== action.payload
-      );
+      state.attachmentList = state.attachmentList.filter((a) => a.id !== action.payload);
+      state.attachmentListTotal = Math.max(0, state.attachmentListTotal - 1);
     },
 
-    toggleFavorite: (state, action: PayloadAction<string>) => {
-      const item = state.attachmentList.find((a) => a.id === action.payload);
-      if (item) {
-        item.isFavorite = !item.isFavorite;
+    toggleAttachmentFavorite: (state, action: PayloadAction<string>) => {
+      const attachment = state.attachmentList.find((a) => a.id === action.payload);
+      if (attachment) {
+        attachment.isFavorite = !attachment.isFavorite;
       }
     },
 
-    // Groups
-    setAttachmentGroupList: (state, action: PayloadAction<AttachmentGroup[]>) => {
-      state.attachmentGroupList = action.payload;
+    setAttachmentListLoading: (state, action: PayloadAction<boolean>) => {
+      state.attachmentListLoading = action.payload;
+    },
+
+    // Attachment groups
+    setAttachmentGroupList: (
+      state,
+      action: PayloadAction<{
+        groups: LibraryAttachmentGroup[];
+        total: number;
+      }>
+    ) => {
+      state.attachmentGroupList = action.payload.groups;
+      state.attachmentGroupListTotal = action.payload.total;
       state.attachmentGroupListLoading = false;
     },
 
-    setAttachmentGroupListTotal: (state, action: PayloadAction<number>) => {
-      state.attachmentGroupListTotal = action.payload;
+    addAttachmentGroup: (state, action: PayloadAction<LibraryAttachmentGroup>) => {
+      state.attachmentGroupList.push(action.payload);
+      state.attachmentGroupListTotal += 1;
+    },
+
+    updateAttachmentGroup: (
+      state,
+      action: PayloadAction<{ id: string; updates: Partial<LibraryAttachmentGroup> }>
+    ) => {
+      const index = state.attachmentGroupList.findIndex((g) => g.id === action.payload.id);
+      if (index !== -1) {
+        state.attachmentGroupList[index] = {
+          ...state.attachmentGroupList[index],
+          ...action.payload.updates,
+        };
+      }
+    },
+
+    removeAttachmentGroup: (state, action: PayloadAction<string>) => {
+      state.attachmentGroupList = state.attachmentGroupList.filter(
+        (g) => g.id !== action.payload
+      );
+      state.attachmentGroupListTotal = Math.max(0, state.attachmentGroupListTotal - 1);
+      if (state.selectedGroupId === action.payload) {
+        state.selectedGroupId = null;
+      }
     },
 
     setAttachmentGroupListLoading: (state, action: PayloadAction<boolean>) => {
       state.attachmentGroupListLoading = action.payload;
     },
 
-    addGroup: (state, action: PayloadAction<AttachmentGroup>) => {
-      state.attachmentGroupList.push(action.payload);
-      state.attachmentGroupListTotal += 1;
+    // Selection
+    setSelectedGroupId: (state, action: PayloadAction<string | null>) => {
+      state.selectedGroupId = action.payload;
     },
 
-    updateGroup: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<AttachmentGroup> }>
-    ) => {
-      const group = state.attachmentGroupList.find(
-        (g) => g.id === action.payload.id
-      );
-      if (group) {
-        Object.assign(group, action.payload.updates);
-      }
+    // Filters
+    setFilterDocType: (state, action: PayloadAction<LibraryDocType>) => {
+      state.filterDocType = action.payload;
     },
 
-    removeGroup: (state, action: PayloadAction<string>) => {
-      state.attachmentGroupList = state.attachmentGroupList.filter(
-        (g) => g.id !== action.payload
-      );
-      state.attachmentGroupListTotal -= 1;
-      if (state.selectedGroupId === action.payload) {
-        state.selectedGroupId = null;
-      }
+    setSearchValue: (state, action: PayloadAction<string>) => {
+      state.searchValue = action.payload;
+    },
+
+    setIsFavorite: (state, action: PayloadAction<boolean>) => {
+      state.isFavorite = action.payload;
     },
 
     // View
-    setViewType: (state, action: PayloadAction<ViewType>) => {
+    setViewType: (state, action: PayloadAction<LibraryViewType>) => {
       state.viewType = action.payload;
     },
 
-    // Selection
-    setSelectedItems: (state, action: PayloadAction<string[]>) => {
-      state.selectedItems = action.payload;
+    // --- Merged from files ---
+    setFiles: (state, action: PayloadAction<FileItem[]>) => {
+      state.files = action.payload;
+      state.isFilesLoading = false;
     },
 
-    toggleItemSelection: (state, action: PayloadAction<string>) => {
-      const index = state.selectedItems.indexOf(action.payload);
-      if (index === -1) {
-        state.selectedItems.push(action.payload);
-      } else {
-        state.selectedItems.splice(index, 1);
+    addFile: (state, action: PayloadAction<FileItem>) => {
+      state.files.unshift(action.payload);
+    },
+
+    updateFile: (
+      state,
+      action: PayloadAction<{ id: string; updates: Partial<FileItem> }>
+    ) => {
+      const index = state.files.findIndex((f) => f.id === action.payload.id);
+      if (index !== -1) {
+        state.files[index] = { ...state.files[index], ...action.payload.updates };
       }
     },
 
-    selectAll: (state) => {
-      state.selectedItems = state.attachmentList.map((a) => a.id);
-    },
-
-    clearSelection: (state) => {
-      state.selectedItems = [];
-    },
-
-    setIsSelectionMode: (state, action: PayloadAction<boolean>) => {
-      state.isSelectionMode = action.payload;
-      if (!action.payload) {
-        state.selectedItems = [];
+    removeFile: (state, action: PayloadAction<string>) => {
+      state.files = state.files.filter((f) => f.id !== action.payload);
+      delete state.versions[action.payload];
+      delete state.uploadProgress[action.payload];
+      if (state.selectedFileId === action.payload) {
+        state.selectedFileId = null;
       }
     },
 
-    // Pagination
-    setPage: (state, action: PayloadAction<number>) => {
-      state.page = action.payload;
+    setVersions: (
+      state,
+      action: PayloadAction<{ fileId: string; versions: FileVersion[] }>
+    ) => {
+      state.versions[action.payload.fileId] = action.payload.versions;
     },
 
-    nextPage: (state) => {
-      if (state.hasMore) {
-        state.page += 1;
+    addVersion: (state, action: PayloadAction<FileVersion>) => {
+      const { fileId } = action.payload;
+      if (!state.versions[fileId]) {
+        state.versions[fileId] = [];
       }
+      state.versions[fileId].unshift(action.payload);
     },
 
-    setHasMore: (state, action: PayloadAction<boolean>) => {
-      state.hasMore = action.payload;
+    setSelectedFile: (state, action: PayloadAction<string | null>) => {
+      state.selectedFileId = action.payload;
     },
 
-    // Sorting
-    setSortBy: (state, action: PayloadAction<LibraryState["sortBy"]>) => {
-      state.sortBy = action.payload;
-      state.page = 1;
+    setUploadProgress: (
+      state,
+      action: PayloadAction<{ fileId: string; progress: number }>
+    ) => {
+      state.uploadProgress[action.payload.fileId] = action.payload.progress;
     },
 
-    setSortOrder: (state, action: PayloadAction<"asc" | "desc">) => {
-      state.sortOrder = action.payload;
-      state.page = 1;
+    clearUploadProgress: (state, action: PayloadAction<string>) => {
+      delete state.uploadProgress[action.payload];
     },
 
-    toggleSortOrder: (state) => {
-      state.sortOrder = state.sortOrder === "asc" ? "desc" : "asc";
-      state.page = 1;
+    setFilesLoading: (state, action: PayloadAction<boolean>) => {
+      state.isFilesLoading = action.payload;
     },
 
-    // Upload
-    setIsUploading: (state, action: PayloadAction<boolean>) => {
-      state.isUploading = action.payload;
-      if (!action.payload) {
-        state.uploadProgress = 0;
-      }
+    setFilesError: (state, action: PayloadAction<string | null>) => {
+      state.error = action.payload;
+      state.isFilesLoading = false;
     },
-
-    setUploadProgress: (state, action: PayloadAction<number>) => {
-      state.uploadProgress = action.payload;
-    },
+    // --- End merged from files ---
 
     // Error
-    setError: (state, action: PayloadAction<string | null>) => {
+    setLibraryError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
       state.attachmentListLoading = false;
       state.attachmentGroupListLoading = false;
@@ -335,43 +375,37 @@ export const librarySlice = createSlice({
 });
 
 export const {
-  setFilterDocType,
-  setIsFavorite,
-  setSearchValue,
-  setSelectedGroupId,
-  setSelectedTags,
-  toggleTag,
-  clearFilters,
   setAttachmentList,
   appendAttachmentList,
-  setAttachmentListTotal,
-  setAttachmentListLoading,
   addAttachment,
   updateAttachment,
   removeAttachment,
-  toggleFavorite,
+  toggleAttachmentFavorite,
+  setAttachmentListLoading,
   setAttachmentGroupList,
-  setAttachmentGroupListTotal,
+  addAttachmentGroup,
+  updateAttachmentGroup,
+  removeAttachmentGroup,
   setAttachmentGroupListLoading,
-  addGroup,
-  updateGroup,
-  removeGroup,
+  setSelectedGroupId,
+  setFilterDocType,
+  setSearchValue,
+  setIsFavorite,
   setViewType,
-  setSelectedItems,
-  toggleItemSelection,
-  selectAll,
-  clearSelection,
-  setIsSelectionMode,
-  setPage,
-  nextPage,
-  setHasMore,
-  setSortBy,
-  setSortOrder,
-  toggleSortOrder,
-  setIsUploading,
-  setUploadProgress,
-  setError,
+  setLibraryError,
   resetLibrary,
+  // --- Merged from files ---
+  setFiles,
+  addFile,
+  updateFile,
+  removeFile,
+  setVersions,
+  addVersion,
+  setSelectedFile,
+  setUploadProgress,
+  clearUploadProgress,
+  setFilesLoading,
+  setFilesError,
 } = librarySlice.actions;
 
 export default librarySlice.reducer;

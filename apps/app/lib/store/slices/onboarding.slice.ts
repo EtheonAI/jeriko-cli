@@ -2,279 +2,195 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Onboarding Slice
- * Manages user onboarding flow and preferences
+ * Manages the new user onboarding flow:
+ * - Multi-step wizard
+ * - User persona/type selection
+ * - Interest/use-case selection
+ * - Default connector suggestions
  */
 
 export type OnboardingStep =
   | "welcome"
-  | "choosePersona"
-  | "selectInterests"
-  | "setupWorkspace"
-  | "connectIntegrations"
+  | "persona"
+  | "interests"
+  | "connectors"
+  | "workspace"
   | "complete";
 
-export type UserType = 1 | 2 | 3; // 1: Individual, 2: Team, 3: Enterprise
-
-export type PersonaType =
+export type UserPersona =
   | "developer"
   | "designer"
-  | "product_manager"
-  | "data_analyst"
-  | "marketer"
   | "researcher"
+  | "marketer"
+  | "analyst"
   | "student"
+  | "business"
   | "other";
 
-export interface Persona {
-  type: PersonaType;
-  label: string;
-  description: string;
-  icon: string;
-  suggestedConnectors: string[];
-  suggestedTemplates: string[];
-}
-
-export interface OnboardingProgress {
-  welcomeSeen: boolean;
-  personaSelected: boolean;
-  interestsSelected: boolean;
-  workspaceSetup: boolean;
-  integrationsConnected: boolean;
-  tourCompleted: boolean;
-}
+export type UserType = "individual" | "team" | "enterprise";
 
 export interface OnboardingState {
-  // Flow state
-  showIndicator: boolean;
-  currentStep: OnboardingStep;
-  userType: UserType;
-  persona: Persona | null;
-
-  // Progress tracking
-  progress: OnboardingProgress;
+  // Current step
+  currentStep: OnboardingStep | null;
 
   // User selections
-  selectedInterests: string[];
-  selectedConnectors: string[];
+  persona: UserPersona | null;
+  userType: UserType | null;
 
-  // Tour state
-  showTour: boolean;
-  tourStep: number;
-  tourDismissed: boolean;
+  // Interests (multi-select)
+  interests: string[];
 
-  // Checklist
-  checklistItems: Array<{
-    id: string;
-    label: string;
-    completed: boolean;
-    action?: string;
-  }>;
-  showChecklist: boolean;
+  // Suggested connectors based on persona
+  suggestedConnectorIds: string[];
+  selectedConnectorIds: string[];
 
-  // Loading
-  isLoading: boolean;
-  isSaving: boolean;
+  // Team candidates (suggested team members)
+  teamCandidateList: string[];
 
-  // Skip state
-  skipped: boolean;
+  // Progress indicator
+  showIndicator: boolean;
+
+  // Completion
+  isCompleted: boolean;
+  completedAt: string | null;
+
+  // Skip tracking
+  skippedSteps: OnboardingStep[];
 }
 
 const initialState: OnboardingState = {
-  showIndicator: true,
-  currentStep: "welcome",
-  userType: 1,
+  currentStep: null,
   persona: null,
-  progress: {
-    welcomeSeen: false,
-    personaSelected: false,
-    interestsSelected: false,
-    workspaceSetup: false,
-    integrationsConnected: false,
-    tourCompleted: false,
-  },
-  selectedInterests: [],
-  selectedConnectors: [],
-  showTour: false,
-  tourStep: 0,
-  tourDismissed: false,
-  checklistItems: [],
-  showChecklist: true,
-  isLoading: false,
-  isSaving: false,
-  skipped: false,
+  userType: null,
+  interests: [],
+  suggestedConnectorIds: [],
+  selectedConnectorIds: [],
+  teamCandidateList: ["", "", ""],
+  showIndicator: true,
+  isCompleted: false,
+  completedAt: null,
+  skippedSteps: [],
 };
 
-export const onboardingSlice = createSlice({
+const onboardingSlice = createSlice({
   name: "onboarding",
   initialState,
   reducers: {
-    // Indicator
-    setShowIndicator: (state, action: PayloadAction<boolean>) => {
-      state.showIndicator = action.payload;
-    },
-
     // Step navigation
     setCurrentStep: (state, action: PayloadAction<OnboardingStep>) => {
       state.currentStep = action.payload;
     },
 
-    nextStep: (state) => {
+    goToNextStep: (state) => {
       const steps: OnboardingStep[] = [
         "welcome",
-        "choosePersona",
-        "selectInterests",
-        "setupWorkspace",
-        "connectIntegrations",
+        "persona",
+        "interests",
+        "connectors",
+        "workspace",
         "complete",
       ];
+      if (!state.currentStep) {
+        state.currentStep = "welcome";
+        return;
+      }
       const currentIndex = steps.indexOf(state.currentStep);
-      if (currentIndex < steps.length - 1) {
+      if (currentIndex >= 0 && currentIndex < steps.length - 1) {
         state.currentStep = steps[currentIndex + 1];
       }
     },
 
-    prevStep: (state) => {
+    goToPreviousStep: (state) => {
       const steps: OnboardingStep[] = [
         "welcome",
-        "choosePersona",
-        "selectInterests",
-        "setupWorkspace",
-        "connectIntegrations",
+        "persona",
+        "interests",
+        "connectors",
+        "workspace",
         "complete",
       ];
+      if (!state.currentStep) return;
       const currentIndex = steps.indexOf(state.currentStep);
       if (currentIndex > 0) {
         state.currentStep = steps[currentIndex - 1];
       }
     },
 
-    // User type
-    setUserType: (state, action: PayloadAction<UserType>) => {
-      state.userType = action.payload;
+    skipCurrentStep: (state) => {
+      const steps: OnboardingStep[] = [
+        "welcome",
+        "persona",
+        "interests",
+        "connectors",
+        "workspace",
+        "complete",
+      ];
+      if (!state.currentStep) return;
+      state.skippedSteps.push(state.currentStep);
+      const currentIndex = steps.indexOf(state.currentStep);
+      if (currentIndex >= 0 && currentIndex < steps.length - 1) {
+        state.currentStep = steps[currentIndex + 1];
+      }
     },
 
     // Persona
-    setPersona: (state, action: PayloadAction<Persona | null>) => {
+    setPersona: (state, action: PayloadAction<UserPersona | null>) => {
       state.persona = action.payload;
-      state.progress.personaSelected = !!action.payload;
     },
 
-    // Progress
-    updateProgress: (
-      state,
-      action: PayloadAction<Partial<OnboardingProgress>>
-    ) => {
-      state.progress = { ...state.progress, ...action.payload };
-    },
-
-    markStepComplete: (
-      state,
-      action: PayloadAction<keyof OnboardingProgress>
-    ) => {
-      state.progress[action.payload] = true;
+    // User type
+    setUserType: (state, action: PayloadAction<UserType | null>) => {
+      state.userType = action.payload;
     },
 
     // Interests
-    setSelectedInterests: (state, action: PayloadAction<string[]>) => {
-      state.selectedInterests = action.payload;
-      state.progress.interestsSelected = action.payload.length > 0;
+    setInterests: (state, action: PayloadAction<string[]>) => {
+      state.interests = action.payload;
     },
 
     toggleInterest: (state, action: PayloadAction<string>) => {
-      const index = state.selectedInterests.indexOf(action.payload);
+      const index = state.interests.indexOf(action.payload);
       if (index === -1) {
-        state.selectedInterests.push(action.payload);
+        state.interests.push(action.payload);
       } else {
-        state.selectedInterests.splice(index, 1);
+        state.interests.splice(index, 1);
       }
-      state.progress.interestsSelected = state.selectedInterests.length > 0;
     },
 
     // Connectors
-    setSelectedConnectors: (state, action: PayloadAction<string[]>) => {
-      state.selectedConnectors = action.payload;
+    setSuggestedConnectorIds: (state, action: PayloadAction<string[]>) => {
+      state.suggestedConnectorIds = action.payload;
     },
 
-    toggleConnector: (state, action: PayloadAction<string>) => {
-      const index = state.selectedConnectors.indexOf(action.payload);
+    setSelectedConnectorIds: (state, action: PayloadAction<string[]>) => {
+      state.selectedConnectorIds = action.payload;
+    },
+
+    toggleSelectedConnector: (state, action: PayloadAction<string>) => {
+      const index = state.selectedConnectorIds.indexOf(action.payload);
       if (index === -1) {
-        state.selectedConnectors.push(action.payload);
+        state.selectedConnectorIds.push(action.payload);
       } else {
-        state.selectedConnectors.splice(index, 1);
+        state.selectedConnectorIds.splice(index, 1);
       }
     },
 
-    // Tour
-    setShowTour: (state, action: PayloadAction<boolean>) => {
-      state.showTour = action.payload;
+    // Team candidates
+    setTeamCandidateList: (state, action: PayloadAction<string[]>) => {
+      state.teamCandidateList = action.payload;
     },
 
-    setTourStep: (state, action: PayloadAction<number>) => {
-      state.tourStep = action.payload;
+    // Indicator
+    setShowIndicator: (state, action: PayloadAction<boolean>) => {
+      state.showIndicator = action.payload;
     },
 
-    nextTourStep: (state) => {
-      state.tourStep += 1;
-    },
-
-    prevTourStep: (state) => {
-      if (state.tourStep > 0) {
-        state.tourStep -= 1;
-      }
-    },
-
-    dismissTour: (state) => {
-      state.showTour = false;
-      state.tourDismissed = true;
-    },
-
-    completeTour: (state) => {
-      state.showTour = false;
-      state.progress.tourCompleted = true;
-    },
-
-    // Checklist
-    setChecklistItems: (
-      state,
-      action: PayloadAction<OnboardingState["checklistItems"]>
-    ) => {
-      state.checklistItems = action.payload;
-    },
-
-    toggleChecklistItem: (state, action: PayloadAction<string>) => {
-      const item = state.checklistItems.find((i) => i.id === action.payload);
-      if (item) {
-        item.completed = !item.completed;
-      }
-    },
-
-    setShowChecklist: (state, action: PayloadAction<boolean>) => {
-      state.showChecklist = action.payload;
-    },
-
-    // Loading
-    setLoading: (state, action: PayloadAction<boolean>) => {
-      state.isLoading = action.payload;
-    },
-
-    setSaving: (state, action: PayloadAction<boolean>) => {
-      state.isSaving = action.payload;
-    },
-
-    // Skip
-    skipOnboarding: (state) => {
-      state.skipped = true;
-      state.currentStep = "complete";
-      state.showIndicator = false;
-    },
-
-    // Complete onboarding
+    // Completion
     completeOnboarding: (state) => {
+      state.isCompleted = true;
+      state.completedAt = new Date().toISOString();
       state.currentStep = "complete";
       state.showIndicator = false;
-      Object.keys(state.progress).forEach((key) => {
-        state.progress[key as keyof OnboardingProgress] = true;
-      });
     },
 
     // Reset
@@ -285,30 +201,19 @@ export const onboardingSlice = createSlice({
 });
 
 export const {
-  setShowIndicator,
   setCurrentStep,
-  nextStep,
-  prevStep,
-  setUserType,
+  goToNextStep,
+  goToPreviousStep,
+  skipCurrentStep,
   setPersona,
-  updateProgress,
-  markStepComplete,
-  setSelectedInterests,
+  setUserType,
+  setInterests,
   toggleInterest,
-  setSelectedConnectors,
-  toggleConnector,
-  setShowTour,
-  setTourStep,
-  nextTourStep,
-  prevTourStep,
-  dismissTour,
-  completeTour,
-  setChecklistItems,
-  toggleChecklistItem,
-  setShowChecklist,
-  setLoading,
-  setSaving,
-  skipOnboarding,
+  setSuggestedConnectorIds,
+  setSelectedConnectorIds,
+  toggleSelectedConnector,
+  setTeamCandidateList,
+  setShowIndicator,
   completeOnboarding,
   resetOnboarding,
 } = onboardingSlice.actions;

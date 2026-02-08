@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:services": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup",
     "start": "node dist/index.js",
     "seed": "tsx src/seed/connector-definitions.ts"
   },

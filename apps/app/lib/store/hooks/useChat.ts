@@ -8,7 +8,6 @@ import {
   updateMessage,
   appendToMessage,
   setStreaming,
-  setCurrentStreamingMessage,
   setInputValue,
   setChatLoading,
   setChatError,
@@ -289,7 +288,7 @@ export function useChatIntegration(sessionId: string | null) {
    * Trigger: State only
    */
   const toggleSharePopover = useCallback(
-    (show: string | null) => {
+    (show: boolean) => {
       dispatch(setShowSharePopover(show));
     },
     [dispatch]

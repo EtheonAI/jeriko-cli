@@ -62,7 +62,7 @@ const initialState: AgentsState = {
   error: null,
 };
 
-export const agentsSlice = createSlice({
+const agentsSlice = createSlice({
   name: "agents",
   initialState,
   reducers: {

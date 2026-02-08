@@ -25,12 +25,16 @@ export interface Summary {
   observe(labels: Record<string, string>, value: number): void;
 }
 
-// Simple in-memory metrics store (for development)
-// In production, use prom-client or similar
+/**
+ * In-memory metrics store with bounded histogram aggregation.
+ * Histograms track count+sum (not individual observations) to prevent unbounded memory growth.
+ * For production with Prometheus scraping, use prom-client instead.
+ */
 class MetricsStore {
   private counters: Map<string, Map<string, number>> = new Map();
   private gauges: Map<string, Map<string, number>> = new Map();
-  private histograms: Map<string, Map<string, number[]>> = new Map();
+  // Histograms store { count, sum } aggregates — NOT individual observations
+  private histograms: Map<string, Map<string, { count: number; sum: number }>> = new Map();
 
   private getKey(labels: Record<string, string>): string {
     return Object.entries(labels)
@@ -61,10 +65,13 @@ class MetricsStore {
       this.histograms.set(name, new Map());
     }
     const key = this.getKey(labels);
-    if (!this.histograms.get(name)!.has(key)) {
-      this.histograms.get(name)!.set(key, []);
+    const existing = this.histograms.get(name)!.get(key);
+    if (existing) {
+      existing.count++;
+      existing.sum += value;
+    } else {
+      this.histograms.get(name)!.set(key, { count: 1, sum: value });
     }
-    this.histograms.get(name)!.get(key)!.push(value);
   }
 
   toPrometheus(): string {
@@ -88,15 +95,13 @@ class MetricsStore {
       }
     }
 
-    // Histograms (simplified - just count and sum)
+    // Histograms (count + sum aggregates)
     for (const [name, values] of this.histograms) {
       lines.push(`# TYPE ${name} histogram`);
-      for (const [labels, observations] of values) {
+      for (const [labels, agg] of values) {
         const labelStr = labels ? `{${labels}}` : "";
-        const count = observations.length;
-        const sum = observations.reduce((a, b) => a + b, 0);
-        lines.push(`${name}_count${labelStr} ${count}`);
-        lines.push(`${name}_sum${labelStr} ${sum}`);
+        lines.push(`${name}_count${labelStr} ${agg.count}`);
+        lines.push(`${name}_sum${labelStr} ${agg.sum}`);
       }
     }
 

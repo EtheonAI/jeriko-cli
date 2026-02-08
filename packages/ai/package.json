@@ -80,14 +80,6 @@
       "types": "./lib/tools/index.ts",
       "default": "./lib/tools/index.ts"
     },
-    "./hooks/use-realtime-chat": {
-      "types": "./hooks/use-realtime-chat.ts",
-      "default": "./hooks/use-realtime-chat.ts"
-    },
-    "./hooks/use-redux-chat": {
-      "types": "./hooks/use-redux-chat.ts",
-      "default": "./hooks/use-redux-chat.ts"
-    },
     "./tools/*": {
       "types": "./tools/*.ts",
       "default": "./tools/*.ts"
@@ -122,22 +114,6 @@
     "./lib/agents": {
       "types": "./lib/agents/index.ts",
       "default": "./lib/agents/index.ts"
-    },
-    "./lib/orchestration": {
-      "types": "./lib/orchestration/index.ts",
-      "default": "./lib/orchestration/index.ts"
-    },
-    "./lib/middleware": {
-      "types": "./lib/middleware/index.ts",
-      "default": "./lib/middleware/index.ts"
-    },
-    "./lib/providers": {
-      "types": "./lib/providers/index.ts",
-      "default": "./lib/providers/index.ts"
-    },
-    "./lib/demo": {
-      "types": "./lib/demo/index.ts",
-      "default": "./lib/demo/index.ts"
     }
   },
   "scripts": {
@@ -145,27 +121,33 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@ai-sdk/google": "^1.2.20",
-    "@ai-sdk/openai": "^2.0.77",
-    "@ai-sdk/react": "^3.0.29",
+    "@ai-sdk/anthropic": "^3.0.38",
+    "@ai-sdk/google": "^3.0.22",
+    "@ai-sdk/openai": "^3.0.7",
+    "@ai-sdk/react": "^3.0.19",
     "@assistant-ui/react": "^0.12.9",
     "@repo/auth": "workspace:*",
     "@repo/design-system": "workspace:*",
     "@t3-oss/env-nextjs": "^0.13.8",
     "@tanstack/react-virtual": "^3.13.18",
-    "ai": "^6.0.27",
+    "ai": "^6.0.77",
     "lucide-react": "^0.511.0",
     "react": "19.2.3",
     "react-markdown": "^10.1.0",
+    "shiki": "^3.14.0",
     "streamdown": "^1.6.11",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5"
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^5.1.3",
+    "jsdom": "^26.1.0",
+    "vitest": "^4.0.18"
   }
 }

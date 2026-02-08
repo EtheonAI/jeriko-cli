@@ -38,8 +38,8 @@ type GlobalSidebarProps = {
 type Session = {
   id: string;
   title: string | null;
-  status: string | null;
-  metadata: Record<string, unknown> | null;
+  status?: string | null;
+  metadata?: Record<string, unknown> | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -82,7 +82,7 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
   const sessions = useMemo(() => {
     const base = trpcSessions ?? [];
     const baseIds = new Set(base.map((s) => s.id));
-    const extras = reduxSessions.filter((s) => !baseIds.has(s.id));
+    const extras = reduxSessions.filter((s: any) => !baseIds.has(s.id));
     return [...extras, ...base];
   }, [trpcSessions, reduxSessions]);
   const isLoading = trpcLoading;
@@ -145,6 +145,8 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
                           chat={{
                             id: session.id,
                             title: session.title || "Untitled",
+                            isFavorite: !!(session.metadata as any)?.isFavorite,
+                            projectId: (session.metadata as any)?.projectId ?? null,
                           }}
                         />
                       ))}

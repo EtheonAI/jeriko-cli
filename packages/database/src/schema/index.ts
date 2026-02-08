@@ -11,7 +11,21 @@ export {
 } from "./users";
 
 // Agent session schemas
-export { agentSessions, agentSessionsRelations, messages, messagesRelations } from "./sessions";
+export {
+  agentSessions,
+  agentSessionsRelations,
+  messages,
+  messagesRelations,
+  votes,
+  votesRelations,
+  documents,
+  documentsRelations,
+  type Vote,
+  type NewVote,
+  type Document,
+  type NewDocument,
+  type DocumentKind,
+} from "./sessions";
 
 // Agent schemas
 export {

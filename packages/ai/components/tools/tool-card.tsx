@@ -12,11 +12,23 @@ import {
   ClockIcon,
   ShieldCheckIcon,
   ShieldXIcon,
+  SearchIcon,
+  GlobeIcon,
+  FileTextIcon,
+  TerminalIcon,
+  ImageIcon,
+  CodeIcon,
+  BellIcon,
+  RocketIcon,
 } from "lucide-react";
 import type { StaticToolUIPart, DynamicToolUIPart, ToolInvocationState } from "../../lib/types/ui-message";
 import { getToolName } from "../../lib/types/ui-message";
 import { ToolStates } from "./tool-states";
 import { ApprovalCard } from "./renderers/approval-card";
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface ToolCardProps {
   part: StaticToolUIPart | DynamicToolUIPart;
@@ -26,9 +38,60 @@ export interface ToolCardProps {
   defaultExpanded?: boolean;
 }
 
-/**
- * ToolCard - Wrapper for tool invocations with state handling
- */
+// ============================================================================
+// Tool category icons
+// ============================================================================
+
+const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  // Search
+  web_search: SearchIcon,
+  // Browser
+  browser_navigate: GlobeIcon,
+  browser_view: GlobeIcon,
+  browser_click: GlobeIcon,
+  browser_input: GlobeIcon,
+  browser_scroll_up: GlobeIcon,
+  browser_scroll_down: GlobeIcon,
+  browser_move_mouse: GlobeIcon,
+  browser_press_key: GlobeIcon,
+  browser_select_option: GlobeIcon,
+  browser_console_exec: GlobeIcon,
+  browser_console_view: GlobeIcon,
+  browser_screenshot: GlobeIcon,
+  browser_restart: GlobeIcon,
+  // File
+  file_read: FileTextIcon,
+  file_write: FileTextIcon,
+  file_str_replace: FileTextIcon,
+  file_find_in_content: FileTextIcon,
+  file_find_by_name: FileTextIcon,
+  // Shell
+  shell_exec: TerminalIcon,
+  shell_view: TerminalIcon,
+  shell_wait: TerminalIcon,
+  shell_write_to_process: TerminalIcon,
+  shell_kill_process: TerminalIcon,
+  // Code
+  code_execute: CodeIcon,
+  // Image
+  generate_image: ImageIcon,
+  // Communication
+  message_notify_user: BellIcon,
+  message_ask_user: BellIcon,
+  // Deploy
+  deploy_expose_port: RocketIcon,
+  deploy_apply_deployment: RocketIcon,
+  // Schedule & Analytics
+  schedule_recurring_task: ClockIcon,
+  check_outcomes: SearchIcon,
+  // Planning
+  show_plan: CodeIcon,
+};
+
+// ============================================================================
+// Component
+// ============================================================================
+
 export function ToolCard({
   part,
   className,
@@ -40,16 +103,17 @@ export function ToolCard({
   const toolName = getToolName(part);
 
   const { icon: StateIcon, color, label, animate } = getStateInfo(part.state);
+  const ToolIcon = TOOL_ICONS[toolName] ?? CodeIcon;
 
   // Show approval UI when needed
   if (part.state === "approval-requested") {
     return (
-      <div className={cn("my-2", className)}>
+      <div data-testid="tool-card" data-tool-name={toolName} data-tool-state="approval-requested" className={cn("my-2", className)}>
         <ApprovalCard
           toolName={toolName}
           toolCallId={part.toolCallId}
           input={part.input}
-          title={part.title}
+          title={(part as { title?: string }).title}
           onApprove={(reason) => onApproval?.(part.toolCallId, true, reason)}
           onDeny={(reason) => onApproval?.(part.toolCallId, false, reason)}
         />
@@ -58,99 +122,134 @@ export function ToolCard({
   }
 
   return (
-    <div className={cn("my-2 overflow-hidden rounded-lg border border-border", className)}>
+    <div
+      data-testid="tool-card"
+      data-tool-name={toolName}
+      data-tool-state={part.state}
+      className={cn(
+        "my-2 overflow-hidden rounded-xl border transition-colors duration-200",
+        part.state === "input-streaming" && "border-blue-500/20",
+        part.state === "input-available" && "border-yellow-500/20",
+        part.state === "output-available" && "border-border/40",
+        part.state === "output-error" && "border-destructive/20",
+        part.state === "output-denied" && "border-orange-500/20",
+        !["input-streaming", "input-available", "output-available", "output-error", "output-denied"].includes(part.state) &&
+          "border-border/40",
+        className
+      )}
+    >
       {/* Header */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center justify-between bg-muted/30 px-3 py-2 text-left transition-colors hover:bg-muted/50"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/20"
       >
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "flex size-6 items-center justify-center rounded-md",
-              color
-            )}
-          >
-            <StateIcon
-              className={cn(
-                "size-3.5",
-                animate && "animate-spin"
-              )}
-            />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">
-              {part.title ?? formatToolName(toolName)}
-            </span>
-            <span className="text-xs text-muted-foreground">{label}</span>
-          </div>
+        {/* Tool icon */}
+        <div
+          className={cn(
+            "flex size-6 items-center justify-center rounded-lg",
+            color
+          )}
+        >
+          {animate ? (
+            <LoaderIcon className="size-3.5 animate-spin" />
+          ) : (
+            <ToolIcon className="size-3.5" />
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Error indicator */}
-          {part.state === "output-error" && (
-            <span className="text-xs text-destructive">Failed</span>
-          )}
-
-          {/* Denied indicator */}
-          {part.state === "output-denied" && (
-            <span className="text-xs text-orange-500">Denied</span>
-          )}
-
-          <ChevronDownIcon
-            className={cn(
-              "size-4 text-muted-foreground transition-transform",
-              isExpanded && "rotate-180"
-            )}
-          />
+        {/* Title + status */}
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-medium text-foreground/80">
+            {(part as { title?: string }).title ?? formatToolName(toolName)}
+          </span>
         </div>
+
+        {/* Status badge */}
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+            part.state === "input-streaming" && "bg-blue-500/10 text-blue-500",
+            part.state === "input-available" && "bg-yellow-500/10 text-yellow-500",
+            part.state === "approval-responded" && "bg-blue-500/10 text-blue-500",
+            part.state === "output-available" && "bg-green-500/10 text-green-500",
+            part.state === "output-error" && "bg-destructive/10 text-destructive",
+            part.state === "output-denied" && "bg-orange-500/10 text-orange-500"
+          )}
+        >
+          {label}
+        </span>
+
+        <ChevronDownIcon
+          className={cn(
+            "size-4 text-muted-foreground/40 transition-transform duration-200",
+            isExpanded && "rotate-180"
+          )}
+        />
       </button>
 
       {/* Content */}
-      {isExpanded && (
-        <div className="border-t border-border p-3">
-          {/* Streaming skeleton */}
-          {part.state === "input-streaming" && (
-            <ToolStates state="streaming" />
-          )}
+      <div
+        className={cn(
+          "grid transition-all duration-300 ease-in-out",
+          isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-border/30 p-3">
+            {/* Streaming skeleton */}
+            {part.state === "input-streaming" && (
+              <ToolStates state="streaming" />
+            )}
 
-          {/* Pending/executing states */}
-          {(part.state === "input-available" || part.state === "approval-responded") && (
-            <ToolStates state="executing" />
-          )}
+            {/* Pending/executing states */}
+            {(part.state === "input-available" || part.state === "approval-responded") && (
+              <ToolStates state="executing" />
+            )}
 
-          {/* Error state */}
-          {part.state === "output-error" && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              <div className="flex items-center gap-2">
-                <AlertCircleIcon className="size-4" />
-                <span className="font-medium">Error</span>
+            {/* Error state */}
+            {part.state === "output-error" && (
+              <div className="rounded-lg bg-destructive/5 p-3 text-sm text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircleIcon className="size-4" />
+                  <span className="font-medium">Error</span>
+                </div>
+                <p className="mt-1 text-destructive/80">{part.errorText ?? "An unknown error occurred"}</p>
               </div>
-              <p className="mt-1">{part.errorText ?? "An unknown error occurred"}</p>
-            </div>
-          )}
+            )}
 
-          {/* Denied state */}
-          {part.state === "output-denied" && (
-            <div className="rounded-md bg-orange-500/10 p-3 text-sm text-orange-600 dark:text-orange-400">
-              <div className="flex items-center gap-2">
-                <ShieldXIcon className="size-4" />
-                <span className="font-medium">Execution Denied</span>
+            {/* Denied state */}
+            {part.state === "output-denied" && (
+              <div className="rounded-lg bg-orange-500/5 p-3 text-sm text-orange-600 dark:text-orange-400">
+                <div className="flex items-center gap-2">
+                  <ShieldXIcon className="size-4" />
+                  <span className="font-medium">Execution Denied</span>
+                </div>
+                {part.approval?.reason && (
+                  <p className="mt-1 opacity-80">Reason: {part.approval.reason}</p>
+                )}
               </div>
-              {part.approval?.reason && (
-                <p className="mt-1">Reason: {part.approval.reason}</p>
-              )}
-            </div>
-          )}
+            )}
 
-          {/* Output available - render the tool content */}
-          {part.state === "output-available" && children}
+            {/* Output available - render the tool content */}
+            {part.state === "output-available" && children}
+          </div>
+        </div>
+      </div>
+
+      {/* Active progress bar */}
+      {(part.state === "input-streaming" || part.state === "input-available" || part.state === "approval-responded") && (
+        <div className="h-[1px] w-full overflow-hidden bg-blue-500/10">
+          <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
         </div>
       )}
     </div>
   );
 }
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function getStateInfo(state: ToolInvocationState): {
   icon: React.ComponentType<{ className?: string }>;
@@ -163,42 +262,37 @@ function getStateInfo(state: ToolInvocationState): {
       return {
         icon: LoaderIcon,
         color: "bg-blue-500/10 text-blue-500",
-        label: "Preparing...",
+        label: "Preparing",
         animate: true,
       };
-
     case "input-available":
       return {
         icon: ClockIcon,
         color: "bg-yellow-500/10 text-yellow-500",
-        label: "Pending execution",
+        label: "Running",
         animate: false,
       };
-
     case "approval-requested":
       return {
         icon: ShieldCheckIcon,
         color: "bg-orange-500/10 text-orange-500",
-        label: "Awaiting approval",
+        label: "Approval",
         animate: false,
       };
-
     case "approval-responded":
       return {
         icon: LoaderIcon,
         color: "bg-blue-500/10 text-blue-500",
-        label: "Executing...",
+        label: "Executing",
         animate: true,
       };
-
     case "output-available":
       return {
         icon: CheckIcon,
         color: "bg-green-500/10 text-green-500",
-        label: "Completed",
+        label: "Done",
         animate: false,
       };
-
     case "output-error":
       return {
         icon: AlertCircleIcon,
@@ -206,7 +300,6 @@ function getStateInfo(state: ToolInvocationState): {
         label: "Failed",
         animate: false,
       };
-
     case "output-denied":
       return {
         icon: XIcon,
@@ -214,7 +307,6 @@ function getStateInfo(state: ToolInvocationState): {
         label: "Denied",
         animate: false,
       };
-
     default:
       return {
         icon: ClockIcon,

@@ -11,7 +11,6 @@ import {
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import {
-  BookOpenIcon,
   CreditCardIcon,
   HelpCircleIcon,
   HomeIcon,
@@ -84,12 +83,6 @@ export function ProfileDropdown({
       <DropdownMenuSeparator />
 
       <DropdownMenuGroup>
-        <DropdownMenuItem asChild>
-          <Link href="/knowledge" className="flex items-center gap-2">
-            <BookOpenIcon className="h-4 w-4" />
-            <span>Knowledge</span>
-          </Link>
-        </DropdownMenuItem>
         <DropdownMenuItem
           className="flex items-center gap-2 cursor-pointer"
           onSelect={() => openSettings("account")}

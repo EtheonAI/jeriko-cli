@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { db, webhooks, webhookDeliveries, webhookEvents, eq, sql } from "@repo/database";
+import { db, webhooks, webhookDeliveries, eq, sql } from "./db.js";
 import { createLogger } from "@repo/service-utils";
 
 const logger = createLogger({ service: "webhook-deliver" });

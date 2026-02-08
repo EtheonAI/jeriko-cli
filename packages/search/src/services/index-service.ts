@@ -78,8 +78,8 @@ async function bulkImportDocuments<T extends { id: string }>(
       batch_size: 100,
     });
 
-  const success = results.filter((r) => r.success).length;
-  const failed = results.filter((r) => !r.success).length;
+  const success = results.filter((r: { success: boolean }) => r.success).length;
+  const failed = results.filter((r: { success: boolean }) => !r.success).length;
 
   return { success, failed };
 }
@@ -177,7 +177,7 @@ export async function getCollectionStats(
   const collection = await client.collections(collectionName).retrieve();
   return {
     numDocuments: collection.num_documents || 0,
-    numMemoryBytesUsed: collection.num_memory_bytes_used || 0,
+    numMemoryBytesUsed: (collection as unknown as Record<string, unknown>).num_memory_bytes_used as number || 0,
   };
 }
 

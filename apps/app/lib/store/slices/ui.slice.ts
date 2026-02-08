@@ -26,6 +26,13 @@ export interface UIState {
   isCommandPaletteOpen: boolean;
   isSearchOpen: boolean;
   breadcrumbs: { label: string; href?: string }[];
+  // Manus-aligned keys
+  chatSidebarPercentage: number | null;
+  chatSidebarWidth: number;
+  windowWidth: number;
+  showAppDownloadMask: boolean;
+  isShowMaxModeIntroduce: boolean;
+  isWebDevSidebarFullscreen: boolean;
 }
 
 const initialState: UIState = {
@@ -37,9 +44,16 @@ const initialState: UIState = {
   isCommandPaletteOpen: false,
   isSearchOpen: false,
   breadcrumbs: [],
+  // Manus-aligned defaults
+  chatSidebarPercentage: null,
+  chatSidebarWidth: 746,
+  windowWidth: 1792,
+  showAppDownloadMask: false,
+  isShowMaxModeIntroduce: false,
+  isWebDevSidebarFullscreen: false,
 };
 
-export const uiSlice = createSlice({
+const uiSlice = createSlice({
   name: "ui",
   initialState,
   reducers: {
@@ -88,6 +102,26 @@ export const uiSlice = createSlice({
     ) => {
       state.breadcrumbs = action.payload;
     },
+
+    // Manus-aligned reducers
+    setChatSidebarPercentage: (state, action: PayloadAction<number | null>) => {
+      state.chatSidebarPercentage = action.payload;
+    },
+    setChatSidebarWidth: (state, action: PayloadAction<number>) => {
+      state.chatSidebarWidth = action.payload;
+    },
+    setWindowWidth: (state, action: PayloadAction<number>) => {
+      state.windowWidth = action.payload;
+    },
+    setShowAppDownloadMask: (state, action: PayloadAction<boolean>) => {
+      state.showAppDownloadMask = action.payload;
+    },
+    setIsShowMaxModeIntroduce: (state, action: PayloadAction<boolean>) => {
+      state.isShowMaxModeIntroduce = action.payload;
+    },
+    setIsWebDevSidebarFullscreen: (state, action: PayloadAction<boolean>) => {
+      state.isWebDevSidebarFullscreen = action.payload;
+    },
   },
 });
 
@@ -105,6 +139,12 @@ export const {
   setCommandPaletteOpen,
   setSearchOpen,
   setBreadcrumbs,
+  setChatSidebarPercentage,
+  setChatSidebarWidth,
+  setWindowWidth,
+  setShowAppDownloadMask,
+  setIsShowMaxModeIntroduce,
+  setIsWebDevSidebarFullscreen,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

@@ -79,7 +79,7 @@ export const devicesRouter = createTRPCRouter({
         type: z.enum(["browser", "desktop", "mobile", "server"]),
         platform: z.string().optional(),
         capabilities: z.array(z.string()).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -103,7 +103,7 @@ export const devicesRouter = createTRPCRouter({
         id: z.string(),
         name: z.string().min(1).max(255).optional(),
         capabilities: z.array(z.string()).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -132,7 +132,7 @@ export const devicesRouter = createTRPCRouter({
       z.object({
         deviceId: z.string(),
         type: z.string(),
-        payload: z.record(z.unknown()).optional(),
+        payload: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

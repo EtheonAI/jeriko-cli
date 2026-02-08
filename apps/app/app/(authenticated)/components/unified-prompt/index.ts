@@ -1,2 +1,2 @@
-export { UnifiedPrompt } from "./unified-prompt";
-export type { UnifiedPromptProps, UnifiedPromptRef, SubmitOptions, SkillId } from "./types";
+export { ChatPrompt, ChatPrompt as UnifiedPrompt } from "./unified-prompt";
+export type { ChatPromptProps, ChatPromptProps as UnifiedPromptProps, ChatPromptRef, ChatPromptRef as UnifiedPromptRef, SubmitOptions, SkillId } from "./types";

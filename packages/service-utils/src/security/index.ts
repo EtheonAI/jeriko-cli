@@ -100,43 +100,49 @@ export function sanitizeObject<T extends Record<string, unknown>>(
 }
 
 /**
- * SQL injection prevention patterns
+ * SQL injection prevention patterns.
+ * NOTE: These are created fresh per call to avoid global regex .lastIndex state bugs.
  */
-const sqlInjectionPatterns = [
-  /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE)\b)/gi,
-  /(--)|(\/\*)|(\*\/)/g,
-  /(;|\||\||&&)/g,
-  /(\bOR\b\s*\d+\s*=\s*\d+)/gi,
-  /(\bAND\b\s*\d+\s*=\s*\d+)/gi,
-];
+function getSqlInjectionPatterns(): RegExp[] {
+  return [
+    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE)\b)/i,
+    /(--)|(\/\*)|(\*\/)/,
+    /(;|\||\||&&)/,
+    /(\bOR\b\s*\d+\s*=\s*\d+)/i,
+    /(\bAND\b\s*\d+\s*=\s*\d+)/i,
+  ];
+}
 
 /**
  * Check if a string contains potential SQL injection
  */
 export function containsSqlInjection(str: string): boolean {
-  return sqlInjectionPatterns.some((pattern) => pattern.test(str));
+  return getSqlInjectionPatterns().some((pattern) => pattern.test(str));
 }
 
 /**
- * NoSQL injection prevention patterns
+ * NoSQL injection prevention patterns.
+ * Created fresh per call to avoid global regex state bugs.
  */
-const noSqlInjectionPatterns = [
-  /\$where/gi,
-  /\$regex/gi,
-  /\$gt/gi,
-  /\$lt/gi,
-  /\$ne/gi,
-  /\$or/gi,
-  /\$and/gi,
-  /\$not/gi,
-  /\$exists/gi,
-];
+function getNoSqlInjectionPatterns(): RegExp[] {
+  return [
+    /\$where/i,
+    /\$regex/i,
+    /\$gt/i,
+    /\$lt/i,
+    /\$ne/i,
+    /\$or/i,
+    /\$and/i,
+    /\$not/i,
+    /\$exists/i,
+  ];
+}
 
 /**
  * Check if a string contains potential NoSQL injection
  */
 export function containsNoSqlInjection(str: string): boolean {
-  return noSqlInjectionPatterns.some((pattern) => pattern.test(str));
+  return getNoSqlInjectionPatterns().some((pattern) => pattern.test(str));
 }
 
 /**
@@ -160,13 +166,28 @@ export function sanitizeFilename(filename: string): string {
 }
 
 /**
- * Sanitize URL path
+ * Sanitize URL path — prevents directory traversal including URL-encoded variants.
  */
 export function sanitizePath(path: string): string {
-  return path
+  // Decode URL-encoded characters first to catch %2e%2e, %2f etc.
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    // If decoding fails, use original
+  }
+  // Double-decode to catch double-encoding attacks (%252e%252e)
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch {
+    // Ignore
+  }
+
+  return decoded
     .replace(/\.{2,}/g, "") // Remove directory traversal
-    .replace(/[<>:"|?*]/g, "") // Remove invalid characters
-    .replace(/\/+/g, "/"); // Normalize slashes
+    .replace(/[<>:"|?*\0]/g, "") // Remove invalid characters + null bytes
+    .replace(/\/+/g, "/") // Normalize slashes
+    .replace(/^\//, ""); // Remove leading slash for relative paths
 }
 
 /**
@@ -190,18 +211,35 @@ export async function hashString(str: string): Promise<string> {
 }
 
 /**
- * Constant-time string comparison (timing attack safe)
+ * Constant-time string comparison (timing attack safe).
+ * Uses Node.js crypto.timingSafeEqual which doesn't leak length info.
+ * Falls back to manual XOR with length padding if crypto unavailable.
  */
 export function secureCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
+  // Use Node.js built-in timing-safe comparison (preferred)
+  try {
+    const bufA = Buffer.from(a, "utf-8");
+    const bufB = Buffer.from(b, "utf-8");
+    // Pad shorter buffer to prevent length leaking through timing
+    if (bufA.length !== bufB.length) {
+      // Hash both to fixed-length to avoid timing leak on length difference
+      const { createHash } = require("crypto") as typeof import("crypto");
+      const hashA = createHash("sha256").update(bufA).digest();
+      const hashB = createHash("sha256").update(bufB).digest();
+      const { timingSafeEqual } = require("crypto") as typeof import("crypto");
+      return timingSafeEqual(hashA, hashB) && bufA.length === bufB.length;
+    }
+    const { timingSafeEqual } = require("crypto") as typeof import("crypto");
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    // Fallback: XOR with length masking
+    const maxLen = Math.max(a.length, b.length);
+    let result = a.length ^ b.length; // Will be non-zero if lengths differ
+    for (let i = 0; i < maxLen; i++) {
+      result |= (a.charCodeAt(i % a.length) || 0) ^ (b.charCodeAt(i % b.length) || 0);
+    }
+    return result === 0;
   }
-
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
 }
 
 /**
@@ -225,14 +263,17 @@ export function isPrivateIP(ip: string): boolean {
     return false;
   }
 
+  const p0 = parts[0]!;
+  const p1 = parts[1]!;
+
   // 10.0.0.0/8
-  if (parts[0] === 10) return true;
+  if (p0 === 10) return true;
   // 172.16.0.0/12
-  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (p0 === 172 && p1 >= 16 && p1 <= 31) return true;
   // 192.168.0.0/16
-  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (p0 === 192 && p1 === 168) return true;
   // 127.0.0.0/8 (loopback)
-  if (parts[0] === 127) return true;
+  if (p0 === 127) return true;
 
   return false;
 }
@@ -244,14 +285,14 @@ export function getRealIP(headers: Record<string, string | string[] | undefined>
   // Check common proxy headers
   const forwardedFor = headers["x-forwarded-for"];
   if (forwardedFor) {
-    const ips = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor).split(",");
+    const ips = (Array.isArray(forwardedFor) ? forwardedFor[0]! : forwardedFor).split(",");
     const realIP = ips[0]?.trim();
     if (realIP) return realIP;
   }
 
   const realIP = headers["x-real-ip"];
   if (realIP) {
-    return Array.isArray(realIP) ? realIP[0] : realIP;
+    return Array.isArray(realIP) ? realIP[0]! : realIP;
   }
 
   return defaultIP;

@@ -160,6 +160,25 @@ PLATFORM_KEYWORDS = {
 }
 
 
+# Tools that require a sandbox to execute
+SANDBOX_DEPENDENT_TOOLS = {
+    "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name",
+    "shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process",
+    "code_execute",
+    # browser_navigate has HTTP fallback, web_search has DuckDuckGo fallback — NOT sandbox-dependent
+    "browser_view", "browser_restart", "browser_click", "browser_input",
+    "browser_move_mouse", "browser_press_key", "browser_select_option", "browser_scroll_up",
+    "browser_scroll_down", "browser_console_exec", "browser_console_view", "browser_screenshot",
+    "deploy_expose_port", "deploy_apply_deployment",
+    "generate_image",
+}
+
+
+def filter_sandbox_tools(tools: list[dict]) -> list[dict]:
+    """Remove tools that require a sandbox when sandbox is unavailable."""
+    return [t for t in tools if t["name"] not in SANDBOX_DEPENDENT_TOOLS]
+
+
 def should_plan(prompt: str) -> bool:
     prompt_lower = prompt.lower()
     return any(trigger in prompt_lower for trigger in PLANNING_TRIGGERS)
@@ -188,6 +207,7 @@ def build_system_prompt(
     user_name: str = "",
     user_memory: str = "",
     connected_apps: str = "",
+    sandbox_available: bool = True,
 ) -> str:
     prompt = f"""You are Rubic, an AI agent created by the Rubic team.
 
@@ -234,6 +254,19 @@ You are operating in an agent loop, iteratively completing tasks through these s
 5. Submit Results: Send results to user via message tools, providing deliverables and related files as attachments
 6. Enter Standby: When all tasks are completed, provide final results and wait for new tasks
 </agent_loop>
+
+<planning_rules>
+CRITICAL: You MUST call show_plan before starting ANY task that involves using tools.
+- Call show_plan FIRST to display your plan before any other tool calls
+- Even simple tasks like "search and summarize" should have a plan (e.g., Search → Analyze → Summarize)
+- Each plan step must have a unique id, a short label, and status (pending/in_progress/completed/cancelled)
+- As you work through steps, call show_plan again with updated statuses so the user sees live progress
+- Call show_plan with status="in_progress" on the current step BEFORE starting it
+- Call show_plan with status="completed" on the step AFTER finishing it
+- Keep plan step labels short and action-oriented (e.g., "Search the web", "Analyze results", "Write code")
+- The ONLY exception: single direct questions that need no tools (e.g., "What is Python?")
+- Even if the sandbox is unavailable, still create plans for multi-step responses
+</planning_rules>
 
 <todo_rules>
 - Create todo.md file as checklist when handling complex multi-step tasks
@@ -344,6 +377,19 @@ User: {user_name or "User"}
 Connected Apps: {connected_apps or "None connected yet. Suggest connecting apps in Settings → Applications."}
 </user_context>
 """
+    if not sandbox_available:
+        prompt += """
+<sandbox_unavailable>
+IMPORTANT: The sandbox environment is currently unavailable. You CANNOT use file, shell, browser, code execution, deployment, or image generation tools. You can still:
+- Answer questions using your knowledge
+- Search the web using web_search
+- Create and display plans using show_plan
+- Communicate with the user via message_notify_user / message_ask_user
+- Execute connected app tools (app_* prefix)
+- Execute device tools (device_* prefix)
+If the user asks for actions requiring sandbox tools, explain that the sandbox is temporarily unavailable and offer alternatives.
+</sandbox_unavailable>
+"""
     return prompt
 
 
@@ -353,33 +399,51 @@ Connected Apps: {connected_apps or "None connected yet. Suggest connecting apps 
 
 
 async def get_or_create_sandbox(session_id: str, user_id: str) -> str | None:
+    """
+    Get an existing running sandbox for this user, or create a new one.
+    Uses the sandbox service REST API at /users/:userId/sandboxes and /sandboxes.
+    """
+    # Sandbox service uses x-user-id header for auth (dev mode) and owner verification
+    headers = {"x-user-id": user_id}
+
     try:
         async with httpx.AsyncClient() as client:
+            # Check for existing running sandboxes for this user
             resp = await client.get(
-                f"{settings.sandbox_service_url}/sandboxes",
-                params={"agentSessionId": session_id},
+                f"{settings.sandbox_service_url}/users/{user_id}/sandboxes",
+                headers=headers,
                 timeout=10.0,
             )
             if resp.status_code == 200:
-                data = resp.json()
-                sandboxes = data if isinstance(data, list) else data.get("sandboxes", [])
-                for sb in sandboxes:
+                resp_json = resp.json()
+                # Sandbox service wraps responses: {data: {...}, meta: {...}}
+                inner = resp_json.get("data", resp_json) if isinstance(resp_json, dict) else resp_json
+                sandbox_list = inner.get("sandboxes", []) if isinstance(inner, dict) else []
+                for sb in sandbox_list:
                     if sb.get("status") in ("running", "active"):
+                        logger.debug("reusing_existing_sandbox", sandbox_id=sb["id"])
                         return sb["id"]
 
+            # No running sandbox found — create a new one
             create_resp = await client.post(
                 f"{settings.sandbox_service_url}/sandboxes",
+                headers=headers,
                 json={
                     "userId": user_id,
-                    "agentSessionId": session_id,
-                    "config": {"timeout": 3600000, "memory": 512},
+                    "projectId": session_id,
+                    "config": {"timeout": 3600000},
                 },
                 timeout=30.0,
             )
             if create_resp.status_code < 400:
-                return create_resp.json().get("id")
+                resp_json = create_resp.json()
+                # Sandbox service wraps responses: {data: {id, ...}, meta: {...}}
+                inner = resp_json.get("data", resp_json) if isinstance(resp_json, dict) else resp_json
+                sandbox_id = inner.get("id") if isinstance(inner, dict) else None
+                logger.info("sandbox_created", sandbox_id=sandbox_id, user_id=user_id)
+                return sandbox_id
 
-            logger.warning("sandbox_create_failed", status=create_resp.status_code)
+            logger.warning("sandbox_create_failed", status=create_resp.status_code, body=create_resp.text)
             return None
     except Exception as e:
         logger.warning("sandbox_unavailable", error=str(e))
@@ -428,6 +492,11 @@ async def setup_session_context(
 
     # Assemble tools ONCE for this session
     tools = await assemble_all_tools(user_id, CORE_TOOLS)
+
+    # If sandbox is unavailable, filter out sandbox-dependent tools
+    if not sandbox_id:
+        logger.info("sandbox_unavailable_filtering_tools", session_id=session_id)
+        tools = filter_sandbox_tools(tools)
 
     ctx = SessionContext(
         session_id=session_id,
@@ -497,12 +566,14 @@ async def complete(
     # Step 2: Load conversation history from DB
     history = await load_conversation_history(session_id)
     if history:
-        # Prepend history before the new user message
-        messages = history + messages
+        # Prepend history before the new user message, then merge any
+        # consecutive user messages (e.g., tool_results + new prompt)
+        from src.session import _merge_consecutive_tool_results
+        messages = _merge_consecutive_tool_results(history + messages)
 
-    # Step 3: Save the new user message to DB
-    if user_prompt:
-        asyncio.create_task(save_user_message(session_id, user_prompt))
+    # NOTE: User message persistence is handled by the Next.js route.ts (agent-proxy.ts)
+    # which saves BOTH user + assistant messages with full AI SDK parts.
+    # Do NOT save here — it causes duplicate messages in the DB.
 
     # Step 4: Proactive check — detect missing integrations
     integration_suggestion = None
@@ -522,6 +593,7 @@ async def complete(
     system_prompt = request.system_prompt or build_system_prompt(
         user_name=x_user_name or "",
         connected_apps=", ".join(session_ctx.connected_apps) if session_ctx.connected_apps else "",
+        sandbox_available=session_ctx.sandbox_id is not None,
     )
 
     # Step 6: Create execution context
@@ -610,27 +682,12 @@ async def _post_completion(
         iterations = result.get("iterations", 1)
         duration_ms = result.get("duration_ms", 0)
 
-        # 1. Save assistant message
-        tool_blocks = None
-        if tool_calls:
-            # Extract tool_use blocks for history reconstruction
-            tool_blocks = [
-                {"type": "tool_use", "id": tc.get("tool_use_id", ""), "name": tc["name"], "input": tc["input"]}
-                for tc in tool_calls
-            ]
-        await save_assistant_message(
-            session_id=session_id,
-            content=content,
-            model=model,
-            usage=usage,
-            tool_blocks=tool_blocks,
-        )
+        # NOTE: Message persistence is handled by the Next.js route.ts (agent-proxy.ts)
+        # which saves assistant messages with full AI SDK UIMessage parts.
+        # Do NOT save here — it causes duplicate messages and role:tool messages
+        # that the frontend displays as raw JSON text.
 
-        # 2. Save tool messages
-        if tool_calls:
-            await save_tool_messages(session_id, tool_calls)
-
-        # 3. Deduct credits
+        # Deduct credits
         credits_used = calculate_credits(
             model=model,
             input_tokens=usage.get("input_tokens", 0),
@@ -646,7 +703,7 @@ async def _post_completion(
             tool_calls=tool_calls,
         )
 
-        # 4. Log telemetry
+        # Log telemetry
         await log_telemetry(
             user_id=user_id,
             session_id=session_id,
@@ -661,7 +718,7 @@ async def _post_completion(
             task_summary=user_prompt[:200] if user_prompt else "",
         )
 
-        # 5. Auto-generate session title from first message
+        # Auto-generate session title from first message
         msg_count = await get_session_message_count(session_id)
         if msg_count <= 2 and user_prompt:
             # Use first ~60 chars of prompt as title
@@ -712,6 +769,10 @@ async def _stream_agent_response(
     total_cache_read = 0
     total_cache_create = 0
     collected_text = []
+
+    # Emit sandbox info so the client can make direct browser control requests
+    if ctx.sandbox_id:
+        yield sse("sandbox_info", {"sandboxId": ctx.sandbox_id})
 
     for iteration in range(50):  # MAX_ITERATIONS
         iter_text = []
@@ -859,6 +920,20 @@ async def _stream_agent_response(
                 "result": result,
                 "summary": _safe_truncate(result, max_len=200),
             })
+
+            # Emit a dedicated browser_frame event for live canvas updates
+            # when a browser tool result contains a screenshot
+            if (
+                not is_error
+                and isinstance(result, dict)
+                and result.get("screenshot")
+                and block["name"].startswith("browser_")
+            ):
+                yield sse("browser_frame", {
+                    "screenshot": result["screenshot"],
+                    "url": result.get("url", ""),
+                    "title": result.get("title", ""),
+                })
 
         messages.append({"role": "user", "content": tool_results})
 

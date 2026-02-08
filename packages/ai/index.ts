@@ -82,6 +82,10 @@ export {
   type ToolResult,
   type ToolExecutionMode,
   type ToolExecutionOptions,
+  // Tool definitions (Manus-aligned Zod schemas)
+  getAllToolDefinitions,
+  getToolSchemas,
+  TOOL_NAMES,
 } from "./lib/tools";
 
 // Export streaming utilities
@@ -143,112 +147,4 @@ export {
   // Agent implementations
   RubicToolLoopAgent,
   createToolLoopAgent,
-  DAGAgent,
-  createDAGAgent,
-  RouterAgent,
-  createRouterAgent,
-  CachedAgent,
-  createCachedAgent,
-  withCache,
 } from "./lib/agents";
-
-// Export orchestration utilities
-export {
-  // DAG Executor
-  DAGExecutor,
-  ExecutionGraphBuilder,
-  createDAGExecutor,
-  createExecutionGraph,
-  type ExecutionNode,
-  type ExecutionGraph,
-  type ExecutionProgress,
-  type DAGExecutorConfig,
-
-  // Task Planner
-  TaskPlanner,
-  createTaskPlanner,
-  quickPlan,
-  type TaskPlan,
-  type PlannedTask,
-
-  // Parallel Runner
-  ParallelRunner,
-  createParallelRunner,
-  runParallel,
-  mapParallel,
-  type ParallelTask,
-  type ParallelResult,
-  type BatchResult,
-
-  // Workflow helpers
-  createLinearWorkflow,
-  createFanOutFanInWorkflow,
-  createPipelineWorkflow,
-} from "./lib/orchestration";
-
-// Export middleware
-export {
-  // Cost tracking
-  createCostTrackingMiddleware,
-  CostTracker,
-  type CostRecord,
-  type CostSummary,
-
-  // Logging
-  createLoggingMiddleware,
-  createLogger,
-  Logger,
-  type LogLevel,
-  type LogEntry,
-
-  // Rate limiting
-  createRateLimitingMiddleware,
-  RateLimiter,
-  requestsPerMinute,
-  tokensPerMinute,
-  type RateLimitConfig,
-
-  // Middleware utilities
-  composeMiddleware,
-  conditionalMiddleware,
-  simpleMiddleware,
-} from "./lib/middleware";
-
-// Export provider management
-export {
-  ProviderRegistry,
-  getProviderRegistry,
-  createProviderRegistry,
-  FallbackProvider,
-  createFallbackProvider,
-  BUILT_IN_MODELS,
-  ANTHROPIC_FALLBACK_CHAIN,
-  OPENAI_FALLBACK_CHAIN,
-  CROSS_PROVIDER_FALLBACK_CHAIN,
-  getModel,
-  listModels,
-  selectModel,
-  initializeProviders,
-  parseModelId,
-  type ProviderName,
-  type ModelInfo,
-  type ModelCapabilities,
-  type ProviderConfig,
-  type FallbackConfig,
-} from "./lib/providers";
-
-// Export demo utilities
-export {
-  MockAgent,
-  createMockAgent,
-  createDemoAgent,
-  getMockTools,
-  MOCK_TOOLS,
-  createDemoSetup,
-  generateDemoConversation,
-  generateDemoSteps,
-  generateDemoUsage,
-  type MockAgentConfig,
-  type DemoConversation,
-  type DemoScenario,
-} from "./lib/demo";

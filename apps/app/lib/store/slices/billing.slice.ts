@@ -105,8 +105,8 @@ export interface BillingState {
   // Upgrade flow
   selectedPlanKeyIndex: number | null;
   selectedPlanKeyForUpgrade: string | null;
-  planPreviewDataLoadingMapForUpgrade: Record<string, boolean>;
-  planPreviewDataMapForUpgrade: Record<string, unknown>;
+  planPreviewDataLoadingMapForUpgrade: Record<string, boolean> | null;
+  planPreviewDataMapForUpgrade: Record<string, unknown> | null;
 
   // Loading states
   loadingKey: string | null;
@@ -114,6 +114,11 @@ export interface BillingState {
   stripeBillingLoading: boolean;
   isLoadingInvoices: boolean;
   isLoadingUsage: boolean;
+
+  // Manus-aligned keys
+  teamSSOSubscription: unknown;
+  teamSCIMSubscription: unknown;
+  trials: unknown[];
 
   // Error
   error: string | null;
@@ -135,17 +140,21 @@ const initialState: BillingState = {
   },
   selectedPlanKeyIndex: null,
   selectedPlanKeyForUpgrade: null,
-  planPreviewDataLoadingMapForUpgrade: {},
-  planPreviewDataMapForUpgrade: {},
+  planPreviewDataLoadingMapForUpgrade: null,
+  planPreviewDataMapForUpgrade: null,
   loadingKey: null,
   isSubscriptionLoading: false,
   stripeBillingLoading: false,
   isLoadingInvoices: false,
   isLoadingUsage: false,
+  // Manus-aligned defaults
+  teamSSOSubscription: null,
+  teamSCIMSubscription: null,
+  trials: [],
   error: null,
 };
 
-export const billingSlice = createSlice({
+const billingSlice = createSlice({
   name: "billing",
   initialState,
   reducers: {
@@ -263,6 +272,9 @@ export const billingSlice = createSlice({
       state,
       action: PayloadAction<{ key: string; loading: boolean }>
     ) => {
+      if (!state.planPreviewDataLoadingMapForUpgrade) {
+        state.planPreviewDataLoadingMapForUpgrade = {};
+      }
       state.planPreviewDataLoadingMapForUpgrade[action.payload.key] =
         action.payload.loading;
     },
@@ -271,9 +283,29 @@ export const billingSlice = createSlice({
       state,
       action: PayloadAction<{ key: string; data: unknown }>
     ) => {
+      if (!state.planPreviewDataMapForUpgrade) {
+        state.planPreviewDataMapForUpgrade = {};
+      }
+      if (!state.planPreviewDataLoadingMapForUpgrade) {
+        state.planPreviewDataLoadingMapForUpgrade = {};
+      }
       state.planPreviewDataMapForUpgrade[action.payload.key] =
         action.payload.data;
       state.planPreviewDataLoadingMapForUpgrade[action.payload.key] = false;
+    },
+
+    setPlanPreviewDataLoadingMapForUpgrade: (
+      state,
+      action: PayloadAction<Record<string, boolean> | null>
+    ) => {
+      state.planPreviewDataLoadingMapForUpgrade = action.payload;
+    },
+
+    setPlanPreviewDataMapForUpgrade: (
+      state,
+      action: PayloadAction<Record<string, unknown> | null>
+    ) => {
+      state.planPreviewDataMapForUpgrade = action.payload;
     },
 
     // Loading states
@@ -295,6 +327,17 @@ export const billingSlice = createSlice({
 
     setLoadingUsage: (state, action: PayloadAction<boolean>) => {
       state.isLoadingUsage = action.payload;
+    },
+
+    // Manus-aligned reducers
+    setTeamSSOSubscription: (state, action: PayloadAction<unknown>) => {
+      state.teamSSOSubscription = action.payload;
+    },
+    setTeamSCIMSubscription: (state, action: PayloadAction<unknown>) => {
+      state.teamSCIMSubscription = action.payload;
+    },
+    setTrials: (state, action: PayloadAction<unknown[]>) => {
+      state.trials = action.payload;
     },
 
     // Error
@@ -337,6 +380,11 @@ export const {
   setLoadingUsage,
   setBillingError,
   resetBilling,
+  setTeamSSOSubscription,
+  setTeamSCIMSubscription,
+  setTrials,
+  setPlanPreviewDataLoadingMapForUpgrade,
+  setPlanPreviewDataMapForUpgrade,
 } = billingSlice.actions;
 
 export default billingSlice.reducer;

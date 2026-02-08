@@ -2,85 +2,124 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
 /**
  * Session Switch Slice
- * Manages session search and switching UI state
+ * Quick session switcher (Cmd+K style within sidebar):
+ * - Fuzzy search sessions by title
+ * - Recent sessions prioritized
+ * - Keyboard navigation
  */
 
-export interface SessionSwitchSession {
+export interface SessionSwitchItem {
   id: string;
-  title: string;
-  lastMessage?: string;
-  updatedAt: string;
+  title: string | null;
   status: string;
+  mode: string;
+  lastActivityAt?: string;
+  updatedAt: string;
+  preview?: string;
 }
 
 export interface SessionSwitchState {
+  // Search
   keyword: string;
-  sessions: SessionSwitchSession[];
-  isSearching: boolean;
+
+  // Filtered sessions
+  sessions: SessionSwitchItem[];
+
+  // UI
+  isOpen: boolean;
   selectedIndex: number;
+  isLoading: boolean;
 }
 
 const initialState: SessionSwitchState = {
   keyword: "",
   sessions: [],
-  isSearching: false,
-  selectedIndex: -1,
+  isOpen: false,
+  selectedIndex: 0,
+  isLoading: false,
 };
 
-export const sessionSwitchSlice = createSlice({
+const sessionSwitchSlice = createSlice({
   name: "sessionSwitch",
   initialState,
   reducers: {
+    // Open/close
+    openSessionSwitch: (state) => {
+      state.isOpen = true;
+      state.keyword = "";
+      state.selectedIndex = 0;
+    },
+
+    closeSessionSwitch: (state) => {
+      state.isOpen = false;
+      state.keyword = "";
+      state.sessions = [];
+      state.selectedIndex = 0;
+    },
+
+    toggleSessionSwitch: (state) => {
+      if (state.isOpen) {
+        state.isOpen = false;
+        state.keyword = "";
+        state.sessions = [];
+        state.selectedIndex = 0;
+      } else {
+        state.isOpen = true;
+        state.keyword = "";
+        state.selectedIndex = 0;
+      }
+    },
+
+    // Search
     setKeyword: (state, action: PayloadAction<string>) => {
       state.keyword = action.payload;
+      state.selectedIndex = 0;
     },
 
-    setSessions: (state, action: PayloadAction<SessionSwitchSession[]>) => {
+    // Sessions
+    setSwitchSessions: (state, action: PayloadAction<SessionSwitchItem[]>) => {
       state.sessions = action.payload;
-      state.isSearching = false;
+      state.isLoading = false;
+      state.selectedIndex = 0;
     },
 
-    setIsSearching: (state, action: PayloadAction<boolean>) => {
-      state.isSearching = action.payload;
-    },
-
-    setSelectedIndex: (state, action: PayloadAction<number>) => {
+    // Navigation
+    setSwitchSelectedIndex: (state, action: PayloadAction<number>) => {
       state.selectedIndex = action.payload;
     },
 
-    moveSelectionUp: (state) => {
-      if (state.selectedIndex > 0) {
-        state.selectedIndex -= 1;
+    moveSwitchSelectionUp: (state) => {
+      if (state.sessions.length > 0) {
+        state.selectedIndex = Math.max(0, state.selectedIndex - 1);
       }
     },
 
-    moveSelectionDown: (state) => {
-      if (state.selectedIndex < state.sessions.length - 1) {
-        state.selectedIndex += 1;
+    moveSwitchSelectionDown: (state) => {
+      if (state.sessions.length > 0) {
+        state.selectedIndex = Math.min(
+          state.sessions.length - 1,
+          state.selectedIndex + 1
+        );
       }
     },
 
-    clearSearch: (state) => {
-      state.keyword = "";
-      state.sessions = [];
-      state.selectedIndex = -1;
-    },
-
-    resetSessionSwitch: (state) => {
-      Object.assign(state, initialState);
+    // Loading
+    setSessionSwitchLoading: (state, action: PayloadAction<boolean>) => {
+      state.isLoading = action.payload;
     },
   },
 });
 
 export const {
+  openSessionSwitch,
+  closeSessionSwitch,
+  toggleSessionSwitch,
   setKeyword,
-  setSessions,
-  setIsSearching,
-  setSelectedIndex,
-  moveSelectionUp,
-  moveSelectionDown,
-  clearSearch,
-  resetSessionSwitch,
+  setSwitchSessions,
+  setSwitchSelectedIndex,
+  moveSwitchSelectionUp,
+  moveSwitchSelectionDown,
+  setSessionSwitchLoading,
 } = sessionSwitchSlice.actions;
 
 export default sessionSwitchSlice.reducer;

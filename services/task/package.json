@@ -14,6 +14,8 @@
     "@fastify/cors": "^10.0.2",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
+    "cron-parser": "^4.9.0",
+    "drizzle-orm": "^0.38.4",
     "fastify": "^5.2.2",
     "inngest": "^3.32.3",
     "zod": "^3.24.2"

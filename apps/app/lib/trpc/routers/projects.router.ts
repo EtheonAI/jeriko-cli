@@ -44,86 +44,85 @@ export const projectsRouter = createTRPCRouter({
         ownedConditions.push(
           or(
             ilike(projects.name, `%${input.search}%`),
-            ilike(projects.description || "", `%${input.search}%`)
+            ilike(sql`COALESCE(${projects.description}, '')`, `%${input.search}%`)
           )!
         );
       }
 
-      const ownedProjects = await db
-        .select()
-        .from(projects)
-        .where(and(...ownedConditions))
-        .orderBy(desc(projects.isPinned), desc(projects.lastActivityAt))
-        .limit(input.limit)
-        .offset(input.offset);
+      // Run owned projects + shared member IDs in parallel
+      const [ownedProjects, sharedProjectIds] = await Promise.all([
+        db
+          .select()
+          .from(projects)
+          .where(and(...ownedConditions))
+          .orderBy(desc(projects.isPinned), desc(projects.lastActivityAt))
+          .limit(input.limit)
+          .offset(input.offset),
+        input.includeShared
+          ? db
+              .select({ projectId: projectMembers.projectId })
+              .from(projectMembers)
+              .where(eq(projectMembers.userId, ctx.user.id))
+          : Promise.resolve([]),
+      ]);
 
-      // If including shared projects, get those too
-      if (input.includeShared) {
-        const sharedProjectIds = await db
-          .select({ projectId: projectMembers.projectId })
-          .from(projectMembers)
-          .where(eq(projectMembers.userId, ctx.user.id));
+      // Merge shared projects if any
+      if (input.includeShared && sharedProjectIds.length > 0) {
+        const ownedIds = new Set(ownedProjects.map((p) => p.id));
+        const filteredIds = sharedProjectIds
+          .map((p) => p.projectId)
+          .filter((id) => !ownedIds.has(id));
 
-        if (sharedProjectIds.length > 0) {
-          const ids = sharedProjectIds.map((p) => p.projectId);
-          // Filter out owned projects from shared
-          const filteredIds = ids.filter(
-            (id) => !ownedProjects.some((p) => p.id === id)
-          );
-
-          if (filteredIds.length > 0) {
-            const sharedProjects = await db
-              .select()
-              .from(projects)
-              .where(
-                and(
-                  sql`${projects.id} IN (${sql.join(filteredIds.map((id) => sql`${id}`), sql`, `)})`,
-                  input.status ? eq(projects.status, input.status) : sql`true`
-                )
+        if (filteredIds.length > 0) {
+          const sharedProjects = await db
+            .select()
+            .from(projects)
+            .where(
+              and(
+                sql`${projects.id} IN (${sql.join(filteredIds.map((id) => sql`${id}`), sql`, `)})`,
+                input.status ? eq(projects.status, input.status) : sql`true`
               )
-              .limit(input.limit);
+            )
+            .limit(input.limit);
 
-            return [...ownedProjects, ...sharedProjects];
-          }
+          return [...ownedProjects, ...sharedProjects];
         }
       }
 
       return ownedProjects;
     }),
 
-  // Get a single project
+  // Get a single project (single query with LEFT JOIN for membership check)
   get: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
-      const [project] = await db
-        .select()
+      const [result] = await db
+        .select({
+          project: projects,
+          memberRole: projectMembers.role,
+        })
         .from(projects)
+        .leftJoin(
+          projectMembers,
+          and(
+            eq(projects.id, projectMembers.projectId),
+            eq(projectMembers.userId, ctx.user.id)
+          )
+        )
         .where(eq(projects.id, input.id))
         .limit(1);
 
-      if (!project) {
+      if (!result) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       }
 
-      // Check access
-      if (project.userId !== ctx.user.id) {
-        const [membership] = await db
-          .select()
-          .from(projectMembers)
-          .where(
-            and(
-              eq(projectMembers.projectId, input.id),
-              eq(projectMembers.userId, ctx.user.id)
-            )
-          )
-          .limit(1);
+      const { project, memberRole } = result;
 
-        if (!membership && project.visibility === "private") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You don't have access to this project",
-          });
-        }
+      if (project.userId !== ctx.user.id && !memberRole && project.visibility === "private") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You don't have access to this project",
+        });
       }
 
       return project;
@@ -138,7 +137,7 @@ export const projectsRouter = createTRPCRouter({
         icon: z.string().optional(),
         color: z.string().optional(),
         visibility: z.enum(["private", "team", "public"]).default("private"),
-        settings: z.record(z.unknown()).optional(),
+        settings: z.record(z.string(), z.unknown()).optional(),
         tags: z.array(z.string()).optional(),
         organizationId: z.string().optional(),
       })
@@ -182,7 +181,7 @@ export const projectsRouter = createTRPCRouter({
         status: z.enum(["active", "archived", "completed", "paused"]).optional(),
         visibility: z.enum(["private", "team", "public"]).optional(),
         isPinned: z.boolean().optional(),
-        settings: z.record(z.unknown()).optional(),
+        settings: z.record(z.string(), z.unknown()).optional(),
         tags: z.array(z.string()).optional(),
       })
     )

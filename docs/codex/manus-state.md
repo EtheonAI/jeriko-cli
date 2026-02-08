@@ -1,0 +1,972 @@
+# Manus State Deep Keys
+
+Source: `state.json` → `preloadedState`
+
+**_persist**
+- Paths: 2
+- `rehydrated`
+- `version`
+
+**agentWorkspace**
+- Paths: 19
+- `animationLock`
+- `chatComputerDialogVisible`
+- `chatReplySearchMetadata`
+- `chatReplySearchResults`
+- `disableChatWorkspaceInitAnimation`
+- `disableSidebarInitAnimation`
+- `fileHistoryVisible`
+- `initialComputerPosition`
+- `initialComputerPosition.height`
+- `initialComputerPosition.left`
+- `initialComputerPosition.top`
+- `initialComputerPosition.width`
+- `isPlannerExpanded`
+- `isSidebarPreviewFullscreen`
+- `isSidebarVisibleInMobile`
+- `isTimelinePlaying`
+- `prevAutoOpenedSidebarType`
+- `sidebarType`
+- `vncDialogVisible`
+
+**aiCanvas**
+- Paths: 2
+- `allAiCanvas`
+- `ocrCache`
+
+**aiCanvasEditor**
+- Paths: 57
+- `altDragCloneIds`
+- `altDragCloneIds[]`
+- `brushing`
+- `brushing.currentPoint`
+- `brushing.isBrushing`
+- `brushing.startPoint`
+- `camera`
+- `camera.x`
+- `camera.y`
+- `camera.z`
+- `commentHistory`
+- `commentHistory.future`
+- `commentHistory.future[]`
+- `commentHistory.past`
+- `commentHistory.past[]`
+- `commentPopup`
+- `commentPopup.commentId`
+- `commentPopup.isOpen`
+- `contextMenu`
+- `contextMenu.position`
+- `contextMenu.target`
+- `editTextMode`
+- `editTextMode.annotations`
+- `editTextMode.annotations[]`
+- `editTextMode.editedTexts`
+- `editTextMode.editedTexts[]`
+- `editTextMode.hoveredAnnotationIndex`
+- `editTextMode.imageId`
+- `editTextMode.isOcrLoading`
+- `editTextMode.selectedAnnotationIndex`
+- `guides`
+- `guides[]`
+- `hoveredShapeId`
+- `interaction`
+- `interaction.activeTool`
+- `interaction.isImageDragging`
+- `interaction.panning`
+- `interaction.rightMouseDown`
+- `interaction.temporaryMarkMode`
+- `interaction.temporaryPanMode`
+- `isAltPressed`
+- `marking`
+- `marking.currentPoint`
+- `marking.imageShapeId`
+- `marking.isMarking`
+- `marking.startPoint`
+- `previewSelectedId`
+- `screenshots`
+- `screenshots.markScreenshots`
+- `screenshots.markedImages`
+- `selectedShapeIds`
+- `selectedShapeIds[]`
+- `settings`
+- `settings.gridState`
+- `settings.rightClickDragToPan`
+- `settings.useScrollWheelZoom`
+- `shapes`
+
+**api**
+- Paths: 14
+- `config`
+- `config.focused`
+- `config.invalidationBehavior`
+- `config.keepUnusedDataFor`
+- `config.middlewareRegistered`
+- `config.online`
+- `config.reducerPath`
+- `config.refetchOnFocus`
+- `config.refetchOnMountOrArgChange`
+- `config.refetchOnReconnect`
+- `mutations`
+- `provided`
+- `queries`
+- `subscriptions`
+
+**auth**
+- Paths: 106
+- `authLoading`
+- `avatarUploading`
+- `clientConfig`
+- `clientConfig.$typeName`
+- `clientConfig.agentMode`
+- `clientConfig.autoAgentDeploySpace`
+- `clientConfig.autoWideResearch`
+- `clientConfig.cookieOptIn`
+- `clientConfig.enableManusBrowser`
+- `clientConfig.hasInterest`
+- `clientConfig.hasShownEduTeamJoinPopup`
+- `clientConfig.lastUpdateLogTime`
+- `clientConfig.recvMarketingEmail`
+- `clientConfig.sessionWaitDoneEmail`
+- `cookieOptIn`
+- `creditAnimateInfo`
+- `globalSettings`
+- `invitationCodeList`
+- `invitationCodeListLoading`
+- `invitationCodeList[]`
+- `invitationCodeRedDotVisible`
+- `modifying`
+- `profileCardVisible`
+- `refreshKey`
+- `shareHistoryCache`
+- `usageInfo`
+- `usageInfo.$typeName`
+- `usageInfo.addonCredits`
+- `usageInfo.consumeStatus`
+- `usageInfo.cooldownStatus`
+- `usageInfo.eventCredits`
+- `usageInfo.freeCredits`
+- `usageInfo.maxRefreshCredits`
+- `usageInfo.nanoBananaTrial`
+- `usageInfo.nextRefreshTime`
+- `usageInfo.nextRefreshTime.$typeName`
+- `usageInfo.nextRefreshTime.nanos`
+- `usageInfo.nextRefreshTime.seconds`
+- `usageInfo.periodicCredits`
+- `usageInfo.proMonthlyCredits`
+- `usageInfo.qualityTrial`
+- `usageInfo.refreshCredits`
+- `usageInfo.refreshInterval`
+- `usageInfo.totalCredits`
+- `usageInfo.userFlag`
+- `usageInfo.userFlag.$typeName`
+- `usageInfo.userFlag.drc16`
+- `userInfo`
+- `userInfo.$typeName`
+- `userInfo.area`
+- `userInfo.avatar`
+- `userInfo.canReceiveExtraCreditsForSubscribe`
+- `userInfo.canReceiveExtraCreditsForUpgrade`
+- `userInfo.cancelAtPeriodEnd`
+- `userInfo.concurrentScheduleTaskLimit`
+- `userInfo.concurrentSessions`
+- `userInfo.currentPeriodEnd`
+- `userInfo.displayname`
+- `userInfo.email`
+- `userInfo.fileUploadQuota`
+- `userInfo.fileUploadQuota.$typeName`
+- `userInfo.fileUploadQuota.isLimited`
+- `userInfo.fileUploadQuota.maxCount`
+- `userInfo.fileUploadQuota.oneEventMaxFileCount`
+- `userInfo.fileUploadQuota.usedCount`
+- `userInfo.firstname`
+- `userInfo.inWaitlist`
+- `userInfo.isAlpha`
+- `userInfo.isBeta`
+- `userInfo.isMembershipTrial`
+- `userInfo.lastname`
+- `userInfo.membershipInterval`
+- `userInfo.membershipTier`
+- `userInfo.membershipVersion`
+- `userInfo.nextMembershipInterval`
+- `userInfo.nextMembershipTier`
+- `userInfo.nextMembershipVersion`
+- `userInfo.nickname`
+- `userInfo.onboardingStepStatus`
+- `userInfo.paymentPlatform`
+- `userInfo.perks`
+- `userInfo.platformList`
+- `userInfo.platformList[]`
+- `userInfo.registeredAt`
+- `userInfo.registeredAt.$typeName`
+- `userInfo.registeredAt.nanos`
+- `userInfo.registeredAt.seconds`
+- `userInfo.smsVerified`
+- `userInfo.subscriptionStatus`
+- `userInfo.teamInfo`
+- `userInfo.teamInfo.$typeName`
+- `userInfo.teamInfo.count`
+- `userInfo.teamInfo.originalUserId`
+- `userInfo.teamInfo.originalUserUid`
+- `userInfo.trialAvailable`
+- `userInfo.uid`
+- `userInfo.userId`
+- `userInfo.userType`
+- `userRegion`
+- `userRegion.$typeName`
+- `userRegion.code`
+- `userRegion.highValueForTeam`
+- `userRegion.isUnsupported`
+- `userRegion.isUnsupportedV2`
+- `userRegion.iso`
+- `userRegion.needCookieOptIn`
+
+**biz**
+- Paths: 42
+- `creditPackages`
+- `creditPackages[]`
+- `creditPackages[].$typeName`
+- `creditPackages[].credits`
+- `creditPackages[].plan`
+- `creditPackages[].price`
+- `freeRefreshCredits`
+- `isSubscriptionLoading`
+- `loadingKey`
+- `personalPlanTiers`
+- `personalPlanTiers[]`
+- `personalPlanTiers[].$typeName`
+- `personalPlanTiers[].credits`
+- `personalPlanTiers[].discountPrice`
+- `personalPlanTiers[].interval`
+- `personalPlanTiers[].plan`
+- `personalPlanTiers[].price`
+- `planPreviewDataLoadingMapForUpgrade`
+- `planPreviewDataMapForUpgrade`
+- `selectedPlanKeyForUpgrade`
+- `selectedPlanKeyIndex`
+- `stripeBillingLoading`
+- `teamPlanTiers`
+- `teamPlanTiers[]`
+- `teamPlanTiers[].$typeName`
+- `teamPlanTiers[].credits`
+- `teamPlanTiers[].discountPrice`
+- `teamPlanTiers[].interval`
+- `teamPlanTiers[].plan`
+- `teamPlanTiers[].price`
+- `teamSSOSubscription`
+- `teamSSOSubscription.credits`
+- `teamSSOSubscription.discountPrice`
+- `teamSSOSubscription.plan`
+- `teamSSOSubscription.price`
+- `trials`
+- `trials[]`
+- `trials[].$typeName`
+- `trials[].credits`
+- `trials[].days`
+- `trials[].plan`
+- `userAutoTopupInfo`
+
+**chat**
+- Paths: 33
+- `agentModeIntroduceScene`
+- `chatExtData`
+- `dataVisualization`
+- `debugModelOverride`
+- `debugModelOverride.config`
+- `debugModelOverride.configText`
+- `debugModelOverride.enabled`
+- `fileSuggestions`
+- `fileSuggestions[]`
+- `files`
+- `files[]`
+- `imageStyleList`
+- `imageStyleListLoading`
+- `inputMode`
+- `inputPlaybookId`
+- `inputPlaybookTemplate`
+- `inputValue`
+- `isAppBannerVisible`
+- `isPageVisible`
+- `microphonePermission`
+- `pinnedSlideTemplateId`
+- `recommendedPlaybooks`
+- `recommendedPlaybooksLoading`
+- `recommendedPlaybooksV2`
+- `recommendedPlaybooksV2.currentPage`
+- `recommendedPlaybooksV2.loading`
+- `recommendedPlaybooksV2.playbooks`
+- `recommendedPlaybooksV2.total`
+- `sendQuestionBehavior`
+- `showSharePopover`
+- `slideTemplateList`
+- `slideTemplateListLoading`
+- `taskMode`
+
+**codeViewer**
+- Paths: 15
+- `activeTabId`
+- `directoryList`
+- `directoryList[]`
+- `directoryMetaData`
+- `directoryMetaData.client/`
+- `directoryMetaData.client/.expanded`
+- `directoryMetaData.client/src/`
+- `directoryMetaData.client/src/.expanded`
+- `fileDataSource`
+- `fileLoadingMap`
+- `fileTabList`
+- `fileTabList[]`
+- `loadDirectoryLoading`
+- `rootDirectory`
+- `userClickedFileTab`
+
+**community**
+- Paths: 5
+- `dataSource`
+- `dataSource[]`
+- `groupedIds`
+- `groupedTotalMap`
+- `isDataSourceLoading`
+
+**configs**
+- Paths: 12
+- `agentWorkspaceAutoExpanded`
+- `automaticallyLearnKnowledge`
+- `chatSidebarMode`
+- `clientId`
+- `disableContextExpensiveErrorSessions`
+- `disableContextExpensiveErrorSessions[]`
+- `firstClickWorkflowEmailAddButton`
+- `gotoComputerTipsShowed`
+- `invitationCodeLength`
+- `mailManusCardShowed`
+- `sessionListPinned`
+- `theme`
+
+**connectors**
+- Paths: 10
+- `connectors`
+- `connectors[]`
+- `githubRepositories`
+- `githubRepositoriesLoading`
+- `githubRepositories[]`
+- `multipleCalendarConfirmedInfo`
+- `multipleEmailConfirmedInfo`
+- `searchQuery`
+- `temporaryEnabledOverrides`
+- `temporaryGithubRepositories`
+
+**example**
+- Paths: 3
+- `exampleList`
+- `exampleListLoading`
+- `exampleList[]`
+
+**experiment**
+- Paths: 210
+- `backendVariants`
+- `backendVariants.202510v10`
+- `backendVariants.202510v10.$typeName`
+- `backendVariants.202510v10.key`
+- `backendVariants.202510v10.metadata`
+- `backendVariants.202510v10.metadata.default`
+- `backendVariants.202510v10.metadata.evaluationId`
+- `backendVariants.202510v10.value`
+- `backendVariants.202510v5`
+- `backendVariants.202510v5.$typeName`
+- `backendVariants.202510v5.key`
+- `backendVariants.202510v5.metadata`
+- `backendVariants.202510v5.metadata.default`
+- `backendVariants.202510v5.metadata.evaluationId`
+- `backendVariants.202510v5.value`
+- `backendVariants.202511v3`
+- `backendVariants.202511v3.$typeName`
+- `backendVariants.202511v3.key`
+- `backendVariants.202511v3.metadata`
+- `backendVariants.202511v3.metadata.evaluationId`
+- `backendVariants.202511v3.metadata.experimentKey`
+- `backendVariants.202511v3.value`
+- `backendVariants.202512v1`
+- `backendVariants.202512v1.$typeName`
+- `backendVariants.202512v1.key`
+- `backendVariants.202512v1.metadata`
+- `backendVariants.202512v1.metadata.default`
+- `backendVariants.202512v1.metadata.evaluationId`
+- `backendVariants.202512v1.value`
+- `backendVariants.202512v6`
+- `backendVariants.202512v6.$typeName`
+- `backendVariants.202512v6.key`
+- `backendVariants.202512v6.metadata`
+- `backendVariants.202512v6.metadata.evaluationId`
+- `backendVariants.202512v6.metadata.experimentKey`
+- `backendVariants.202512v6.value`
+- `backendVariants.202512v7`
+- `backendVariants.202512v7.$typeName`
+- `backendVariants.202512v7.key`
+- `backendVariants.202512v7.metadata`
+- `backendVariants.202512v7.metadata.default`
+- `backendVariants.202512v7.metadata.evaluationId`
+- `backendVariants.202512v7.value`
+- `backendVariants.agent_feature_v46`
+- `backendVariants.agent_feature_v46.$typeName`
+- `backendVariants.agent_feature_v46.key`
+- `backendVariants.agent_feature_v46.metadata`
+- `backendVariants.agent_feature_v46.metadata.evaluationId`
+- `backendVariants.agent_feature_v46.metadata.experimentKey`
+- `backendVariants.agent_feature_v46.value`
+- `backendVariants.agent_feature_v50`
+- `backendVariants.agent_feature_v50.$typeName`
+- `backendVariants.agent_feature_v50.key`
+- `backendVariants.agent_feature_v50.metadata`
+- `backendVariants.agent_feature_v50.metadata.default`
+- `backendVariants.agent_feature_v50.metadata.evaluationId`
+- `backendVariants.agent_feature_v50.metadata.testInstrumentation`
+- `backendVariants.agent_feature_v50.value`
+- `backendVariants.agent_feature_v51`
+- `backendVariants.agent_feature_v51.$typeName`
+- `backendVariants.agent_feature_v51.key`
+- `backendVariants.agent_feature_v51.metadata`
+- `backendVariants.agent_feature_v51.metadata.default`
+- `backendVariants.agent_feature_v51.metadata.evaluationId`
+- `backendVariants.agent_feature_v51.metadata.testInstrumentation`
+- `backendVariants.agent_feature_v51.value`
+- `backendVariants.agent_feature_v55`
+- `backendVariants.agent_feature_v55.$typeName`
+- `backendVariants.agent_feature_v55.key`
+- `backendVariants.agent_feature_v55.metadata`
+- `backendVariants.agent_feature_v55.metadata.evaluationId`
+- `backendVariants.agent_feature_v55.metadata.experimentKey`
+- `backendVariants.agent_feature_v55.value`
+- `guestPageExperiment`
+- `variants`
+- `variants.agent_feature_v13`
+- `variants.agent_feature_v13.expKey`
+- `variants.agent_feature_v13.key`
+- `variants.agent_feature_v13.metadata`
+- `variants.agent_feature_v13.metadata.evaluationId`
+- `variants.agent_feature_v13.metadata.experimentKey`
+- `variants.agent_feature_v13.value`
+- `variants.agent_feature_v15`
+- `variants.agent_feature_v15.expKey`
+- `variants.agent_feature_v15.key`
+- `variants.agent_feature_v15.metadata`
+- `variants.agent_feature_v15.metadata.evaluationId`
+- `variants.agent_feature_v15.metadata.experimentKey`
+- `variants.agent_feature_v15.value`
+- `variants.agent_feature_v16`
+- `variants.agent_feature_v16.key`
+- `variants.agent_feature_v16.metadata`
+- `variants.agent_feature_v16.metadata.default`
+- `variants.agent_feature_v16.metadata.evaluationId`
+- `variants.agent_feature_v16.metadata.testInstrumentation`
+- `variants.agent_feature_v17`
+- `variants.agent_feature_v17.expKey`
+- `variants.agent_feature_v17.key`
+- `variants.agent_feature_v17.metadata`
+- `variants.agent_feature_v17.metadata.evaluationId`
+- `variants.agent_feature_v17.metadata.experimentKey`
+- `variants.agent_feature_v17.value`
+- `variants.agent_feature_v22`
+- `variants.agent_feature_v22.expKey`
+- `variants.agent_feature_v22.key`
+- `variants.agent_feature_v22.metadata`
+- `variants.agent_feature_v22.metadata.evaluationId`
+- `variants.agent_feature_v22.metadata.experimentKey`
+- `variants.agent_feature_v22.value`
+- `variants.agent_feature_v24`
+- `variants.agent_feature_v24.expKey`
+- `variants.agent_feature_v24.key`
+- `variants.agent_feature_v24.metadata`
+- `variants.agent_feature_v24.metadata.evaluationId`
+- `variants.agent_feature_v24.metadata.experimentKey`
+- `variants.agent_feature_v24.value`
+- `variants.agent_feature_v25`
+- `variants.agent_feature_v25.expKey`
+- `variants.agent_feature_v25.key`
+- `variants.agent_feature_v25.metadata`
+- `variants.agent_feature_v25.metadata.evaluationId`
+- `variants.agent_feature_v25.metadata.experimentKey`
+- `variants.agent_feature_v25.value`
+- `variants.agent_feature_v31`
+- `variants.agent_feature_v31.expKey`
+- `variants.agent_feature_v31.key`
+- `variants.agent_feature_v31.metadata`
+- `variants.agent_feature_v31.metadata.evaluationId`
+- `variants.agent_feature_v31.metadata.experimentKey`
+- `variants.agent_feature_v31.value`
+- `variants.agent_feature_v32`
+- `variants.agent_feature_v32.expKey`
+- `variants.agent_feature_v32.key`
+- `variants.agent_feature_v32.metadata`
+- `variants.agent_feature_v32.metadata.evaluationId`
+- `variants.agent_feature_v32.metadata.experimentKey`
+- `variants.agent_feature_v32.value`
+- `variants.agent_feature_v35`
+- `variants.agent_feature_v35.expKey`
+- `variants.agent_feature_v35.key`
+- `variants.agent_feature_v35.metadata`
+- `variants.agent_feature_v35.metadata.evaluationId`
+- `variants.agent_feature_v35.metadata.experimentKey`
+- `variants.agent_feature_v35.value`
+- `variants.agent_feature_v38`
+- `variants.agent_feature_v38.key`
+- `variants.agent_feature_v38.metadata`
+- `variants.agent_feature_v38.metadata.default`
+- `variants.agent_feature_v38.metadata.evaluationId`
+- `variants.agent_feature_v44`
+- `variants.agent_feature_v44.expKey`
+- `variants.agent_feature_v44.key`
+- `variants.agent_feature_v44.metadata`
+- `variants.agent_feature_v44.metadata.evaluationId`
+- `variants.agent_feature_v44.metadata.experimentKey`
+- `variants.agent_feature_v44.value`
+- `variants.agent_feature_v48`
+- `variants.agent_feature_v48.expKey`
+- `variants.agent_feature_v48.key`
+- `variants.agent_feature_v48.metadata`
+- `variants.agent_feature_v48.metadata.evaluationId`
+- `variants.agent_feature_v48.metadata.experimentKey`
+- `variants.agent_feature_v48.value`
+- `variants.agent_feature_v49`
+- `variants.agent_feature_v49.expKey`
+- `variants.agent_feature_v49.key`
+- `variants.agent_feature_v49.metadata`
+- `variants.agent_feature_v49.metadata.evaluationId`
+- `variants.agent_feature_v49.metadata.experimentKey`
+- `variants.agent_feature_v49.value`
+- `variants.agent_feature_v53`
+- `variants.agent_feature_v53.expKey`
+- `variants.agent_feature_v53.key`
+- `variants.agent_feature_v53.metadata`
+- `variants.agent_feature_v53.metadata.evaluationId`
+- `variants.agent_feature_v53.metadata.experimentKey`
+- `variants.agent_feature_v53.value`
+- `variants.agent_feature_v54`
+- `variants.agent_feature_v54.expKey`
+- `variants.agent_feature_v54.key`
+- `variants.agent_feature_v54.metadata`
+- `variants.agent_feature_v54.metadata.evaluationId`
+- `variants.agent_feature_v54.metadata.experimentKey`
+- `variants.agent_feature_v54.value`
+- `variants.agent_feature_v56`
+- `variants.agent_feature_v56.expKey`
+- `variants.agent_feature_v56.key`
+- `variants.agent_feature_v56.metadata`
+- `variants.agent_feature_v56.metadata.evaluationId`
+- `variants.agent_feature_v56.metadata.experimentKey`
+- `variants.agent_feature_v56.value`
+- `variants.agent_feature_v57`
+- `variants.agent_feature_v57.key`
+- `variants.agent_feature_v57.metadata`
+- `variants.agent_feature_v57.metadata.default`
+- `variants.agent_feature_v57.metadata.evaluationId`
+- `variants.agent_feature_v58`
+- `variants.agent_feature_v58.expKey`
+- `variants.agent_feature_v58.key`
+- `variants.agent_feature_v58.metadata`
+- `variants.agent_feature_v58.metadata.evaluationId`
+- `variants.agent_feature_v58.metadata.experimentKey`
+- `variants.agent_feature_v58.value`
+- `variants.agent_feature_v7`
+- `variants.agent_feature_v7.expKey`
+- `variants.agent_feature_v7.key`
+- `variants.agent_feature_v7.metadata`
+- `variants.agent_feature_v7.metadata.evaluationId`
+- `variants.agent_feature_v7.metadata.experimentKey`
+- `variants.agent_feature_v7.value`
+
+**fileConnector**
+- Paths: 6
+- `fileConnectorList`
+- `fileConnectorListLoading`
+- `fileConnectorList[]`
+- `fileConnectorList[].appType`
+- `fileConnectorList[].connected`
+- `fileConnectorList[].type`
+
+**fileManagement**
+- Paths: 16
+- `fileTab`
+- `googleDrivePickerOptions`
+- `initSessionFileListLoading`
+- `isDownloadMode`
+- `selectedFiles`
+- `selectedFiles[]`
+- `sessionFileList`
+- `sessionFileList[]`
+- `showGoogleDrivePicker`
+- `spaceEditCode`
+- `spacePreviewerEditMode`
+- `spaces`
+- `spacesLoading`
+- `spaces[]`
+- `tempActiveDeployId`
+- `tempSpaceId`
+
+**filePreviewer**
+- Paths: 12
+- `autoOpenSharePopover`
+- `currentHistoryVersionUid`
+- `currentSlideId`
+- `downloading`
+- `exitEditLock`
+- `fileHistory`
+- `fullscreen`
+- `loading`
+- `mode`
+- `previewData`
+- `saveStatus`
+- `syncingFile`
+
+**fileShare**
+- Paths: 6
+- `downloading`
+- `error`
+- `fileInfo`
+- `loading`
+- `shareId`
+- `shareInfo`
+
+**guestPage**
+- Paths: 1
+- `isInGuestPage`
+
+**knowledge**
+- Paths: 5
+- `suggestedKnowledgeMap`
+- `userKnowledgeList`
+- `userKnowledgeListLoading`
+- `userKnowledgeList[]`
+- `userKnowledgeTotal`
+
+**library**
+- Paths: 12
+- `attachmentGroupList`
+- `attachmentGroupListLoading`
+- `attachmentGroupListTotal`
+- `attachmentGroupList[]`
+- `attachmentList`
+- `attachmentListLoading`
+- `attachmentListTotal`
+- `attachmentList[]`
+- `filterDocType`
+- `isFavorite`
+- `searchValue`
+- `viewType`
+
+**login**
+- Paths: 20
+- `captchaData`
+- `eduInfo`
+- `email`
+- `emailError`
+- `focused`
+- `invitationInfo`
+- `lastSendTime`
+- `loadingEmailCheck`
+- `loadingEmailCodeCheck`
+- `loadingEmailLogin`
+- `loadingEmailRegister`
+- `loginPlatform`
+- `password`
+- `passwordError`
+- `step`
+- `teamInvitationInfo`
+- `tempToken`
+- `verifyCode`
+- `verifyCodeError`
+- `verifyCodeTimeout`
+
+**mailManus**
+- Paths: 9
+- `agentEmailInfo`
+- `agentSubEmails`
+- `agentSubEmails[]`
+- `canEditAgentEmail`
+- `canEditTime`
+- `emailWhiteList`
+- `emailWhiteList[]`
+- `hasUnreadUnknownEmail`
+- `initTab`
+
+**mapReduce**
+- Paths: 2
+- `isFullscreen`
+- `startLoading`
+
+**myBrowser**
+- Paths: 2
+- `allowInstall`
+- `browserSettings`
+
+**navbar**
+- Paths: 4
+- `isNavBarHoveringLocked`
+- `isNavBarMinimal`
+- `isNavbarHovering`
+- `tabKey`
+
+**notification**
+- Paths: 22
+- `categoryHasMore`
+- `categoryHasMore.0`
+- `categoryHasMore.1`
+- `categoryHasMore.2`
+- `categoryNotifications`
+- `categoryNotifications.0`
+- `categoryNotifications.0[]`
+- `categoryNotifications.1`
+- `categoryNotifications.1[]`
+- `categoryNotifications.2`
+- `categoryNotifications.2[]`
+- `connectError`
+- `connectStatus`
+- `fetchNotificationLoading`
+- `hasNew`
+- `isNotificationListVisible`
+- `notificationTab`
+- `updatePageHasMore`
+- `updatePageHasNew`
+- `updatePageLoading`
+- `updatePageNotificationList`
+- `updatePageNotificationList[]`
+
+**onboarding**
+- Paths: 4
+- `currentStep`
+- `persona`
+- `showIndicator`
+- `userType`
+
+**products**
+- Paths: 4
+- `files`
+- `files[]`
+- `inputValue`
+- `playbookInfo`
+
+**project**
+- Paths: 6
+- `currentProjectId`
+- `currentProjectSessionLoading`
+- `currentProjectSessionTotal`
+- `initProjectLoading`
+- `projectList`
+- `projectList[]`
+
+**scheduledTask**
+- Paths: 4
+- `allScheduleList`
+- `allScheduleList[]`
+- `chatScheduledTaskIds`
+- `chatScheduledTaskIds[]`
+
+**sessionSwitch**
+- Paths: 3
+- `keyword`
+- `sessions`
+- `sessions[]`
+
+**sessions**
+- Paths: 41
+- `allCollaborators`
+- `allCollaborators.entities`
+- `allCollaborators.ids`
+- `allCollaborators.ids[]`
+- `currentSessionId`
+- `groupedSessionState`
+- `groupedSessionState.all`
+- `groupedSessionState.all.ids`
+- `groupedSessionState.all.ids[]`
+- `groupedSessionState.all.initialized`
+- `groupedSessionState.all.loading`
+- `groupedSessionState.all.total`
+- `groupedSessionState.favorites`
+- `groupedSessionState.favorites.ids`
+- `groupedSessionState.favorites.ids[]`
+- `groupedSessionState.favorites.initialized`
+- `groupedSessionState.favorites.loading`
+- `groupedSessionState.favorites.total`
+- `groupedSessionState.scheduled`
+- `groupedSessionState.scheduled.ids`
+- `groupedSessionState.scheduled.ids[]`
+- `groupedSessionState.scheduled.initialized`
+- `groupedSessionState.scheduled.loading`
+- `groupedSessionState.scheduled.total`
+- `isSearchMode`
+- `isShareFileMode`
+- `isShareMode`
+- `loadBottomSegmentsLoading`
+- `loadSessionDetailLoading`
+- `loadSessionLoading`
+- `loadTopSegmentsLoading`
+- `scheduledTaskSessions`
+- `searchValue`
+- `segmentEndpoints`
+- `segmentEndpoints[]`
+- `sessions`
+- `sessions.entities`
+- `sessions.ids`
+- `sessions.ids[]`
+- `sharingSessionUid`
+- `swapSessionDetailMap`
+
+**slideEditor**
+- Paths: 3
+- `sessionUid`
+- `slides`
+- `slides[]`
+
+**team**
+- Paths: 28
+- `accessControls`
+- `assetShareList`
+- `assetShareList[]`
+- `currentTeam`
+- `initTeamLoading`
+- `listTeamResponse`
+- `listTeamResponse.$typeName`
+- `listTeamResponse.teams`
+- `listTeamResponse.teams[]`
+- `listTeamResponse.totalCount`
+- `listTeamResponse.userAvatar`
+- `listTeamResponse.userId`
+- `listTeamResponse.userName`
+- `ssoInfo`
+- `ssoInfo.connection`
+- `ssoInfo.domains`
+- `ssoInfo.domains[]`
+- `ssoInfo.enabled`
+- `ssoInfo.expired`
+- `ssoInfo.howMemberCanLogin`
+- `ssoInfo.memberAddPolicy`
+- `ssoInfo.ssoId`
+- `ssoInfoLoading`
+- `teamListLoading`
+- `teamMemberList`
+- `teamMemberList[]`
+- `teamRenewalSettings`
+- `teamRenewalSettingsLoading`
+
+**timeline**
+- Paths: 3
+- `percentage`
+- `segmentEventsLoadingMap`
+- `segmentEventsMap`
+
+**ui**
+- Paths: 6
+- `chatSidebarPercentage`
+- `isMobile`
+- `isShowMaxModeIntroduce`
+- `navTasksFolded`
+- `showAppDownloadMask`
+- `windowWidth`
+
+**webDev**
+- Paths: 80
+- `activeTab`
+- `cachedInviteUsers`
+- `cachedInviteUsers[]`
+- `currentAppBuildingProgress`
+- `currentProjectInviteUsers`
+- `currentProjectInviteUsers[]`
+- `database`
+- `database.activeTableId`
+- `database.isLoadingTableList`
+- `database.tableData`
+- `database.tableData.data`
+- `database.tableData.data[]`
+- `database.tableData.hasMoreData`
+- `database.tableData.isLoading`
+- `database.tableData.isLoadingMore`
+- `database.tableData.totalRows`
+- `database.tableList`
+- `database.tableList[]`
+- `editMobileAppVersionDialogOpen`
+- `editMode`
+- `fullStyleSelections`
+- `fullStyleSelections[]`
+- `gitRepoCreation`
+- `gitRepoCreation.status`
+- `gitSyncStatus`
+- `gitSyncStatus.isLoading`
+- `gitSyncStatus.status`
+- `initPreviewPath`
+- `initServerProjectLoading`
+- `isFullscreenMode`
+- `lastFeatureConfirm`
+- `lastFeatureConfirm.features`
+- `lastFeatureConfirm.features[]`
+- `mobilePreviewOnPhoneHidden`
+- `mountedTabs`
+- `mountedTabs.code`
+- `mountedTabs.dashboard`
+- `mountedTabs.database`
+- `mountedTabs.file`
+- `mountedTabs.preview`
+- `mountedTabs.settings`
+- `preview`
+- `preview.isHistoricalVersion`
+- `previewOldVersion`
+- `previewOldVersionLoading`
+- `previewerBadgeClosedList`
+- `previewerBadgeClosedList[]`
+- `project`
+- `projectInited`
+- `publishButtonLoading`
+- `publishPopoverVisible`
+- `setting`
+- `setting.customDomains`
+- `setting.customDomains[]`
+- `setting.pendingPurchasedDomain`
+- `setting.purchasedDomains`
+- `setting.purchasedDomains[]`
+- `setting.selectedDomainProviderId`
+- `setting.selectedPurchasedDomainName`
+- `settingSubTab`
+- `storage`
+- `storage.continuationToken`
+- `storage.currentPath`
+- `storage.files`
+- `storage.files[]`
+- `storage.hasMore`
+- `storage.originalFiles`
+- `storage.originalFiles[]`
+- `storage.selectedRows`
+- `storage.selectedRows[]`
+- `storage.tableDataLoading`
+- `storage.tableOrderBy`
+- `updateCurrentAabVersion`
+- `updateCurrentApkVersion`
+- `userClickedTab`
+- `webview`
+- `webview.isInWebView`
+- `webview.needHiddenHeader`
+- `webview.projectDetailFromAgent`
+- `webview.webdevHomepageUpdated`
+
+**webDevUsage**
+- Paths: 7
+- `manageBudgetLoading`
+- `projectUsageStatus`
+- `usageDetail`
+- `usageDetailExpandedProjects`
+- `usageDetailExpandedProjects[]`
+- `usageDetailLoading`
+- `usageInfo`
+
+**webdevAuth**
+- Paths: 0
+
+**websocket**
+- Paths: 9
+- `contextLengthStatus`
+- `disableTimelineAutoUpdate`
+- `entities`
+- `error`
+- `ids`
+- `ids[]`
+- `isVNCConnected`
+- `status`
+- `taskFinished`
+

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, agents, agentTasks, agentSessions, eq, asc, desc } from "@repo/database";
+import { db, agents, agentTasks, agentSessions, eq, and, asc, desc } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { syncActionToSearch } from "@repo/search";
 
@@ -9,46 +9,37 @@ export const agentsRouter = createTRPCRouter({
   list: protectedProcedure
     .input(z.object({ sessionId: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, input.sessionId))
-        .limit(1);
+      // Run ownership check + agents query in parallel
+      const [[session], sessionAgents] = await Promise.all([
+        db
+          .select()
+          .from(agentSessions)
+          .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.userId, ctx.user.id)))
+          .limit(1),
+        db
+          .select()
+          .from(agents)
+          .where(eq(agents.sessionId, input.sessionId))
+          .orderBy(asc(agents.createdAt)),
+      ]);
 
-      if (!session || session.userId !== ctx.user.id) {
+      if (!session) {
         throw new Error("Session not found");
       }
-
-      const sessionAgents = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.sessionId, input.sessionId))
-        .orderBy(asc(agents.createdAt));
 
       return sessionAgents;
     }),
 
-  // Get an agent by ID
+  // Get an agent by ID (single JOIN instead of 2 sequential queries)
   get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
-    const [agent] = await db.select().from(agents).where(eq(agents.id, input.id)).limit(1);
-
-    if (!agent) {
-      return null;
-    }
-
-    // Verify session ownership
-    const [session] = await db
-      .select()
-      .from(agentSessions)
-      .where(eq(agentSessions.id, agent.sessionId))
+    const result = await db
+      .select({ agent: agents })
+      .from(agents)
+      .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
+      .where(and(eq(agents.id, input.id), eq(agentSessions.userId, ctx.user.id)))
       .limit(1);
 
-    if (!session || session.userId !== ctx.user.id) {
-      return null;
-    }
-
-    return agent;
+    return result[0]?.agent ?? null;
   }),
 
   // Create an agent (internal use)
@@ -66,7 +57,7 @@ export const agentsRouter = createTRPCRouter({
           "analyst",
         ]),
         name: z.string().optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -113,21 +104,16 @@ export const agentsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
 
-      const [agent] = await db.select().from(agents).where(eq(agents.id, id)).limit(1);
-
-      if (!agent) {
-        throw new Error("Agent not found");
-      }
-
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, agent.sessionId))
+      // Verify agent exists + session ownership in one JOIN query
+      const result = await db
+        .select({ agent: agents })
+        .from(agents)
+        .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
+        .where(and(eq(agents.id, id), eq(agentSessions.userId, ctx.user.id)))
         .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        throw new Error("Access denied");
+      if (!result[0]) {
+        throw new Error("Agent not found or access denied");
       }
 
       const [updatedAgent] = await db
@@ -139,8 +125,6 @@ export const agentsRouter = createTRPCRouter({
         .where(eq(agents.id, id))
         .returning();
 
-      // TODO: Publish agent:update event via gateway/backend service
-
       return updatedAgent;
     }),
 
@@ -148,21 +132,16 @@ export const agentsRouter = createTRPCRouter({
   tasks: protectedProcedure
     .input(z.object({ agentId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const [agent] = await db.select().from(agents).where(eq(agents.id, input.agentId)).limit(1);
-
-      if (!agent) {
-        throw new Error("Agent not found");
-      }
-
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, agent.sessionId))
+      // Verify agent exists + session ownership in one JOIN query
+      const agentResult = await db
+        .select({ agent: agents })
+        .from(agents)
+        .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
+        .where(and(eq(agents.id, input.agentId), eq(agentSessions.userId, ctx.user.id)))
         .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        throw new Error("Access denied");
+      if (!agentResult[0]) {
+        throw new Error("Agent not found or access denied");
       }
 
       const tasks = await db
@@ -186,21 +165,17 @@ export const agentsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const [agent] = await db.select().from(agents).where(eq(agents.id, input.agentId)).limit(1);
-
-      if (!agent) {
-        throw new Error("Agent not found");
-      }
-
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, agent.sessionId))
+      // Verify agent + session ownership in one JOIN
+      const agentResult = await db
+        .select({ agent: agents })
+        .from(agents)
+        .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
+        .where(and(eq(agents.id, input.agentId), eq(agentSessions.userId, ctx.user.id)))
         .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        throw new Error("Access denied");
+      const agent = agentResult[0]?.agent;
+      if (!agent) {
+        throw new Error("Agent not found or access denied");
       }
 
       const id = createId();
@@ -219,7 +194,6 @@ export const agentsRouter = createTRPCRouter({
 
       if (task) {
         void syncActionToSearch(task, agent, ctx.user.id);
-        // TODO: Publish task:created event via gateway/backend service
       }
 
       return task;
@@ -231,35 +205,26 @@ export const agentsRouter = createTRPCRouter({
       z.object({
         id: z.string(),
         status: z.enum(["pending", "in_progress", "completed", "failed", "cancelled"]).optional(),
-        result: z.record(z.unknown()).optional(),
+        result: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { id, ...updates } = input;
 
-      const [task] = await db.select().from(agentTasks).where(eq(agentTasks.id, id)).limit(1);
-
-      if (!task) {
-        throw new Error("Task not found");
-      }
-
-      // Verify ownership through agent -> session chain
-      const [agent] = await db.select().from(agents).where(eq(agents.id, task.agentId)).limit(1);
-
-      if (!agent) {
-        throw new Error("Agent not found");
-      }
-
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(eq(agentSessions.id, agent.sessionId))
+      // Verify task → agent → session ownership in one JOIN (3 queries → 1)
+      const result = await db
+        .select({ task: agentTasks, agent: agents })
+        .from(agentTasks)
+        .innerJoin(agents, eq(agentTasks.agentId, agents.id))
+        .innerJoin(agentSessions, eq(agents.sessionId, agentSessions.id))
+        .where(and(eq(agentTasks.id, id), eq(agentSessions.userId, ctx.user.id)))
         .limit(1);
 
-      if (!session || session.userId !== ctx.user.id) {
-        throw new Error("Access denied");
+      if (!result[0]) {
+        throw new Error("Task not found or access denied");
       }
 
+      const { task, agent } = result[0];
       const updateData: Record<string, unknown> = { ...updates };
 
       if (updates.status === "in_progress" && !task.startedAt) {
@@ -278,7 +243,6 @@ export const agentsRouter = createTRPCRouter({
 
       if (updatedTask) {
         void syncActionToSearch(updatedTask, agent, ctx.user.id);
-        // TODO: Publish task:updated/cancelled/completed events via gateway/backend service
       }
 
       return updatedTask;

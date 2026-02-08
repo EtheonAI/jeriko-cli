@@ -64,7 +64,7 @@ export function FileListTable({
   const allSelected = files.length > 0 && files.every((f) => selectedFiles.includes(f.id));
   const someSelected = files.some((f) => selectedFiles.includes(f.id));
 
-  const sorted = [...files].sort((a, b) => {
+  const sorted = files.toSorted((a, b) => {
     const aFolder = a.mimeType === "application/folder" ? 0 : 1;
     const bFolder = b.mimeType === "application/folder" ? 0 : 1;
     if (aFolder !== bFolder) return aFolder - bFolder;

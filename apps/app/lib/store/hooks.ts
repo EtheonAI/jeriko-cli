@@ -20,7 +20,7 @@ export const useAuth = () => useAppSelector((state) => state.auth);
 export const useSessions = () => useAppSelector((state) => state.sessions);
 export const useChat = () => useAppSelector((state) => state.chat);
 export const useAgents = () => useAppSelector((state) => state.agents);
-export const useFiles = () => useAppSelector((state) => state.files);
+// files merged into library — use useLibrary() instead
 export const useWebSocket = () => useAppSelector((state) => state.websocket);
 export const useUI = () => useAppSelector((state) => state.ui);
 
@@ -266,6 +266,7 @@ export const useAgentWorkspace = () => useAppSelector((state) => state.agentWork
 export const useWebdevAuth = () => useAppSelector((state) => state.webdevAuth);
 export const useAiCanvasEditor = () => useAppSelector((state) => state.aiCanvasEditor);
 export const useBiz = () => useAppSelector((state) => state.biz);
+export const useMeeting = () => useAppSelector((state) => state.meeting);
 
 // ================== INTEGRATION HOOKS ==================
 // Re-export integration hooks that combine better-auth, WebSocket, and RTK Query

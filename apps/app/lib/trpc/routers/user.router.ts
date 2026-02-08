@@ -9,6 +9,7 @@ import {
   messages,
   files,
   eq,
+  ne,
   and,
   inArray,
   type UserPreferences,
@@ -101,54 +102,47 @@ export const userRouter = createTRPCRouter({
       };
     }),
 
-  // Change password
+  // Change password (uses better-auth's built-in API for proper hash handling)
   changePassword: protectedProcedure
     .input(
       z.object({
         currentPassword: z.string().min(1),
-        newPassword: z.string().min(8).max(100),
+        newPassword: z.string().min(12).max(128),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Get user's account with password
+      // Verify user has a credential account
       const [account] = await db
-        .select()
+        .select({ id: accounts.id })
         .from(accounts)
         .where(and(eq(accounts.userId, ctx.user.id), eq(accounts.providerId, "credential")))
         .limit(1);
 
-      if (!account || !account.password) {
+      if (!account) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Password authentication not enabled for this account",
         });
       }
 
-      // Verify current password using better-auth's context
-      const ctx_auth = await auth.api.getSession({
-        headers: new Headers(),
+      // Use better-auth's changePassword API which handles verification + hashing
+      const result = await auth.api.changePassword({
+        body: {
+          currentPassword: input.currentPassword,
+          newPassword: input.newPassword,
+        },
+        headers: new Headers({
+          // Pass user context via cookie so better-auth identifies the session
+          cookie: `better-auth.session_token=${ctx.session.session?.token ?? ""}`,
+        }),
       });
 
-      // For security, we'll use a simple bcrypt comparison
-      // In production, use better-auth's built-in password verification
-      const bcrypt = await import("bcryptjs");
-      const isValid = await bcrypt.compare(input.currentPassword, account.password);
-
-      if (!isValid) {
+      if (!result) {
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Current password is incorrect",
         });
       }
-
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(input.newPassword, 12);
-
-      // Update password
-      await db
-        .update(accounts)
-        .set({ password: hashedPassword })
-        .where(eq(accounts.id, account.id));
 
       return { success: true };
     }),
@@ -162,14 +156,22 @@ export const userRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify password if the user has one
+      // Check if user has a credential (password) account
       const [account] = await db
-        .select()
+        .select({ id: accounts.id, password: accounts.password })
         .from(accounts)
         .where(and(eq(accounts.userId, ctx.user.id), eq(accounts.providerId, "credential")))
         .limit(1);
 
-      if (account?.password && input.password) {
+      // Require password verification for credential accounts
+      if (account?.password) {
+        if (!input.password) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Password is required to delete your account",
+          });
+        }
+
         const bcrypt = await import("bcryptjs");
         const isValid = await bcrypt.compare(input.password, account.password);
 
@@ -224,19 +226,24 @@ export const userRouter = createTRPCRouter({
     }),
 
   // Revoke all sessions except current
-  revokeAllSessions: protectedProcedure
-    .input(z.object({ currentToken: z.string() }))
-    .mutation(async ({ ctx, input }) => {
+  revokeAllSessions: protectedProcedure.mutation(async ({ ctx }) => {
+    const currentSessionToken = ctx.session.session?.token;
+
+    if (currentSessionToken) {
+      // Delete all sessions except the current one
       await db.delete(authSessions).where(
         and(
-          eq(authSessions.userId, ctx.user.id)
-          // Keep the current session
-          // In a real implementation, you'd compare the token
+          eq(authSessions.userId, ctx.user.id),
+          ne(authSessions.token, currentSessionToken)
         )
       );
+    } else {
+      // Fallback: delete all sessions (shouldn't happen since user is authenticated)
+      await db.delete(authSessions).where(eq(authSessions.userId, ctx.user.id));
+    }
 
-      return { success: true };
-    }),
+    return { success: true };
+  }),
 
   // Get connected accounts (OAuth providers)
   getConnectedAccounts: protectedProcedure.query(async ({ ctx }) => {
@@ -324,24 +331,23 @@ export const userRouter = createTRPCRouter({
 
   // Export user data as JSON
   exportData: protectedProcedure.mutation(async ({ ctx }) => {
-    const [user] = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+    // Fetch user, sessions, and files in parallel (all independent)
+    const [[user], sessions, userFiles] = await Promise.all([
+      db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1),
+      db.select().from(agentSessions).where(eq(agentSessions.userId, ctx.user.id)),
+      db.select().from(files).where(eq(files.userId, ctx.user.id)),
+    ]);
 
     if (!user) {
       throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
     }
 
-    const sessions = await db
-      .select()
-      .from(agentSessions)
-      .where(eq(agentSessions.userId, ctx.user.id));
-
+    // Messages depend on session IDs, so they must run after sessions
     const sessionIds = sessions.map((s) => s.id);
     let allMessages: (typeof messages.$inferSelect)[] = [];
     if (sessionIds.length > 0) {
       allMessages = await db.select().from(messages).where(inArray(messages.sessionId, sessionIds));
     }
-
-    const userFiles = await db.select().from(files).where(eq(files.userId, ctx.user.id));
 
     return {
       user: {

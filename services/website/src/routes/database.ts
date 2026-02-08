@@ -6,7 +6,7 @@ import {
   createLogger,
   createId,
 } from "@repo/service-utils";
-import { db, websites as websitesTable, eq, and } from "@repo/database";
+import { db, websites as websitesTable, eq, and } from "../lib/db.js";
 
 const logger = createLogger({ service: "website-database" });
 

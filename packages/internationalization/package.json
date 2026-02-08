@@ -29,8 +29,8 @@
     "@repo/typescript-config": "workspace:*",
     "@types/negotiator": "^0.6.4",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5",
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3",
     "next": "16.1.5"
   }
 }

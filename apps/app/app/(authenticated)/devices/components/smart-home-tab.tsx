@@ -78,7 +78,7 @@ export function SmartHomeTab() {
     }
 
     // Sort: named rooms first (alphabetical), "Unassigned" last
-    return Array.from(groups.entries()).sort(([a], [b]) => {
+    return Array.from(groups.entries()).toSorted(([a], [b]) => {
       if (a === "Unassigned") return 1;
       if (b === "Unassigned") return -1;
       return a.localeCompare(b);

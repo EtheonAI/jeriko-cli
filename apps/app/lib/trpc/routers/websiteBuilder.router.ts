@@ -312,8 +312,8 @@ export const websiteBuilderRouter = createTRPCRouter({
         id: z.string(),
         name: z.string().min(1).max(255).optional(),
         description: z.string().max(1000).optional(),
-        settings: z.record(z.unknown()).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        settings: z.record(z.string(), z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

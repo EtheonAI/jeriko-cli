@@ -1,10 +1,9 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import type { SourceUrlUIPart, UIMessage } from "@repo/ai/lib/types";
 
 export type MessageRole = "user" | "assistant" | "system" | "tool";
 export type TaskMode = "standard" | "adaptive" | "agent";
 export type InputMode = "text" | "voice";
-export type MicrophonePermission = "prompt" | "granted" | "denied";
-export type SendQuestionBehavior = "enter" | "ctrl_enter" | "cmd_enter";
 
 export interface MessageAttachment {
   id: string;
@@ -20,8 +19,8 @@ export interface Message {
   sessionId: string;
   role: MessageRole;
   content: string;
-  /** Structured message parts (text, tool calls with results/screenshots, etc.) */
-  parts?: unknown[];
+  /** Full AI SDK UIMessage parts — preserved for historical replay (planner, tool results) */
+  parts?: Record<string, unknown>[];
   attachments?: MessageAttachment[];
   metadata?: {
     toolName?: string;
@@ -64,120 +63,136 @@ export interface PlaybookInfo {
   icon?: string;
 }
 
-export interface SlideTemplate {
-  uid: string;
-  name: string;
-  cover: string;
-  official: boolean;
-  isFree: boolean;
-  previewUrls: string[];
-  imagePreviewUrls: Array<{ thumbnail: string; raw: string }>;
+export interface RecommendedPlaybooksV2 {
+  playbooks: unknown[] | null;
+  loading: boolean;
+  total: number;
+  currentPage: number;
 }
 
-export interface ImageStyle {
+export interface DebugModelOverride {
+  enabled: boolean;
+  config: unknown;
+  configText: string;
+}
+
+// --- Merged from chatPage.slice.ts ---
+
+export interface StreamingState {
+  messageId: string | null;
+  activePartId: string | null;
+  partialText: string;
+}
+
+export interface ToolApprovalRequest {
   id: string;
-  name: string;
-  previewUrl: string;
-  prompt?: string;
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  sessionId: string;
+  messageId: string;
+  createdAt: string;
 }
 
-export interface DataVisualization {
-  type: "chart" | "table" | "graph";
-  data: unknown;
-  config?: Record<string, unknown>;
-}
-
-export interface FileSuggestion {
-  id: string;
-  name: string;
-  path: string;
-  type: string;
-  relevance: number;
-}
+// --- End chatPage types ---
 
 export interface ChatState {
-  messages: Record<string, Message[]>; // sessionId -> messages
+  messages: Record<string, Message[]>;
   isStreaming: boolean;
-  currentStreamingMessageId: string | null;
   currentStreamingSessionId: string | null;
   inputValue: string;
   isLoading: boolean;
   error: string | null;
-  // Manus-style features
   taskMode: TaskMode;
   inputMode: InputMode;
-  microphonePermission: MicrophonePermission;
-  sendQuestionBehavior: SendQuestionBehavior | null;
-  // File attachments for current input
   files: ChatFile[];
-  // Extended data for chat context
   chatExtData: ChatExtData | null;
-  // Share popover state
-  showSharePopover: string | null; // sessionId or null
-  // Playbook/template info
+  showSharePopover: boolean;
   playbookInfo: PlaybookInfo | null;
-  recommendedPlaybooks: PlaybookInfo[];
-  recommendedPlaybooksLoading: boolean;
-  inputPlaybookId: string | null;
-  inputPlaybookTemplate: string | null;
-  // Slide templates
-  slideTemplateList: SlideTemplate[];
-  slideTemplateListLoading: boolean;
-  pinnedSlideTemplateId: string | null;
-  // Data visualization
-  dataVisualization: DataVisualization | null;
-  // Page visibility
-  isPageVisible: boolean;
-  // File suggestions
-  fileSuggestions: FileSuggestion[];
-  // App banner
-  isAppBannerVisible: boolean;
-  // Image styles
-  imageStyleList: ImageStyle[];
-  imageStyleListLoading: boolean;
-  // Agent mode
-  agentModeIntroduceScene: string | null;
-  // Typing indicator
-  isTyping: boolean;
   typingUsers: string[];
+  // Manus-aligned keys
+  sendQuestionBehavior: unknown;
+  slideTemplateList: unknown[];
+  slideTemplateListLoading: boolean;
+  recommendedPlaybooksV2: RecommendedPlaybooksV2;
+  dataVisualization: unknown;
+  debugModelOverride: DebugModelOverride;
+  isPageVisible: boolean;
+  fileSuggestions: unknown[];
+  inputPlaybookId: string | null;
+  inputPlaybookTemplate: unknown;
+  isAppBannerVisible: boolean;
+  imageStyleList: unknown[];
+  imageStyleListLoading: boolean;
+  agentModeIntroduceScene: unknown;
+  pinnedSlideTemplateId: string | null;
+  textContentLength: number;
+  editorContent: Record<string, unknown>;
+  // --- Merged from chatPage ---
+  dagExpanded: boolean;
+  selectedAgentId: string | null;
+  sidebarType: "sources" | "agents" | null;
+  sidebarOpen: boolean;
+  isAtBottom: boolean;
+  hasNewMessages: boolean;
+  uiMessages: Record<string, UIMessage[]>;
+  streamingState: StreamingState;
+  pendingApprovals: ToolApprovalRequest[];
+  sources: Record<string, SourceUrlUIPart[]>;
+  activeSessionId: string | null;
 }
 
 const initialState: ChatState = {
   messages: {},
   isStreaming: false,
-  currentStreamingMessageId: null,
   currentStreamingSessionId: null,
   inputValue: "",
   isLoading: false,
   error: null,
-  // Manus-style features
-  taskMode: "standard",
+  taskMode: "agent",
   inputMode: "text",
-  microphonePermission: "prompt",
-  sendQuestionBehavior: null,
   files: [],
   chatExtData: null,
-  showSharePopover: null,
+  showSharePopover: false,
   playbookInfo: null,
-  recommendedPlaybooks: [],
-  recommendedPlaybooksLoading: false,
-  inputPlaybookId: null,
-  inputPlaybookTemplate: null,
+  typingUsers: [],
+  // Manus-aligned defaults
+  sendQuestionBehavior: null,
   slideTemplateList: [],
   slideTemplateListLoading: false,
-  pinnedSlideTemplateId: null,
+  recommendedPlaybooksV2: { playbooks: null, loading: false, total: 0, currentPage: 0 },
   dataVisualization: null,
+  debugModelOverride: { enabled: false, config: null, configText: "" },
   isPageVisible: true,
   fileSuggestions: [],
+  inputPlaybookId: null,
+  inputPlaybookTemplate: null,
   isAppBannerVisible: false,
   imageStyleList: [],
   imageStyleListLoading: false,
   agentModeIntroduceScene: null,
-  isTyping: false,
-  typingUsers: [],
+  pinnedSlideTemplateId: null,
+  textContentLength: 0,
+  editorContent: {},
+  // --- Merged from chatPage ---
+  dagExpanded: true,
+  selectedAgentId: null,
+  sidebarType: null,
+  sidebarOpen: false,
+  isAtBottom: true,
+  hasNewMessages: false,
+  uiMessages: {},
+  streamingState: {
+    messageId: null,
+    activePartId: null,
+    partialText: "",
+  },
+  pendingApprovals: [],
+  sources: {},
+  activeSessionId: null,
 };
 
-export const chatSlice = createSlice({
+const chatSlice = createSlice({
   name: "chat",
   initialState,
   reducers: {
@@ -191,17 +206,6 @@ export const chatSlice = createSlice({
         state.messages[sessionId] = [];
       }
       state.messages[sessionId].push(action.payload);
-    },
-
-    // Batch add messages for performance (WebSocket batching)
-    addMessages: (state, action: PayloadAction<Message[]>) => {
-      for (const message of action.payload) {
-        const { sessionId } = message;
-        if (!state.messages[sessionId]) {
-          state.messages[sessionId] = [];
-        }
-        state.messages[sessionId].push(message);
-      }
     },
     updateMessage: (
       state,
@@ -237,19 +241,22 @@ export const chatSlice = createSlice({
         }
       }
     },
+    clearSessionMessages: (state, action: PayloadAction<string>) => {
+      delete state.messages[action.payload];
+    },
+
+    // Streaming
     setStreaming: (state, action: PayloadAction<boolean>) => {
       state.isStreaming = action.payload;
       if (!action.payload) {
-        state.currentStreamingMessageId = null;
         state.currentStreamingSessionId = null;
       }
-    },
-    setCurrentStreamingMessage: (state, action: PayloadAction<string | null>) => {
-      state.currentStreamingMessageId = action.payload;
     },
     setCurrentStreamingSession: (state, action: PayloadAction<string | null>) => {
       state.currentStreamingSessionId = action.payload;
     },
+
+    // Input
     setInputValue: (state, action: PayloadAction<string>) => {
       state.inputValue = action.payload;
     },
@@ -260,246 +267,335 @@ export const chatSlice = createSlice({
       state.error = action.payload;
       state.isLoading = false;
     },
-    clearSessionMessages: (state, action: PayloadAction<string>) => {
-      delete state.messages[action.payload];
-    },
 
-    // Task mode
+    // Task & input mode
     setTaskMode: (state, action: PayloadAction<TaskMode>) => {
       state.taskMode = action.payload;
     },
-
-    // Input mode
     setInputMode: (state, action: PayloadAction<InputMode>) => {
       state.inputMode = action.payload;
     },
 
-    // Microphone permission
-    setMicrophonePermission: (state, action: PayloadAction<MicrophonePermission>) => {
-      state.microphonePermission = action.payload;
-    },
-
-    // Send question behavior
-    setSendQuestionBehavior: (state, action: PayloadAction<SendQuestionBehavior | null>) => {
-      state.sendQuestionBehavior = action.payload;
-    },
-
-    // File management
+    // File attachments
     addChatFile: (state, action: PayloadAction<ChatFile>) => {
       state.files.push(action.payload);
     },
-
     updateChatFile: (state, action: PayloadAction<{ id: string; updates: Partial<ChatFile> }>) => {
       const index = state.files.findIndex((f) => f.id === action.payload.id);
       if (index !== -1) {
         state.files[index] = { ...state.files[index], ...action.payload.updates };
       }
     },
-
     removeChatFile: (state, action: PayloadAction<string>) => {
       state.files = state.files.filter((f) => f.id !== action.payload);
     },
-
     clearChatFiles: (state) => {
       state.files = [];
     },
 
-    // Chat extended data
+    // Context
     setChatExtData: (state, action: PayloadAction<ChatExtData | null>) => {
       state.chatExtData = action.payload;
     },
-
-    updateChatExtData: (state, action: PayloadAction<Partial<ChatExtData>>) => {
-      if (state.chatExtData) {
-        state.chatExtData = { ...state.chatExtData, ...action.payload };
-      } else {
-        state.chatExtData = action.payload as ChatExtData;
-      }
-    },
-
-    // Share popover
-    setShowSharePopover: (state, action: PayloadAction<string | null>) => {
+    setShowSharePopover: (state, action: PayloadAction<boolean>) => {
       state.showSharePopover = action.payload;
     },
-
-    // Playbook info
     setPlaybookInfo: (state, action: PayloadAction<PlaybookInfo | null>) => {
       state.playbookInfo = action.payload;
     },
 
-    setRecommendedPlaybooks: (state, action: PayloadAction<PlaybookInfo[]>) => {
-      state.recommendedPlaybooks = action.payload;
-      state.recommendedPlaybooksLoading = false;
-    },
-
-    setRecommendedPlaybooksLoading: (state, action: PayloadAction<boolean>) => {
-      state.recommendedPlaybooksLoading = action.payload;
-    },
-
-    setInputPlaybookId: (state, action: PayloadAction<string | null>) => {
-      state.inputPlaybookId = action.payload;
-    },
-
-    setInputPlaybookTemplate: (state, action: PayloadAction<string | null>) => {
-      state.inputPlaybookTemplate = action.payload;
-    },
-
-    // Slide templates
-    setSlideTemplateList: (state, action: PayloadAction<SlideTemplate[]>) => {
-      state.slideTemplateList = action.payload;
-      state.slideTemplateListLoading = false;
-    },
-
-    setSlideTemplateListLoading: (state, action: PayloadAction<boolean>) => {
-      state.slideTemplateListLoading = action.payload;
-    },
-
-    setPinnedSlideTemplateId: (state, action: PayloadAction<string | null>) => {
-      state.pinnedSlideTemplateId = action.payload;
-    },
-
-    // Data visualization
-    setDataVisualization: (state, action: PayloadAction<DataVisualization | null>) => {
-      state.dataVisualization = action.payload;
-    },
-
-    // Page visibility
-    setIsPageVisible: (state, action: PayloadAction<boolean>) => {
-      state.isPageVisible = action.payload;
-    },
-
-    // File suggestions
-    setFileSuggestions: (state, action: PayloadAction<FileSuggestion[]>) => {
-      state.fileSuggestions = action.payload;
-    },
-
-    clearFileSuggestions: (state) => {
-      state.fileSuggestions = [];
-    },
-
-    // App banner
-    setIsAppBannerVisible: (state, action: PayloadAction<boolean>) => {
-      state.isAppBannerVisible = action.payload;
-    },
-
-    // Image styles
-    setImageStyleList: (state, action: PayloadAction<ImageStyle[]>) => {
-      state.imageStyleList = action.payload;
-      state.imageStyleListLoading = false;
-    },
-
-    setImageStyleListLoading: (state, action: PayloadAction<boolean>) => {
-      state.imageStyleListLoading = action.payload;
-    },
-
-    // Agent mode
-    setAgentModeIntroduceScene: (state, action: PayloadAction<string | null>) => {
-      state.agentModeIntroduceScene = action.payload;
-    },
-
-    // Typing indicator
-    setIsTyping: (state, action: PayloadAction<boolean>) => {
-      state.isTyping = action.payload;
-    },
-
+    // Typing
     addTypingUser: (state, action: PayloadAction<string>) => {
       if (!state.typingUsers.includes(action.payload)) {
         state.typingUsers.push(action.payload);
       }
     },
-
     removeTypingUser: (state, action: PayloadAction<string>) => {
       state.typingUsers = state.typingUsers.filter((u) => u !== action.payload);
     },
-
     clearTypingUsers: (state) => {
       state.typingUsers = [];
     },
 
-    // Reset chat state for new conversation
+    // Manus-aligned reducers
+    setSendQuestionBehavior: (state, action: PayloadAction<unknown>) => {
+      state.sendQuestionBehavior = action.payload;
+    },
+    setSlideTemplateList: (state, action: PayloadAction<unknown[]>) => {
+      state.slideTemplateList = action.payload;
+    },
+    setSlideTemplateListLoading: (state, action: PayloadAction<boolean>) => {
+      state.slideTemplateListLoading = action.payload;
+    },
+    setRecommendedPlaybooksV2: (state, action: PayloadAction<RecommendedPlaybooksV2>) => {
+      state.recommendedPlaybooksV2 = action.payload;
+    },
+    setDataVisualization: (state, action: PayloadAction<unknown>) => {
+      state.dataVisualization = action.payload;
+    },
+    setDebugModelOverride: (state, action: PayloadAction<DebugModelOverride>) => {
+      state.debugModelOverride = action.payload;
+    },
+    setIsPageVisible: (state, action: PayloadAction<boolean>) => {
+      state.isPageVisible = action.payload;
+    },
+    setFileSuggestions: (state, action: PayloadAction<unknown[]>) => {
+      state.fileSuggestions = action.payload;
+    },
+    setInputPlaybookId: (state, action: PayloadAction<string | null>) => {
+      state.inputPlaybookId = action.payload;
+    },
+    setInputPlaybookTemplate: (state, action: PayloadAction<unknown>) => {
+      state.inputPlaybookTemplate = action.payload;
+    },
+    setIsAppBannerVisible: (state, action: PayloadAction<boolean>) => {
+      state.isAppBannerVisible = action.payload;
+    },
+    setImageStyleList: (state, action: PayloadAction<unknown[]>) => {
+      state.imageStyleList = action.payload;
+    },
+    setImageStyleListLoading: (state, action: PayloadAction<boolean>) => {
+      state.imageStyleListLoading = action.payload;
+    },
+    setAgentModeIntroduceScene: (state, action: PayloadAction<unknown>) => {
+      state.agentModeIntroduceScene = action.payload;
+    },
+    setPinnedSlideTemplateId: (state, action: PayloadAction<string | null>) => {
+      state.pinnedSlideTemplateId = action.payload;
+    },
+    setTextContentLength: (state, action: PayloadAction<number>) => {
+      state.textContentLength = action.payload;
+    },
+    setEditorContent: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.editorContent = action.payload;
+    },
+
+    // --- Merged from chatPage.slice.ts ---
+
+    // Chat page UI state
+    setDagExpanded: (state, action: PayloadAction<boolean>) => {
+      state.dagExpanded = action.payload;
+    },
+    setSelectedAgentId: (state, action: PayloadAction<string | null>) => {
+      state.selectedAgentId = action.payload;
+    },
+    setChatSidebarType: (state, action: PayloadAction<"sources" | "agents" | null>) => {
+      state.sidebarType = action.payload;
+    },
+    setChatSidebarOpen: (state, action: PayloadAction<boolean>) => {
+      state.sidebarOpen = action.payload;
+    },
+    toggleChatSidebar: (state, action: PayloadAction<"sources" | "agents">) => {
+      if (state.sidebarType === action.payload && state.sidebarOpen) {
+        state.sidebarOpen = false;
+      } else {
+        state.sidebarType = action.payload;
+        state.sidebarOpen = true;
+      }
+    },
+    setIsAtBottom: (state, action: PayloadAction<boolean>) => {
+      state.isAtBottom = action.payload;
+      if (action.payload) {
+        state.hasNewMessages = false;
+      }
+    },
+    setHasNewMessages: (state, action: PayloadAction<boolean>) => {
+      state.hasNewMessages = action.payload;
+    },
+
+    // UIMessage management
+    setUIMessages: (
+      state,
+      action: PayloadAction<{ sessionId: string; messages: UIMessage[] }>
+    ) => {
+      state.uiMessages[action.payload.sessionId] = action.payload.messages;
+    },
+    addUIMessage: (
+      state,
+      action: PayloadAction<{ sessionId: string; message: UIMessage }>
+    ) => {
+      const { sessionId, message } = action.payload;
+      if (!state.uiMessages[sessionId]) {
+        state.uiMessages[sessionId] = [];
+      }
+      state.uiMessages[sessionId].push(message);
+    },
+    updateUIMessage: (
+      state,
+      action: PayloadAction<{
+        sessionId: string;
+        messageId: string;
+        updates: Partial<UIMessage>;
+      }>
+    ) => {
+      const { sessionId, messageId, updates } = action.payload;
+      const messages = state.uiMessages[sessionId];
+      if (messages) {
+        const index = messages.findIndex((m) => m.id === messageId);
+        if (index !== -1) {
+          messages[index] = { ...messages[index], ...updates };
+        }
+      }
+    },
+    clearUIMessages: (state, action: PayloadAction<string>) => {
+      delete state.uiMessages[action.payload];
+    },
+
+    // Streaming state
+    startMessageStream: (
+      state,
+      action: PayloadAction<{ messageId: string }>
+    ) => {
+      state.streamingState.messageId = action.payload.messageId;
+      state.streamingState.partialText = "";
+    },
+    processStreamChunk: (
+      state,
+      action: PayloadAction<{ partId: string; text: string }>
+    ) => {
+      state.streamingState.activePartId = action.payload.partId;
+      state.streamingState.partialText += action.payload.text;
+    },
+    endMessageStream: (state) => {
+      state.streamingState.messageId = null;
+      state.streamingState.activePartId = null;
+      state.streamingState.partialText = "";
+    },
+
+    // Tool approvals
+    addToolApproval: (state, action: PayloadAction<ToolApprovalRequest>) => {
+      state.pendingApprovals.push(action.payload);
+    },
+    removeToolApproval: (state, action: PayloadAction<string>) => {
+      state.pendingApprovals = state.pendingApprovals.filter(
+        (a) => a.id !== action.payload
+      );
+    },
+    clearToolApprovals: (state, action: PayloadAction<string>) => {
+      state.pendingApprovals = state.pendingApprovals.filter(
+        (a) => a.sessionId !== action.payload
+      );
+    },
+
+    // Sources
+    setChatSources: (
+      state,
+      action: PayloadAction<{ sessionId: string; sources: SourceUrlUIPart[] }>
+    ) => {
+      state.sources[action.payload.sessionId] = action.payload.sources;
+    },
+    addChatSource: (
+      state,
+      action: PayloadAction<{ sessionId: string; source: SourceUrlUIPart }>
+    ) => {
+      const { sessionId, source } = action.payload;
+      if (!state.sources[sessionId]) {
+        state.sources[sessionId] = [];
+      }
+      if (!state.sources[sessionId].find((s) => s.sourceId === source.sourceId)) {
+        state.sources[sessionId].push(source);
+      }
+    },
+    clearChatSources: (state, action: PayloadAction<string>) => {
+      delete state.sources[action.payload];
+    },
+
+    // Active session
+    setActiveSessionId: (state, action: PayloadAction<string | null>) => {
+      state.activeSessionId = action.payload;
+    },
+
+    // --- End merged from chatPage ---
+
+    // Reset
     resetChatState: (state) => {
       state.inputValue = "";
       state.files = [];
       state.chatExtData = null;
       state.playbookInfo = null;
-      state.isTyping = false;
       state.typingUsers = [];
     },
-  },
-  extraReducers: (builder) => {
-    // Manus compatibility
-    builder.addCase(
-      "chat/setRecommendedPlaybooksV2",
-      (state, action: PayloadAction<PlaybookInfo[]>) => {
-        state.recommendedPlaybooks = action.payload ?? [];
-        state.recommendedPlaybooksLoading = false;
-      }
-    );
-    builder.addCase(
-      "chat/setSlideTemplateList",
-      (state, action: PayloadAction<SlideTemplate[]>) => {
-        state.slideTemplateList = action.payload ?? [];
-        state.slideTemplateListLoading = false;
-      }
-    );
-    builder.addCase("chat/setSlideTemplateListLoading", (state, action: PayloadAction<boolean>) => {
-      state.slideTemplateListLoading = action.payload;
-    });
-    builder.addCase("chat/setImageStyleList", (state, action: PayloadAction<ImageStyle[]>) => {
-      state.imageStyleList = action.payload ?? [];
-      state.imageStyleListLoading = false;
-    });
-    builder.addCase("chat/setImageStyleListLoading", (state, action: PayloadAction<boolean>) => {
-      state.imageStyleListLoading = action.payload;
-    });
+
+    resetChatPageState: (state) => {
+      state.dagExpanded = true;
+      state.selectedAgentId = null;
+      state.sidebarType = null;
+      state.sidebarOpen = false;
+      state.isAtBottom = true;
+      state.hasNewMessages = false;
+      state.streamingState = {
+        messageId: null,
+        activePartId: null,
+        partialText: "",
+      };
+    },
   },
 });
 
 export const {
   setMessages,
   addMessage,
-  addMessages,
   updateMessage,
   appendToMessage,
+  clearSessionMessages,
   setStreaming,
-  setCurrentStreamingMessage,
   setCurrentStreamingSession,
   setInputValue,
   setChatLoading,
   setChatError,
-  clearSessionMessages,
   setTaskMode,
   setInputMode,
-  setMicrophonePermission,
-  setSendQuestionBehavior,
   addChatFile,
   updateChatFile,
   removeChatFile,
   clearChatFiles,
   setChatExtData,
-  updateChatExtData,
   setShowSharePopover,
   setPlaybookInfo,
-  setRecommendedPlaybooks,
-  setRecommendedPlaybooksLoading,
-  setInputPlaybookId,
-  setInputPlaybookTemplate,
-  setSlideTemplateList,
-  setSlideTemplateListLoading,
-  setPinnedSlideTemplateId,
-  setDataVisualization,
-  setIsPageVisible,
-  setFileSuggestions,
-  clearFileSuggestions,
-  setIsAppBannerVisible,
-  setImageStyleList,
-  setImageStyleListLoading,
-  setAgentModeIntroduceScene,
-  setIsTyping,
   addTypingUser,
   removeTypingUser,
   clearTypingUsers,
   resetChatState,
+  setSendQuestionBehavior,
+  setSlideTemplateList,
+  setSlideTemplateListLoading,
+  setRecommendedPlaybooksV2,
+  setDataVisualization,
+  setDebugModelOverride,
+  setIsPageVisible,
+  setFileSuggestions,
+  setInputPlaybookId,
+  setInputPlaybookTemplate,
+  setIsAppBannerVisible,
+  setImageStyleList,
+  setImageStyleListLoading,
+  setAgentModeIntroduceScene,
+  setPinnedSlideTemplateId,
+  setTextContentLength,
+  setEditorContent,
+  // --- Merged from chatPage ---
+  setDagExpanded,
+  setSelectedAgentId,
+  setChatSidebarType,
+  setChatSidebarOpen,
+  toggleChatSidebar,
+  setIsAtBottom,
+  setHasNewMessages,
+  setUIMessages,
+  addUIMessage,
+  updateUIMessage,
+  clearUIMessages,
+  startMessageStream,
+  processStreamChunk,
+  endMessageStream,
+  addToolApproval,
+  removeToolApproval,
+  clearToolApprovals,
+  setChatSources,
+  addChatSource,
+  clearChatSources,
+  setActiveSessionId,
+  resetChatPageState,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

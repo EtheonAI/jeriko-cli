@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Attachment } from "@repo/ai/lib/types";
 import { trpc } from "@/lib/trpc/client";
-import { UnifiedPrompt, type SubmitOptions } from "./unified-prompt";
+import { ChatPrompt, type SubmitOptions } from "./unified-prompt";
 import { useAppDispatch } from "@/lib/store/hooks";
 import { createAndSelectSession, type AgentSession } from "@/lib/store/slices/sessions.slice";
 
@@ -38,7 +38,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
 
         // Update Redux session list so sidebar renders immediately
         const normalized: AgentSession = {
-          ...(session as AgentSession),
+          ...(session as unknown as AgentSession),
           createdAt:
             typeof session.createdAt === "string"
               ? session.createdAt
@@ -86,7 +86,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
 
   return (
     <div className="w-full flex justify-center">
-      <UnifiedPrompt
+      <ChatPrompt
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         disabled={isLoading}

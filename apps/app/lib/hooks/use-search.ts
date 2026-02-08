@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { trpc } from "../trpc/client";
+import { getTrpcClient } from "../trpc/vanilla";
 import {
   openSearch,
   closeSearch,
@@ -35,7 +35,7 @@ import {
   selectSelectedResult,
   type SearchResultType,
   type RecentSearch,
-} from "../store";
+} from "../store/slices/search.slice";
 
 const DEBOUNCE_MS = 300;
 const RECENT_SEARCHES_KEY = "rubic-recent-searches";
@@ -57,23 +57,6 @@ export function useSearch() {
   const activeFilter = useAppSelector(selectActiveFilter);
   const selectedIndex = useAppSelector(selectSelectedIndex);
   const selectedResult = useAppSelector(selectSelectedResult);
-
-  // TRPC mutation for search
-  const searchMutation = trpc.search.global.useMutation({
-    onSuccess: (data) => {
-      dispatch(setResults(data));
-      if (query.trim().length >= MIN_QUERY_LENGTH) {
-        dispatch(addRecentSearch({ query: query.trim(), resultCount: data.totalFound }));
-        saveRecentSearches([
-          { query: query.trim(), timestamp: Date.now(), resultCount: data.totalFound },
-          ...recentSearches.filter((s) => s.query.toLowerCase() !== query.toLowerCase()),
-        ]);
-      }
-    },
-    onError: (err) => {
-      dispatch(setError(err.message));
-    },
-  });
 
   // Load recent searches from localStorage on mount
   useEffect(() => {
@@ -97,6 +80,29 @@ export function useSearch() {
     }
   }, []);
 
+  // Search via vanilla tRPC client (imperative query call)
+  const performSearchQuery = useCallback(
+    async (searchQuery: string) => {
+      try {
+        const data = await getTrpcClient().search.global.query({
+          query: searchQuery,
+          limit: 20,
+        });
+        dispatch(setResults(data));
+        if (searchQuery.trim().length >= MIN_QUERY_LENGTH) {
+          dispatch(addRecentSearch({ query: searchQuery.trim(), resultCount: data.totalFound }));
+          saveRecentSearches([
+            { query: searchQuery.trim(), timestamp: Date.now(), resultCount: data.totalFound },
+            ...recentSearches.filter((s) => s.query.toLowerCase() !== searchQuery.toLowerCase()),
+          ]);
+        }
+      } catch (err: any) {
+        dispatch(setError(err.message ?? "Search failed"));
+      }
+    },
+    [dispatch, recentSearches, saveRecentSearches]
+  );
+
   // Debounced search
   const performSearch = useCallback(
     (searchQuery: string) => {
@@ -113,13 +119,10 @@ export function useSearch() {
       dispatch(setLoading(true));
 
       debounceRef.current = setTimeout(() => {
-        searchMutation.mutate({
-          query: searchQuery,
-          limit: 20,
-        });
+        performSearchQuery(searchQuery);
       }, DEBOUNCE_MS);
     },
-    [dispatch, searchMutation]
+    [dispatch, performSearchQuery]
   );
 
   // Handle query change

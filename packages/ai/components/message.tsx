@@ -1,7 +1,8 @@
 import type { UIMessage } from "ai";
-import type { ComponentProps } from "react";
-import Markdown from "react-markdown";
+import { lazy, Suspense, type ComponentProps } from "react";
 import { twMerge } from "tailwind-merge";
+
+const Markdown = lazy(() => import("react-markdown"));
 
 type MessageProps = {
   data: UIMessage;
@@ -24,7 +25,9 @@ export const Message = ({ data, markdown }: MessageProps) => {
           : "self-start bg-muted"
       )}
     >
-      <Markdown {...markdown}>{textContent}</Markdown>
+      <Suspense fallback={<p className="whitespace-pre-wrap">{textContent}</p>}>
+        <Markdown {...markdown}>{textContent}</Markdown>
+      </Suspense>
     </div>
   );
 };

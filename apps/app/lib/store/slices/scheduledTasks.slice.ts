@@ -77,7 +77,7 @@ const initialState: ScheduledTasksState = {
   error: null,
 };
 
-export const scheduledTasksSlice = createSlice({
+const scheduledTasksSlice = createSlice({
   name: "scheduledTasks",
   initialState,
   reducers: {
@@ -236,8 +236,8 @@ export const scheduledTasksSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    builder.addCase("scheduledTask/addSchedule", (state, action: PayloadAction<ScheduledTask>) => {
-      state.tasks.unshift(action.payload);
+    builder.addCase("scheduledTask/addSchedule", (state, action) => {
+      state.tasks.unshift((action as any).payload);
       state.isCreating = false;
       state.editingTask = null;
     });

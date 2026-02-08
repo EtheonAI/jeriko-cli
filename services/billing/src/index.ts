@@ -1,7 +1,7 @@
-import Fastify from "fastify";
 import rawBody from "fastify-raw-body";
 import Stripe from "stripe";
-import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
+import { createService, typedRoute, getEnv, createId, dispatchWebhookEvent, z } from "@repo/service-utils";
+import { NotFoundError, ValidationError, AppError, AuthorizationError } from "@repo/service-utils/errors";
 import {
   db,
   users,
@@ -19,15 +19,76 @@ import {
   sql,
   gte,
   lte,
-} from "@repo/database";
+  initDb,
+} from "./lib/db.js";
 
-const logger = createLogger({ service: "billing" });
+// ─── Stripe Client ───────────────────────────────────────────────────────────
 
 const stripe = new Stripe(getEnv("STRIPE_SECRET_KEY", ""), {
   apiVersion: "2025-09-30.clover" as Stripe.LatestApiVersion,
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Zod Schemas ─────────────────────────────────────────────────────────────
+
+const UserIdParams = z.object({
+  userId: z.string().min(1),
+});
+
+const IdParams = z.object({
+  id: z.string().min(1),
+});
+
+const CreateSubscriptionBody = z.object({
+  userId: z.string().min(1),
+  planId: z.string().min(1),
+  paymentMethodId: z.string().min(1).optional(),
+  interval: z.enum(["monthly", "yearly"]).default("monthly"),
+});
+
+const CancelSubscriptionBody = z.object({
+  immediate: z.boolean().default(false),
+}).optional();
+
+const PurchaseCreditsBody = z.object({
+  userId: z.string().min(1),
+  packageId: z.string().min(1),
+  paymentMethodId: z.string().min(1).optional(),
+});
+
+const RecordUsageBody = z.object({
+  userId: z.string().min(1),
+  type: z.string().min(1),
+  amount: z.number().positive(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const UsageHistoryQuery = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  type: z.string().optional(),
+});
+
+// ─── Custom Errors ───────────────────────────────────────────────────────────
+
+class PaymentRequiredError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 402, "PAYMENT_REQUIRED", true, details);
+  }
+}
+
+class WebhookConfigError extends AppError {
+  constructor(message: string) {
+    super(message, 500, "WEBHOOK_CONFIG_ERROR", true);
+  }
+}
+
+class WebhookSignatureError extends AppError {
+  constructor() {
+    super("Invalid signature", 400, "INVALID_SIGNATURE", true);
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function getOrCreateStripeCustomer(userId: string): Promise<string | null> {
   const [user] = await db
@@ -50,7 +111,12 @@ async function getOrCreateStripeCustomer(userId: string): Promise<string | null>
   return customer.id;
 }
 
-async function grantCredits(
+/** Type for a Drizzle db or transaction — both support the same query methods. */
+type DbOrTx = Pick<typeof db, "insert" | "update" | "select" | "delete">;
+
+/** Core logic for granting credits — always runs inside a transaction context. */
+async function grantCreditsInTx(
+  tx: DbOrTx,
   userId: string,
   amount: number,
   type: "subscription_grant" | "purchase" | "refund" | "adjustment" | "bonus",
@@ -59,33 +125,34 @@ async function grantCredits(
   description?: string,
   periodDates?: { periodStart: Date; periodEnd: Date }
 ): Promise<void> {
-  const [existing] = await db
-    .select()
-    .from(creditBalances)
+  // Atomic update — uses SQL addition to avoid read-then-write race condition
+  const updateFields: Record<string, unknown> = {
+    balance: sql`${creditBalances.balance} + ${amount}`,
+  };
+
+  if (type === "subscription_grant" && periodDates) {
+    updateFields.periodCredits = amount;
+    updateFields.periodCreditsUsed = 0;
+    updateFields.periodStart = periodDates.periodStart;
+    updateFields.periodEnd = periodDates.periodEnd;
+  } else if (type === "purchase") {
+    updateFields.purchasedCredits = sql`${creditBalances.purchasedCredits} + ${amount}`;
+  }
+
+  const [updated] = await tx
+    .update(creditBalances)
+    .set(updateFields)
     .where(eq(creditBalances.userId, userId))
-    .limit(1);
+    .returning();
 
-  const currentBalance = existing?.balance ?? 0;
-  const newBalance = currentBalance + amount;
+  let newBalance: number;
 
-  if (existing) {
-    const updates: Record<string, unknown> = { balance: newBalance };
-
-    if (type === "subscription_grant" && periodDates) {
-      updates.periodCredits = amount;
-      updates.periodCreditsUsed = 0;
-      updates.periodStart = periodDates.periodStart;
-      updates.periodEnd = periodDates.periodEnd;
-    } else if (type === "purchase") {
-      updates.purchasedCredits = sql`${creditBalances.purchasedCredits} + ${amount}`;
-    }
-
-    await db.update(creditBalances).set(updates).where(eq(creditBalances.userId, userId));
-  } else {
+  if (!updated) {
+    // No existing record — insert new balance row
     const values: Record<string, unknown> = {
       id: createId(),
       userId,
-      balance: newBalance,
+      balance: amount,
     };
 
     if (type === "subscription_grant" && periodDates) {
@@ -97,10 +164,16 @@ async function grantCredits(
       values.purchasedCredits = amount;
     }
 
-    await db.insert(creditBalances).values(values as typeof creditBalances.$inferInsert);
+    const [inserted] = await tx
+      .insert(creditBalances)
+      .values(values as typeof creditBalances.$inferInsert)
+      .returning();
+    newBalance = inserted!.balance;
+  } else {
+    newBalance = updated.balance;
   }
 
-  await db.insert(creditTransactions).values({
+  await tx.insert(creditTransactions).values({
     id: createId(),
     userId,
     type,
@@ -110,6 +183,32 @@ async function grantCredits(
     referenceId,
     description,
   });
+}
+
+/**
+ * Grant credits to a user's balance and record the transaction.
+ * When called with an existing transaction (tx), runs inside that transaction.
+ * When called without, creates its own transaction for atomicity.
+ */
+async function grantCredits(
+  userId: string,
+  amount: number,
+  type: "subscription_grant" | "purchase" | "refund" | "adjustment" | "bonus",
+  referenceType?: string,
+  referenceId?: string,
+  description?: string,
+  periodDates?: { periodStart: Date; periodEnd: Date },
+  tx?: DbOrTx
+): Promise<void> {
+  if (tx) {
+    // Already inside a transaction — run directly
+    await grantCreditsInTx(tx, userId, amount, type, referenceType, referenceId, description, periodDates);
+  } else {
+    // No transaction provided — create one for atomicity
+    await db.transaction(async (newTx) => {
+      await grantCreditsInTx(newTx, userId, amount, type, referenceType, referenceId, description, periodDates);
+    });
+  }
 }
 
 function mapStripeStatus(
@@ -135,7 +234,7 @@ function mapStripeStatus(
   }
 }
 
-async function triggerAutoTopup(userId: string, packageId: string) {
+async function triggerAutoTopup(userId: string, packageId: string, logger: { info: Function; error: Function }) {
   const [pkg] = await db
     .select()
     .from(creditPackages)
@@ -178,16 +277,14 @@ async function triggerAutoTopup(userId: string, packageId: string) {
   }
 }
 
-// ─── Server ───────────────────────────────────────────────────────────────────
+// ─── Server ──────────────────────────────────────────────────────────────────
 
 async function main() {
-  const port = parseInt(getEnv("PORT", "4008"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
+  await initDb();
 
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
+  const { app, logger, start } = await createService({
+    name: "billing",
+    publicRoutes: ["/webhooks/stripe"],
   });
 
   // Register raw body plugin for Stripe webhook signature verification
@@ -198,102 +295,84 @@ async function main() {
     runFirst: true,
   });
 
-  // ─── Health Check ─────────────────────────────────────────────────────────
+  // ─── Get Subscription Plans ──────────────────────────────────────────────
 
-  app.get("/health", async () => {
-    return { status: "ok", service: "billing" };
-  });
+  app.get("/plans", typedRoute({}, async (_request, reply) => {
+    const plans = await db
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.isActive, true))
+      .orderBy(subscriptionPlans.sortOrder);
 
-  // ─── Get Subscription Plans ───────────────────────────────────────────────
+    return reply.success({ plans });
+  }));
 
-  app.get("/plans", async (request, reply) => {
-    try {
-      const plans = await db
-        .select()
-        .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.isActive, true))
-        .orderBy(subscriptionPlans.sortOrder);
-      return { plans };
-    } catch (error) {
-      logger.error(error, "Failed to fetch plans");
-      return reply.status(500).send({ error: "Failed to fetch plans" });
+  // ─── Get User Subscription ───────────────────────────────────────────────
+
+  app.get("/users/:userId/subscription", typedRoute({ params: UserIdParams }, async (request, reply) => {
+    const { userId } = request.params;
+    if (request.userId !== userId) throw new AuthorizationError();
+
+    const [subscription] = await db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.userId, userId))
+      .limit(1);
+
+    if (!subscription) {
+      return reply.success({ userId, plan: "free", status: "active" });
     }
-  });
 
-  // ─── Get User Subscription ────────────────────────────────────────────────
+    return reply.success(subscription);
+  }));
 
-  app.get("/users/:userId/subscription", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    try {
-      const [subscription] = await db
-        .select()
-        .from(userSubscriptions)
-        .where(eq(userSubscriptions.userId, userId))
-        .limit(1);
-      if (!subscription) {
-        return { userId, plan: "free", status: "active" };
-      }
-      return subscription;
-    } catch (error) {
-      logger.error(error, "Failed to fetch subscription");
-      return reply.status(500).send({ error: "Failed to fetch subscription" });
+  // ─── Create Subscription ─────────────────────────────────────────────────
+
+  app.post("/subscriptions", typedRoute({ body: CreateSubscriptionBody }, async (request, reply) => {
+    const { planId, paymentMethodId, interval } = request.body;
+    const userId = request.userId;
+
+    // Look up the plan to get Stripe price ID
+    const [plan] = await db
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundError("Plan");
     }
-  });
 
-  // ─── Create Subscription ──────────────────────────────────────────────────
+    const stripePriceId =
+      interval === "yearly" ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
 
-  app.post("/subscriptions", async (request, reply) => {
-    const {
-      userId,
-      planId,
-      paymentMethodId,
-      interval = "monthly",
-    } = request.body as {
-      userId: string;
-      planId: string;
-      paymentMethodId?: string;
-      interval?: "monthly" | "yearly";
-    };
+    if (!stripePriceId) {
+      throw new ValidationError("Plan does not have a Stripe price configured");
+    }
 
-    try {
-      // Look up the plan to get Stripe price ID
-      const [plan] = await db
-        .select()
-        .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.id, planId))
-        .limit(1);
-      if (!plan) {
-        return reply.status(404).send({ error: "Plan not found" });
-      }
+    // Get or create Stripe customer
+    const customerId = await getOrCreateStripeCustomer(userId);
+    if (!customerId) {
+      throw new NotFoundError("User");
+    }
 
-      const stripePriceId =
-        interval === "yearly" ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
-      if (!stripePriceId) {
-        return reply.status(400).send({ error: "Plan does not have a Stripe price configured" });
-      }
+    // Create Stripe subscription
+    const stripeSubscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: stripePriceId }],
+      payment_behavior: "default_incomplete",
+      ...(paymentMethodId && { default_payment_method: paymentMethodId }),
+      metadata: { userId, planId, interval },
+      expand: ["latest_invoice.payment_intent"],
+    });
 
-      // Get or create Stripe customer
-      const customerId = await getOrCreateStripeCustomer(userId);
-      if (!customerId) {
-        return reply.status(404).send({ error: "User not found" });
-      }
+    const firstItem = stripeSubscription.items.data[0];
+    const periodStart = firstItem ? new Date(firstItem.current_period_start * 1000) : new Date();
+    const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
 
-      // Create Stripe subscription
-      const stripeSubscription = await stripe.subscriptions.create({
-        customer: customerId,
-        items: [{ price: stripePriceId }],
-        payment_behavior: "default_incomplete",
-        ...(paymentMethodId && { default_payment_method: paymentMethodId }),
-        metadata: { userId, planId, interval },
-        expand: ["latest_invoice.payment_intent"],
-      });
-
-      const firstItem = stripeSubscription.items.data[0];
-      const periodStart = firstItem ? new Date(firstItem.current_period_start * 1000) : new Date();
-      const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
-
-      // Insert subscription into DB
-      const [subscription] = await db
+    // Insert subscription, sync user, and grant credits in a single transaction
+    const subscription = await db.transaction(async (tx) => {
+      const [sub] = await tx
         .insert(userSubscriptions)
         .values({
           id: createId(),
@@ -309,7 +388,7 @@ async function main() {
         .returning();
 
       // Sync Stripe fields to users table
-      await db
+      await tx
         .update(users)
         .set({
           stripeCustomerId: customerId,
@@ -328,154 +407,150 @@ async function main() {
           "subscription",
           stripeSubscription.id,
           `${plan.name} plan - initial credits`,
-          { periodStart, periodEnd }
+          { periodStart, periodEnd },
+          tx
         );
       }
 
-      dispatchWebhookEvent({
-        eventType: "billing.subscription.created",
-        resourceType: "subscription",
-        resourceId: subscription!.id,
-        payload: {
-          id: subscription!.id,
-          planId,
-          status: stripeSubscription.status,
-          stripeSubscriptionId: stripeSubscription.id,
-        },
-        userId,
-      });
+      return sub;
+    });
 
-      return {
+    dispatchWebhookEvent({
+      eventType: "billing.subscription.created",
+      resourceType: "subscription",
+      resourceId: subscription!.id,
+      payload: {
         id: subscription!.id,
-        userId,
         planId,
         status: stripeSubscription.status,
         stripeSubscriptionId: stripeSubscription.id,
-        clientSecret:
-          stripeSubscription.status === "incomplete"
-            ? (
-                stripeSubscription.latest_invoice as Stripe.Invoice & {
-                  payment_intent: Stripe.PaymentIntent;
-                }
-              )?.payment_intent?.client_secret
-            : undefined,
-      };
-    } catch (error) {
-      logger.error(error, "Failed to create subscription");
-      return reply.status(500).send({ error: "Failed to create subscription" });
+      },
+      userId,
+    });
+
+    return reply.success({
+      id: subscription!.id,
+      userId,
+      planId,
+      status: stripeSubscription.status,
+      stripeSubscriptionId: stripeSubscription.id,
+      clientSecret:
+        stripeSubscription.status === "incomplete"
+          ? (
+              stripeSubscription.latest_invoice as Stripe.Invoice & {
+                payment_intent: Stripe.PaymentIntent;
+              }
+            )?.payment_intent?.client_secret
+          : undefined,
+    });
+  }));
+
+  // ─── Cancel Subscription ─────────────────────────────────────────────────
+
+  app.post("/subscriptions/:id/cancel", typedRoute({ params: IdParams, body: CancelSubscriptionBody }, async (request, reply) => {
+    const { id } = request.params;
+    const immediate = request.body?.immediate ?? false;
+
+    // Look up the subscription to get Stripe ID
+    const [existing] = await db
+      .select()
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.id, id))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundError("Subscription");
     }
-  });
 
-  // ─── Cancel Subscription ──────────────────────────────────────────────────
-
-  app.post("/subscriptions/:id/cancel", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { immediate = false } = (request.body as { immediate?: boolean }) || {};
-
-    try {
-      // Look up the subscription to get Stripe ID
-      const [existing] = await db
-        .select()
-        .from(userSubscriptions)
-        .where(eq(userSubscriptions.id, id))
-        .limit(1);
-
-      if (!existing) {
-        return reply.status(404).send({ error: "Subscription not found" });
-      }
-
-      // Cancel in Stripe
-      if (existing.stripeSubscriptionId) {
-        if (immediate) {
-          await stripe.subscriptions.cancel(existing.stripeSubscriptionId);
-        } else {
-          await stripe.subscriptions.update(existing.stripeSubscriptionId, {
-            cancel_at_period_end: true,
-          });
-        }
-      }
-
-      // Update DB
-      const [updated] = await db
-        .update(userSubscriptions)
-        .set({
-          cancelAtPeriodEnd: !immediate,
-          canceledAt: new Date(),
-          ...(immediate && { status: "canceled" as const }),
-        })
-        .where(eq(userSubscriptions.id, id))
-        .returning();
-
-      return { id: updated!.id, status: immediate ? "canceled" : "cancel_at_period_end" };
-    } catch (error) {
-      logger.error(error, "Failed to cancel subscription");
-      return reply.status(500).send({ error: "Failed to cancel subscription" });
+    if (existing.userId !== request.userId) {
+      throw new AuthorizationError("Not authorized to cancel this subscription");
     }
-  });
 
-  // ─── Get Credit Balance ───────────────────────────────────────────────────
-
-  app.get("/users/:userId/credits", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    try {
-      const [balance] = await db
-        .select()
-        .from(creditBalances)
-        .where(eq(creditBalances.userId, userId))
-        .limit(1);
-      if (!balance) {
-        return { userId, balance: 0, used: 0 };
+    // Cancel in Stripe
+    if (existing.stripeSubscriptionId) {
+      if (immediate) {
+        await stripe.subscriptions.cancel(existing.stripeSubscriptionId);
+      } else {
+        await stripe.subscriptions.update(existing.stripeSubscriptionId, {
+          cancel_at_period_end: true,
+        });
       }
-      return { userId, balance: balance.balance, used: balance.periodCreditsUsed };
-    } catch (error) {
-      logger.error(error, "Failed to fetch credit balance");
-      return reply.status(500).send({ error: "Failed to fetch credit balance" });
     }
-  });
 
-  // ─── Purchase Credits ─────────────────────────────────────────────────────
+    // Update DB
+    const [updated] = await db
+      .update(userSubscriptions)
+      .set({
+        cancelAtPeriodEnd: !immediate,
+        canceledAt: new Date(),
+        ...(immediate && { status: "canceled" as const }),
+      })
+      .where(eq(userSubscriptions.id, id))
+      .returning();
 
-  app.post("/credits/purchase", async (request, reply) => {
-    const { userId, packageId, paymentMethodId } = request.body as {
-      userId: string;
-      packageId: string;
-      paymentMethodId?: string;
-    };
+    return reply.success({ id: updated!.id, status: immediate ? "canceled" : "cancel_at_period_end" });
+  }));
 
-    try {
-      const [pkg] = await db
+  // ─── Get Credit Balance ──────────────────────────────────────────────────
+
+  app.get("/users/:userId/credits", typedRoute({ params: UserIdParams }, async (request, reply) => {
+    const { userId } = request.params;
+    if (request.userId !== userId) throw new AuthorizationError();
+
+    const [balance] = await db
+      .select()
+      .from(creditBalances)
+      .where(eq(creditBalances.userId, userId))
+      .limit(1);
+
+    if (!balance) {
+      return reply.success({ userId, balance: 0, used: 0 });
+    }
+
+    return reply.success({ userId, balance: balance.balance, used: balance.periodCreditsUsed });
+  }));
+
+  // ─── Purchase Credits ────────────────────────────────────────────────────
+
+  app.post("/credits/purchase", typedRoute({ body: PurchaseCreditsBody }, async (request, reply) => {
+    const { packageId, paymentMethodId } = request.body;
+    const userId = request.userId;
+
+    const [pkg] = await db
+      .select()
+      .from(creditPackages)
+      .where(eq(creditPackages.id, packageId))
+      .limit(1);
+
+    if (!pkg) {
+      throw new NotFoundError("Credit package");
+    }
+
+    // Get or create Stripe customer
+    const customerId = await getOrCreateStripeCustomer(userId);
+    if (!customerId) {
+      throw new NotFoundError("User");
+    }
+
+    // Resolve payment method: use provided one, or get user's default
+    let resolvedPaymentMethodId = paymentMethodId;
+    if (!resolvedPaymentMethodId) {
+      const [defaultMethod] = await db
         .select()
-        .from(creditPackages)
-        .where(eq(creditPackages.id, packageId))
+        .from(paymentMethods)
+        .where(and(eq(paymentMethods.userId, userId), eq(paymentMethods.isDefault, true)))
         .limit(1);
-      if (!pkg) {
-        return reply.status(404).send({ error: "Credit package not found" });
-      }
+      resolvedPaymentMethodId = defaultMethod?.stripePaymentMethodId;
+    }
 
-      // Get or create Stripe customer
-      const customerId = await getOrCreateStripeCustomer(userId);
-      if (!customerId) {
-        return reply.status(404).send({ error: "User not found" });
-      }
+    if (!resolvedPaymentMethodId) {
+      throw new ValidationError("No payment method available");
+    }
 
-      // Resolve payment method: use provided one, or get user's default
-      let resolvedPaymentMethodId = paymentMethodId;
-      if (!resolvedPaymentMethodId) {
-        const [defaultMethod] = await db
-          .select()
-          .from(paymentMethods)
-          .where(and(eq(paymentMethods.userId, userId), eq(paymentMethods.isDefault, true)))
-          .limit(1);
-        resolvedPaymentMethodId = defaultMethod?.stripePaymentMethodId;
-      }
+    const creditsToAdd = pkg.credits + (pkg.bonusCredits || 0);
 
-      if (!resolvedPaymentMethodId) {
-        return reply.status(400).send({ error: "No payment method available" });
-      }
-
-      const creditsToAdd = pkg.credits + (pkg.bonusCredits || 0);
-
-      // Create and confirm payment intent
+    // Create and confirm payment intent
+    try {
       const paymentIntent = await stripe.paymentIntents.create({
         amount: pkg.price,
         currency: pkg.currency,
@@ -487,8 +562,7 @@ async function main() {
       });
 
       if (paymentIntent.status !== "succeeded") {
-        return reply.status(402).send({
-          error: "Payment requires further action",
+        throw new PaymentRequiredError("Payment requires further action", {
           clientSecret: paymentIntent.client_secret,
           status: paymentIntent.status,
         });
@@ -510,33 +584,30 @@ async function main() {
         .where(eq(creditBalances.userId, userId))
         .limit(1);
 
-      return {
+      return reply.success({
         credits: creditsToAdd,
         balance: balance?.balance ?? creditsToAdd,
         status: "completed",
         stripePaymentIntentId: paymentIntent.id,
-      };
+      });
     } catch (error) {
-      logger.error(error, "Failed to purchase credits");
+      if (error instanceof AppError) throw error;
       if (error instanceof Stripe.errors.StripeCardError) {
-        return reply.status(402).send({ error: error.message, code: error.code });
+        throw new PaymentRequiredError(error.message, { code: error.code });
       }
-      return reply.status(500).send({ error: "Failed to purchase credits" });
+      throw error;
     }
-  });
+  }));
 
-  // ─── Record Usage ─────────────────────────────────────────────────────────
+  // ─── Record Usage ────────────────────────────────────────────────────────
 
-  app.post("/usage", async (request, reply) => {
-    const { userId, type, amount, metadata } = request.body as {
-      userId: string;
-      type: string;
-      amount: number;
-      metadata?: Record<string, unknown>;
-    };
+  app.post("/usage", typedRoute({ body: RecordUsageBody }, async (request, reply) => {
+    const { type, amount, metadata } = request.body;
+    const userId = request.userId;
 
-    try {
-      const [record] = await db
+    // Insert usage record and deduct credits in a single transaction
+    const { record, updatedBalance } = await db.transaction(async (tx) => {
+      const [rec] = await tx
         .insert(usageRecords)
         .values({
           id: createId(),
@@ -548,7 +619,7 @@ async function main() {
         .returning();
 
       // Deduct from balance
-      await db
+      await tx
         .update(creditBalances)
         .set({
           balance: sql`${creditBalances.balance} - ${amount}`,
@@ -557,66 +628,57 @@ async function main() {
         .where(eq(creditBalances.userId, userId));
 
       // Check auto top-up threshold
-      const [updatedBalance] = await db
+      const [bal] = await tx
         .select()
         .from(creditBalances)
         .where(eq(creditBalances.userId, userId))
         .limit(1);
 
-      if (
-        updatedBalance?.autoTopupEnabled &&
-        updatedBalance.autoTopupPackageId &&
-        updatedBalance.balance <= (updatedBalance.autoTopupThreshold || 0)
-      ) {
-        triggerAutoTopup(userId, updatedBalance.autoTopupPackageId).catch((err) =>
-          logger.error({ err, userId }, "Auto top-up failed")
-        );
-      }
+      return { record: rec, updatedBalance: bal };
+    });
 
-      return { id: record!.id, recorded: true };
-    } catch (error) {
-      logger.error(error, "Failed to record usage");
-      return reply.status(500).send({ error: "Failed to record usage" });
+    if (
+      updatedBalance?.autoTopupEnabled &&
+      updatedBalance.autoTopupPackageId &&
+      updatedBalance.balance <= (updatedBalance.autoTopupThreshold || 0)
+    ) {
+      triggerAutoTopup(userId, updatedBalance.autoTopupPackageId, logger).catch((err) =>
+        logger.error({ err, userId }, "Auto top-up failed")
+      );
     }
-  });
 
-  // ─── Get Usage History ────────────────────────────────────────────────────
+    return reply.success({ id: record!.id, recorded: true });
+  }));
 
-  app.get("/users/:userId/usage", async (request, reply) => {
-    const { userId } = request.params as { userId: string };
-    const { from, to, type } = request.query as {
-      from?: string;
-      to?: string;
-      type?: string;
-    };
+  // ─── Get Usage History ───────────────────────────────────────────────────
 
-    try {
-      const conditions = [eq(usageRecords.userId, userId)];
-      if (from) {
-        conditions.push(gte(usageRecords.createdAt, new Date(from)));
-      }
-      if (to) {
-        conditions.push(lte(usageRecords.createdAt, new Date(to)));
-      }
-      if (type) {
-        conditions.push(eq(usageRecords.type, type as any));
-      }
+  app.get("/users/:userId/usage", typedRoute({ params: UserIdParams, query: UsageHistoryQuery }, async (request, reply) => {
+    const { userId } = request.params;
+    if (request.userId !== userId) throw new AuthorizationError();
+    const { from, to, type } = request.query;
 
-      const records = await db
-        .select()
-        .from(usageRecords)
-        .where(and(...conditions))
-        .orderBy(desc(usageRecords.createdAt))
-        .limit(100);
-
-      return { usage: records, total: records.length };
-    } catch (error) {
-      logger.error(error, "Failed to fetch usage history");
-      return reply.status(500).send({ error: "Failed to fetch usage history" });
+    const conditions = [eq(usageRecords.userId, userId)];
+    if (from) {
+      conditions.push(gte(usageRecords.createdAt, new Date(from)));
     }
-  });
+    if (to) {
+      conditions.push(lte(usageRecords.createdAt, new Date(to)));
+    }
+    if (type) {
+      conditions.push(eq(usageRecords.type, type as any));
+    }
 
-  // ─── Stripe Webhook Handler ───────────────────────────────────────────────
+    const records = await db
+      .select()
+      .from(usageRecords)
+      .where(and(...conditions))
+      .orderBy(desc(usageRecords.createdAt))
+      .limit(100);
+
+    return reply.success({ usage: records, total: records.length });
+  }));
+
+  // ─── Stripe Webhook Handler ──────────────────────────────────────────────
 
   app.post("/webhooks/stripe", { config: { rawBody: true } }, async (request: any, reply) => {
     const signature = request.headers["stripe-signature"] as string;
@@ -624,7 +686,7 @@ async function main() {
 
     if (!webhookSecret) {
       logger.error("STRIPE_WEBHOOK_SECRET not configured");
-      return reply.status(500).send({ error: "Webhook secret not configured" });
+      throw new WebhookConfigError("Webhook secret not configured");
     }
 
     let event: Stripe.Event;
@@ -632,55 +694,55 @@ async function main() {
       event = stripe.webhooks.constructEvent(request.rawBody, signature, webhookSecret);
     } catch (err) {
       logger.error({ err }, "Stripe webhook signature verification failed");
-      return reply.status(400).send({ error: "Invalid signature" });
+      throw new WebhookSignatureError();
     }
 
-    try {
-      switch (event.type) {
-        case "checkout.session.completed": {
-          const session = event.data.object as Stripe.Checkout.Session;
-          const userId = session.metadata?.userId;
-          if (!userId) break;
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.userId;
+        if (!userId) break;
 
-          if (session.mode === "subscription") {
-            const planId = session.metadata?.planId;
-            const interval = session.metadata?.interval as "monthly" | "yearly" | undefined;
-            const stripeSubId =
-              typeof session.subscription === "string"
-                ? session.subscription
-                : (session.subscription as any)?.id;
+        if (session.mode === "subscription") {
+          const planId = session.metadata?.planId;
+          const interval = session.metadata?.interval as "monthly" | "yearly" | undefined;
+          const stripeSubId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : (session.subscription as any)?.id;
 
-            if (!stripeSubId || !planId) break;
+          if (!stripeSubId || !planId) break;
 
-            const stripeSub = await stripe.subscriptions.retrieve(stripeSubId);
-            const customerId =
-              typeof stripeSub.customer === "string"
-                ? stripeSub.customer
-                : (stripeSub.customer as any).id;
+          const stripeSub = await stripe.subscriptions.retrieve(stripeSubId);
+          const customerId =
+            typeof stripeSub.customer === "string"
+              ? stripeSub.customer
+              : (stripeSub.customer as any).id;
 
-            const [plan] = await db
-              .select()
-              .from(subscriptionPlans)
-              .where(eq(subscriptionPlans.id, planId))
-              .limit(1);
+          const [plan] = await db
+            .select()
+            .from(subscriptionPlans)
+            .where(eq(subscriptionPlans.id, planId))
+            .limit(1);
 
-            const firstItem = stripeSub.items.data[0];
-            const periodStart = firstItem
-              ? new Date(firstItem.current_period_start * 1000)
-              : new Date();
-            const periodEnd = firstItem
-              ? new Date(firstItem.current_period_end * 1000)
-              : new Date();
+          const firstItem = stripeSub.items.data[0];
+          const periodStart = firstItem
+            ? new Date(firstItem.current_period_start * 1000)
+            : new Date();
+          const periodEnd = firstItem
+            ? new Date(firstItem.current_period_end * 1000)
+            : new Date();
 
-            // Upsert subscription
-            const [existingSub] = await db
+          // Upsert subscription, sync user, and grant credits in a single transaction
+          await db.transaction(async (tx) => {
+            const [existingSub] = await tx
               .select()
               .from(userSubscriptions)
               .where(eq(userSubscriptions.userId, userId))
               .limit(1);
 
             if (existingSub) {
-              await db
+              await tx
                 .update(userSubscriptions)
                 .set({
                   planId,
@@ -696,7 +758,7 @@ async function main() {
                 })
                 .where(eq(userSubscriptions.id, existingSub.id));
             } else {
-              await db.insert(userSubscriptions).values({
+              await tx.insert(userSubscriptions).values({
                 id: createId(),
                 userId,
                 planId,
@@ -710,7 +772,7 @@ async function main() {
             }
 
             // Sync Stripe fields to users table
-            await db
+            await tx
               .update(users)
               .set({
                 stripeCustomerId: customerId,
@@ -729,55 +791,58 @@ async function main() {
                 "subscription",
                 stripeSubId,
                 `${plan.name} plan - initial credits`,
-                { periodStart, periodEnd }
+                { periodStart, periodEnd },
+                tx
               );
             }
-          } else if (session.mode === "payment" && session.metadata?.type === "credit_purchase") {
-            const credits = Number(session.metadata?.credits);
-            const packageId = session.metadata?.packageId;
-            if (!credits || Number.isNaN(credits)) break;
+          });
+        } else if (session.mode === "payment" && session.metadata?.type === "credit_purchase") {
+          const credits = Number(session.metadata?.credits);
+          const packageId = session.metadata?.packageId;
+          if (!credits || Number.isNaN(credits)) break;
 
-            await grantCredits(
-              userId,
-              credits,
-              "purchase",
-              "package",
-              packageId ?? undefined,
-              "Credit package purchase"
-            );
-          }
-          break;
+          await grantCredits(
+            userId,
+            credits,
+            "purchase",
+            "package",
+            packageId ?? undefined,
+            "Credit package purchase"
+          );
+        }
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId =
+          typeof invoice.customer === "string" ? invoice.customer : (invoice.customer as any)?.id;
+        if (!customerId) break;
+
+        // Find user by Stripe customer ID
+        const [user] = await db
+          .select()
+          .from(users)
+          .where(eq(users.stripeCustomerId, customerId))
+          .limit(1);
+        if (!user) break;
+
+        // Find subscription if linked
+        const subRef = (invoice as any).parent?.subscription_details?.subscription;
+        const stripeSubId = typeof subRef === "string" ? subRef : subRef?.id;
+
+        let subscriptionId: string | undefined;
+        if (stripeSubId) {
+          const [sub] = await db
+            .select({ id: userSubscriptions.id })
+            .from(userSubscriptions)
+            .where(eq(userSubscriptions.stripeSubscriptionId, stripeSubId))
+            .limit(1);
+          subscriptionId = sub?.id;
         }
 
-        case "invoice.paid": {
-          const invoice = event.data.object as Stripe.Invoice;
-          const customerId =
-            typeof invoice.customer === "string" ? invoice.customer : (invoice.customer as any)?.id;
-          if (!customerId) break;
-
-          // Find user by Stripe customer ID
-          const [user] = await db
-            .select()
-            .from(users)
-            .where(eq(users.stripeCustomerId, customerId))
-            .limit(1);
-          if (!user) break;
-
-          // Find subscription if linked
-          const subRef = (invoice as any).parent?.subscription_details?.subscription;
-          const stripeSubId = typeof subRef === "string" ? subRef : subRef?.id;
-
-          let subscriptionId: string | undefined;
-          if (stripeSubId) {
-            const [sub] = await db
-              .select({ id: userSubscriptions.id })
-              .from(userSubscriptions)
-              .where(eq(userSubscriptions.stripeSubscriptionId, stripeSubId))
-              .limit(1);
-            subscriptionId = sub?.id;
-          }
-
-          // Upsert invoice record
+        // Upsert invoice and grant renewal credits in a single transaction
+        await db.transaction(async (tx) => {
           const invoiceData = {
             userId: user.id,
             subscriptionId: subscriptionId ?? null,
@@ -797,28 +862,28 @@ async function main() {
             invoicePdfUrl: invoice.invoice_pdf ?? null,
           };
 
-          const [existingInvoice] = await db
+          const [existingInvoice] = await tx
             .select()
             .from(invoices)
             .where(eq(invoices.stripeInvoiceId, invoice.id))
             .limit(1);
 
           if (existingInvoice) {
-            await db.update(invoices).set(invoiceData).where(eq(invoices.id, existingInvoice.id));
+            await tx.update(invoices).set(invoiceData).where(eq(invoices.id, existingInvoice.id));
           } else {
-            await db.insert(invoices).values({ id: createId(), ...invoiceData });
+            await tx.insert(invoices).values({ id: createId(), ...invoiceData });
           }
 
           // On subscription renewal, grant monthly credits
           if (invoice.billing_reason === "subscription_cycle" && stripeSubId) {
-            const [sub] = await db
+            const [sub] = await tx
               .select({ planId: userSubscriptions.planId })
               .from(userSubscriptions)
               .where(eq(userSubscriptions.stripeSubscriptionId, stripeSubId))
               .limit(1);
 
             if (sub) {
-              const [plan] = await db
+              const [plan] = await tx
                 .select()
                 .from(subscriptionPlans)
                 .where(eq(subscriptionPlans.id, sub.planId))
@@ -839,31 +904,35 @@ async function main() {
                   "invoice",
                   invoice.id,
                   `${plan.name} plan - monthly renewal credits`,
-                  { periodStart, periodEnd }
+                  { periodStart, periodEnd },
+                  tx
                 );
               }
             }
           }
-          break;
-        }
+        });
+        break;
+      }
 
-        case "customer.subscription.updated": {
-          const subscription = event.data.object as Stripe.Subscription;
-          const [existing] = await db
-            .select()
-            .from(userSubscriptions)
-            .where(eq(userSubscriptions.stripeSubscriptionId, subscription.id))
-            .limit(1);
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const [existing] = await db
+          .select()
+          .from(userSubscriptions)
+          .where(eq(userSubscriptions.stripeSubscriptionId, subscription.id))
+          .limit(1);
 
-          if (!existing) break;
+        if (!existing) break;
 
-          const firstItem = subscription.items.data[0];
-          const periodStart = firstItem
-            ? new Date(firstItem.current_period_start * 1000)
-            : new Date();
-          const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
+        const firstItem = subscription.items.data[0];
+        const periodStart = firstItem
+          ? new Date(firstItem.current_period_start * 1000)
+          : new Date();
+        const periodEnd = firstItem ? new Date(firstItem.current_period_end * 1000) : new Date();
 
-          await db
+        // Update subscription and user in a single transaction
+        await db.transaction(async (tx) => {
+          await tx
             .update(userSubscriptions)
             .set({
               status: mapStripeStatus(subscription.status),
@@ -873,29 +942,32 @@ async function main() {
             })
             .where(eq(userSubscriptions.id, existing.id));
 
-          await db
+          await tx
             .update(users)
             .set({ stripeCurrentPeriodEnd: periodEnd })
             .where(eq(users.id, existing.userId));
-          break;
-        }
+        });
+        break;
+      }
 
-        case "customer.subscription.deleted": {
-          const subscription = event.data.object as Stripe.Subscription;
-          const [existing] = await db
-            .select()
-            .from(userSubscriptions)
-            .where(eq(userSubscriptions.stripeSubscriptionId, subscription.id))
-            .limit(1);
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const [existing] = await db
+          .select()
+          .from(userSubscriptions)
+          .where(eq(userSubscriptions.stripeSubscriptionId, subscription.id))
+          .limit(1);
 
-          if (!existing) break;
+        if (!existing) break;
 
-          await db
+        // Update subscription and clear user Stripe fields in a single transaction
+        await db.transaction(async (tx) => {
+          await tx
             .update(userSubscriptions)
             .set({ status: "canceled", canceledAt: new Date() })
             .where(eq(userSubscriptions.id, existing.id));
 
-          await db
+          await tx
             .update(users)
             .set({
               stripeSubscriptionId: null,
@@ -903,62 +975,20 @@ async function main() {
               stripeCurrentPeriodEnd: null,
             })
             .where(eq(users.id, existing.userId));
-          break;
-        }
-
-        default:
-          logger.warn({ eventType: event.type }, "Unhandled Stripe event type");
+        });
+        break;
       }
-    } catch (err) {
-      logger.error({ err, eventType: event.type }, "Failed to process Stripe webhook event");
-      return reply.status(500).send({ error: "Webhook processing failed" });
+
+      default:
+        logger.warn({ eventType: event.type }, "Unhandled Stripe event type");
     }
 
-    return { received: true };
+    return reply.success({ received: true });
   });
 
-  // ─── Request Logging ──────────────────────────────────────────────────────
+  // ─── Start Server ────────────────────────────────────────────────────────
 
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
-
-  // ─── Start Server ─────────────────────────────────────────────────────────
-
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "Billing service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
-
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
-      await app.close();
-      process.exit(0);
-    });
-  }
+  await start();
 }
 
 main();

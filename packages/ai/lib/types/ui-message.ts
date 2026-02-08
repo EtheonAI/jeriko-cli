@@ -350,44 +350,44 @@ export interface UIMessage<
 // Type Guards
 // ============================================================================
 
-export function isTextUIPart(part: UIMessagePart): part is TextUIPart {
-  return part.type === 'text';
+export function isTextUIPart(part: UIMessagePart | null | undefined): part is TextUIPart {
+  return part != null && part.type === 'text';
 }
 
-export function isReasoningUIPart(part: UIMessagePart): part is ReasoningUIPart {
-  return part.type === 'reasoning';
+export function isReasoningUIPart(part: UIMessagePart | null | undefined): part is ReasoningUIPart {
+  return part != null && part.type === 'reasoning';
 }
 
-export function isFileUIPart(part: UIMessagePart): part is FileUIPart {
-  return part.type === 'file';
+export function isFileUIPart(part: UIMessagePart | null | undefined): part is FileUIPart {
+  return part != null && part.type === 'file';
 }
 
-export function isStaticToolUIPart(part: UIMessagePart): part is StaticToolUIPart {
-  return part.type.startsWith('tool-');
+export function isStaticToolUIPart(part: UIMessagePart | null | undefined): part is StaticToolUIPart {
+  return part != null && typeof part.type === 'string' && part.type.startsWith('tool-');
 }
 
-export function isDynamicToolUIPart(part: UIMessagePart): part is DynamicToolUIPart {
-  return part.type === 'dynamic-tool';
+export function isDynamicToolUIPart(part: UIMessagePart | null | undefined): part is DynamicToolUIPart {
+  return part != null && part.type === 'dynamic-tool';
 }
 
-export function isToolUIPart(part: UIMessagePart): part is StaticToolUIPart | DynamicToolUIPart {
+export function isToolUIPart(part: UIMessagePart | null | undefined): part is StaticToolUIPart | DynamicToolUIPart {
   return isStaticToolUIPart(part) || isDynamicToolUIPart(part);
 }
 
-export function isDataUIPart(part: UIMessagePart): part is DataUIPart {
-  return part.type.startsWith('data-');
+export function isDataUIPart(part: UIMessagePart | null | undefined): part is DataUIPart {
+  return part != null && typeof part.type === 'string' && part.type.startsWith('data-');
 }
 
-export function isSourceUrlUIPart(part: UIMessagePart): part is SourceUrlUIPart {
-  return part.type === 'source-url';
+export function isSourceUrlUIPart(part: UIMessagePart | null | undefined): part is SourceUrlUIPart {
+  return part != null && part.type === 'source-url';
 }
 
-export function isSourceDocumentUIPart(part: UIMessagePart): part is SourceDocumentUIPart {
-  return part.type === 'source-document';
+export function isSourceDocumentUIPart(part: UIMessagePart | null | undefined): part is SourceDocumentUIPart {
+  return part != null && part.type === 'source-document';
 }
 
-export function isStepStartUIPart(part: UIMessagePart): part is StepStartUIPart {
-  return part.type === 'step-start';
+export function isStepStartUIPart(part: UIMessagePart | null | undefined): part is StepStartUIPart {
+  return part != null && part.type === 'step-start';
 }
 
 // ============================================================================

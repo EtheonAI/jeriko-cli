@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { CodeIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import {
+  CodeIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  XIcon,
+} from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 import { ShikiCodeBlock } from "./shiki-code-block";
 import { LanguageFileIcon } from "./file-icon";
@@ -61,7 +66,9 @@ function FileTreeNode({
         type="button"
         className={cn(
           "flex w-full items-center gap-1.5 px-2 py-1 text-xs transition-colors hover:bg-muted/10",
-          isSelected ? "bg-muted/20 text-foreground" : "text-muted-foreground/70"
+          isSelected
+            ? "bg-muted/20 text-foreground"
+            : "text-muted-foreground/70"
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
@@ -173,10 +180,15 @@ export function CodeView({
   onSelectTab,
   onCloseTab,
 }: CodeViewProps) {
-  const [selectedPath, setSelectedPath] = useState<string>("");
+  // Derive selected path from the active tab (parent-controlled)
+  const activeTab = fileTabs?.find((t) => t.isActive);
+  const [localSelectedPath, setLocalSelectedPath] = useState<string>("");
+
+  // Sync: prefer parent's active tab path, fall back to local state
+  const selectedPath = activeTab?.path || localSelectedPath;
 
   const handleSelect = (path: string) => {
-    setSelectedPath(path);
+    setLocalSelectedPath(path);
     onSelectFile?.(path);
   };
 
@@ -196,7 +208,9 @@ export function CodeView({
           />
         ))}
         {(!fileTree || fileTree.length === 0) && (
-          <div className="px-3 py-4 text-center text-xs text-muted-foreground/40">No files yet</div>
+          <div className="px-3 py-4 text-center text-xs text-muted-foreground/40">
+            No files yet
+          </div>
         )}
       </div>
 

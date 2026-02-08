@@ -175,24 +175,25 @@ export const webhooksRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Verify webhook ownership
-      const [webhook] = await db
-        .select()
-        .from(webhooks)
-        .where(and(eq(webhooks.id, input.webhookId), eq(webhooks.userId, ctx.user.id)))
-        .limit(1);
+      // Run ownership check + deliveries query in parallel
+      const [[webhook], deliveries] = await Promise.all([
+        db
+          .select()
+          .from(webhooks)
+          .where(and(eq(webhooks.id, input.webhookId), eq(webhooks.userId, ctx.user.id)))
+          .limit(1),
+        db
+          .select()
+          .from(webhookDeliveries)
+          .where(eq(webhookDeliveries.webhookId, input.webhookId))
+          .orderBy(desc(webhookDeliveries.createdAt))
+          .limit(input.limit)
+          .offset(input.offset),
+      ]);
 
       if (!webhook) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Webhook not found" });
       }
-
-      const deliveries = await db
-        .select()
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.webhookId, input.webhookId))
-        .orderBy(desc(webhookDeliveries.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
 
       return deliveries;
     }),

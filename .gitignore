@@ -40,3 +40,4 @@ packages/database/generated/
 
 # IDE / Editor
 .cursor/
+.agents/

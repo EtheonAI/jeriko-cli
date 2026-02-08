@@ -27,22 +27,25 @@ export const filesRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       if (input?.sessionId) {
-        // Verify session ownership
-        const [session] = await db
-          .select()
-          .from(agentSessions)
-          .where(eq(agentSessions.id, input.sessionId))
-          .limit(1);
+        // Run ownership check + files query in parallel
+        const [[session], sessionFiles] = await Promise.all([
+          db
+            .select()
+            .from(agentSessions)
+            .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.userId, ctx.user.id)))
+            .limit(1),
+          db
+            .select()
+            .from(files)
+            .where(eq(files.sessionId, input.sessionId))
+            .orderBy(desc(files.createdAt)),
+        ]);
 
-        if (!session || session.userId !== ctx.user.id) {
+        if (!session) {
           throw new Error("Session not found");
         }
 
-        return db
-          .select()
-          .from(files)
-          .where(eq(files.sessionId, input.sessionId))
-          .orderBy(desc(files.createdAt));
+        return sessionFiles;
       }
 
       return db
@@ -75,7 +78,7 @@ export const filesRouter = createTRPCRouter({
         storageProvider: z.enum(["local", "s3", "r2", "vercel_blob"]).optional(),
         sessionId: z.string().optional(),
         isPublic: z.boolean().optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -124,7 +127,7 @@ export const filesRouter = createTRPCRouter({
         name: z.string().optional(),
         path: z.string().optional(),
         isPublic: z.boolean().optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

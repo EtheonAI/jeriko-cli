@@ -7,7 +7,7 @@ import { connectorsRouter } from "./connectors.router";
 import { notificationsRouter } from "./notifications.router";
 import { scheduledTasksRouter } from "./scheduledTasks.router";
 import { projectsRouter } from "./projects.router";
-import { knowledgeRouter } from "./knowledge.router";
+
 import { billingRouter } from "./billing.router";
 import { mailRouter } from "./mail.router";
 import { searchRouter } from "./search.router";
@@ -34,7 +34,7 @@ export const appRouter = createTRPCRouter({
   notifications: notificationsRouter,
   scheduledTasks: scheduledTasksRouter,
   projects: projectsRouter,
-  knowledge: knowledgeRouter,
+
   billing: billingRouter,
   mail: mailRouter,
   // User management

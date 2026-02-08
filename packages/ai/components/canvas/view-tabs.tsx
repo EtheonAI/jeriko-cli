@@ -82,7 +82,12 @@ export function ViewTabs({ availableViews, activeView, onSelectView }: ViewTabsP
             )}
             onClick={() => onSelectView(view)}
           >
-            <Icon className={cn("size-3", isActive ? config.color : "text-muted-foreground/40")} />
+            <Icon
+              className={cn(
+                "size-3",
+                isActive ? config.color : "text-muted-foreground/40"
+              )}
+            />
             {config.label}
           </button>
         );

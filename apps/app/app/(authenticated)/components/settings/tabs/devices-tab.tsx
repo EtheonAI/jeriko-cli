@@ -255,7 +255,7 @@ export function DevicesTab() {
       {/* Device List */}
       {devices && devices.length > 0 ? (
         <div className="space-y-3">
-          {devices.map((device) => {
+          {devices.map((device: any) => {
             const DeviceIcon = deviceIcons[device.type] || MonitorIcon;
             const status = statusConfig[device.status] || statusConfig.offline;
             const StatusIcon = status.icon;
@@ -302,7 +302,7 @@ export function DevicesTab() {
                     </div>
                     {device.capabilities && device.capabilities.length > 0 && (
                       <div className="flex gap-1 mt-1">
-                        {device.capabilities.slice(0, 3).map((cap) => (
+                        {device.capabilities.slice(0, 3).map((cap: string) => (
                           <Badge key={cap} variant="outline" className="text-xs">
                             {cap}
                           </Badge>

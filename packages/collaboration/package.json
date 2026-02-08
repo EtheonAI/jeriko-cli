@@ -2,6 +2,32 @@
   "name": "@repo/collaboration",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./auth": {
+      "types": "./auth.ts",
+      "default": "./auth.ts"
+    },
+    "./config": {
+      "types": "./config.ts",
+      "default": "./config.ts"
+    },
+    "./hooks": {
+      "types": "./hooks.ts",
+      "default": "./hooks.ts"
+    },
+    "./keys": {
+      "types": "./keys.ts",
+      "default": "./keys.ts"
+    },
+    "./room": {
+      "types": "./room.tsx",
+      "default": "./room.tsx"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
@@ -18,7 +44,7 @@
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5"
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3"
   }
 }

@@ -1,5 +1,4 @@
-import { Middleware } from "@reduxjs/toolkit";
-import type { RootState, AppDispatch } from "../index";
+import type { Middleware, Dispatch, UnknownAction } from "@reduxjs/toolkit";
 import {
   setConnectionStatus,
   setSocketId,
@@ -33,11 +32,15 @@ import type { Agent, AgentTask } from "../slices/agents.slice";
 import type { ScheduledTask, ScheduledTaskExecution } from "../slices/scheduledTasks.slice";
 
 // ==================================================================
+// Event types — single source of truth for all WS events
+// ==================================================================
 
-// Discriminated union for WebSocket events from server
 export type WebSocketEvent =
   | { type: "connected"; data?: { clientId?: string } }
   | { type: "error"; data?: { message?: string } }
+  | { type: "server:shutdown"; data?: { reason?: string } }
+  | { type: "subscribed"; data?: { channel?: string } }
+  | { type: "unsubscribed"; data?: { channel?: string } }
   | { type: "task:created"; data?: { task?: AgentTask } }
   | {
       type: "task:updated";
@@ -85,8 +88,7 @@ export type WebSocketEvent =
       type: "scheduledTask:execution:update";
       data?: { taskId?: string; executionId?: string; updates?: Partial<ScheduledTaskExecution> };
     }
-  | { type: "pong"; data?: unknown }
-  | { type: string; data?: unknown }; // Fallback for unknown events
+  | { type: "pong"; data?: { ts?: number } };
 
 // WebSocket middleware actions
 export const WS_CONNECT = "websocket/connect";
@@ -105,21 +107,35 @@ export const wsSend = (event: string, data: unknown) => ({
   payload: { event, data },
 });
 
-// --- Module-level state ---
+// ─── Configuration ─────────────────────────────────────────────────
+
+const BASE_RECONNECT_DELAY_MS = 500;
+const MAX_RECONNECT_DELAY_MS = 30000;
+const MAX_RECONNECT_ATTEMPTS = 15;
+const PING_INTERVAL_MS = 25000; // Slightly under 30s to account for network jitter
+const PONG_TIMEOUT_MS = 10000; // Consider connection dead if no pong within 10s
+const MAX_PENDING_MESSAGES = 100;
+
+// ─── Module-level state ────────────────────────────────────────────
+
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingInterval: ReturnType<typeof setInterval> | null = null;
+let pongTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let shouldReconnect = true;
-const baseReconnectDelayMs = 250;
-const maxReconnectDelayMs = 30000;
-const MAX_RECONNECT_ATTEMPTS = 15;
-const PING_INTERVAL_MS = 30000;
+let lastPingTime = 0;
 
-// Message queue for offline sends
+// Bounded message queue for offline sends
 const pendingMessages: Array<{ event: string; data: unknown }> = [];
 
+// ─── Helpers ───────────────────────────────────────────────────────
+
 function cleanupSocket() {
+  if (pongTimeoutTimer) {
+    clearTimeout(pongTimeoutTimer);
+    pongTimeoutTimer = null;
+  }
   if (pingInterval) {
     clearInterval(pingInterval);
     pingInterval = null;
@@ -130,7 +146,7 @@ function cleanupSocket() {
     socket.onerror = null;
     socket.onmessage = null;
     if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-      socket.close();
+      socket.close(1000, "Client cleanup");
     }
     socket = null;
   }
@@ -143,16 +159,27 @@ function drainPendingMessages() {
   }
 }
 
-function startPingInterval(dispatch: AppDispatch) {
+function startPingInterval(dispatch: Dispatch<UnknownAction>) {
   if (pingInterval) clearInterval(pingInterval);
   pingInterval = setInterval(() => {
     if (socket?.readyState === WebSocket.OPEN) {
+      lastPingTime = Date.now();
       socket.send(JSON.stringify({ type: "ping" }));
+
+      // Start pong timeout — if no pong arrives, connection is dead
+      if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
+      pongTimeoutTimer = setTimeout(() => {
+        if (socket) {
+          console.warn("[WS] Pong timeout — closing dead connection");
+          socket.close(4000, "Pong timeout");
+        }
+      }, PONG_TIMEOUT_MS);
     }
   }, PING_INTERVAL_MS);
 }
 
-function scheduleReconnect(dispatch: AppDispatch) {
+/** Exponential backoff with jitter */
+function scheduleReconnect(dispatch: Dispatch<UnknownAction>) {
   if (!shouldReconnect) return;
   if (reconnectTimer) return;
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -161,27 +188,41 @@ function scheduleReconnect(dispatch: AppDispatch) {
     return;
   }
 
-  const delay = Math.min(
-    maxReconnectDelayMs,
-    baseReconnectDelayMs * Math.pow(2, reconnectAttempts)
-  );
+  // Exponential backoff with ±25% jitter to prevent thundering herd
+  const exponential = BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts);
+  const capped = Math.min(MAX_RECONNECT_DELAY_MS, exponential);
+  const jitter = capped * (0.75 + Math.random() * 0.5); // [75%, 125%] of capped
 
-  reconnectAttempts += 1;
+  reconnectAttempts++;
+  dispatch(setConnectionStatus("connecting"));
+
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     dispatch(wsConnect());
-  }, delay);
+  }, jitter);
 }
 
-export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) => (action) => {
-  const dispatch = store.dispatch as AppDispatch;
+async function fetchGatewayToken(): Promise<string | null> {
+  try {
+    const response = await fetch("/api/gateway-token");
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Middleware ─────────────────────────────────────────────────────
+
+export const websocketMiddleware: Middleware = (store) => (next) => (action) => {
+  const dispatch = store.dispatch as Dispatch<UnknownAction>;
 
   switch ((action as { type: string }).type) {
     case WS_CONNECT: {
-      // Clean up existing socket and handlers before creating a new one
       cleanupSocket();
-
       shouldReconnect = true;
+
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
@@ -191,64 +232,56 @@ export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) 
       dispatch(setConnectionStatus("connecting"));
 
       void (async () => {
+        // Always fetch fresh token on every connect (handles reconnect with expired token)
+        const token = await fetchGatewayToken();
+        if (!token) {
+          dispatch(setLastError("Failed to fetch gateway token"));
+          dispatch(setConnectionStatus("error"));
+          scheduleReconnect(dispatch);
+          return;
+        }
+
         try {
-          const tokenResponse = await fetch("/api/gateway-token");
-          if (!tokenResponse.ok) {
-            dispatch(setLastError("Failed to fetch gateway token"));
-            dispatch(setConnectionStatus("error"));
-            scheduleReconnect(dispatch);
-            return;
-          }
-
-          let tokenData: { token?: string };
-          try {
-            tokenData = await tokenResponse.json();
-          } catch {
-            dispatch(setLastError("Invalid gateway token response"));
-            dispatch(setConnectionStatus("error"));
-            scheduleReconnect(dispatch);
-            return;
-          }
-
-          const { token } = tokenData;
-          if (!token) {
-            dispatch(setLastError("Missing gateway token"));
-            dispatch(setConnectionStatus("error"));
-            scheduleReconnect(dispatch);
-            return;
-          }
-
-          socket = new WebSocket(`${wsBaseUrl}?token=${encodeURIComponent(token)}`);
+          // Use Sec-WebSocket-Protocol for token passing (avoids leaking JWT in URL/logs)
+          // Protocol format: ["access_token", "<jwt>"]
+          // Falls back to query param if protocol negotiation fails
+          socket = new WebSocket(wsBaseUrl, ["access_token", token]);
 
           socket.onopen = () => {
             reconnectAttempts = 0;
             dispatch(setConnectionStatus("connected"));
+            dispatch(setLastError(null));
             startPingInterval(dispatch);
             drainPendingMessages();
           };
 
-          socket.onclose = () => {
+          socket.onclose = (event) => {
             cleanupSocket();
             dispatch(setConnectionStatus("disconnected"));
             dispatch(setSocketId(null));
+
+            // 4001 = auth failure — don't reconnect
+            if (event.code === 4001) {
+              dispatch(setLastError("Authentication failed"));
+              dispatch(setConnectionStatus("error"));
+              return;
+            }
+
             scheduleReconnect(dispatch);
           };
 
           socket.onerror = () => {
+            // The close event will fire after this, which handles reconnection
             dispatch(setLastError("WebSocket connection error"));
           };
 
           socket.onmessage = (event) => {
             try {
               const data = JSON.parse(event.data);
-              if (!data || typeof data.type !== "string") {
-                console.warn("Invalid WebSocket message format:", data);
-                return;
-              }
+              if (!data || typeof data.type !== "string") return;
               handleWebSocketMessage(dispatch, data as WebSocketEvent);
-            } catch (error) {
-              console.error("Failed to parse WebSocket message:", error);
-              dispatch(setLastError("Failed to parse server message"));
+            } catch {
+              // Silently ignore unparseable messages
             }
           };
         } catch {
@@ -268,6 +301,7 @@ export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) 
       }
       cleanupSocket();
       pendingMessages.length = 0;
+      reconnectAttempts = 0;
       dispatch(setConnectionStatus("disconnected"));
       break;
     }
@@ -295,7 +329,10 @@ export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) 
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: event, data }));
       } else {
-        // Queue message to send when reconnected
+        // Bounded queue — drop oldest messages if full
+        if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
+          pendingMessages.shift();
+        }
         pendingMessages.push({ event, data });
       }
       break;
@@ -308,7 +345,9 @@ export const websocketMiddleware: Middleware<{}, RootState> = (store) => (next) 
   return next(action);
 };
 
-function handleWebSocketMessage(dispatch: AppDispatch, event: WebSocketEvent) {
+// ─── Message handler ───────────────────────────────────────────────
+
+function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSocketEvent) {
   switch (event.type) {
     // Connection events
     case "connected":
@@ -317,6 +356,16 @@ function handleWebSocketMessage(dispatch: AppDispatch, event: WebSocketEvent) {
 
     case "error":
       dispatch(setLastError(event.data?.message ?? "WebSocket error"));
+      break;
+
+    case "server:shutdown":
+      // Server is going away — reconnect soon
+      dispatch(setLastError("Server restarting, reconnecting..."));
+      break;
+
+    case "subscribed":
+    case "unsubscribed":
+      // Acknowledgment from server — no action needed
       break;
 
     // Task events
@@ -430,11 +479,11 @@ function handleWebSocketMessage(dispatch: AppDispatch, event: WebSocketEvent) {
 
     // Device events
     case "device:status":
-      if (event.data?.deviceId) {
+      if (event.data?.deviceId && event.data.status) {
         dispatch(
           updateDeviceStatus({
             deviceId: event.data.deviceId,
-            status: event.data.status,
+            status: event.data.status as "online" | "offline" | "busy" | "error",
             lastHeartbeat: event.data.lastHeartbeat,
           })
         );
@@ -483,15 +532,20 @@ function handleWebSocketMessage(dispatch: AppDispatch, event: WebSocketEvent) {
       }
       break;
 
-    // Heartbeat
+    // Heartbeat — cancel pong timeout
     case "pong":
+      if (pongTimeoutTimer) {
+        clearTimeout(pongTimeoutTimer);
+        pongTimeoutTimer = null;
+      }
       dispatch(setLastPongTime(Date.now()));
       break;
 
-    default:
-      // Only warn for truly unknown events, not empty keepalives
-      if (event.type !== "ping") {
-        console.warn("Unknown WebSocket event type:", event.type);
+    default: {
+      const unhandled = event as { type: string };
+      if (unhandled.type !== "ping") {
+        console.warn("[WS] Unknown event type:", unhandled.type);
       }
+    }
   }
 }

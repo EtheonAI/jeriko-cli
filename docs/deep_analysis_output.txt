@@ -1,0 +1,1445 @@
+
+================================================================================
+SLICE: _persist
+================================================================================
+  version: (number) 8
+  rehydrated: (boolean) true
+
+================================================================================
+SLICE: agentWorkspace
+================================================================================
+  sidebarType: null
+  isSidebarPreviewFullscreen: (boolean) false
+  isSidebarVisibleInMobile: (boolean) false
+  animationLock: (boolean) false
+  isTimelinePlaying: (boolean) false
+  vncDialogVisible: (boolean) false
+  initialComputerPosition: {} (4 keys)
+    top: (number) 0
+    left: (number) 0
+    width: (number) 0
+    height: (number) 0
+  chatReplySearchMetadata: null
+  chatReplySearchResults: {}
+  isPlannerExpanded: (boolean) false
+  prevAutoOpenedSidebarType: null
+  fileHistoryVisible: (boolean) false
+  chatComputerDialogVisible: (boolean) false
+  disableChatWorkspaceInitAnimation: null
+  disableSidebarInitAnimation: (boolean) false
+
+================================================================================
+SLICE: aiCanvas
+================================================================================
+  allAiCanvas: {}
+  ocrCache: {}
+
+================================================================================
+SLICE: aiCanvasEditor
+================================================================================
+  shapes: {}
+  camera: {} (3 keys)
+    x: (number) 0
+    y: (number) 0
+    z: (number) 0.24
+  selectedShapeIds: []
+  hoveredShapeId: null
+  previewSelectedId: null
+  altDragCloneIds: []
+  isAltPressed: (boolean) false
+  isFullscreen: (boolean) false
+  guides: []
+  interaction: {} (6 keys)
+    activeTool: (string) "select"
+    rightMouseDown: (boolean) false
+    isImageDragging: (boolean) false
+    temporaryPanMode: (boolean) false
+    temporaryMarkMode: (boolean) false
+    panning: (boolean) false
+  brushing: {} (3 keys)
+    isBrushing: (boolean) false
+    startPoint: null
+    currentPoint: null
+  marking: {} (4 keys)
+    isMarking: (boolean) false
+    startPoint: null
+    currentPoint: null
+    imageShapeId: null
+  contextMenu: {} (2 keys)
+    position: null
+    target: null
+  screenshots: {} (2 keys)
+    markScreenshots: {}
+    markedImages: {}
+  editTextMode: {} (6 keys)
+    imageId: null
+    annotations: []
+    selectedAnnotationIndex: null
+    hoveredAnnotationIndex: null
+    editedTexts: []
+    isOcrLoading: (boolean) false
+  settings: {} (3 keys)
+    useScrollWheelZoom: (boolean) false
+    rightClickDragToPan: (boolean) false
+    gridState: (boolean) false
+  commentHistory: {} (2 keys)
+    past: []
+    future: []
+  commentPopup: {} (2 keys)
+    commentId: (string) ""
+    isOpen: (boolean) false
+
+================================================================================
+SLICE: api
+================================================================================
+  queries: {} (3 keys)
+    getSessionFiles({"sessionId":"RTI3WrlJ8LavQM0v4geXkF","type":"private"}): {} (7 keys)
+      status: (string) "fulfilled"
+      endpointName: (string) "getSessionFiles"
+      requestId: (string) "SxronqSR5tnEn4Z0j28yz"
+      originalArgs: {} (2 keys)
+        sessionId: (string) "RTI3WrlJ8LavQM0v4geXkF"
+        type: (string) "private"
+      startedTimeStamp: (number) 1770457376822
+      data: {} (1 keys)
+        files: [] (5 items)
+          [0]:
+            raw: [] (1 items)
+              [0]:
+                type: (string) "tool_call_text_edit_file"
+                eventId: (string) "gSzqy6okthbpmu9GTxioia"
+                path: (string) "/home/ubuntu/analyze_rtk_usage.py"
+                filename: (string) "analyze_rtk_usage.py"
+                fileContent: (string) "import json\n\ndef analyze_state(file_path):\n    try:\n        with open(file_path, 'r') as f:\n            data = json.load..."
+                url: (string) "https://private-us-east-1.manuscdn.com/sessionFile/RTI3WrlJ8LavQM0v4geXkF/sandbox/gSzqy6okthbpmu9GTxioia_1770456828759_n..."
+            id: (string) "RTI3WrlJ8LavQM0v4geXkF-/home/ubuntu/analyze_rtk_usage.py"
+            category: (string) "code"
+            displayFilename: (string) "analyze_rtk_usage.py"
+            iconType: (string) "code"
+            lastUpdatedAt: (number) 1770456829000
+            chatLocationEventId: (string) "nEjGbytqwzx5X98kY2hz2B"
+            isSynced: (boolean) true
+            isBlocked: (boolean) false
+            sharedAt: (number) 0
+      fulfilledTimeStamp: (number) 1770457377080
+    getSessionV2({"getFirstSegment":false,"sessionId":"RTI3WrlJ8LavQM0v4geXkF"}): {} (7 keys)
+      status: (string) "fulfilled"
+      endpointName: (string) "getSessionV2"
+      requestId: (string) "YyRgTQa87xq3x_GLzWwqn"
+      originalArgs: {} (2 keys)
+        sessionId: (string) "RTI3WrlJ8LavQM0v4geXkF"
+        getFirstSegment: (boolean) false
+      startedTimeStamp: (number) 1770457356584
+      data: {} (12 keys)
+        id: (string) "RTI3WrlJ8LavQM0v4geXkF"
+        createdAt: (number) 1770456578788
+        updatedAt: (number) 1770456840641
+        title: (string) "Extracting Redux State Slices and Keys from JSON File"
+        iconInfo: {} (4 keys)
+          $typeName: (string) "session.v1.IconInfo"
+          url: (string) "https://files.manuscdn.com/assets/icon/session/file-text-star.svg"
+          bgColorLight: (string) "#5F4FB8"
+          bgColorDark: (string) "#3F3F3F"
+        userStatus: (number) 2
+        isInvited: (boolean) true
+        isShared: (boolean) false
+        agentTaskMode: (number) 1
+        segments: [] (1 items)
+          [0]:
+            events: [] (92 items)
+              [0]:
+                type: (string) "chat"
+                timestamp: (number) 1770456578370
+                id: (string) "ccFtgBqM2whOYEAGQlr4WE"
+                sender: (string) "user"
+                qualityMode: (string) "user"
+                senderId: (string) "310519663323253630"
+                messageType: (string) "text"
+                content: (string) "give me your redux, state slices with their keys in json, focus, all of your states in this file"
+                contents: [] (2 items)
+                  [0]:
+                    type: (string) "text"
+                    value: (string) "give me your redux, state slices with their keys in json, focus, all of your states in this file"
+                attachments: [] (1 items)
+                  [0]:
+                    contentLength: (number) 706852
+                    contentType: (string) "application/json"
+                    filename: (string) "state(7).json"
+                    id: (string) "768OpN6eixUgBHYa3gOilz"
+                    path: (string) "/home/ubuntu/upload/state(7).json"
+                    type: (string) "file"
+                    url: (string) "https://private-us-east-1.manuscdn.com/users/310519663323253630/uploads/768OpN6eixUgBHYa3gOilz_na1fn_c3RhdGUoNyk.json?Po..."
+                extData: {} (2 keys)
+                  capabilities: {} (2 keys)
+                    enabledConnectors: []
+                    enabledSkills: [] (1 items)
+                      [0]:
+                        id: (string) "fYCPsSWJij5mFE3AAj5yMG"
+                        name: (string) "skill-creator"
+                  mode: (string) "lite"
+                taskMode: (string) "standard"
+        taskMode: (string) "lite_concord"
+        segmentEndpoints: []
+      fulfilledTimeStamp: (number) 1770457357147
+    getPresignedUrl({"fileSize":35743295,"fileType":"application/json","filename":"state (8).json","id":"temp-gxYzrsKFe4VICKmB9aINWA"}): {} (7 keys)
+      status: (string) "fulfilled"
+      endpointName: (string) "getPresignedUrl"
+      requestId: (string) "mPvvXGGjcudopnuddZGAA"
+      originalArgs: {} (4 keys)
+        filename: (string) "state (8).json"
+        fileType: (string) "application/json"
+        fileSize: (number) 35743295
+        id: (string) "temp-gxYzrsKFe4VICKmB9aINWA"
+      startedTimeStamp: (number) 1770457415882
+      data: {} (2 keys)
+        uploadUrl: (string) "https://vida-private.s3.us-east-1.amazonaws.com/users/310519663323253630/uploads/ahujOFvLbeqqcHyvRKIpon_na1fn_c3RhdGUoOC..."
+        id: (string) "ahujOFvLbeqqcHyvRKIpon"
+      fulfilledTimeStamp: (number) 1770457416055
+  mutations: {} (2 keys)
+    8vJfVoxywZ3VDpQ1wmM3x: {} (6 keys)
+      requestId: (string) "8vJfVoxywZ3VDpQ1wmM3x"
+      status: (string) "fulfilled"
+      endpointName: (string) "uploadToS3"
+      startedTimeStamp: (number) 1770457416059
+      data: (string) "ok"
+      fulfilledTimeStamp: (number) 1770457434687
+    Bq8ydsOBUyTkFZAkTdRPY: {} (6 keys)
+      requestId: (string) "Bq8ydsOBUyTkFZAkTdRPY"
+      status: (string) "fulfilled"
+      endpointName: (string) "completeUpload"
+      startedTimeStamp: (number) 1770457434696
+      data: {} (1 keys)
+        fileUrl: (string) "https://private-us-east-1.manuscdn.com/users/310519663323253630/uploads/ahujOFvLbeqqcHyvRKIpon_na1fn_c3RhdGUoOCk.json?Po..."
+      fulfilledTimeStamp: (number) 1770457435655
+  provided: {}
+  subscriptions: {} (3 keys)
+    getSessionFiles({"sessionId":"RTI3WrlJ8LavQM0v4geXkF","type":"private"}): {} (2 keys)
+      6Szz44LQLZmkrDb0xzbGU: {}
+      SxronqSR5tnEn4Z0j28yz: {}
+    getSessionV2({"getFirstSegment":false,"sessionId":"RTI3WrlJ8LavQM0v4geXkF"}): {} (1 keys)
+      YyRgTQa87xq3x_GLzWwqn: {}
+    getPresignedUrl({"fileSize":35743295,"fileType":"application/json","filename":"state (8).json","id":"temp-gxYzrsKFe4VICKmB9aINWA"}): {} (1 keys)
+      mPvvXGGjcudopnuddZGAA: {} (2 keys)
+        pollingInterval: (number) 0
+        skipPollingIfUnfocused: (boolean) false
+  config: {} (9 keys)
+    online: (boolean) true
+    focused: (boolean) true
+    middlewareRegistered: (boolean) true
+    refetchOnFocus: (boolean) false
+    refetchOnReconnect: (boolean) false
+    refetchOnMountOrArgChange: (boolean) false
+    keepUnusedDataFor: (number) 60
+    reducerPath: (string) "api"
+    invalidationBehavior: (string) "delayed"
+
+================================================================================
+SLICE: auth
+================================================================================
+  userInfo: {} (40 keys)
+    $typeName: (string) "user.v1.UserInfoResponse"
+    userId: (string) "310519663323253630"
+    email: (string) "tattarifi@fxcc.co"
+    firstname: (string) "Thayer"
+    lastname: (string) "Attarifi"
+    displayname: (string) "Thayer Attarifi"
+    nickname: (string) "Thayer Attarifi"
+    avatar: (string) "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c"
+    isAlpha: (boolean) true
+    inWaitlist: (boolean) false
+    currentPeriodEnd: (number) 0
+    cancelAtPeriodEnd: (boolean) false
+    isBeta: (boolean) false
+    paymentPlatform: (string) ""
+    uid: (string) "93Q6jjptqKGLXnMhyRh83S"
+    concurrentSessions: (number) 1
+    platformList: [] (1 items)
+      [0]:
+        "google"
+    canReceiveExtraCreditsForSubscribe: (boolean) true
+    canReceiveExtraCreditsForUpgrade: (boolean) false
+    subscriptionStatus: (number) 0
+    trialAvailable: (boolean) true
+    membershipVersion: (string) "free"
+    membershipInterval: (string) ""
+    nextMembershipVersion: (string) ""
+    userType: (number) 1
+    isMembershipTrial: (boolean) false
+    smsVerified: (boolean) true
+    nextMembershipInterval: (string) ""
+    perks: (boolean) false
+    concurrentScheduleTaskLimit: (number) 2
+    area: (number) 2
+    membershipTier: (number) 0
+    nextMembershipTier: (number) 0
+    onboardingStepStatus: (number) 0
+    isWorkEmail: (boolean) true
+    emailStatus: (number) 0
+    teamInfo: {} (4 keys)
+      $typeName: (string) "user.v1.TeamInfo"
+      count: (number) 0
+      originalUserId: (string) "310519663323253630"
+      originalUserUid: (string) "93Q6jjptqKGLXnMhyRh83S"
+    registeredAt: {} (3 keys)
+      $typeName: (string) "google.protobuf.Timestamp"
+      seconds: (number) 1769682960
+      nanos: (number) 0
+    fileUploadQuota: {} (7 keys)
+      $typeName: (string) "user.v1.FileUploadQuota"
+      usedCount: (number) 2
+      maxCount: (number) 4
+      isLimited: (boolean) true
+      oneEventMaxFileCount: (number) 1
+      resetTime: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1770542978
+        nanos: (number) 789991974
+      resetTtl: (number) 85533
+    membershipInfo: {} (7 keys)
+      $typeName: (string) "user.v1.MembershipInfo"
+      membershipVersion: (string) "free"
+      currentPeriodEnd: (number) 0
+      paymentPlatform: (string) ""
+      isMembershipTrial: (boolean) false
+      membershipInterval: (string) ""
+      membershipTier: (number) 0
+  modifying: (boolean) false
+  avatarUploading: (boolean) false
+  authLoading: (boolean) false
+  invitationCodeListLoading: (boolean) false
+  invitationCodeList: [] (1 items)
+    [0]:
+      $typeName: (string) "user.v1.PersonalInvitationCodeInfo"
+      id: (number) 26495043
+      kind: (number) 9
+      inviteCode: (string) "C8RWMEPW71NJQ"
+      maxUses: (number) 999999999
+      usedCount: (number) 0
+      pending: (boolean) false
+      createdAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1769682959
+        nanos: (number) 642000000
+  invitationCodeRedDotVisible: (boolean) true
+  globalSettings: {} (3 keys)
+    $typeName: (string) "user.v1.GetGlobalSettingsResponse"
+    disablingPayments: (boolean) false
+    freeMapreduceCount: (number) 1
+  usageInfo: {} (23 keys)
+    $typeName: (string) "user.v1.GetAvailableCreditsResponse"
+    totalCredits: (number) 69
+    freeCredits: (number) 0
+    periodicCredits: (number) 0
+    addonCredits: (number) 0
+    proMonthlyCredits: (number) 0
+    eventCredits: (number) 0
+    refreshCredits: (number) 69
+    maxRefreshCredits: (number) 300
+    refreshInterval: (string) "daily"
+    consumeStatus: (number) 0
+    cooldownStatus: (number) 0
+    qualityTrial: (number) 0
+    nanoBananaTrial: (number) 0
+    nextRefreshTime: {} (2 keys)
+      seconds: (number) 1770505200
+      nanos: (number) 0
+    userFlag: {} (2 keys)
+      $typeName: (string) "user.v1.UserFlag"
+      drc16: (boolean) false
+    cdTime: (string) "1970-01-01T00:00:00Z"
+    event_credits: (number) 0
+    liveEventId: (string) ""
+    qualityCredits: (number) 0
+    refresh_credits: (number) 69
+    speedCredits: (number) 0
+    totalPaidCredits: (number) 0
+  usageInfoReady: (boolean) true
+  clientConfig: {} (12 keys)
+    $typeName: (string) "user.v1.GetUserClientConfigResponse"
+    recvMarketingEmail: (boolean) true
+    hasInterest: (boolean) false
+    sessionWaitDoneEmail: (boolean) true
+    autoAgentDeploySpace: (boolean) false
+    hasShownEduTeamJoinPopup: (boolean) false
+    lastUpdateLogTime: (number) 1769575799
+    enableManusBrowser: (boolean) false
+    agentMode: (number) 0
+    cookieOptIn: (number) 1
+    autoWideResearch: (boolean) false
+    locale: (string) "en"
+  userRegion: {} (7 keys)
+    $typeName: (string) "user.v1.CheckRegionResponse"
+    isUnsupported: (boolean) false
+    isUnsupportedV2: (boolean) false
+    iso: (string) "HR"
+    code: (string) "+385"
+    needCookieOptIn: (boolean) true
+    highValueForTeam: (boolean) true
+  creditAnimateInfo: null
+  refreshKey: (string) "bK5pwPtljxFP1NmrR37WLd"
+  profileCardVisible: (boolean) false
+  shareHistoryCache: null
+  cookieOptIn: (number) 1
+
+================================================================================
+SLICE: biz
+================================================================================
+  loadingKey: null
+  creditPackages: [] (5 items)
+    [0]:
+      $typeName: (string) "user.v1.AddonCreditInfo"
+      plan: (number) 101
+      price: (number) 20
+      credits: (number) 2000
+  personalPlanTiers: [] (39 items)
+    [0]:
+      $typeName: (string) "user.v1.MembershipTier"
+      plan: (number) 0
+      price: (number) 0
+      discountPrice: (number) 0
+      credits: (number) 0
+      interval: (string) ""
+  teamPlanTiers: [] (31 items)
+    [0]:
+      $typeName: (string) "user.v1.MembershipTier"
+      plan: (number) 0
+      price: (number) 0
+      discountPrice: (number) 0
+      credits: (number) 0
+      interval: (string) ""
+  teamSSOSubscription: {} (4 keys)
+    plan: (number) 205
+    price: (number) 150
+    discountPrice: (number) 0
+    credits: (number) 0
+  teamSCIMSubscription: {} (4 keys)
+    plan: (number) 250
+    price: (number) 150
+    discountPrice: (number) 0
+    credits: (number) 0
+  trials: [] (4 items)
+    [0]:
+      $typeName: (string) "user.v1.TrialInfo"
+      plan: (number) 5
+      days: (number) 7
+      credits: (number) 500
+  freeRefreshCredits: (number) 1500
+  stripeBillingLoading: (boolean) false
+  userAutoTopupInfo: null
+  isSubscriptionLoading: (boolean) false
+  selectedPlanKeyIndex: null
+  planPreviewDataLoadingMapForUpgrade: null
+  planPreviewDataMapForUpgrade: null
+  selectedPlanKeyForUpgrade: null
+
+================================================================================
+SLICE: chat
+================================================================================
+  files: []
+  showSharePopover: (boolean) false
+  taskMode: (string) "agent"
+  inputMode: (string) "text"
+  chatExtData: null
+  sendQuestionBehavior: null
+  slideTemplateList: [] (27 items)
+    [0]:
+      $typeName: (string) "session.v1.SlideTemplate"
+      uid: (string) "vinyl_837a6d52-2e81-4abf-96cb-255ec70598c7"
+      official: (boolean) true
+      isFree: (boolean) true
+      name: (string) "Vinyl"
+      cover: (string) "https://files.manuscdn.com/slides_screenshots/309866552558125445/MYmBbqGMdWFGc3NfXCnhro/417922e0-d93d-4d6e-8178-48f4b010..."
+      previewUrls: []
+      imagePreviewUrls: [] (11 items)
+        [0]:
+          $typeName: (string) "session.v1.ImagePreviewUrl"
+          thumbnail: (string) "https://files.manuscdn.com/slides_screenshots/309866552558125445/MYmBbqGMdWFGc3NfXCnhro/417922e0-d93d-4d6e-8178-48f4b010..."
+          raw: (string) "https://files.manuscdn.com/slides_screenshots/309866552558125445/MYmBbqGMdWFGc3NfXCnhro/417922e0-d93d-4d6e-8178-48f4b010..."
+      status: (number) 1
+      error: (string) ""
+      isTeamShared: (boolean) false
+      isOwner: (boolean) false
+      slidesGenerateMode: (string) "image"
+  slideTemplateListLoading: (boolean) false
+  recommendedPlaybooksV2: {} (4 keys)
+    playbooks: null
+    loading: (boolean) false
+    total: (number) 0
+    currentPage: (number) 0
+  dataVisualization: null
+  debugModelOverride: {} (3 keys)
+    enabled: (boolean) false
+    config: null
+    configText: (string) ""
+  isPageVisible: (boolean) true
+  fileSuggestions: []
+  inputPlaybookId: null
+  inputPlaybookTemplate: null
+  isAppBannerVisible: (boolean) false
+  imageStyleList: [] (15 items)
+    [0]:
+      $typeName: (string) "session.v1.SessionTemplate"
+      uid: (string) "NgBLuHEYAyFX6Hod3d89Pa"
+      templateId: (string) "image-figurine-3d-template"
+      title: (string) "3D Figurine"
+      description: (string) "image"
+      official: (boolean) true
+      templateType: (number) 1
+      cover: (string) "https://files.manuscdn.com/assets/dashboard/materials/2025/09/08/85be3aa4bb40a409ce897e8caca219e8e2e64a6c15d57391d5ba733..."
+      isFree: (boolean) true
+      version: (number) 1
+      meta: {} (1 keys)
+        style: (string) "figurine-3d"
+      prompt: (string) "Create a 1/7 scale commercialized figurine of the characters (described in text or given in the picture), in a realistic..."
+      category: (string) ""
+  imageStyleListLoading: (boolean) false
+  agentModeIntroduceScene: null
+  pinnedSlideTemplateId: null
+  textContentLength: (number) 0
+  editorContent: {} (2 keys)
+    type: (string) "doc"
+    content: [] (1 items)
+      [0]:
+        type: (string) "paragraph"
+
+================================================================================
+SLICE: codeViewer
+================================================================================
+  rootDirectory: null
+  directoryList: []
+  directoryMetaData: {} (2 keys)
+    client/: {} (1 keys)
+      expanded: (boolean) true
+    client/src/: {} (1 keys)
+      expanded: (boolean) true
+  loadDirectoryLoading: (boolean) true
+  fileLoadingMap: {}
+  fileDataSource: {}
+  fileTabList: []
+  activeTabId: null
+  userClickedFileTab: (boolean) false
+
+================================================================================
+SLICE: community
+================================================================================
+  dataSource: []
+  isDataSourceLoading: (boolean) true
+  groupedTotalMap: {}
+  groupedIds: {}
+
+================================================================================
+SLICE: configs
+================================================================================
+  sessionListPinned: (boolean) true
+  agentWorkspaceAutoExpanded: (boolean) true
+  automaticallyLearnKnowledge: (boolean) true
+  theme: (string) "system"
+  clientId: (string) "ZlqkI7Enf0NaqoJnBN0vG5"
+  gotoComputerTipsShowed: (boolean) false
+  disableContextExpensiveErrorSessions: []
+  invitationCodeLength: (number) 1
+  mailManusCardShowed: (boolean) true
+  chatSidebarMode: (string) "sidebar"
+  firstClickWorkflowEmailAddButton: (boolean) true
+
+================================================================================
+SLICE: connectors
+================================================================================
+  connectors: [] (78 items)
+    [0]:
+      $typeName: (string) "connectors.v1.Connector"
+      userId: (string) ""
+      uid: (string) "be268223-40b2-4f3c-a907-c12eb1699283"
+      type: (number) 1
+      name: (string) "My Browser"
+      iconUrl: (string) "https://d1oupeiobkpcny.cloudfront.net/assets/dashboard/materials/2025/10/27/be92248c8db2f0f71a48f9536d8ae1d8ac012d88f7fb..."
+      brief: (string) "Access the web on your own browser"
+      order: (number) 8
+      category: (string) "Developer"
+      connectorInfo: [] (3 items)
+        [0]:
+          $typeName: (string) "connectors.v1.ConnectorInfoItem"
+          label: (string) "Author"
+          value: (string) "Manus"
+          link: (string) ""
+      isInstalled: (boolean) false
+      isEnabled: (boolean) false
+      displayGroup: (number) 1
+      isPublished: (boolean) true
+      isTranslated: (boolean) true
+      scopes: []
+      iconUrlDark: (string) "https://d1oupeiobkpcny.cloudfront.net/assets/dashboard/materials/2025/10/27/a4a2c85210889e964361c636ded2df04ead5e0ceccc9..."
+      description: (string) "Install the Manus extension to help your agent access sites that require logins or have heightened security. It works wi..."
+      createdAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1761826064
+        nanos: (number) 853000000
+      updatedAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1763723418
+        nanos: (number) 567000000
+      builtConfig: {} (3 keys)
+        $typeName: (string) "connectors.v1.BuiltinConfig"
+        builtIn: (number) 10
+        githubRepo: []
+  githubRepositories: []
+  githubRepositoriesLoading: (boolean) false
+  temporaryEnabledOverrides: {}
+  temporaryGithubRepositories: {}
+  searchQuery: (string) ""
+  multipleEmailConfirmedInfo: {}
+  multipleCalendarConfirmedInfo: {}
+
+================================================================================
+SLICE: enterpriseTeam
+================================================================================
+  apiKeys: null
+  auditLogs: null
+
+================================================================================
+SLICE: example
+================================================================================
+  exampleList: []
+  exampleListLoading: (boolean) false
+
+================================================================================
+SLICE: experiment
+================================================================================
+  variants: {} (map with 29 dynamic entries)
+    [example key: agent_feature_v13]
+      key: (string) "control"
+      value: (string) "control"
+      expKey: (string) "exp-1"
+      metadata: {} (2 keys)
+        evaluationId: (string) "1462734336398_1770456489774_9805"
+        experimentKey: (string) "exp-1"
+  backendVariants: {} (13 keys)
+    202510v10: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    202510v5: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    202511v3: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "treatment"
+      value: (string) "treatment"
+      metadata: {} (2 keys)
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        experimentKey: (string) "exp-1"
+    202512v1: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    202512v6: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "control"
+      value: (string) "control"
+      metadata: {} (2 keys)
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        experimentKey: (string) "exp-1"
+    202512v7: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    202601v2: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    agent_feature_v46: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "control"
+      value: (string) "control"
+      metadata: {} (2 keys)
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        experimentKey: (string) "exp-1"
+    agent_feature_v50: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (3 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        testInstrumentation: (boolean) true
+    agent_feature_v51: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (3 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        testInstrumentation: (boolean) true
+    agent_feature_v55: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "control"
+      value: (string) "control"
+      metadata: {} (2 keys)
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+        experimentKey: (string) "exp-1"
+    agent_feature_v67: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+    agent_feature_v69: {} (4 keys)
+      $typeName: (string) "user.v1.ExperimentVar"
+      key: (string) "off"
+      value: (string) ""
+      metadata: {} (2 keys)
+        default: (boolean) true
+        evaluationId: (string) "1462734336398_1770457445729_8020"
+
+================================================================================
+SLICE: fileConnector
+================================================================================
+  fileConnectorList: [] (9 items)
+    [0]:
+      $typeName: (string) "app_oauth.v1.ConnectAPP"
+      type: (string) "google_drive"
+      connected: (boolean) false
+      appType: (number) 1
+      errCode: (number) 1
+  fileConnectorListLoading: (boolean) false
+
+================================================================================
+SLICE: fileManagement
+================================================================================
+  spaces: []
+  spacesLoading: (boolean) false
+  fileTab: (string) "all"
+  isDownloadMode: (boolean) false
+  selectedFiles: []
+  sessionFileList: [] (11 items)
+    [0]:
+      raw: [] (1 items)
+        [0]:
+          type: (string) "tool_call_text_edit_file"
+          eventId: (string) "ccFtgBqM2whOYEAGQlr4WE"
+          path: (string) "/home/ubuntu/upload/state(7).json"
+          filename: (string) "state(7).json"
+          fileContent: (string) "\n(Content truncated due to size limit. Use line ranges to read remaining content)"
+          url: (string) "https://private-us-east-1.manuscdn.com/users/310519663323253630/uploads/768OpN6eixUgBHYa3gOilz_na1fn_c3RhdGUoNyk.json?Po..."
+      category: (string) "code"
+      displayFilename: (string) "state(7).json"
+      iconType: (string) "code"
+      id: (string) "RTI3WrlJ8LavQM0v4geXkF-/home/ubuntu/upload/state(7).json"
+      chatLocationEventId: (string) "FAV88sH1EDtj93LhtJJRrr"
+      lastUpdatedAt: (number) 1770456582000
+      isSynced: (boolean) true
+      isBlocked: (boolean) false
+      sharedAt: (number) 0
+  initSessionFileListLoading: (boolean) false
+  showGoogleDrivePicker: (boolean) false
+  googleDrivePickerOptions: null
+  spaceEditCode: (string) "bJcCNiPrToY9GxBiM44EAx"
+  spacePreviewerEditMode: (boolean) false
+  tempActiveDeployId: null
+  tempSpaceId: null
+
+================================================================================
+SLICE: filePreviewer
+================================================================================
+  mode: (string) "preview"
+  previewData: null
+  loading: (boolean) false
+  saveStatus: (string) "default"
+  downloading: (boolean) false
+  fileHistory: null
+  currentHistoryVersionUid: null
+  syncingFile: (boolean) false
+  exitEditLock: (boolean) false
+  autoOpenSharePopover: (boolean) false
+  sharePopoverVisible: (boolean) false
+  fullscreen: (boolean) false
+  currentSlideId: null
+
+================================================================================
+SLICE: fileShare
+================================================================================
+  shareId: (string) ""
+  shareInfo: null
+  loading: (boolean) true
+  error: (string) ""
+  fileInfo: null
+  downloading: (boolean) false
+
+================================================================================
+SLICE: guestPage
+================================================================================
+  isInGuestPage: (boolean) false
+
+================================================================================
+SLICE: knowledge
+================================================================================
+  userKnowledgeListLoading: (boolean) false
+  suggestedKnowledgeMap: {}
+  userKnowledgeList: []
+  userKnowledgeTotal: (number) 0
+
+================================================================================
+SLICE: library
+================================================================================
+  filterDocType: (number) 0
+  attachmentList: []
+  attachmentListTotal: (number) 0
+  attachmentListLoading: (boolean) false
+  attachmentGroupListLoading: (boolean) false
+  attachmentGroupListTotal: (number) 0
+  attachmentGroupList: []
+  isFavorite: (boolean) false
+  searchValue: (string) ""
+  viewType: (string) "grid"
+
+================================================================================
+SLICE: login
+================================================================================
+  step: (string) "emailCheck"
+  email: (string) ""
+  emailError: (string) ""
+  password: (string) ""
+  passwordError: (string) ""
+  captchaData: null
+  tempToken: (string) ""
+  loadingEmailCheck: (boolean) false
+  loadingEmailLogin: (boolean) false
+  loadingEmailRegister: (boolean) false
+  loadingEmailCodeCheck: (boolean) false
+  loginPlatform: null
+  verifyCode: (string) ""
+  verifyCodeError: (string) ""
+  verifyCodeTimeout: (number) 60
+  lastSendTime: (number) 0
+  focused: (boolean) false
+  teamInvitationInfo: null
+  invitationInfo: null
+  eduInfo: null
+
+================================================================================
+SLICE: mailManus
+================================================================================
+  agentEmailInfo: {} (7 keys)
+    $typeName: (string) "user.v1.AgentEmailInfo"
+    email: (string) "tattarifi165@manus.bot"
+    prompt: (string) ""
+    emailType: (number) 0
+    canEditAgentEmail: (boolean) true
+    createdAt: {} (3 keys)
+      $typeName: (string) "google.protobuf.Timestamp"
+      seconds: (number) 1769682962
+      nanos: (number) 143000000
+    canEditTime: {} (3 keys)
+      $typeName: (string) "google.protobuf.Timestamp"
+      seconds: (number) 1769682962
+      nanos: (number) 143000000
+  emailWhiteList: [] (1 items)
+    [0]:
+      $typeName: (string) "user.v1.AgentEmailWhiteListInfo"
+      email: (string) "tattarifi@fxcc.co"
+      createdAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1769682962
+        nanos: (number) 149000000
+  canEditAgentEmail: (boolean) true
+  canEditTime: {} (3 keys)
+    $typeName: (string) "google.protobuf.Timestamp"
+    seconds: (number) 1769682962
+    nanos: (number) 143000000
+  agentSubEmails: []
+  hasUnreadUnknownEmail: (boolean) false
+  initTab: (string) "settings"
+
+================================================================================
+SLICE: mapReduce
+================================================================================
+  startLoading: (boolean) false
+  isFullscreen: (boolean) false
+
+================================================================================
+SLICE: meeting
+================================================================================
+  shouldShowMeetingIntro: (boolean) false
+
+================================================================================
+SLICE: myBrowser
+================================================================================
+  browserSettings: null
+  allowInstall: (boolean) true
+
+================================================================================
+SLICE: navbar
+================================================================================
+  tabKey: (string) "task"
+  isNavbarHovering: (boolean) false
+  isNavBarMinimal: (boolean) false
+  isNavBarHoveringLocked: (boolean) false
+
+================================================================================
+SLICE: notification
+================================================================================
+  connectStatus: (string) "connected"
+  connectError: null
+  isNotificationListVisible: (boolean) false
+  categoryNotifications: {} (3 keys)
+    0: [] (10 items)
+      [0]:
+        $typeName: (string) "notifier.v1.NotificationItemV2"
+        uid: (string) "R59zXYxTtJTxHvQzmYfkET"
+        type: (number) 1
+        interactionItems: []
+        notificationCategory: (number) 2
+        templateUid: (string) "skills"
+        isPopupUpdateLog: (boolean) true
+        detail: {} (7 keys)
+          $typeName: (string) "notifier.v1.NotificationItemDetail"
+          title: (string) " Introducing Manus Skills"
+          content: (string) "Turn your AI into any expert you need. Capture specialized knowledge, and extend Manus infinitely."
+          data: []
+          button: {} (7 keys)
+            $typeName: (string) "notifier.v1.ButtonInfo"
+            buttonText: (string) ""
+            type: (string) ""
+            target: (string) ""
+            prompt: (string) ""
+            tool: (number) 0
+            showInFrontend: (boolean) false
+          media: {} (4 keys)
+            $typeName: (string) "notifier.v1.MediaInfo"
+            type: (string) "video"
+            url: (string) "https://d1oupeiobkpcny.cloudfront.net/assets/dashboard/app_home_recommended/2026/01/28/3f69c2310f204e55ce4f5f2653e97136d..."
+            coverUrl: (string) "https://d1oupeiobkpcny.cloudfront.net/assets/dashboard/app_home_recommended/2026/01/28/178b4ad5ccd6bd0da346d4c68571b4aed..."
+          cancelButton: {} (7 keys)
+            $typeName: (string) "notifier.v1.ButtonInfo"
+            buttonText: (string) ""
+            type: (string) ""
+            target: (string) ""
+            prompt: (string) ""
+            tool: (number) 0
+            showInFrontend: (boolean) false
+        createAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1769575799
+          nanos: (number) 904000000
+    1: []
+    2: []
+  categoryHasMore: {} (3 keys)
+    0: (boolean) true
+    1: (boolean) true
+    2: (boolean) true
+  notificationTab: (number) 0
+  fetchNotificationLoading: (boolean) false
+  hasNew: (boolean) false
+  updatePageNotificationList: []
+  updatePageHasMore: (boolean) false
+  updatePageHasNew: (boolean) false
+  updatePageLoading: (boolean) true
+
+================================================================================
+SLICE: onboarding
+================================================================================
+  currentStep: null
+  userType: null
+  teamCandidateList: [] (3 items)
+    [0]:
+      ""
+
+================================================================================
+SLICE: products
+================================================================================
+  files: []
+  inputValue: (string) ""
+  playbookInfo: null
+
+================================================================================
+SLICE: project
+================================================================================
+  projectList: []
+  currentProjectId: null
+  initProjectLoading: (boolean) false
+  currentProjectSessionLoading: (boolean) false
+  currentProjectSessionTotal: (number) 0
+
+================================================================================
+SLICE: scheduledTask
+================================================================================
+  allScheduleList: []
+  chatScheduledTaskIds: []
+
+================================================================================
+SLICE: sessionSwitch
+================================================================================
+  keyword: (string) ""
+  sessions: []
+
+================================================================================
+SLICE: sessions
+================================================================================
+  currentSessionId: (string) "RTI3WrlJ8LavQM0v4geXkF"
+  navTab: (string) "all"
+  searchValue: (string) ""
+  isSearchMode: (boolean) false
+  isShareMode: (boolean) false
+  sessions: {} (2 keys)
+    ids: [] (2 items)
+      [0]:
+        "VnC5qrRUgYcYAWERIqUR1y"
+    entities: {} (2 keys)
+      VnC5qrRUgYcYAWERIqUR1y: {} (28 keys)
+        $typeName: (string) "session.v1.AgentSession"
+        uid: (string) "VnC5qrRUgYcYAWERIqUR1y"
+        userId: (string) "310519663323253630"
+        title: (string) "Is Manus.im Using a Framework or Library for UI?"
+        icon: (string) ""
+        lastDisplayMessage: (string) "I will investigate whether manus.im uses a premade template or a custom-built design system, and clarify the relationshi..."
+        status: (number) 8
+        unreadMessageCount: (number) 0
+        isFavorite: (boolean) false
+        isShared: (boolean) false
+        agentTaskMode: (number) 1
+        costedCredits: (number) 1164
+        feedbackSubmitted: (boolean) false
+        publishedToCommunity: (boolean) false
+        auditStatus: (number) 0
+        isBlocked: (boolean) false
+        feedbackEventIds: []
+        collaborators: [] (1 items)
+          [0]:
+            $typeName: (string) "session.v1.Collaborator"
+            email: (string) "tattarifi@fxcc.co"
+            permission: (number) 2
+            isOwner: (boolean) true
+            status: (number) 0
+            isTeamMember: (boolean) false
+            sessionUid: (string) "VnC5qrRUgYcYAWERIqUR1y"
+            userId: (string) "310519663323253630"
+            name: (string) "Thayer Attarifi"
+            avatar: (string) "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c"
+            createdAt: {} (3 keys)
+              $typeName: (string) "google.protobuf.Timestamp"
+              seconds: (number) 1770026042
+              nanos: (number) 174000000
+        lastMessageTime: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770027050
+          nanos: (number) 842000000
+        lastReadAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770456508
+          nanos: (number) 133000000
+        createdAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770026042
+          nanos: (number) 174000000
+        updatedAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770456508
+          nanos: (number) 726000000
+        iconInfo: {} (4 keys)
+          $typeName: (string) "session.v1.IconInfo"
+          url: (string) "https://files.manuscdn.com/assets/icon/session/ai-network.svg"
+          bgColorLight: (string) "#7D4D4D"
+          bgColorDark: (string) "#36B023"
+        displayContent: (string) ""
+        displayEventId: (string) ""
+        displayTitle: (string) ""
+        scheduledTask: (boolean) false
+        createFrom: {} (3 keys)
+          $typeName: (string) "session.v1.CreateFrom"
+          source: (number) 1
+          deleted: (boolean) false
+      RTI3WrlJ8LavQM0v4geXkF: {} (28 keys)
+        $typeName: (string) "session.v1.AgentSession"
+        isShared: (boolean) false
+        icon: (string) ""
+        lastDisplayMessage: (string) "I have performed an exhaustive analysis of the new state file (`state(8).json`) and compared it with the previous one. \n..."
+        status: (number) 7
+        title: (string) "Extracting Redux State Slices and Keys from JSON File"
+        uid: (string) "RTI3WrlJ8LavQM0v4geXkF"
+        unreadMessageCount: (number) 0
+        userId: (string) "310519663323253630"
+        isFavorite: (boolean) false
+        createdAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770456578
+          nanos: (number) 636000000
+        agentTaskMode: (number) 1
+        collaborators: [] (1 items)
+          [0]:
+            $typeName: (string) "session.v1.Collaborator"
+            email: (string) "tattarifi@fxcc.co"
+            permission: (number) 2
+            isOwner: (boolean) true
+            status: (number) 0
+            isTeamMember: (boolean) false
+            sessionUid: (string) "RTI3WrlJ8LavQM0v4geXkF"
+            userId: (string) "310519663323253630"
+            name: (string) "Thayer Attarifi"
+            avatar: (string) "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c"
+            createdAt: {} (3 keys)
+              $typeName: (string) "google.protobuf.Timestamp"
+              seconds: (number) 1770456578
+              nanos: (number) 636000000
+        feedbackSubmitted: (boolean) false
+        costedCredits: (number) 231
+        publishedToCommunity: (boolean) false
+        auditStatus: (number) 0
+        isBlocked: (boolean) false
+        feedbackEventIds: []
+        scheduledTask: (boolean) false
+        lastMessageTime: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770457509
+          nanos: (number) 237000000
+        newMessageCount: (number) 0
+        iconInfo: {} (4 keys)
+          $typeName: (string) "session.v1.IconInfo"
+          url: (string) "https://files.manuscdn.com/assets/icon/session/file-text-star.svg"
+          bgColorLight: (string) "#5F4FB8"
+          bgColorDark: (string) "#3F3F3F"
+        lastReadAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770457509
+          nanos: (number) 359000000
+        updatedAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770457509
+          nanos: (number) 754000000
+        createFrom: {} (3 keys)
+          $typeName: (string) "session.v1.CreateFrom"
+          source: (number) 1
+          deleted: (boolean) false
+        slidesImages: []
+        webpageScreenshots: {}
+  loadSessionLoading: (boolean) false
+  isShareFileMode: (boolean) false
+  loadSessionDetailLoading: (boolean) false
+  swapSessionDetailMap: {} (1 keys)
+    RTI3WrlJ8LavQM0v4geXkF: {} (3 keys)
+      uid: (string) "RTI3WrlJ8LavQM0v4geXkF"
+      title: (string) "Extracting Redux State Slices and Keys from JSON File"
+      iconInfo: {} (4 keys)
+        $typeName: (string) "session.v1.IconInfo"
+        url: (string) "https://files.manuscdn.com/assets/icon/session/file-text-star.svg"
+        bgColorLight: (string) "#5F4FB8"
+        bgColorDark: (string) "#3F3F3F"
+  groupedSessionState: {} (5 keys)
+    all: {} (4 keys)
+      ids: [] (2 items)
+        [0]:
+          "RTI3WrlJ8LavQM0v4geXkF"
+      initialized: (boolean) true
+      loading: (boolean) false
+      total: (number) 2
+    noProject: {} (4 keys)
+      ids: []
+      loading: (boolean) false
+      initialized: (boolean) false
+      total: (number) 0
+    favorites: {} (4 keys)
+      ids: []
+      loading: (boolean) false
+      initialized: (boolean) false
+      total: (number) 0
+    scheduled: {} (4 keys)
+      ids: []
+      loading: (boolean) false
+      initialized: (boolean) false
+      total: (number) 0
+    shared: {} (4 keys)
+      ids: []
+      loading: (boolean) false
+      initialized: (boolean) false
+      total: (number) 0
+  allCollaborators: {} (2 keys)
+    ids: [] (1 items)
+      [0]:
+        "310519663323253630"
+    entities: {} (1 keys)
+      310519663323253630: {} (11 keys)
+        $typeName: (string) "session.v1.Collaborator"
+        email: (string) "tattarifi@fxcc.co"
+        permission: (number) 2
+        isOwner: (boolean) true
+        status: (number) 0
+        isTeamMember: (boolean) false
+        sessionUid: (string) "RTI3WrlJ8LavQM0v4geXkF"
+        userId: (string) "310519663323253630"
+        name: (string) "Thayer Attarifi"
+        avatar: (string) "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c"
+        createdAt: {} (3 keys)
+          $typeName: (string) "google.protobuf.Timestamp"
+          seconds: (number) 1770456578
+          nanos: (number) 636000000
+  loadTopSegmentsLoading: (boolean) false
+  loadBottomSegmentsLoading: (boolean) false
+  segmentEndpoints: []
+  scheduledTaskSessions: null
+  sharingSessionUid: null
+  unreadMessageIndex: null
+  isSharePopoverVisible: (boolean) false
+
+================================================================================
+SLICE: skills
+================================================================================
+  userAddedSkills: [] (4 items)
+    [0]:
+      $typeName: (string) "skill.v1.Skill"
+      id: (string) "EL5yBdm22CwMBYRKvv2NHg"
+      name: (string) "video-generator"
+      description: (string) "Professional AI video production workflow. Use when creating videos, short films, commercials, or any video content usin..."
+      enabled: (boolean) false
+      version: (string) "NjdyvTjjS6kLTvVDsfXheX"
+      ownerType: (number) 2
+      type: (number) 3
+      displayName: (string) "video-generator"
+      translations: []
+      sortOrder: (string) "n6"
+      defaultEnable: (boolean) false
+      defaultAdd: (boolean) true
+      updatedAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1770126733
+        nanos: (number) 770000000
+  officialSkills: [] (7 items)
+    [0]:
+      $typeName: (string) "skill.v1.Skill"
+      id: (string) "fYCPsSWJij5mFE3AAj5yMG"
+      name: (string) "skill-creator"
+      description: (string) "Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an exist..."
+      enabled: (boolean) true
+      version: (string) "aEj6sWQUV4ngukZhAnD4UY"
+      ownerType: (number) 2
+      type: (number) 2
+      displayName: (string) "skill-creator"
+      translations: []
+      sortOrder: (string) "n0"
+      defaultEnable: (boolean) true
+      defaultAdd: (boolean) true
+      updatedAt: {} (3 keys)
+        $typeName: (string) "google.protobuf.Timestamp"
+        seconds: (number) 1769176882
+        nanos: (number) 66000000
+      added: (boolean) true
+  isLoading: (boolean) false
+  searchQuery: (string) ""
+
+================================================================================
+SLICE: slideEditor
+================================================================================
+  slides: []
+  sessionUid: null
+
+================================================================================
+SLICE: team
+================================================================================
+  listTeamResponse: {} (6 keys)
+    $typeName: (string) "team.v1.ListTeamResponse"
+    teams: []
+    totalCount: (number) 0
+    userId: (string) "310519663323253630"
+    userName: (string) "Thayer Attarifi"
+    userAvatar: (string) "https://lh3.googleusercontent.com/a/ACg8ocLYZJnzONloYmutptC8uZSokjz0vXtIiXw8qMIzFIUQHkMM-w=s96-c"
+  initTeamLoading: (boolean) false
+  teamListLoading: (boolean) false
+  currentTeam: null
+  teamMemberList: []
+  teamRenewalSettings: null
+  teamRenewalSettingsLoading: (boolean) false
+  ssoInfo: {} (7 keys)
+    ssoId: (string) ""
+    enabled: (boolean) false
+    expired: (boolean) false
+    connection: (boolean) false
+    domains: []
+    memberAddPolicy: (number) 1
+    howMemberCanLogin: (number) 1
+  ssoInfoLoading: (boolean) false
+  scimUnmanagedAccounts: []
+  accessControls: null
+  assetShareList: []
+  enterpriseTeamBanner: null
+
+================================================================================
+SLICE: timeline
+================================================================================
+  segmentEventsMap: {}
+  segmentEventsLoadingMap: {}
+  percentage: (number) 100
+
+================================================================================
+SLICE: ui
+================================================================================
+  isMobile: (boolean) false
+  chatSidebarPercentage: null
+  chatSidebarWidth: (number) 746
+  windowWidth: (number) 1792
+  showAppDownloadMask: (boolean) false
+  isShowMaxModeIntroduce: (boolean) false
+  isWebDevSidebarFullscreen: (boolean) false
+
+================================================================================
+SLICE: webDev
+================================================================================
+  isFullscreenMode: (boolean) false
+  userClickedTab: (boolean) false
+  activeTab: (string) "preview"
+  settingSubTab: null
+  mountedTabs: {} (6 keys)
+    preview: (boolean) true
+    database: (boolean) false
+    settings: (boolean) false
+    dashboard: (boolean) false
+    code: (boolean) false
+    file: (boolean) false
+  publishPopoverVisible: (boolean) false
+  initServerProjectLoading: (boolean) false
+  publishButtonLoading: (boolean) false
+  previewOldVersion: null
+  previewOldVersionLoading: (boolean) false
+  editMode: (boolean) false
+  project: null
+  initPreviewPath: (string) ""
+  cachedInviteUsers: []
+  currentProjectInviteUsers: []
+  projectInited: (boolean) false
+  preview: {} (1 keys)
+    isHistoricalVersion: (boolean) false
+  database: {} (4 keys)
+    tableList: []
+    activeTableId: null
+    isLoadingTableList: (boolean) true
+    tableData: {} (5 keys)
+      data: []
+      hasMoreData: (boolean) false
+      totalRows: (number) 0
+      isLoading: (boolean) false
+      isLoadingMore: (boolean) false
+  setting: {} (5 keys)
+    customDomains: []
+    purchasedDomains: []
+    selectedPurchasedDomainName: null
+    pendingPurchasedDomain: null
+    selectedDomainProviderId: null
+  storage: {} (8 keys)
+    tableDataLoading: (boolean) true
+    files: []
+    originalFiles: []
+    currentPath: (string) ""
+    selectedRows: []
+    continuationToken: (string) ""
+    hasMore: (boolean) false
+    tableOrderBy: null
+  webview: {} (4 keys)
+    isInWebView: (boolean) false
+    projectDetailFromAgent: null
+    webdevHomepageUpdated: (boolean) false
+    needHiddenHeader: (boolean) false
+  lastFeatureConfirm: {} (1 keys)
+    features: []
+  fullStyleSelections: []
+  mobilePreviewOnPhoneHidden: (boolean) false
+  currentAppBuildingProgress: {}
+  iosBuildLogs: (string) ""
+  iosBuildErrorMessage: null
+  updateCurrentApkVersion: null
+  updateCurrentAabVersion: null
+  updateCurrentIpaVersion: null
+  mobilePublishActiveTab: (string) "android"
+  userExplicitlySetMobilePublishTab: (boolean) false
+  previewerBadgeClosedList: []
+  keepPublishPopoverOpen: (boolean) false
+  gitSyncStatus: {} (2 keys)
+    status: null
+    isLoading: (boolean) false
+  gitRepoCreation: {} (1 keys)
+    status: (string) "idle"
+  iosPublishFormData: {} (2 keys)
+    appleAccount: {} (2 keys)
+      email: (string) ""
+      password: (string) ""
+    expoToken: (string) ""
+  iosFirstPublishStep: (string) "checklist"
+
+================================================================================
+SLICE: webDevUsage
+================================================================================
+  usageInfo: null
+  usageDetail: null
+  usageDetailLoading: (boolean) false
+  usageDetailExpandedProjects: []
+  projectUsageStatus: null
+  manageBudgetLoading: (boolean) false
+
+================================================================================
+SLICE: webdevAuth
+================================================================================
+  {}
+
+================================================================================
+SLICE: websocket
+================================================================================
+  ids: [] (172 items)
+    [0]:
+      "ccFtgBqM2whOYEAGQlr4WE"
+  entities: {} (map with 172 dynamic entries)
+    [example key: ccFtgBqM2whOYEAGQlr4WE]
+      type: (string) "event"
+      timestamp: (number) 1770456578370
+      event: {} (12 keys)
+        type: (string) "chat"
+        timestamp: (number) 1770456578370
+        id: (string) "ccFtgBqM2whOYEAGQlr4WE"
+        sender: (string) "user"
+        qualityMode: (string) "user"
+        senderId: (string) "310519663323253630"
+        messageType: (string) "text"
+        content: (string) "give me your redux, state slices with their keys in json, focus, all of your states in this file"
+        contents: [] (2 items)
+          [0]:
+            type: (string) "text"
+            value: (string) "give me your redux, state slices with their keys in json, focus, all of your states in this file"
+        attachments: [] (1 items)
+          [0]:
+            contentLength: (number) 706852
+            contentType: (string) "application/json"
+            filename: (string) "state(7).json"
+            id: (string) "768OpN6eixUgBHYa3gOilz"
+            path: (string) "/home/ubuntu/upload/state(7).json"
+            type: (string) "file"
+            url: (string) "https://private-us-east-1.manuscdn.com/users/310519663323253630/uploads/768OpN6eixUgBHYa3gOilz_na1fn_c3RhdGUoNyk.json?Po..."
+        extData: {} (2 keys)
+          capabilities: {} (2 keys)
+            enabledConnectors: []
+            enabledSkills: [] (1 items)
+              [0]:
+                id: (string) "fYCPsSWJij5mFE3AAj5yMG"
+                name: (string) "skill-creator"
+          mode: (string) "lite"
+        taskMode: (string) "standard"
+      messageStatus: (string) "confirmed"
+      id: (string) "ccFtgBqM2whOYEAGQlr4WE"
+      sessionId: (string) "RTI3WrlJ8LavQM0v4geXkF"
+  status: (string) "connected"
+  error: null
+  contextLengthStatus: (string) "normal"
+  taskFinished: (boolean) false
+  isVNCConnected: null
+  disableTimelineAutoUpdate: null

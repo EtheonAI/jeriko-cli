@@ -1,0 +1,111 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "group:monorepos",
+    "group:recommended",
+    ":separateMajorReleases",
+    ":combinePatchMinorReleases",
+    ":enableVulnerabilityAlerts",
+    "schedule:earlyMondays"
+  ],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on the first day of the month"]
+  },
+  "packageRules": [
+    {
+      "description": "Auto-merge patch updates for dev dependencies",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group all TypeScript-related updates",
+      "matchPackagePatterns": ["typescript", "ts-", "@typescript-eslint/*"],
+      "groupName": "TypeScript"
+    },
+    {
+      "description": "Group all ESLint-related updates",
+      "matchPackagePatterns": ["eslint"],
+      "groupName": "ESLint"
+    },
+    {
+      "description": "Group all React updates",
+      "matchPackagePatterns": ["react", "react-dom", "@types/react"],
+      "groupName": "React"
+    },
+    {
+      "description": "Group all Next.js updates",
+      "matchPackagePatterns": ["next", "@next/*"],
+      "groupName": "Next.js"
+    },
+    {
+      "description": "Group all Radix UI updates",
+      "matchPackagePatterns": ["@radix-ui/*"],
+      "groupName": "Radix UI"
+    },
+    {
+      "description": "Group all AI SDK updates",
+      "matchPackagePatterns": ["@ai-sdk/*", "ai"],
+      "groupName": "AI SDK"
+    },
+    {
+      "description": "Group all Sentry updates",
+      "matchPackagePatterns": ["@sentry/*"],
+      "groupName": "Sentry"
+    },
+    {
+      "description": "Group all tRPC updates",
+      "matchPackagePatterns": ["@trpc/*"],
+      "groupName": "tRPC"
+    },
+    {
+      "description": "Group all testing updates",
+      "matchPackagePatterns": ["vitest", "@testing-library/*", "@vitejs/*", "jsdom", "@playwright/*"],
+      "groupName": "Testing"
+    },
+    {
+      "description": "Group all OpenTelemetry updates",
+      "matchPackagePatterns": ["@opentelemetry/*"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Group all Turborepo updates",
+      "matchPackagePatterns": ["turbo", "@turbo/*"],
+      "groupName": "Turborepo"
+    },
+    {
+      "description": "Group all Docker-related updates",
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker"
+    },
+    {
+      "description": "Group all GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "automerge": true,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Pin Drizzle ORM to avoid breaking changes",
+      "matchPackageNames": ["drizzle-orm"],
+      "allowedVersions": "0.38.x"
+    },
+    {
+      "description": "Pin Zod to v4.x",
+      "matchPackageNames": ["zod"],
+      "allowedVersions": ">=4.0.0"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 5
+}

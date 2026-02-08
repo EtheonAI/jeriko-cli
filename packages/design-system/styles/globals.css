@@ -43,6 +43,12 @@
   --sidebar-ring: oklch(0.708 0 0);
 
   --font-weight-bold: 700;
+
+  /* Canvas (agent workspace panel) */
+  --canvas-bg: oklch(0.97 0 0);
+  --canvas-surface: oklch(0.98 0 0);
+  --canvas-deep: oklch(0.955 0 0);
+  --canvas-header: oklch(0.975 0 0);
 }
 
 .dark {
@@ -81,6 +87,12 @@
   --sidebar-accent-foreground: oklch(0.92 0 0);
   --sidebar-border: oklch(0.22 0 0);
   --sidebar-ring: oklch(0.45 0 0);
+
+  /* Canvas (agent workspace panel) - darker than main, like a terminal */
+  --canvas-bg: oklch(0.14 0 0);
+  --canvas-surface: oklch(0.18 0 0);
+  --canvas-deep: oklch(0.10 0 0);
+  --canvas-header: oklch(0.16 0 0);
 }
 
 @theme inline {
@@ -118,6 +130,10 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-success: var(--success);
+  --color-canvas-bg: var(--canvas-bg);
+  --color-canvas-surface: var(--canvas-surface);
+  --color-canvas-deep: var(--canvas-deep);
+  --color-canvas-header: var(--canvas-header);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

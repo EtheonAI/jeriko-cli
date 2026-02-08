@@ -11,6 +11,8 @@ export interface MessageItemProps {
   className?: string;
   onAction?: (action: string, messageId: string) => void;
   onToolApproval?: (toolCallId: string, approved: boolean, reason?: string) => void;
+  /** Called when user clicks to view a tool's state in the canvas */
+  onViewInCanvas?: (toolCallId: string) => void;
 }
 
 /**
@@ -21,6 +23,7 @@ export function MessageItem({
   className,
   onAction,
   onToolApproval,
+  onViewInCanvas,
 }: MessageItemProps) {
   const handleAction = (action: string) => {
     onAction?.(action, message.id);
@@ -43,6 +46,7 @@ export function MessageItem({
           className={className}
           onAction={handleAction}
           onToolApproval={onToolApproval}
+          onViewInCanvas={onViewInCanvas}
         />
       );
 

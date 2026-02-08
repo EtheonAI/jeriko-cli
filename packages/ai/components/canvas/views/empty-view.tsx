@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { GlobeIcon, CodeIcon, TerminalIcon, FileTextIcon } from "lucide-react";
+import {
+  GlobeIcon,
+  CodeIcon,
+  TerminalIcon,
+  FileTextIcon,
+} from "lucide-react";
 
 // ============================================================================
 // Component
@@ -25,7 +30,9 @@ export function EmptyView() {
               className="flex flex-col items-center gap-1.5 rounded-xl bg-muted/10 px-6 py-4"
             >
               <Icon className={`size-6 ${color} opacity-60`} />
-              <span className="text-[11px] font-medium text-muted-foreground/40">{label}</span>
+              <span className="text-[11px] font-medium text-muted-foreground/40">
+                {label}
+              </span>
             </div>
           ))}
         </div>

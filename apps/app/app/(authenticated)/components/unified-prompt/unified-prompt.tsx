@@ -10,7 +10,7 @@ import {
 import { cn } from "@repo/design-system/lib/utils";
 import { ArrowUpIcon, LoaderIcon, SquareIcon } from "lucide-react";
 
-import type { UnifiedPromptProps, UnifiedPromptRef } from "./types";
+import type { ChatPromptProps, ChatPromptRef } from "./types";
 import { usePromptState } from "./use-prompt-state";
 import { AttachmentRow } from "./attachment-row";
 import { FilesButton } from "./files-button";
@@ -20,8 +20,8 @@ import { VoiceInputButton } from "./voice-input-button";
 import { AnimatedPlaceholder } from "./animated-placeholder";
 import { QuickActions, ACTION_PREFILLS } from "./quick-actions";
 
-export const UnifiedPrompt = forwardRef<UnifiedPromptRef, UnifiedPromptProps>(
-  function UnifiedPrompt(
+export const ChatPrompt = forwardRef<ChatPromptRef, ChatPromptProps>(
+  function ChatPrompt(
     {
       onSubmit,
       placeholder,
@@ -245,6 +245,7 @@ export const UnifiedPrompt = forwardRef<UnifiedPromptRef, UnifiedPromptProps>(
               placeholder={
                 showPlaceholderAnimation ? undefined : (placeholder ?? "Ask anything...")
               }
+              data-testid="prompt-input"
               disabled={isDisabled}
               maxLength={maxLength}
               rows={2}

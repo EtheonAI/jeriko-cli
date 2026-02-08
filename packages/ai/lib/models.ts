@@ -54,3 +54,14 @@ export function resolveModel(modelId?: string): any {
   }
   return openai(modelId);
 }
+
+/** Resolve a fallback model when the primary provider has a quota/auth error */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveFallbackModel(primaryModelId?: string): any {
+  // If primary was OpenAI (or default), fall back to Anthropic
+  if (!primaryModelId || !primaryModelId.startsWith("claude")) {
+    return anthropic("claude-sonnet-4-5-20250929");
+  }
+  // If primary was Anthropic, fall back to OpenAI
+  return openai("gpt-4o-mini");
+}

@@ -8,7 +8,9 @@ When no sandbox is available, falls back to simple HTTP fetch.
 """
 
 import json
+import re
 import textwrap
+import urllib.parse
 
 import httpx
 import structlog
@@ -33,7 +35,8 @@ async def _sandbox_code_execute(sandbox_id: str, code: str, timeout: int = 120) 
         if resp.status_code >= 400:
             return {"error": f"Sandbox execution failed: {resp.text}"}
 
-        data = resp.json()
+        raw = resp.json()
+        data = raw.get("data", raw)  # Unwrap service envelope
         stdout = data.get("stdout", "")
         stderr = data.get("stderr", "")
 
@@ -54,93 +57,87 @@ async def browser_web_search(
     sandbox_id: str | None, query: str, num_results: int = 5, date_range: str | None = None
 ) -> dict:
     """
-    Search the web using Serper as primary (fast, stable).
-    Falls back to browser-use inside the sandbox for JS-heavy pages.
+    Search the web. Priority:
+    1. Serper API (fastest, structured results)
+    2. E2B browser via Playwright controller (visual Google search with screenshot)
+    3. DuckDuckGo HTML scraping (no sandbox, no API key)
     """
+    # 1. Try Serper first (fastest, most reliable)
     if settings.serper_api_key:
         serper_result = await _serper_search(query, num_results, date_range)
         if serper_result.get("results"):
             return serper_result
-        # If Serper failed or returned no results and we have a sandbox, try browser-use
+        # Serper failed — fall through to browser or DuckDuckGo
         if not sandbox_id:
             return serper_result
 
-    if not sandbox_id:
-        return {
-            "error": "Web search unavailable: no sandbox and no SERPER_API_KEY configured.",
-            "query": query,
-            "results": [],
-        }
+    # 2. Use E2B browser (Playwright controller on port 9821) for visual Google search
+    if sandbox_id:
+        try:
+            from .browser_interactive import browser_action
 
-    # Escape the query for Python string embedding
-    safe_query = query.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
+            encoded_query = urllib.parse.quote_plus(query)
+            google_url = f"https://www.google.com/search?q={encoded_query}&num={num_results}"
 
-    script = textwrap.dedent(f"""\
-        import asyncio
-        import json
+            result = await browser_action(sandbox_id, "navigate", {"url": google_url})
 
-        async def search():
-            try:
-                from browser_use import Agent, Browser
-                from langchain_anthropic import ChatAnthropic
-
-                browser = Browser()
-                agent = Agent(
-                    task=(
-                        "Search for: {safe_query}. "
-                        "Return the top {num_results} results. "
-                        "For each result, provide the title, URL, and a brief snippet."
-                    ),
-                    llm=ChatAnthropic(model="claude-haiku-4-5-20251001"),
-                    browser=browser,
-                )
-                result = await agent.run()
-                await browser.close()
-                print(json.dumps({{
-                    "query": "{safe_query}",
-                    "results": str(result),
-                    "source": "browser-use",
-                }}))
-            except ImportError:
-                # browser-use not available, fall back to simple fetch
-                import urllib.parse
-                import urllib.request
-
-                url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote("{safe_query}")
-                req = urllib.request.Request(url, headers={{"User-Agent": "Mozilla/5.0"}})
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    html = resp.read().decode("utf-8", errors="replace")
-
-                # Extract basic results from DuckDuckGo HTML
-                results = []
-                import re
-                for match in re.finditer(
-                    r'<a rel="nofollow" class="result__a" href="([^"]*)">(.*?)</a>',
-                    html,
-                ):
-                    href, title = match.groups()
-                    title = re.sub(r"<[^>]+>", "", title)
-                    if href and title and len(results) < {num_results}:
-                        results.append({{"title": title.strip(), "url": href, "snippet": ""}})
-
-                print(json.dumps({{
-                    "query": "{safe_query}",
+            if result.get("error"):
+                logger.warning("browser_search_failed", error=result["error"], query=query)
+            else:
+                # Parse structured results from page content
+                results = _parse_google_results(result.get("content", ""), num_results)
+                return {
+                    "query": query,
                     "results": results,
-                    "source": "duckduckgo-fallback",
-                }}))
-            except Exception as e:
-                print(json.dumps({{"error": str(e), "query": "{safe_query}", "results": []}}))
+                    "screenshot": result.get("screenshot"),
+                    "url": result.get("url", google_url),
+                    "title": result.get("title", ""),
+                    "source": "google-browser",
+                }
+        except Exception as e:
+            logger.warning("browser_search_error", error=str(e), query=query)
 
-        asyncio.run(search())
-    """)
+    # 3. Fallback: DuckDuckGo HTML search (no API key, no sandbox needed)
+    return await _duckduckgo_search(query, num_results)
 
-    browser_result = await _sandbox_code_execute(sandbox_id, script, timeout=60)
-    if isinstance(browser_result, dict) and browser_result.get("results"):
-        return browser_result
-    # Final fallback to Serper if browser-use failed
-    if settings.serper_api_key:
-        return await _serper_search(query, num_results, date_range)
-    return browser_result
+
+def _parse_google_results(content: str, num_results: int = 5) -> list[dict]:
+    """Extract search results from Google search page text content."""
+    results = []
+    if not content:
+        return results
+
+    # Google search results typically appear as blocks of text.
+    # Each result has a URL line, a title, and a snippet.
+    # Split content into lines and look for URL patterns.
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines) and len(results) < num_results:
+        line = lines[i].strip()
+        # Look for lines that contain URLs (https://...)
+        url_match = re.search(r'(https?://[^\s]+)', line)
+        if url_match and not any(d in url_match.group(1) for d in [
+            "google.com/search", "accounts.google", "support.google",
+            "policies.google", "maps.google",
+        ]):
+            url = url_match.group(1).rstrip(".,;)")
+            # Title is typically on the same or previous line
+            title = line.replace(url, "").strip(" ·›-")
+            if not title and i > 0:
+                title = lines[i - 1].strip()
+            # Snippet is typically on the next line(s)
+            snippet = ""
+            if i + 1 < len(lines):
+                snippet = lines[i + 1].strip()
+            if title or url:
+                results.append({
+                    "title": title[:200] if title else url,
+                    "url": url,
+                    "snippet": snippet[:300],
+                })
+        i += 1
+
+    return results
 
 
 async def browser_navigate(sandbox_id: str | None, url: str) -> dict:
@@ -295,16 +292,77 @@ async def _serper_search(query: str, num_results: int = 5, date_range: str | Non
             return {"error": f"Search failed: {str(e)}", "query": query, "results": []}
 
 
+async def _duckduckgo_search(query: str, num_results: int = 5) -> dict:
+    """Fallback web search using DuckDuckGo HTML (no API key needed)."""
+    url = "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(query)
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; Rubic/1.0)"},
+                follow_redirects=True,
+            )
+            html = resp.text
+
+            results = []
+            for match in re.finditer(
+                r'<a rel="nofollow" class="result__a" href="([^"]*)"[^>]*>(.*?)</a>',
+                html,
+            ):
+                href, title = match.groups()
+                title = re.sub(r"<[^>]+>", "", title).strip()
+                if href and title and len(results) < num_results:
+                    # Resolve DuckDuckGo redirect URLs
+                    clean_url = href
+                    if "//duckduckgo.com/l/?" in href:
+                        parsed = urllib.parse.urlparse(href)
+                        params = urllib.parse.parse_qs(parsed.query)
+                        if "uddg" in params:
+                            clean_url = urllib.parse.unquote(params["uddg"][0])
+                    results.append({"title": title, "url": clean_url, "snippet": ""})
+
+            # Try to extract snippets
+            for i, match in enumerate(
+                re.finditer(r'<a class="result__snippet"[^>]*>(.*?)</a>', html)
+            ):
+                if i >= len(results):
+                    break
+                snippet = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+                results[i]["snippet"] = snippet
+
+            return {
+                "query": query,
+                "results": results,
+                "source": "duckduckgo",
+            }
+        except Exception as e:
+            logger.warning("duckduckgo_search_failed", error=str(e), query=query)
+            return {"error": f"Search failed: {str(e)}", "query": query, "results": []}
+
+
 async def _simple_http_fetch(url: str) -> dict:
     """Simple HTTP fetch fallback when no sandbox browser is available."""
     async with httpx.AsyncClient(timeout=20.0) as client:
         try:
             resp = await client.get(url, follow_redirects=True)
+            content = resp.text
+            content_type = resp.headers.get("content-type", "")
+
+            # Strip HTML tags for cleaner text content
+            if "html" in content_type.lower():
+                text = re.sub(r"<script[^>]*>.*?</script>", "", content, flags=re.DOTALL)
+                text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL)
+                text = re.sub(r"<[^>]+>", " ", text)
+                text = re.sub(r"\s+", " ", text).strip()
+                content = text
+
             return {
                 "url": url,
+                "title": "",
                 "status_code": resp.status_code,
-                "content_type": resp.headers.get("content-type", ""),
-                "content": resp.text[:10000],
+                "content_type": content_type,
+                "content": content[:10000],
                 "source": "http-fallback",
             }
         except Exception as e:

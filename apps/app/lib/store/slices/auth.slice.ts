@@ -107,6 +107,18 @@ export interface AuthState {
     teamName?: string;
     invitedBy?: string;
   } | null;
+  // Manus-aligned keys
+  modifying: boolean;
+  avatarUploading: boolean;
+  invitationCodeRedDotVisible: boolean;
+  usageInfo: Record<string, unknown>;
+  usageInfoReady: boolean;
+  userRegion: Record<string, unknown>;
+  creditAnimateInfo: unknown;
+  refreshKey: string;
+  profileCardVisible: boolean;
+  shareHistoryCache: unknown;
+  cookieOptIn: number;
 }
 
 const initialState: AuthState = {
@@ -138,9 +150,21 @@ const initialState: AuthState = {
   oauthLoading: false,
   // Invitation
   pendingInvitation: null,
+  // Manus-aligned defaults
+  modifying: false,
+  avatarUploading: false,
+  invitationCodeRedDotVisible: true,
+  usageInfo: {},
+  usageInfoReady: true,
+  userRegion: {},
+  creditAnimateInfo: null,
+  refreshKey: "",
+  profileCardVisible: false,
+  shareHistoryCache: null,
+  cookieOptIn: 1,
 };
 
-export const authSlice = createSlice({
+const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
@@ -278,6 +302,41 @@ export const authSlice = createSlice({
       state.pendingInvitation = null;
     },
 
+    // Manus-aligned reducers
+    setModifying: (state, action: PayloadAction<boolean>) => {
+      state.modifying = action.payload;
+    },
+    setAvatarUploading: (state, action: PayloadAction<boolean>) => {
+      state.avatarUploading = action.payload;
+    },
+    setInvitationCodeRedDotVisible: (state, action: PayloadAction<boolean>) => {
+      state.invitationCodeRedDotVisible = action.payload;
+    },
+    setUsageInfo: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.usageInfo = action.payload;
+    },
+    setUsageInfoReady: (state, action: PayloadAction<boolean>) => {
+      state.usageInfoReady = action.payload;
+    },
+    setUserRegion: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.userRegion = action.payload;
+    },
+    setCreditAnimateInfo: (state, action: PayloadAction<unknown>) => {
+      state.creditAnimateInfo = action.payload;
+    },
+    setRefreshKey: (state, action: PayloadAction<string>) => {
+      state.refreshKey = action.payload;
+    },
+    setProfileCardVisible: (state, action: PayloadAction<boolean>) => {
+      state.profileCardVisible = action.payload;
+    },
+    setShareHistoryCache: (state, action: PayloadAction<unknown>) => {
+      state.shareHistoryCache = action.payload;
+    },
+    setCookieOptIn: (state, action: PayloadAction<number>) => {
+      state.cookieOptIn = action.payload;
+    },
+
     // Reset auth flow state (for navigation)
     resetAuthFlow: (state) => {
       state.loginStep = "email";
@@ -293,28 +352,26 @@ export const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility actions
-    builder.addCase("auth/setUserInfo", (state, action: PayloadAction<any>) => {
-      state.user = action.payload ?? null;
-      state.isAuthenticated = !!action.payload;
+    builder.addCase("auth/setUserInfo", (state, action) => {
+      const payload = (action as any).payload;
+      state.user = payload ?? null;
+      state.isAuthenticated = !!payload;
       state.isLoading = false;
       state.error = null;
     });
-    builder.addCase("auth/setClientConfig", (state, action: PayloadAction<any>) => {
-      state.clientConfig = action.payload ?? null;
+    builder.addCase("auth/setClientConfig", (state, action) => {
+      state.clientConfig = (action as any).payload ?? null;
     });
-    builder.addCase("auth/setGlobalSettings", (state, action: PayloadAction<any>) => {
-      state.globalSettings = action.payload ?? null;
+    builder.addCase("auth/setGlobalSettings", (state, action) => {
+      state.globalSettings = (action as any).payload ?? null;
     });
-    builder.addCase("auth/setInvitationCodeList", (state, action: PayloadAction<any[]>) => {
-      state.invitationCodeList = action.payload ?? [];
+    builder.addCase("auth/setInvitationCodeList", (state, action) => {
+      state.invitationCodeList = (action as any).payload ?? [];
       state.invitationCodeListLoading = false;
     });
-    builder.addCase(
-      "auth/setInvitationCodeListLoading",
-      (state, action: PayloadAction<boolean>) => {
-        state.invitationCodeListLoading = action.payload;
-      }
-    );
+    builder.addCase("auth/setInvitationCodeListLoading", (state, action) => {
+      state.invitationCodeListLoading = (action as any).payload;
+    });
   },
 });
 
@@ -338,6 +395,17 @@ export const {
   updateUserPreferences,
   logout,
   resetAuthFlow,
+  setModifying,
+  setAvatarUploading,
+  setInvitationCodeRedDotVisible,
+  setUsageInfo,
+  setUsageInfoReady,
+  setUserRegion,
+  setCreditAnimateInfo,
+  setRefreshKey,
+  setProfileCardVisible,
+  setShareHistoryCache,
+  setCookieOptIn,
 } = authSlice.actions;
 
 export default authSlice.reducer;

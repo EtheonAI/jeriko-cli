@@ -15,11 +15,22 @@ export type SmartHomeEntityDomain =
   | "light"
   | "climate"
   | "sensor"
+  | "binary_sensor"
   | "switch"
   | "media_player"
   | "lock"
   | "scene"
-  | "cover";
+  | "cover"
+  | "fan"
+  | "vacuum"
+  | "camera"
+  | "alarm_control_panel"
+  | "humidifier"
+  | "water_heater"
+  | "remote"
+  | "siren"
+  | "automation"
+  | "input_boolean";
 
 // Smart Home Hubs — registered HA instances
 export const smartHomeHubs = pgTable("smart_home_hubs", {
@@ -79,7 +90,7 @@ export const smartHomeEntities = pgTable("smart_home_entities", {
     .references(() => smartHomeHubs.id, { onDelete: "cascade" }),
   entityId: text("entity_id").notNull(), // e.g. "light.living_room"
   domain: text("domain", {
-    enum: ["light", "climate", "sensor", "switch", "media_player", "lock", "scene", "cover"],
+    enum: ["light", "climate", "sensor", "binary_sensor", "switch", "media_player", "lock", "scene", "cover", "fan", "vacuum", "camera", "alarm_control_panel", "humidifier", "water_heater", "remote", "siren", "automation", "input_boolean"],
   }).notNull(),
   name: text("name").notNull(),
   areaId: text("area_id"),

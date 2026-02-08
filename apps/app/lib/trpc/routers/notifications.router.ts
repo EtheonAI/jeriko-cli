@@ -58,24 +58,26 @@ export const notificationsRouter = createTRPCRouter({
         conditions.push(eq(notifications.type, input.type));
       }
 
-      const items = await db
-        .select()
-        .from(notifications)
-        .where(and(...conditions))
-        .orderBy(desc(notifications.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
+      // Run items + count in parallel (independent queries, same WHERE)
+      const [items, [countResult]] = await Promise.all([
+        db
+          .select()
+          .from(notifications)
+          .where(and(...conditions))
+          .orderBy(desc(notifications.createdAt))
+          .limit(input.limit)
+          .offset(input.offset),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(notifications)
+          .where(and(...conditions)),
+      ]);
 
-      // Get total count
-      const [countResult] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(notifications)
-        .where(and(...conditions));
-
+      const total = countResult?.count || 0;
       return {
         items,
-        total: countResult?.count || 0,
-        hasMore: input.offset + items.length < (countResult?.count || 0),
+        total,
+        hasMore: input.offset + items.length < total,
       };
     }),
 
@@ -236,7 +238,7 @@ export const notificationsRouter = createTRPCRouter({
         quietHoursStart: z.string().optional(),
         quietHoursEnd: z.string().optional(),
         quietHoursTimezone: z.string().optional(),
-        typeSettings: z.record(z.unknown()).optional(),
+        typeSettings: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -249,7 +251,7 @@ export const notificationsRouter = createTRPCRouter({
       if (existing) {
         const [preferences] = await db
           .update(notificationPreferences)
-          .set(input)
+          .set(input as any)
           .where(eq(notificationPreferences.userId, ctx.user.id))
           .returning();
         return preferences;
@@ -262,7 +264,7 @@ export const notificationsRouter = createTRPCRouter({
           id,
           userId: ctx.user.id,
           ...input,
-        })
+        } as any)
         .returning();
 
       return preferences;

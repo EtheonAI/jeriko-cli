@@ -73,7 +73,10 @@ function resolveLanguage(lang?: string): string {
 
 // Highlighter singleton — lazy loaded once
 let highlighterPromise: Promise<
-  import("shiki").HighlighterGeneric<import("shiki").BundledLanguage, import("shiki").BundledTheme>
+  import("shiki").HighlighterGeneric<
+    import("shiki").BundledLanguage,
+    import("shiki").BundledTheme
+  >
 > | null = null;
 const loadedLangs = new Set<string>();
 
@@ -211,7 +214,10 @@ export function ShikiCodeBlock({
               ))}
             </div>
             {/* Highlighted code */}
-            <div className="flex-1 min-w-0" dangerouslySetInnerHTML={{ __html: html }} />
+            <div
+              className="flex-1 min-w-0"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
           </div>
         ) : (
           <div dangerouslySetInnerHTML={{ __html: html }} />

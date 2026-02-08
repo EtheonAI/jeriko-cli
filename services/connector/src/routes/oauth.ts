@@ -61,7 +61,7 @@ async function getAuthConfigId(toolkit: string): Promise<string> {
     await db
       .update(connectorDefinitions)
       .set({
-        oauthConfig: { ...(oauthConfig ?? {}), composioAuthConfigId: authConfigId },
+        oauthConfig: { ...(oauthConfig ?? {}), composioAuthConfigId: authConfigId } as typeof connectorDefinitions.$inferInsert.oauthConfig,
       })
       .where(eq(connectorDefinitions.id, definition.id));
   }

@@ -64,11 +64,11 @@ export const sessionsRouter = createTRPCRouter({
         id: z.string(),
         title: z.string().optional(),
         status: z.enum(["active", "paused", "completed", "failed"]).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, ...updates } = input;
+      const { id, metadata: newMeta, ...updates } = input;
 
       // Verify ownership
       const [existing] = await db
@@ -81,9 +81,17 @@ export const sessionsRouter = createTRPCRouter({
         throw new Error("Session not found");
       }
 
+      // Merge metadata if provided (shallow merge with existing)
+      const mergedMeta = newMeta
+        ? { ...(existing.metadata as Record<string, unknown> ?? {}), ...newMeta }
+        : undefined;
+
+      const setValues: Record<string, unknown> = { ...updates };
+      if (mergedMeta) setValues.metadata = mergedMeta;
+
       const [session] = await db
         .update(agentSessions)
-        .set(updates)
+        .set(setValues)
         .where(eq(agentSessions.id, id))
         .returning();
 

@@ -2,6 +2,44 @@
   "name": "@repo/observability",
   "version": "0.0.0",
   "private": true,
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./client": {
+      "types": "./client.ts",
+      "default": "./client.ts"
+    },
+    "./edge": {
+      "types": "./edge.ts",
+      "default": "./edge.ts"
+    },
+    "./error": {
+      "types": "./error.ts",
+      "default": "./error.ts"
+    },
+    "./instrumentation": {
+      "types": "./instrumentation.ts",
+      "default": "./instrumentation.ts"
+    },
+    "./keys": {
+      "types": "./keys.ts",
+      "default": "./keys.ts"
+    },
+    "./log": {
+      "types": "./log.ts",
+      "default": "./log.ts"
+    },
+    "./next-config": {
+      "types": "./next-config.ts",
+      "default": "./next-config.ts"
+    },
+    "./server": {
+      "types": "./server.ts",
+      "default": "./server.ts"
+    }
+  },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
@@ -17,8 +55,8 @@
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "24.9.1",
-    "@types/react": "19.1.5",
-    "@types/react-dom": "19.1.5",
+    "@types/react": "19.2.13",
+    "@types/react-dom": "19.2.3",
     "typescript": "^5.9.3"
   }
 }

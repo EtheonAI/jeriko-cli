@@ -4,9 +4,7 @@ import {
   text,
   timestamp,
   jsonb,
-  boolean,
   integer,
-  real,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { users } from "./users";

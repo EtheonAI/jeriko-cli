@@ -211,7 +211,7 @@ export function MyDevicesTab() {
 
       {devices && devices.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {devices.map((device) => {
+          {devices.map((device: any) => {
             const DeviceIcon = deviceIcons[device.type] || MonitorIcon;
             const status = statusConfig[device.status] || statusConfig.offline;
             const StatusIcon = status.icon;

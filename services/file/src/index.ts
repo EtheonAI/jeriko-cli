@@ -1,32 +1,54 @@
-import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-import { createLogger, getEnv, createId, dispatchWebhookEvent } from "@repo/service-utils";
-import { eq, and, desc, asc, sql } from "drizzle-orm";
+import { createService, typedRoute, createId, dispatchWebhookEvent } from "@repo/service-utils";
+import { NotFoundError, ValidationError, AuthenticationError, AuthorizationError } from "@repo/service-utils/errors";
+import { sanitizePath } from "@repo/service-utils/security";
+import { z } from "zod";
+import { eq, and, desc, sql } from "drizzle-orm";
 
-const logger = createLogger({ service: "file" });
+// ─── Zod schemas ────────────────────────────────────────────────────────────
+
+const IdParams = z.object({
+  id: z.string().min(1, "File ID is required"),
+});
+
+const UserIdParams = z.object({
+  userId: z.string().min(1, "User ID is required"),
+});
+
+const DownloadQuery = z.object({
+  version: z.string().optional(),
+});
+
+const ListFilesQuery = z.object({
+  sessionId: z.string().optional(),
+  mimeType: z.string().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+// ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
   // Dynamic imports to avoid ESM namespace destructuring issues with tsx
-  const database = await import("@repo/database/service-index");
+  const rawDatabase = await import("@repo/database/service-index");
+  const database = (rawDatabase as any).default ?? rawDatabase;
   const { db, files, fileVersions } = database;
-  const storageModule = await import("@repo/storage");
+  const rawStorage = await import("@repo/storage");
+  const storageModule = (rawStorage as any).default ?? rawStorage;
   const {
     uploadFile,
     getPresignedUrl,
-    deleteFile,
     deleteFiles,
     getStorageKey,
     getVersionStorageKey,
   } = storageModule;
-  const port = parseInt(getEnv("PORT", "4005"), 10);
-  const host = getEnv("HOST", "0.0.0.0");
 
-  const app = Fastify({
-    logger: false,
-    requestIdHeader: "x-request-id",
-    genReqId: () => crypto.randomUUID(),
+  const { app, logger, start } = await createService({
+    name: "file",
+    port: parseInt(process.env.PORT || "4005", 10),
   });
 
+  // Register multipart plugin for file uploads
   await app.register(multipart, {
     limits: {
       fileSize: 100 * 1024 * 1024, // 100MB
@@ -34,45 +56,55 @@ async function main() {
     },
   });
 
-  // Health check
-  app.get("/health", async () => {
-    return { status: "ok", service: "file" };
-  });
+  // ── Helpers ─────────────────────────────────────────────────────────────
 
-  // POST /upload - Single file upload
-  app.post("/upload", async (request, reply) => {
+  /** Extract & validate the x-user-id header. Throws if missing. */
+  function requireUserId(request: { headers: Record<string, string | string[] | undefined> }): string {
     const userId = request.headers["x-user-id"] as string | undefined;
     if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
+      throw new AuthenticationError("Missing x-user-id header");
     }
+    return userId;
+  }
 
+  /** Read the x-path header, sanitize it, and return a safe path. */
+  function getSafePath(request: { headers: Record<string, string | string[] | undefined> }): string {
+    const raw = (request.headers["x-path"] as string) || "/";
+    return sanitizePath(raw);
+  }
+
+  // ── POST /upload — Single file upload ──────────────────────────────────
+
+  app.post("/upload", typedRoute({}, async (request, reply) => {
+    const userId = requireUserId(request);
     const data = await request.file();
     if (!data) {
-      return reply.status(400).send({ error: "No file provided" });
+      throw new ValidationError("No file provided");
     }
 
-    try {
-      const sessionId = request.headers["x-session-id"] as string | undefined;
+    const sessionId = request.headers["x-session-id"] as string | undefined;
 
-      const chunks: Buffer[] = [];
-      for await (const chunk of data.file) {
-        chunks.push(chunk);
-      }
-      const buffer = Buffer.concat(chunks);
+    const chunks: Buffer[] = [];
+    for await (const chunk of data.file) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
 
-      const fileId = createId();
-      const storageKey = getStorageKey(userId, fileId, data.filename);
+    const fileId = createId();
+    const storageKey = getStorageKey(userId, fileId, data.filename);
 
-      await uploadFile(storageKey, buffer, data.mimetype);
+    await uploadFile(storageKey, buffer, data.mimetype);
 
-      const [file] = await db
+    // Insert file record and initial version in a single transaction
+    const file = await db.transaction(async (tx) => {
+      const [f] = await tx
         .insert(files)
         .values({
           id: fileId,
           userId,
           sessionId: sessionId || null,
           name: data.filename,
-          path: (request.headers["x-path"] as string) || "/",
+          path: getSafePath(request),
           mimeType: data.mimetype,
           size: buffer.length,
           storageKey,
@@ -81,7 +113,7 @@ async function main() {
         .returning();
 
       // Create initial version
-      await db.insert(fileVersions).values({
+      await tx.insert(fileVersions).values({
         id: createId(),
         fileId,
         version: 1,
@@ -90,36 +122,33 @@ async function main() {
         changeDescription: "Initial upload",
       });
 
-      dispatchWebhookEvent({
-        eventType: "file.uploaded",
-        resourceType: "file",
-        resourceId: file!.id,
-        payload: { id: file!.id, name: file!.name, mimeType: file!.mimeType, size: file!.size },
-        userId,
-      });
+      return f;
+    });
 
-      return {
-        id: file!.id,
-        name: file!.name,
-        mimeType: file!.mimeType,
-        size: file!.size,
-        storageProvider: file!.storageProvider,
-        createdAt: file!.createdAt,
-      };
-    } catch (error) {
-      logger.error(error, "Failed to upload file");
-      return reply.status(500).send({ error: "Failed to upload file" });
-    }
-  });
+    dispatchWebhookEvent({
+      eventType: "file.uploaded",
+      resourceType: "file",
+      resourceId: file!.id,
+      payload: { id: file!.id, name: file!.name, mimeType: file!.mimeType, size: file!.size },
+      userId,
+    });
 
-  // POST /upload/bulk - Multi-file upload
-  app.post("/upload/bulk", async (request, reply) => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
-    }
+    return reply.success({
+      id: file!.id,
+      name: file!.name,
+      mimeType: file!.mimeType,
+      size: file!.size,
+      storageProvider: file!.storageProvider,
+      createdAt: file!.createdAt,
+    });
+  }));
 
+  // ── POST /upload/bulk — Multi-file upload ──────────────────────────────
+
+  app.post("/upload/bulk", typedRoute({}, async (request, reply) => {
+    const userId = requireUserId(request);
     const sessionId = request.headers["x-session-id"] as string | undefined;
+
     const results: Array<{
       id: string;
       name: string;
@@ -128,29 +157,30 @@ async function main() {
     }> = [];
     const errors: Array<{ filename: string; error: string }> = [];
 
-    try {
-      const parts = request.files();
-      for await (const data of parts) {
-        try {
-          const chunks: Buffer[] = [];
-          for await (const chunk of data.file) {
-            chunks.push(chunk);
-          }
-          const buffer = Buffer.concat(chunks);
+    const parts = request.files();
+    for await (const data of parts) {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of data.file) {
+          chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
 
-          const fileId = createId();
-          const storageKey = getStorageKey(userId, fileId, data.filename);
+        const fileId = createId();
+        const storageKey = getStorageKey(userId, fileId, data.filename);
 
-          await uploadFile(storageKey, buffer, data.mimetype);
+        await uploadFile(storageKey, buffer, data.mimetype);
 
-          const [file] = await db
+        // Insert file record and initial version in a single transaction
+        const file = await db.transaction(async (tx) => {
+          const [f] = await tx
             .insert(files)
             .values({
               id: fileId,
               userId,
               sessionId: sessionId || null,
               name: data.filename,
-              path: (request.headers["x-path"] as string) || "/",
+              path: getSafePath(request),
               mimeType: data.mimetype,
               size: buffer.length,
               storageKey,
@@ -158,7 +188,7 @@ async function main() {
             })
             .returning();
 
-          await db.insert(fileVersions).values({
+          await tx.insert(fileVersions).values({
             id: createId(),
             fileId,
             version: 1,
@@ -167,153 +197,134 @@ async function main() {
             changeDescription: "Initial upload",
           });
 
-          results.push({
-            id: file!.id,
-            name: file!.name,
-            mimeType: file!.mimeType,
-            size: file!.size,
-          });
-        } catch (err) {
-          logger.error(err, `Failed to upload file: ${data.filename}`);
-          errors.push({ filename: data.filename, error: "Upload failed" });
-        }
+          return f;
+        });
+
+        results.push({
+          id: file!.id,
+          name: file!.name,
+          mimeType: file!.mimeType,
+          size: file!.size,
+        });
+      } catch (err) {
+        logger.error(err, `Failed to upload file: ${data.filename}`);
+        errors.push({ filename: data.filename, error: "Upload failed" });
       }
-
-      return { files: results, errors };
-    } catch (error) {
-      logger.error(error, "Failed to process bulk upload");
-      return reply.status(500).send({ error: "Failed to process bulk upload" });
-    }
-  });
-
-  // GET /files/:id - File metadata + versions
-  app.get("/files/:id", async (request, reply) => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
     }
 
-    const { id } = request.params as { id: string };
+    return reply.success({ files: results, errors });
+  }));
 
-    try {
-      const [file] = await db
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, userId)))
-        .limit(1);
+  // ── GET /files/:id — File metadata + versions ─────────────────────────
 
-      if (!file) {
-        return reply.status(404).send({ error: "File not found" });
-      }
+  app.get("/files/:id", typedRoute({ params: IdParams }, async (request, reply) => {
+    const userId = requireUserId(request);
+    const { id } = request.params;
 
-      const versions = await db
+    const [file] = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), eq(files.userId, userId)))
+      .limit(1);
+
+    if (!file) {
+      throw new NotFoundError("File");
+    }
+
+    const versions = await db
+      .select()
+      .from(fileVersions)
+      .where(eq(fileVersions.fileId, id))
+      .orderBy(desc(fileVersions.version));
+
+    return reply.success({ ...file, versions });
+  }));
+
+  // ── GET /files/:id/download — Presigned download URL ───────────────────
+
+  app.get("/files/:id/download", typedRoute({ params: IdParams, query: DownloadQuery }, async (request, reply) => {
+    const userId = requireUserId(request);
+    const { id } = request.params;
+    const { version } = request.query;
+
+    const [file] = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), eq(files.userId, userId)))
+      .limit(1);
+
+    if (!file) {
+      throw new NotFoundError("File");
+    }
+
+    let key = file.storageKey;
+
+    // If a specific version is requested, resolve its storageKey
+    if (version) {
+      const [ver] = await db
         .select()
         .from(fileVersions)
-        .where(eq(fileVersions.fileId, id))
-        .orderBy(desc(fileVersions.version));
-
-      return { ...file, versions };
-    } catch (error) {
-      logger.error(error, "Failed to fetch file");
-      return reply.status(500).send({ error: "Failed to fetch file" });
-    }
-  });
-
-  // GET /files/:id/download - Presigned download URL
-  app.get("/files/:id/download", async (request, reply) => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
-    }
-
-    const { id } = request.params as { id: string };
-    const { version } = request.query as { version?: string };
-
-    try {
-      const [file] = await db
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, userId)))
+        .where(and(eq(fileVersions.fileId, id), eq(fileVersions.version, parseInt(version, 10))))
         .limit(1);
 
-      if (!file) {
-        return reply.status(404).send({ error: "File not found" });
+      if (!ver) {
+        throw new NotFoundError("Version");
       }
-
-      let key = file.storageKey;
-
-      // If a specific version is requested, resolve its storageKey
-      if (version) {
-        const [ver] = await db
-          .select()
-          .from(fileVersions)
-          .where(and(eq(fileVersions.fileId, id), eq(fileVersions.version, parseInt(version, 10))))
-          .limit(1);
-
-        if (!ver) {
-          return reply.status(404).send({ error: "Version not found" });
-        }
-        key = ver.storageKey;
-      }
-
-      if (!key) {
-        return reply.status(404).send({ error: "File has no storage key" });
-      }
-
-      const expiresIn = 3600;
-      const url = await getPresignedUrl(key, expiresIn);
-
-      return { id: file.id, url, expiresIn };
-    } catch (error) {
-      logger.error(error, "Failed to generate download URL");
-      return reply.status(500).send({ error: "Failed to generate download URL" });
-    }
-  });
-
-  // PUT /files/:id - Upload new version
-  app.put("/files/:id", async (request, reply) => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
+      key = ver.storageKey;
     }
 
-    const { id } = request.params as { id: string };
+    if (!key) {
+      throw new NotFoundError("File storage key");
+    }
+
+    const expiresIn = 3600;
+    const url = await getPresignedUrl(key, expiresIn);
+
+    return reply.success({ id: file.id, url, expiresIn });
+  }));
+
+  // ── PUT /files/:id — Upload new version ────────────────────────────────
+
+  app.put("/files/:id", typedRoute({ params: IdParams }, async (request, reply) => {
+    const userId = requireUserId(request);
+    const { id } = request.params;
 
     const data = await request.file();
     if (!data) {
-      return reply.status(400).send({ error: "No file provided" });
+      throw new ValidationError("No file provided");
     }
 
-    try {
-      const [file] = await db
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, userId)))
-        .limit(1);
+    const [file] = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), eq(files.userId, userId)))
+      .limit(1);
 
-      if (!file) {
-        return reply.status(404).send({ error: "File not found" });
-      }
+    if (!file) {
+      throw new NotFoundError("File");
+    }
 
-      // Get the latest version number
-      const [latest] = await db
-        .select({ maxVersion: sql<number>`coalesce(max(${fileVersions.version}), 0)` })
-        .from(fileVersions)
-        .where(eq(fileVersions.fileId, id));
+    // Get the latest version number
+    const [latest] = await db
+      .select({ maxVersion: sql<number>`coalesce(max(${fileVersions.version}), 0)` })
+      .from(fileVersions)
+      .where(eq(fileVersions.fileId, id));
 
-      const nextVersion = (latest?.maxVersion ?? 0) + 1;
+    const nextVersion = (latest?.maxVersion ?? 0) + 1;
 
-      const chunks: Buffer[] = [];
-      for await (const chunk of data.file) {
-        chunks.push(chunk);
-      }
-      const buffer = Buffer.concat(chunks);
+    const chunks: Buffer[] = [];
+    for await (const chunk of data.file) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
 
-      const storageKey = getVersionStorageKey(userId, id, nextVersion, data.filename);
+    const storageKey = getVersionStorageKey(userId, id, nextVersion, data.filename);
 
-      await uploadFile(storageKey, buffer, data.mimetype);
+    await uploadFile(storageKey, buffer, data.mimetype);
 
-      await db.insert(fileVersions).values({
+    // Insert new version and update file record in a single transaction
+    const updated = await db.transaction(async (tx) => {
+      await tx.insert(fileVersions).values({
         id: createId(),
         fileId: id,
         version: nextVersion,
@@ -323,7 +334,7 @@ async function main() {
       });
 
       // Update the main file record to point to the latest version
-      const [updated] = await db
+      const [u] = await tx
         .update(files)
         .set({
           storageKey,
@@ -334,163 +345,99 @@ async function main() {
         .where(eq(files.id, id))
         .returning();
 
-      return {
-        id: updated!.id,
-        name: updated!.name,
-        version: nextVersion,
-        size: updated!.size,
-        storageKey: updated!.storageKey,
-      };
-    } catch (error) {
-      logger.error(error, "Failed to upload new version");
-      return reply.status(500).send({ error: "Failed to upload new version" });
-    }
-  });
-
-  // DELETE /files/:id - S3 + DB cleanup
-  app.delete("/files/:id", async (request, reply) => {
-    const userId = request.headers["x-user-id"] as string | undefined;
-    if (!userId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
-    }
-
-    const { id } = request.params as { id: string };
-
-    try {
-      const [file] = await db
-        .select()
-        .from(files)
-        .where(and(eq(files.id, id), eq(files.userId, userId)))
-        .limit(1);
-
-      if (!file) {
-        return reply.status(404).send({ error: "File not found" });
-      }
-
-      // Collect all storage keys (main file + all versions)
-      const versions = await db
-        .select({ storageKey: fileVersions.storageKey })
-        .from(fileVersions)
-        .where(eq(fileVersions.fileId, id));
-
-      const keysToDelete = versions.map((v) => v.storageKey).filter(Boolean);
-
-      // Include the main file's storageKey if it differs
-      if (file.storageKey && !keysToDelete.includes(file.storageKey)) {
-        keysToDelete.push(file.storageKey);
-      }
-
-      // Delete from S3
-      if (keysToDelete.length > 0) {
-        await deleteFiles(keysToDelete);
-      }
-
-      // Delete from DB (cascade handles fileVersions)
-      await db.delete(files).where(eq(files.id, id));
-
-      return { deleted: true };
-    } catch (error) {
-      logger.error(error, "Failed to delete file");
-      return reply.status(500).send({ error: "Failed to delete file" });
-    }
-  });
-
-  // GET /users/:userId/files - List user files
-  app.get("/users/:userId/files", async (request, reply) => {
-    const authUserId = request.headers["x-user-id"] as string | undefined;
-    if (!authUserId) {
-      return reply.status(401).send({ error: "Missing x-user-id header" });
-    }
-
-    const { userId } = request.params as { userId: string };
-    if (authUserId !== userId) {
-      return reply.status(403).send({ error: "Forbidden" });
-    }
-
-    const {
-      sessionId,
-      mimeType,
-      cursor,
-      limit: limitStr,
-    } = request.query as {
-      sessionId?: string;
-      mimeType?: string;
-      cursor?: string;
-      limit?: string;
-    };
-
-    const limit = Math.min(parseInt(limitStr || "50", 10), 100);
-
-    try {
-      const conditions = [eq(files.userId, userId)];
-
-      if (sessionId) {
-        conditions.push(eq(files.sessionId, sessionId));
-      }
-      if (mimeType) {
-        conditions.push(eq(files.mimeType, mimeType));
-      }
-      if (cursor) {
-        conditions.push(sql`${files.createdAt} < ${cursor}`);
-      }
-
-      const result = await db
-        .select()
-        .from(files)
-        .where(and(...conditions))
-        .orderBy(desc(files.createdAt))
-        .limit(limit + 1);
-
-      const hasMore = result.length > limit;
-      const fileList = hasMore ? result.slice(0, limit) : result;
-      const nextCursor = hasMore ? fileList[fileList.length - 1]!.createdAt.toISOString() : null;
-
-      return { files: fileList, nextCursor };
-    } catch (error) {
-      logger.error(error, "Failed to list user files");
-      return reply.status(500).send({ error: "Failed to list files" });
-    }
-  });
-
-  // Request logging
-  app.addHook("onRequest", async (request) => {
-    logger.info(
-      {
-        requestId: request.id,
-        method: request.method,
-        url: request.url,
-      },
-      "Incoming request"
-    );
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    logger.info(
-      {
-        requestId: request.id,
-        statusCode: reply.statusCode,
-        responseTime: reply.elapsedTime,
-      },
-      "Request completed"
-    );
-  });
-
-  try {
-    await app.listen({ port, host });
-    logger.info({ port, host }, "File service started");
-  } catch (err) {
-    logger.error(err, "Failed to start server");
-    process.exit(1);
-  }
-
-  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      logger.info({ signal }, "Received shutdown signal");
-      await app.close();
-      process.exit(0);
+      return u;
     });
-  }
+
+    return reply.success({
+      id: updated!.id,
+      name: updated!.name,
+      version: nextVersion,
+      size: updated!.size,
+      storageKey: updated!.storageKey,
+    });
+  }));
+
+  // ── DELETE /files/:id — S3 + DB cleanup ────────────────────────────────
+
+  app.delete("/files/:id", typedRoute({ params: IdParams }, async (request, reply) => {
+    const userId = requireUserId(request);
+    const { id } = request.params;
+
+    const [file] = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.id, id), eq(files.userId, userId)))
+      .limit(1);
+
+    if (!file) {
+      throw new NotFoundError("File");
+    }
+
+    // Collect all storage keys (main file + all versions)
+    const versions = await db
+      .select({ storageKey: fileVersions.storageKey })
+      .from(fileVersions)
+      .where(eq(fileVersions.fileId, id));
+
+    const keysToDelete = versions.map((v) => v.storageKey).filter(Boolean);
+
+    // Include the main file's storageKey if it differs
+    if (file.storageKey && !keysToDelete.includes(file.storageKey)) {
+      keysToDelete.push(file.storageKey);
+    }
+
+    // Delete from DB first (cascade handles fileVersions), then clean up S3
+    await db.delete(files).where(eq(files.id, id));
+
+    // Delete from S3 after DB commit — if this fails, orphaned S3 objects can be cleaned up later
+    if (keysToDelete.length > 0) {
+      await deleteFiles(keysToDelete);
+    }
+
+    return reply.success({ deleted: true });
+  }));
+
+  // ── GET /users/:userId/files — List user files ─────────────────────────
+
+  app.get("/users/:userId/files", typedRoute({ params: UserIdParams, query: ListFilesQuery }, async (request, reply) => {
+    const authUserId = requireUserId(request);
+    const { userId } = request.params;
+
+    if (authUserId !== userId) {
+      throw new AuthorizationError("Forbidden");
+    }
+
+    const { sessionId, mimeType, cursor, limit } = request.query;
+
+    const conditions = [eq(files.userId, userId)];
+
+    if (sessionId) {
+      conditions.push(eq(files.sessionId, sessionId));
+    }
+    if (mimeType) {
+      conditions.push(eq(files.mimeType, mimeType));
+    }
+    if (cursor) {
+      conditions.push(sql`${files.createdAt} < ${cursor}`);
+    }
+
+    const result = await db
+      .select()
+      .from(files)
+      .where(and(...conditions))
+      .orderBy(desc(files.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = result.length > limit;
+    const fileList = hasMore ? result.slice(0, limit) : result;
+    const nextCursor = hasMore ? fileList[fileList.length - 1]!.createdAt.toISOString() : null;
+
+    return reply.success({ files: fileList, nextCursor });
+  }));
+
+  // ── Start the service ──────────────────────────────────────────────────
+
+  await start();
 }
 
 main();

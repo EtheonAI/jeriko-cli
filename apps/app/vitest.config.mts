@@ -6,6 +6,23 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    globals: true,
+    include: ["__tests__/**/*.test.{ts,tsx}", "**/*.test.{ts,tsx}"],
+    exclude: ["node_modules", "dist", ".next", "e2e"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html", "lcov"],
+      exclude: [
+        "node_modules",
+        "dist",
+        ".next",
+        "e2e",
+        "**/*.d.ts",
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/*.config.*",
+      ],
+    },
   },
   resolve: {
     alias: {

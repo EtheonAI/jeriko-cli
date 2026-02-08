@@ -91,6 +91,13 @@ export interface ConnectorsState {
     step: "select" | "configure" | "authorize" | "complete";
     error: string | null;
   };
+  // Manus-aligned keys
+  temporaryEnabledOverrides: Record<string, boolean>;
+  temporaryGithubRepositories: Record<string, unknown>;
+  multipleEmailConfirmedInfo: Record<string, unknown>;
+  multipleCalendarConfirmedInfo: Record<string, unknown>;
+  githubRepositories: unknown[];
+  githubRepositoriesLoading: boolean;
   // Error state
   error: string | null;
 }
@@ -111,10 +118,17 @@ const initialState: ConnectorsState = {
     step: "select",
     error: null,
   },
+  // Manus-aligned defaults
+  temporaryEnabledOverrides: {},
+  temporaryGithubRepositories: {},
+  multipleEmailConfirmedInfo: {},
+  multipleCalendarConfirmedInfo: {},
+  githubRepositories: [],
+  githubRepositoriesLoading: false,
   error: null,
 };
 
-export const connectorsSlice = createSlice({
+const connectorsSlice = createSlice({
   name: "connectors",
   initialState,
   reducers: {
@@ -248,6 +262,26 @@ export const connectorsSlice = createSlice({
       state.isInstalling = false;
     },
 
+    // Manus-aligned reducers
+    setTemporaryEnabledOverrides: (state, action: PayloadAction<Record<string, boolean>>) => {
+      state.temporaryEnabledOverrides = action.payload;
+    },
+    setTemporaryGithubRepositories: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.temporaryGithubRepositories = action.payload;
+    },
+    setMultipleEmailConfirmedInfo: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.multipleEmailConfirmedInfo = action.payload;
+    },
+    setMultipleCalendarConfirmedInfo: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.multipleCalendarConfirmedInfo = action.payload;
+    },
+    setGithubRepositories: (state, action: PayloadAction<unknown[]>) => {
+      state.githubRepositories = action.payload;
+    },
+    setGithubRepositoriesLoading: (state, action: PayloadAction<boolean>) => {
+      state.githubRepositoriesLoading = action.payload;
+    },
+
     // Sync status for connectors
     setConnectorSyncStatus: (
       state,
@@ -271,8 +305,8 @@ export const connectorsSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility
-    builder.addCase("connectors/setConnectors", (state, action: PayloadAction<Connector[]>) => {
-      state.availableConnectors = action.payload ?? [];
+    builder.addCase("connectors/setConnectors", (state, action) => {
+      state.availableConnectors = (action as any).payload ?? [];
       state.isLoadingAvailable = false;
     });
   },
@@ -297,6 +331,12 @@ export const {
   setInstalling,
   setConnectorsError,
   setConnectorSyncStatus,
+  setTemporaryEnabledOverrides,
+  setTemporaryGithubRepositories,
+  setMultipleEmailConfirmedInfo,
+  setMultipleCalendarConfirmedInfo,
+  setGithubRepositories,
+  setGithubRepositoriesLoading,
 } = connectorsSlice.actions;
 
 export default connectorsSlice.reducer;

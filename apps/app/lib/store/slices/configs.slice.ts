@@ -106,7 +106,7 @@ export interface ConfigsState {
   clientConfig: ClientConfig | null;
   // Invitation codes
   invitationCodes: InvitationCode[];
-  invitationCodeLength: number | null;
+  invitationCodeLength: number;
   // Agent email (like Manus bot email)
   agentEmailInfo: AgentEmailInfo | null;
   emailWhiteList: Array<{
@@ -137,6 +137,17 @@ export interface ConfigsState {
       expiresAt?: string;
     };
   } | null;
+  // Manus-aligned config keys
+  sessionListPinned: boolean;
+  agentWorkspaceAutoExpanded: boolean;
+  automaticallyLearnKnowledge: boolean;
+  theme: string;
+  clientId: string;
+  gotoComputerTipsShowed: boolean;
+  disableContextExpensiveErrorSessions: string[];
+  agentMailCardShowed: boolean;
+  chatSidebarMode: string;
+  firstClickWorkflowEmailAddButton: boolean;
   // Loading states
   isLoading: boolean;
   isUpdating: boolean;
@@ -203,7 +214,7 @@ const defaultClientConfig: ClientConfig = {
 const initialState: ConfigsState = {
   clientConfig: null,
   invitationCodes: [],
-  invitationCodeLength: null,
+  invitationCodeLength: 1,
   agentEmailInfo: null,
   emailWhiteList: [],
   features: {
@@ -218,13 +229,24 @@ const initialState: ConfigsState = {
     storageLimit: 5,
   },
   paymentInfo: null,
+  // Manus-aligned defaults
+  sessionListPinned: true,
+  agentWorkspaceAutoExpanded: true,
+  automaticallyLearnKnowledge: true,
+  theme: "system",
+  clientId: "",
+  gotoComputerTipsShowed: false,
+  disableContextExpensiveErrorSessions: [],
+  agentMailCardShowed: true,
+  chatSidebarMode: "sidebar",
+  firstClickWorkflowEmailAddButton: true,
   isLoading: false,
   isUpdating: false,
   isInitialized: false,
   error: null,
 };
 
-export const configsSlice = createSlice({
+const configsSlice = createSlice({
   name: "configs",
   initialState,
   reducers: {
@@ -433,6 +455,38 @@ export const configsSlice = createSlice({
       }
     },
 
+    // Manus-aligned config setters
+    setSessionListPinned: (state, action: PayloadAction<boolean>) => {
+      state.sessionListPinned = action.payload;
+    },
+    setAgentWorkspaceAutoExpanded: (state, action: PayloadAction<boolean>) => {
+      state.agentWorkspaceAutoExpanded = action.payload;
+    },
+    setAutomaticallyLearnKnowledge: (state, action: PayloadAction<boolean>) => {
+      state.automaticallyLearnKnowledge = action.payload;
+    },
+    setConfigTheme: (state, action: PayloadAction<string>) => {
+      state.theme = action.payload;
+    },
+    setClientId: (state, action: PayloadAction<string>) => {
+      state.clientId = action.payload;
+    },
+    setGotoComputerTipsShowed: (state, action: PayloadAction<boolean>) => {
+      state.gotoComputerTipsShowed = action.payload;
+    },
+    setDisableContextExpensiveErrorSessions: (state, action: PayloadAction<string[]>) => {
+      state.disableContextExpensiveErrorSessions = action.payload;
+    },
+    setAgentMailCardShowed: (state, action: PayloadAction<boolean>) => {
+      state.agentMailCardShowed = action.payload;
+    },
+    setChatSidebarMode: (state, action: PayloadAction<string>) => {
+      state.chatSidebarMode = action.payload;
+    },
+    setFirstClickWorkflowEmailAddButton: (state, action: PayloadAction<boolean>) => {
+      state.firstClickWorkflowEmailAddButton = action.payload;
+    },
+
     // Loading states
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;
@@ -458,7 +512,7 @@ export const configsSlice = createSlice({
     clearConfigsState: (state) => {
       state.clientConfig = null;
       state.invitationCodes = [];
-      state.invitationCodeLength = null;
+      state.invitationCodeLength = 1;
       state.agentEmailInfo = null;
       state.emailWhiteList = [];
       state.paymentInfo = null;
@@ -467,8 +521,8 @@ export const configsSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility
-    builder.addCase("configs/setInvitationCodeLength", (state, action: PayloadAction<number>) => {
-      state.invitationCodeLength = action.payload ?? null;
+    builder.addCase("configs/setInvitationCodeLength", (state, action) => {
+      state.invitationCodeLength = (action as any).payload ?? null;
     });
   },
 });
@@ -497,6 +551,16 @@ export const {
   removeFromEmailWhiteList,
   setFeatures,
   setPaymentInfo,
+  setSessionListPinned,
+  setAgentWorkspaceAutoExpanded,
+  setAutomaticallyLearnKnowledge,
+  setConfigTheme,
+  setClientId,
+  setGotoComputerTipsShowed,
+  setDisableContextExpensiveErrorSessions,
+  setAgentMailCardShowed,
+  setChatSidebarMode,
+  setFirstClickWorkflowEmailAddButton,
   updatePaymentInfo,
   setLoading,
   setUpdating,

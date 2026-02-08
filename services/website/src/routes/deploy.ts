@@ -6,7 +6,7 @@ import {
   createLogger,
   createId,
 } from "@repo/service-utils";
-import { db, websites as websitesTable, websiteCrawlJobs, eq, and, desc } from "@repo/database";
+import { db, websites as websitesTable, websiteCrawlJobs, eq, and, desc } from "../lib/db.js";
 
 const logger = createLogger({ service: "website-deploy" });
 
@@ -174,7 +174,7 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Get deployment status
   fastify.get("/websites/:id/deployments/:deploymentId", async (request, reply) => {
-    const userId = getUserId(request);
+    getUserId(request);
     const { deploymentId } = request.params as { id: string; deploymentId: string };
 
     try {
@@ -211,7 +211,7 @@ export const deployRoutes: FastifyPluginAsync = async (fastify) => {
 
   // List deployments
   fastify.get("/websites/:id/deployments", async (request, reply) => {
-    const userId = getUserId(request);
+    getUserId(request);
     const { id } = request.params as { id: string };
 
     try {

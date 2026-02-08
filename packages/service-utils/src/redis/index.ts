@@ -13,6 +13,9 @@ let redisClient: any = null;
 let redisPubClient: any = null;
 let redisSubClient: any = null;
 
+// Track per-channel subscriber callbacks for proper cleanup
+const channelSubscribers = new Map<string, Set<(message: unknown) => void>>();
+
 export function getRedisConfig(): RedisConfig {
   return {
     host: process.env.REDIS_HOST || "localhost",
@@ -63,6 +66,25 @@ export function getRedisSubClient() {
       password: config.password,
       db: config.db,
     });
+
+    // Single global message handler that dispatches to per-channel callbacks
+    redisSubClient.on("message", (ch: string, msg: string) => {
+      const callbacks = channelSubscribers.get(ch);
+      if (!callbacks || callbacks.size === 0) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(msg);
+      } catch {
+        return;
+      }
+      for (const cb of callbacks) {
+        try {
+          cb(parsed);
+        } catch {
+          // Individual callback errors should not break others
+        }
+      }
+    });
   }
   return redisSubClient;
 }
@@ -100,20 +122,45 @@ export async function publish(channel: string, message: unknown): Promise<void> 
   await pub.publish(channel, JSON.stringify(message));
 }
 
+/**
+ * Subscribe to a Redis channel with proper lifecycle management.
+ * Returns an unsubscribe function that cleans up the listener.
+ * Only calls Redis SUBSCRIBE when the first callback is added for a channel,
+ * and Redis UNSUBSCRIBE when the last callback is removed.
+ */
 export function subscribe(
   channel: string,
   callback: (message: unknown) => void
-): void {
+): () => void {
   const sub = getRedisSubClient();
-  sub.subscribe(channel);
-  sub.on("message", (ch: string, msg: string) => {
-    if (ch === channel) {
-      callback(JSON.parse(msg));
+
+  let callbacks = channelSubscribers.get(channel);
+  if (!callbacks) {
+    callbacks = new Set();
+    channelSubscribers.set(channel, callbacks);
+    // First subscriber for this channel — subscribe at Redis level
+    sub.subscribe(channel);
+  }
+
+  callbacks.add(callback);
+
+  // Return unsubscribe function
+  return () => {
+    const cbs = channelSubscribers.get(channel);
+    if (!cbs) return;
+    cbs.delete(callback);
+    if (cbs.size === 0) {
+      channelSubscribers.delete(channel);
+      // Last subscriber removed — unsubscribe at Redis level
+      sub.unsubscribe(channel);
     }
-  });
+  };
 }
 
 export async function closeRedis(): Promise<void> {
+  // Clear all subscription tracking
+  channelSubscribers.clear();
+
   if (redisClient) {
     await redisClient.quit();
     redisClient = null;

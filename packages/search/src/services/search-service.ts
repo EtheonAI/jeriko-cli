@@ -12,8 +12,7 @@ import type {
   ProjectDocument,
   ActionDocument,
 } from "../types";
-import type { MultiSearchRequestSchema } from "typesense/lib/Typesense/MultiSearch";
-import type { SearchResponse } from "typesense/lib/Typesense/Documents";
+import type { SearchResponseHit, SearchResponse, DocumentSchema } from "typesense/lib/Typesense/Documents";
 
 const client = getTypesenseClient();
 
@@ -36,8 +35,18 @@ function buildFilterString(userId: string, options?: SearchOptions["filters"]): 
   return filters.join(" && ");
 }
 
+// Shared highlight mapping helper
+function mapHighlights<T extends DocumentSchema>(
+  hit: SearchResponseHit<T>
+): SearchResultItem["highlights"] {
+  return hit.highlights?.map((h: { field: keyof T; snippet?: string }) => ({
+    field: String(h.field),
+    snippet: h.snippet || "",
+  }));
+}
+
 // Map Typesense hit to SearchResultItem
-function mapFileHit(hit: SearchResponse<FileDocument>["hits"][0]): SearchResultItem {
+function mapFileHit(hit: SearchResponseHit<FileDocument>): SearchResultItem {
   const doc = hit.document;
   return {
     id: doc.id,
@@ -48,10 +57,7 @@ function mapFileHit(hit: SearchResponse<FileDocument>["hits"][0]): SearchResultI
     icon: getFileIcon(doc.mimeType),
     timestamp: doc.updatedAt,
     url: `/files/${doc.id}`,
-    highlights: hit.highlights?.map((h) => ({
-      field: h.field,
-      snippet: h.snippet || "",
-    })),
+    highlights: mapHighlights(hit),
     metadata: {
       size: doc.size,
       mimeType: doc.mimeType,
@@ -60,7 +66,7 @@ function mapFileHit(hit: SearchResponse<FileDocument>["hits"][0]): SearchResultI
   };
 }
 
-function mapSessionHit(hit: SearchResponse<SessionDocument>["hits"][0]): SearchResultItem {
+function mapSessionHit(hit: SearchResponseHit<SessionDocument>): SearchResultItem {
   const doc = hit.document;
   return {
     id: doc.id,
@@ -70,17 +76,14 @@ function mapSessionHit(hit: SearchResponse<SessionDocument>["hits"][0]): SearchR
     icon: "message-square",
     timestamp: doc.updatedAt,
     url: `/chat/${doc.id}`,
-    highlights: hit.highlights?.map((h) => ({
-      field: h.field,
-      snippet: h.snippet || "",
-    })),
+    highlights: mapHighlights(hit),
     metadata: {
       status: doc.status,
     },
   };
 }
 
-function mapTaskHit(hit: SearchResponse<TaskDocument>["hits"][0]): SearchResultItem {
+function mapTaskHit(hit: SearchResponseHit<TaskDocument>): SearchResultItem {
   const doc = hit.document;
   return {
     id: doc.id,
@@ -91,10 +94,7 @@ function mapTaskHit(hit: SearchResponse<TaskDocument>["hits"][0]): SearchResultI
     icon: "clock",
     timestamp: doc.createdAt,
     url: `/actions?tab=tasks&id=${doc.id}`,
-    highlights: hit.highlights?.map((h) => ({
-      field: h.field,
-      snippet: h.snippet || "",
-    })),
+    highlights: mapHighlights(hit),
     metadata: {
       status: doc.status,
       taskType: doc.taskType,
@@ -105,7 +105,7 @@ function mapTaskHit(hit: SearchResponse<TaskDocument>["hits"][0]): SearchResultI
   };
 }
 
-function mapProjectHit(hit: SearchResponse<ProjectDocument>["hits"][0]): SearchResultItem {
+function mapProjectHit(hit: SearchResponseHit<ProjectDocument>): SearchResultItem {
   const doc = hit.document;
   return {
     id: doc.id,
@@ -116,10 +116,7 @@ function mapProjectHit(hit: SearchResponse<ProjectDocument>["hits"][0]): SearchR
     icon: "folder",
     timestamp: doc.updatedAt,
     url: `/projects/${doc.id}`,
-    highlights: hit.highlights?.map((h) => ({
-      field: h.field,
-      snippet: h.snippet || "",
-    })),
+    highlights: mapHighlights(hit),
     metadata: {
       status: doc.status,
       visibility: doc.visibility,
@@ -129,7 +126,7 @@ function mapProjectHit(hit: SearchResponse<ProjectDocument>["hits"][0]): SearchR
   };
 }
 
-function mapActionHit(hit: SearchResponse<ActionDocument>["hits"][0]): SearchResultItem {
+function mapActionHit(hit: SearchResponseHit<ActionDocument>): SearchResultItem {
   const doc = hit.document;
   return {
     id: doc.id,
@@ -140,10 +137,7 @@ function mapActionHit(hit: SearchResponse<ActionDocument>["hits"][0]): SearchRes
     icon: "zap",
     timestamp: doc.createdAt,
     url: `/chat/${doc.sessionId}`,
-    highlights: hit.highlights?.map((h) => ({
-      field: h.field,
-      snippet: h.snippet || "",
-    })),
+    highlights: mapHighlights(hit),
     metadata: {
       status: doc.status,
       agentType: doc.agentType,
@@ -181,7 +175,7 @@ export async function search(options: SearchOptions): Promise<SearchResults> {
   } = options;
 
   // Build search requests for each collection
-  const searches: MultiSearchRequestSchema["searches"] = [];
+  const searches: Array<Record<string, unknown>> = [];
 
   if (collections.includes(COLLECTION_NAMES.FILES)) {
     searches.push({
@@ -254,14 +248,19 @@ export async function search(options: SearchOptions): Promise<SearchResults> {
   }
 
   // Execute federated search
-  const response = await client.multiSearch.perform({ searches }, {});
+  const response = await client.multiSearch.perform(
+    { searches } as Parameters<typeof client.multiSearch.perform>[0],
+    {}
+  );
 
   // Process results
   const results: SearchResultItem[] = [];
   let totalFound = 0;
   const facets: SearchResults["facets"] = { type: {} };
 
-  for (const searchResult of response.results) {
+  const responseResults = (response as { results: Array<SearchResponse<DocumentSchema>> }).results;
+
+  for (const searchResult of responseResults) {
     if (!searchResult.hits) continue;
 
     const collection = searchResult.request_params?.collection_name;
@@ -279,19 +278,19 @@ export async function search(options: SearchOptions): Promise<SearchResults> {
 
       switch (collection) {
         case COLLECTION_NAMES.FILES:
-          item = mapFileHit(hit as SearchResponse<FileDocument>["hits"][0]);
+          item = mapFileHit(hit as unknown as SearchResponseHit<FileDocument>);
           break;
         case COLLECTION_NAMES.SESSIONS:
-          item = mapSessionHit(hit as SearchResponse<SessionDocument>["hits"][0]);
+          item = mapSessionHit(hit as unknown as SearchResponseHit<SessionDocument>);
           break;
         case COLLECTION_NAMES.TASKS:
-          item = mapTaskHit(hit as SearchResponse<TaskDocument>["hits"][0]);
+          item = mapTaskHit(hit as unknown as SearchResponseHit<TaskDocument>);
           break;
         case COLLECTION_NAMES.PROJECTS:
-          item = mapProjectHit(hit as SearchResponse<ProjectDocument>["hits"][0]);
+          item = mapProjectHit(hit as unknown as SearchResponseHit<ProjectDocument>);
           break;
         case COLLECTION_NAMES.ACTIONS:
-          item = mapActionHit(hit as SearchResponse<ActionDocument>["hits"][0]);
+          item = mapActionHit(hit as unknown as SearchResponseHit<ActionDocument>);
           break;
       }
 
@@ -331,7 +330,7 @@ function collectionToType(collection: string): "file" | "session" | "task" | "pr
 }
 
 // Search within a single collection
-export async function searchCollection<T>(
+export async function searchCollection<T extends DocumentSchema>(
   collectionName: CollectionName,
   query: string,
   userId: string,
@@ -357,7 +356,7 @@ export async function searchCollection<T>(
     });
 
   return {
-    results: (response.hits?.map((hit) => hit.document) || []) as T[],
+    results: (response.hits?.map((hit: SearchResponseHit<DocumentSchema>) => hit.document) || []) as T[],
     totalFound: response.found || 0,
   };
 }

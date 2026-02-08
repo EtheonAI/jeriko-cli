@@ -61,7 +61,7 @@ export function startStaleDeviceChecker(): NodeJS.Timeout {
 
       if (stale.length > 0) {
         logger.info(
-          { count: stale.length, deviceIds: stale.map((d) => d.id) },
+          { count: stale.length, deviceIds: stale.map((d: { id: string }) => d.id) },
           "Marked stale devices offline"
         );
       }

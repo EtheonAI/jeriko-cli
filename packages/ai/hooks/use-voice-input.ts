@@ -133,6 +133,20 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
   const volumeAnimationRef = useRef<number | null>(null);
   const transcriptRef = useRef('');
 
+  // Callback refs — prevent stale closures in recognition event handlers
+  const onStartRef = useRef(onStart);
+  const onResultRef = useRef(onResult);
+  const onEndRef = useRef(onEnd);
+  const onErrorRef = useRef(onError);
+  const onVolumeChangeRef = useRef(onVolumeChange);
+
+  // Keep callback refs up to date on every render
+  onStartRef.current = onStart;
+  onResultRef.current = onResult;
+  onEndRef.current = onEnd;
+  onErrorRef.current = onError;
+  onVolumeChangeRef.current = onVolumeChange;
+
   // Check support on mount
   useEffect(() => {
     const SpeechRecognitionAPI = (
@@ -217,7 +231,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
         const normalizedVolume = Math.min(rms / 128, 1);
 
         setVolume(normalizedVolume);
-        onVolumeChange?.(normalizedVolume);
+        onVolumeChangeRef.current?.(normalizedVolume);
 
         // Reset silence timer if there's sound
         if (autoStop && normalizedVolume > 0.01) {
@@ -236,7 +250,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
     } catch (err) {
       console.warn('Volume monitoring not available:', err);
     }
-  }, [autoStop, silenceTimeout, onVolumeChange]);
+  }, [autoStop, silenceTimeout]);
 
   // Start recording
   const start = useCallback(async () => {
@@ -252,13 +266,18 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
       const err = new Error('Speech recognition not supported');
       setError(err);
       setState('error');
-      onError?.(err);
+      onErrorRef.current?.(err);
       return;
     }
 
     try {
       setState('requesting');
       setError(null);
+
+      // Reset transcript for new session
+      transcriptRef.current = '';
+      setTranscript('');
+      setInterimTranscript('');
 
       // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -282,7 +301,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
 
       recognition.onstart = () => {
         setState('listening');
-        onStart?.();
+        onStartRef.current?.();
 
         // Set max duration timer
         if (maxDuration > 0) {
@@ -308,14 +327,17 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
         }
 
         if (final) {
-          transcriptRef.current += final;
+          // Add space between accumulated final results
+          transcriptRef.current = transcriptRef.current
+            ? `${transcriptRef.current} ${final}`
+            : final;
           setTranscript(transcriptRef.current);
-          onResult?.(final, true);
+          onResultRef.current?.(final, true);
         }
 
         setInterimTranscript(interim);
         if (interim) {
-          onResult?.(interim, false);
+          onResultRef.current?.(interim, false);
         }
       };
 
@@ -328,17 +350,17 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
         const err = new Error(`Speech recognition error: ${event.error}`);
         setError(err);
         setState('error');
-        onError?.(err);
+        onErrorRef.current?.(err);
         cleanup();
       };
 
       recognition.onend = () => {
-        // Check current state via ref to avoid stale closure
+        // Check current state via updater to avoid stale closure
         setState((currentState) => {
           if (currentState === 'listening') {
             setTimeout(() => {
               const finalTranscript = transcriptRef.current;
-              onEnd?.(finalTranscript);
+              onEndRef.current?.(finalTranscript);
               setState('idle');
             }, 100);
             return 'processing';
@@ -358,7 +380,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
       const error = err instanceof Error ? err : new Error('Failed to start voice input');
       setError(error);
       setState('error');
-      onError?.(error);
+      onErrorRef.current?.(error);
       cleanup();
     }
   }, [
@@ -368,10 +390,6 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
     interimResults,
     maxAlternatives,
     maxDuration,
-    onStart,
-    onResult,
-    onEnd,
-    onError,
     startVolumeMonitoring,
     cleanup,
   ]);

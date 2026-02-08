@@ -2,14 +2,78 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { AgentSession } from "../slices/sessions.slice";
 import type { Message } from "../slices/chat.slice";
 import type { Agent, AgentTask } from "../slices/agents.slice";
-import type { FileItem } from "../slices/files.slice";
+import type { FileItem } from "../slices/library.slice";
 import type { Connector, InstalledConnector } from "../slices/connectors.slice";
 import type { Notification, NotificationPreferences } from "../slices/notifications.slice";
 import type { ScheduledTask, ScheduledTaskExecution } from "../slices/scheduledTasks.slice";
 import type { Team, TeamMember, TeamInvitation } from "../slices/team.slice";
 import type { Project, ProjectSession } from "../slices/projects.slice";
-import type { Attachment, AttachmentGroup, KnowledgeBase } from "../slices/knowledge.slice";
 import type { ClientConfig } from "../slices/configs.slice";
+
+// Knowledge types (inlined after knowledge.slice removal)
+export type DocumentType = "document" | "pdf" | "image" | "video" | "audio" | "code" | "spreadsheet" | "presentation" | "archive" | "other";
+export type AttachmentSource = "upload" | "web" | "connector" | "agent";
+
+export interface Attachment {
+  id: string;
+  userId: string;
+  sessionId?: string;
+  projectId?: string;
+  groupId?: string;
+  name: string;
+  description?: string;
+  mimeType: string;
+  size: number;
+  docType: DocumentType;
+  source: AttachmentSource;
+  storageKey: string;
+  storageProvider: "local" | "s3" | "r2" | "vercel_blob";
+  url?: string;
+  thumbnailUrl?: string;
+  isProcessed: boolean;
+  isIndexed: boolean;
+  processingStatus?: "pending" | "processing" | "completed" | "failed";
+  processingError?: string;
+  extractedText?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttachmentGroup {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  attachmentCount: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeBase {
+  id: string;
+  userId: string;
+  teamId?: string;
+  name: string;
+  description?: string;
+  settings: {
+    autoIndex: boolean;
+    chunkSize: number;
+    chunkOverlap: number;
+    embeddingModel: string;
+  };
+  documentCount: number;
+  totalSize: number;
+  lastIndexedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // Base API slice with RTK Query
 // Performance optimizations:

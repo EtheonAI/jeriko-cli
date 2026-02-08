@@ -22,7 +22,9 @@ export function MapReduceView({ tasks }: MapReduceViewProps) {
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/10 bg-canvas-surface px-3 py-2">
         <LayoutGridIcon className="size-3.5 text-cyan-400" />
-        <span className="text-xs font-medium text-muted-foreground/70">Parallel Processing</span>
+        <span className="text-xs font-medium text-muted-foreground/70">
+          Parallel Processing
+        </span>
       </div>
 
       {/* Content */}
@@ -34,8 +36,12 @@ export function MapReduceView({ tasks }: MapReduceViewProps) {
                 key={task.id}
                 className="rounded-lg border border-border/10 bg-canvas-surface p-3"
               >
-                <div className="mb-1 text-xs font-medium text-foreground/80">{task.label}</div>
-                <div className="text-xs text-muted-foreground/50">{task.status}</div>
+                <div className="mb-1 text-xs font-medium text-foreground/80">
+                  {task.label}
+                </div>
+                <div className="text-xs text-muted-foreground/50">
+                  {task.status}
+                </div>
               </div>
             ))}
           </div>
@@ -43,7 +49,9 @@ export function MapReduceView({ tasks }: MapReduceViewProps) {
           <div className="text-center text-muted-foreground/40">
             <LayoutGridIcon className="mx-auto mb-3 size-12 opacity-30" />
             <p className="text-sm">Map/Reduce Tasks</p>
-            <p className="mt-1 text-xs text-muted-foreground/30">Parallel subtask execution</p>
+            <p className="mt-1 text-xs text-muted-foreground/30">
+              Parallel subtask execution
+            </p>
           </div>
         )}
       </div>

@@ -78,7 +78,7 @@ export const scheduledTasksRouter = createTRPCRouter({
         // Timezone
         timezone: z.string().default("UTC"),
         // Task payload
-        payload: z.record(z.unknown()).optional(),
+        payload: z.record(z.string(), z.unknown()).optional(),
         // Retry config
         maxRetries: z.number().min(0).max(10).default(3),
         retryDelaySeconds: z.number().min(0).default(60),
@@ -178,7 +178,7 @@ export const scheduledTasksRouter = createTRPCRouter({
         recurrenceTime: z.string().optional(),
         cronExpression: z.string().optional(),
         timezone: z.string().optional(),
-        payload: z.record(z.unknown()).optional(),
+        payload: z.record(z.string(), z.unknown()).optional(),
         maxRetries: z.number().min(0).max(10).optional(),
         retryDelaySeconds: z.number().min(0).optional(),
         endDate: z.date().optional(),
@@ -350,12 +350,26 @@ export const scheduledTasksRouter = createTRPCRouter({
         .returning();
 
       if (task) {
-        // TODO: Publish scheduledTask:update event via gateway/backend service
+        // Trigger execution via task service → Inngest
+        const TASK_SERVICE_URL = process.env.TASK_SERVICE_URL || "http://localhost:3002";
+        try {
+          const resp = await fetch(`${TASK_SERVICE_URL}/scheduled-tasks/${input.id}/trigger`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": ctx.user.id,
+            },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!resp.ok) {
+            const errText = await resp.text().catch(() => "Unknown error");
+            console.warn(`Task service trigger returned ${resp.status}: ${errText}`);
+          }
+        } catch (err) {
+          // Non-fatal — execution record already created above
+          console.warn("Failed to trigger task execution via task service:", err);
+        }
       }
-
-      // TODO: Publish scheduledTask:execution:new event via gateway/backend service
-
-      // TODO: Trigger actual task execution via queue/worker
 
       return { executionId };
     }),
@@ -370,24 +384,25 @@ export const scheduledTasksRouter = createTRPCRouter({
       })
     )
     .query(async ({ ctx, input }) => {
-      // Verify ownership
-      const [task] = await db
-        .select()
-        .from(scheduledTasks)
-        .where(and(eq(scheduledTasks.id, input.taskId), eq(scheduledTasks.userId, ctx.user.id)))
-        .limit(1);
+      // Run ownership check + executions query in parallel
+      const [[task], executions] = await Promise.all([
+        db
+          .select()
+          .from(scheduledTasks)
+          .where(and(eq(scheduledTasks.id, input.taskId), eq(scheduledTasks.userId, ctx.user.id)))
+          .limit(1),
+        db
+          .select()
+          .from(taskExecutions)
+          .where(eq(taskExecutions.scheduledTaskId, input.taskId))
+          .orderBy(desc(taskExecutions.createdAt))
+          .limit(input.limit)
+          .offset(input.offset),
+      ]);
 
       if (!task) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
       }
-
-      const executions = await db
-        .select()
-        .from(taskExecutions)
-        .where(eq(taskExecutions.scheduledTaskId, input.taskId))
-        .orderBy(desc(taskExecutions.createdAt))
-        .limit(input.limit)
-        .offset(input.offset);
 
       return executions;
     }),

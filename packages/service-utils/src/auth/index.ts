@@ -1,6 +1,9 @@
 import * as jose from "jose";
 import { z } from "zod";
 
+// Internal service-to-service HMAC auth
+export { signInternalRequest, verifyInternalSignature, internalAuthMiddleware } from './internal-auth.js';
+
 export interface JWTPayload {
   sub: string; // user id
   email: string;

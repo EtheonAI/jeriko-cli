@@ -389,7 +389,7 @@ export function useSessionsIntegration() {
   // Sort sessions (memoized)
   const sortedSessions = useMemo(() => {
     const { sortBy, sortOrder } = sessionsState;
-    return [...filteredSessions].sort((a, b) => {
+    return filteredSessions.toSorted((a: AgentSession, b: AgentSession) => {
       let comparison = 0;
       switch (sortBy) {
         case "title":

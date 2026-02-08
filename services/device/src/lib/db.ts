@@ -1,4 +1,5 @@
-import { eq, and, or, desc, asc, sql, isNull } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql } from "drizzle-orm";
+import { isNull } from "drizzle-orm";
 
 // Database and schema references - populated by initDb()
 export let db: any;
@@ -10,12 +11,13 @@ export let smartHomeEntities: any;
 
 export async function initDb() {
   const mod = await import("@repo/database");
-  db = mod.db;
-  devices = mod.devices;
-  deviceSessions = mod.deviceSessions;
-  deviceCommands = mod.deviceCommands;
-  smartHomeHubs = mod.smartHomeHubs;
-  smartHomeEntities = mod.smartHomeEntities;
+  const resolved = (mod as any).default ?? mod;
+  db = resolved.db;
+  devices = resolved.devices;
+  deviceSessions = resolved.deviceSessions;
+  deviceCommands = resolved.deviceCommands;
+  smartHomeHubs = resolved.smartHomeHubs;
+  smartHomeEntities = resolved.smartHomeEntities;
 }
 
 // Re-export drizzle helpers (direct dependency, no resolution issue)

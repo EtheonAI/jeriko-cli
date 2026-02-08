@@ -71,6 +71,22 @@
     "./webhooks": {
       "types": "./dist/webhooks/index.d.ts",
       "import": "./dist/webhooks/index.js"
+    },
+    "./factory": {
+      "types": "./dist/factory/index.d.ts",
+      "import": "./dist/factory/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas/common.d.ts",
+      "import": "./dist/schemas/common.js"
+    },
+    "./circuit-breaker": {
+      "types": "./dist/circuit-breaker/index.d.ts",
+      "import": "./dist/circuit-breaker/index.js"
+    },
+    "./events": {
+      "types": "./dist/events/index.d.ts",
+      "import": "./dist/events/index.js"
     }
   },
   "scripts": {
@@ -84,6 +100,9 @@
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
     "@repo/database": "workspace:*",
+    "fastify": "^5.2.2",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.2",
     "ioredis": "^5.4.1",
     "jose": "^6.0.8",
     "pino": "^9.6.0",
@@ -94,7 +113,6 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.13.4",
     "@vitest/coverage-v8": "^4.0.3",
-    "fastify": "^5.2.2",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.3"

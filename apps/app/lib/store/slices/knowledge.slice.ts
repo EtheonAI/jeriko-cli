@@ -1,487 +1,197 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
-export type DocumentType =
-  | "document"
-  | "pdf"
-  | "image"
-  | "video"
-  | "audio"
-  | "code"
-  | "spreadsheet"
-  | "presentation"
-  | "archive"
-  | "other";
+/**
+ * Knowledge Slice
+ * User knowledge/memory management for the AI agent.
+ * Backend: Knowledge service (RAG pipeline, embeddings, vector search).
+ * This tracks user knowledge items, suggestions, and auto-learning settings.
+ */
 
-export type AttachmentSource = "upload" | "web" | "connector" | "agent";
-
-export interface AttachmentMetadata {
-  width?: number;
-  height?: number;
-  duration?: number;
-  pageCount?: number;
-  wordCount?: number;
-  encoding?: string;
-  language?: string;
-  [key: string]: unknown;
-}
-
-export interface Attachment {
+export interface KnowledgeItem {
   id: string;
-  userId: string;
-  sessionId?: string;
-  projectId?: string;
-  groupId?: string;
-  // File info
-  name: string;
-  description?: string;
-  mimeType: string;
-  size: number;
-  docType: DocumentType;
-  source: AttachmentSource;
-  // Storage
-  storageKey: string;
-  storageProvider: "local" | "s3" | "r2" | "vercel_blob";
-  url?: string;
-  thumbnailUrl?: string;
-  // Processing
-  isProcessed: boolean;
-  isIndexed: boolean; // For vector search
-  processingStatus?: "pending" | "processing" | "completed" | "failed";
-  processingError?: string;
-  // Extracted content
-  extractedText?: string;
-  summary?: string;
-  // Metadata
-  metadata?: AttachmentMetadata;
-  tags?: string[];
-  isFavorite: boolean;
-  // Timestamps
+  title: string;
+  content: string;
+  source?: string;
+  sourceUrl?: string;
+  fileId?: string;
+  tags: string[];
+  isAutoLearned: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface AttachmentGroup {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  color?: string;
-  attachmentCount: number;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface KnowledgeBase {
-  id: string;
-  userId: string;
-  teamId?: string;
-  name: string;
-  description?: string;
-  // Configuration
-  settings: {
-    autoIndex: boolean;
-    chunkSize: number;
-    chunkOverlap: number;
-    embeddingModel: string;
-  };
-  // Stats
-  documentCount: number;
-  totalSize: number;
-  lastIndexedAt?: string;
-  // Timestamps
-  createdAt: string;
-  updatedAt: string;
+export interface SuggestedKnowledge {
+  sessionId: string;
+  content: string;
+  source: string;
+  confidence: number;
+  accepted: boolean;
 }
 
 export interface KnowledgeState {
-  // Attachments (library items)
-  attachments: Attachment[];
-  attachmentTotal: number;
-  // Attachment groups/folders
-  groups: AttachmentGroup[];
-  groupsTotal: number;
-  // Knowledge bases
-  knowledgeBases: KnowledgeBase[];
-  currentKnowledgeBaseId: string | null;
-  // View state
-  viewType: "grid" | "list";
-  filterDocType: DocumentType | "all";
-  isFavoriteFilter: boolean;
-  searchValue: string;
-  sortBy: "name" | "createdAt" | "size" | "type";
-  sortOrder: "asc" | "desc";
-  // Selection
-  selectedAttachmentIds: string[];
-  selectedGroupId: string | null;
-  // Upload state
-  uploadQueue: Array<{
-    id: string;
-    file: string; // File name
-    progress: number;
-    status: "pending" | "uploading" | "processing" | "completed" | "error";
-    error?: string;
-  }>;
-  // Loading states
-  isLoadingAttachments: boolean;
-  isLoadingGroups: boolean;
-  isLoadingKnowledgeBases: boolean;
-  isUploading: boolean;
-  // Error state
+  // User knowledge list
+  userKnowledgeList: KnowledgeItem[];
+  userKnowledgeListLoading: boolean;
+  userKnowledgeTotal: number;
+
+  // Suggested knowledge from sessions (agent suggests things to remember)
+  suggestedKnowledgeMap: Record<string, SuggestedKnowledge[]>;
+
+  // Pagination
+  cursor: string | null;
+  hasMore: boolean;
+
+  // Search/filter
+  searchQuery: string;
+  selectedTags: string[];
+
+  // Error
   error: string | null;
 }
 
 const initialState: KnowledgeState = {
-  attachments: [],
-  attachmentTotal: 0,
-  groups: [],
-  groupsTotal: 0,
-  knowledgeBases: [],
-  currentKnowledgeBaseId: null,
-  viewType: "grid",
-  filterDocType: "all",
-  isFavoriteFilter: false,
-  searchValue: "",
-  sortBy: "createdAt",
-  sortOrder: "desc",
-  selectedAttachmentIds: [],
-  selectedGroupId: null,
-  uploadQueue: [],
-  isLoadingAttachments: false,
-  isLoadingGroups: false,
-  isLoadingKnowledgeBases: false,
-  isUploading: false,
+  userKnowledgeList: [],
+  userKnowledgeListLoading: false,
+  userKnowledgeTotal: 0,
+  suggestedKnowledgeMap: {},
+  cursor: null,
+  hasMore: false,
+  searchQuery: "",
+  selectedTags: [],
   error: null,
 };
 
-export const knowledgeSlice = createSlice({
+const knowledgeSlice = createSlice({
   name: "knowledge",
   initialState,
   reducers: {
-    // Set attachments
-    setAttachments: (
+    // Knowledge list
+    setUserKnowledgeList: (state, action: PayloadAction<KnowledgeItem[]>) => {
+      state.userKnowledgeList = action.payload;
+      state.userKnowledgeListLoading = false;
+    },
+
+    appendUserKnowledgeList: (
       state,
-      action: PayloadAction<{ attachments: Attachment[]; total: number }>
+      action: PayloadAction<{ items: KnowledgeItem[]; total: number; cursor: string | null; hasMore: boolean }>
     ) => {
-      state.attachments = action.payload.attachments;
-      state.attachmentTotal = action.payload.total;
-      state.isLoadingAttachments = false;
+      state.userKnowledgeList = [
+        ...state.userKnowledgeList,
+        ...action.payload.items,
+      ];
+      state.userKnowledgeTotal = action.payload.total;
+      state.cursor = action.payload.cursor;
+      state.hasMore = action.payload.hasMore;
+      state.userKnowledgeListLoading = false;
     },
 
-    // Append attachments (pagination)
-    appendAttachments: (state, action: PayloadAction<Attachment[]>) => {
-      state.attachments = [...state.attachments, ...action.payload];
+    setUserKnowledgeListLoading: (state, action: PayloadAction<boolean>) => {
+      state.userKnowledgeListLoading = action.payload;
     },
 
-    // Add a single attachment
-    addAttachment: (state, action: PayloadAction<Attachment>) => {
-      state.attachments.unshift(action.payload);
-      state.attachmentTotal += 1;
+    setUserKnowledgeTotal: (state, action: PayloadAction<number>) => {
+      state.userKnowledgeTotal = action.payload;
     },
 
-    // Update an attachment
-    updateAttachment: (
+    // CRUD
+    addKnowledgeItem: (state, action: PayloadAction<KnowledgeItem>) => {
+      state.userKnowledgeList.unshift(action.payload);
+      state.userKnowledgeTotal += 1;
+    },
+
+    updateKnowledgeItem: (
       state,
-      action: PayloadAction<{ id: string; updates: Partial<Attachment> }>
+      action: PayloadAction<{ id: string; updates: Partial<KnowledgeItem> }>
     ) => {
-      const index = state.attachments.findIndex(
-        (a) => a.id === action.payload.id
+      const item = state.userKnowledgeList.find(
+        (k) => k.id === action.payload.id
       );
-      if (index !== -1) {
-        state.attachments[index] = {
-          ...state.attachments[index],
-          ...action.payload.updates,
-          updatedAt: new Date().toISOString(),
-        };
+      if (item) {
+        Object.assign(item, action.payload.updates);
       }
     },
 
-    // Delete an attachment
-    deleteAttachment: (state, action: PayloadAction<string>) => {
-      state.attachments = state.attachments.filter(
-        (a) => a.id !== action.payload
+    removeKnowledgeItem: (state, action: PayloadAction<string>) => {
+      state.userKnowledgeList = state.userKnowledgeList.filter(
+        (k) => k.id !== action.payload
       );
-      state.attachmentTotal = Math.max(0, state.attachmentTotal - 1);
-      state.selectedAttachmentIds = state.selectedAttachmentIds.filter(
-        (id) => id !== action.payload
-      );
+      state.userKnowledgeTotal = Math.max(0, state.userKnowledgeTotal - 1);
     },
 
-    // Delete multiple attachments
-    deleteAttachments: (state, action: PayloadAction<string[]>) => {
-      state.attachments = state.attachments.filter(
-        (a) => !action.payload.includes(a.id)
-      );
-      state.attachmentTotal = Math.max(
-        0,
-        state.attachmentTotal - action.payload.length
-      );
-      state.selectedAttachmentIds = state.selectedAttachmentIds.filter(
-        (id) => !action.payload.includes(id)
-      );
-    },
-
-    // Toggle favorite
-    toggleAttachmentFavorite: (state, action: PayloadAction<string>) => {
-      const attachment = state.attachments.find((a) => a.id === action.payload);
-      if (attachment) {
-        attachment.isFavorite = !attachment.isFavorite;
-      }
-    },
-
-    // Set groups
-    setGroups: (
-      state,
-      action: PayloadAction<{ groups: AttachmentGroup[]; total: number }>
-    ) => {
-      state.groups = action.payload.groups;
-      state.groupsTotal = action.payload.total;
-      state.isLoadingGroups = false;
-    },
-
-    // Add a group
-    addGroup: (state, action: PayloadAction<AttachmentGroup>) => {
-      state.groups.push(action.payload);
-      state.groupsTotal += 1;
-    },
-
-    // Update a group
-    updateGroup: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<AttachmentGroup> }>
-    ) => {
-      const index = state.groups.findIndex((g) => g.id === action.payload.id);
-      if (index !== -1) {
-        state.groups[index] = {
-          ...state.groups[index],
-          ...action.payload.updates,
-        };
-      }
-    },
-
-    // Delete a group
-    deleteGroup: (state, action: PayloadAction<string>) => {
-      state.groups = state.groups.filter((g) => g.id !== action.payload);
-      state.groupsTotal = Math.max(0, state.groupsTotal - 1);
-      if (state.selectedGroupId === action.payload) {
-        state.selectedGroupId = null;
-      }
-    },
-
-    // Set knowledge bases
-    setKnowledgeBases: (state, action: PayloadAction<KnowledgeBase[]>) => {
-      state.knowledgeBases = action.payload;
-      state.isLoadingKnowledgeBases = false;
-    },
-
-    // Add a knowledge base
-    addKnowledgeBase: (state, action: PayloadAction<KnowledgeBase>) => {
-      state.knowledgeBases.push(action.payload);
-    },
-
-    // Update a knowledge base
-    updateKnowledgeBase: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<KnowledgeBase> }>
-    ) => {
-      const index = state.knowledgeBases.findIndex(
-        (kb) => kb.id === action.payload.id
-      );
-      if (index !== -1) {
-        state.knowledgeBases[index] = {
-          ...state.knowledgeBases[index],
-          ...action.payload.updates,
-        };
-      }
-    },
-
-    // Delete a knowledge base
-    deleteKnowledgeBase: (state, action: PayloadAction<string>) => {
-      state.knowledgeBases = state.knowledgeBases.filter(
-        (kb) => kb.id !== action.payload
-      );
-      if (state.currentKnowledgeBaseId === action.payload) {
-        state.currentKnowledgeBaseId = null;
-      }
-    },
-
-    // Set current knowledge base
-    setCurrentKnowledgeBase: (state, action: PayloadAction<string | null>) => {
-      state.currentKnowledgeBaseId = action.payload;
-    },
-
-    // View state
-    setViewType: (state, action: PayloadAction<"grid" | "list">) => {
-      state.viewType = action.payload;
-    },
-
-    setFilterDocType: (state, action: PayloadAction<DocumentType | "all">) => {
-      state.filterDocType = action.payload;
-    },
-
-    setFavoriteFilter: (state, action: PayloadAction<boolean>) => {
-      state.isFavoriteFilter = action.payload;
-    },
-
-    setSearchValue: (state, action: PayloadAction<string>) => {
-      state.searchValue = action.payload;
-    },
-
-    setSortBy: (
-      state,
-      action: PayloadAction<"name" | "createdAt" | "size" | "type">
-    ) => {
-      state.sortBy = action.payload;
-    },
-
-    setSortOrder: (state, action: PayloadAction<"asc" | "desc">) => {
-      state.sortOrder = action.payload;
-    },
-
-    // Selection
-    setSelectedAttachments: (state, action: PayloadAction<string[]>) => {
-      state.selectedAttachmentIds = action.payload;
-    },
-
-    toggleAttachmentSelection: (state, action: PayloadAction<string>) => {
-      const index = state.selectedAttachmentIds.indexOf(action.payload);
-      if (index === -1) {
-        state.selectedAttachmentIds.push(action.payload);
-      } else {
-        state.selectedAttachmentIds.splice(index, 1);
-      }
-    },
-
-    clearSelection: (state) => {
-      state.selectedAttachmentIds = [];
-    },
-
-    setSelectedGroup: (state, action: PayloadAction<string | null>) => {
-      state.selectedGroupId = action.payload;
-    },
-
-    // Upload queue
-    addToUploadQueue: (
-      state,
-      action: PayloadAction<{ id: string; file: string }>
-    ) => {
-      state.uploadQueue.push({
-        id: action.payload.id,
-        file: action.payload.file,
-        progress: 0,
-        status: "pending",
-      });
-    },
-
-    updateUploadProgress: (
+    // Suggested knowledge
+    setSuggestedKnowledge: (
       state,
       action: PayloadAction<{
-        id: string;
-        progress: number;
-        status?: "pending" | "uploading" | "processing" | "completed" | "error";
-        error?: string;
+        sessionId: string;
+        suggestions: SuggestedKnowledge[];
       }>
     ) => {
-      const item = state.uploadQueue.find((u) => u.id === action.payload.id);
-      if (item) {
-        item.progress = action.payload.progress;
-        if (action.payload.status) {
-          item.status = action.payload.status;
-        }
-        if (action.payload.error) {
-          item.error = action.payload.error;
-        }
+      state.suggestedKnowledgeMap[action.payload.sessionId] =
+        action.payload.suggestions;
+    },
+
+    acceptSuggestedKnowledge: (
+      state,
+      action: PayloadAction<{ sessionId: string; index: number }>
+    ) => {
+      const suggestions =
+        state.suggestedKnowledgeMap[action.payload.sessionId];
+      if (suggestions && suggestions[action.payload.index]) {
+        suggestions[action.payload.index].accepted = true;
       }
     },
 
-    removeFromUploadQueue: (state, action: PayloadAction<string>) => {
-      state.uploadQueue = state.uploadQueue.filter(
-        (u) => u.id !== action.payload
-      );
+    clearSuggestedKnowledge: (state, action: PayloadAction<string>) => {
+      delete state.suggestedKnowledgeMap[action.payload];
     },
 
-    clearUploadQueue: (state) => {
-      state.uploadQueue = [];
-      state.isUploading = false;
+    // Search/filter
+    setKnowledgeSearchQuery: (state, action: PayloadAction<string>) => {
+      state.searchQuery = action.payload;
     },
 
-    // Loading states
-    setLoadingAttachments: (state, action: PayloadAction<boolean>) => {
-      state.isLoadingAttachments = action.payload;
+    setSelectedTags: (state, action: PayloadAction<string[]>) => {
+      state.selectedTags = action.payload;
     },
 
-    setLoadingGroups: (state, action: PayloadAction<boolean>) => {
-      state.isLoadingGroups = action.payload;
+    toggleSelectedTag: (state, action: PayloadAction<string>) => {
+      const index = state.selectedTags.indexOf(action.payload);
+      if (index === -1) {
+        state.selectedTags.push(action.payload);
+      } else {
+        state.selectedTags.splice(index, 1);
+      }
     },
 
-    setLoadingKnowledgeBases: (state, action: PayloadAction<boolean>) => {
-      state.isLoadingKnowledgeBases = action.payload;
-    },
-
-    setUploading: (state, action: PayloadAction<boolean>) => {
-      state.isUploading = action.payload;
-    },
-
-    // Error handling
+    // Error
     setKnowledgeError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
-      state.isLoadingAttachments = false;
-      state.isLoadingGroups = false;
-      state.isLoadingKnowledgeBases = false;
-      state.isUploading = false;
+      state.userKnowledgeListLoading = false;
     },
 
-    // Clear state
-    clearKnowledgeState: (state) => {
-      state.attachments = [];
-      state.attachmentTotal = 0;
-      state.groups = [];
-      state.groupsTotal = 0;
-      state.selectedAttachmentIds = [];
-      state.selectedGroupId = null;
-      state.uploadQueue = [];
+    // Reset
+    resetKnowledge: (state) => {
+      Object.assign(state, initialState);
     },
   },
 });
 
 export const {
-  setAttachments,
-  appendAttachments,
-  addAttachment,
-  updateAttachment,
-  deleteAttachment,
-  deleteAttachments,
-  toggleAttachmentFavorite,
-  setGroups,
-  addGroup,
-  updateGroup,
-  deleteGroup,
-  setKnowledgeBases,
-  addKnowledgeBase,
-  updateKnowledgeBase,
-  deleteKnowledgeBase,
-  setCurrentKnowledgeBase,
-  setViewType,
-  setFilterDocType,
-  setFavoriteFilter,
-  setSearchValue,
-  setSortBy,
-  setSortOrder,
-  setSelectedAttachments,
-  toggleAttachmentSelection,
-  clearSelection,
-  setSelectedGroup,
-  addToUploadQueue,
-  updateUploadProgress,
-  removeFromUploadQueue,
-  clearUploadQueue,
-  setLoadingAttachments,
-  setLoadingGroups,
-  setLoadingKnowledgeBases,
-  setUploading,
+  setUserKnowledgeList,
+  appendUserKnowledgeList,
+  setUserKnowledgeListLoading,
+  setUserKnowledgeTotal,
+  addKnowledgeItem,
+  updateKnowledgeItem,
+  removeKnowledgeItem,
+  setSuggestedKnowledge,
+  acceptSuggestedKnowledge,
+  clearSuggestedKnowledge,
+  setKnowledgeSearchQuery,
+  setSelectedTags,
+  toggleSelectedTag,
   setKnowledgeError,
-  clearKnowledgeState,
+  resetKnowledge,
 } = knowledgeSlice.actions;
 
 export default knowledgeSlice.reducer;

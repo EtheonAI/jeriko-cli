@@ -128,7 +128,9 @@ function BrowserUrlBar({
       </div>
       <form onSubmit={handleSubmit} className="flex flex-1">
         <div className="flex flex-1 items-center gap-2 truncate rounded-md bg-canvas-deep px-3 py-1 font-mono text-xs text-muted-foreground">
-          {loading && <LoaderIcon className="size-3 flex-shrink-0 animate-spin text-blue-400" />}
+          {loading && (
+            <LoaderIcon className="size-3 flex-shrink-0 animate-spin text-blue-400" />
+          )}
           <input
             ref={inputRef}
             type="text"
@@ -254,26 +256,16 @@ export function BrowserView({
       e.stopPropagation();
 
       // Map common keys
-      const key =
-        e.key === "Enter"
-          ? "Enter"
-          : e.key === "Backspace"
-            ? "Backspace"
-            : e.key === "Tab"
-              ? "Tab"
-              : e.key === "Escape"
-                ? "Escape"
-                : e.key === "ArrowUp"
-                  ? "ArrowUp"
-                  : e.key === "ArrowDown"
-                    ? "ArrowDown"
-                    : e.key === "ArrowLeft"
-                      ? "ArrowLeft"
-                      : e.key === "ArrowRight"
-                        ? "ArrowRight"
-                        : e.key.length === 1
-                          ? e.key
-                          : null;
+      const key = e.key === "Enter" ? "Enter"
+        : e.key === "Backspace" ? "Backspace"
+        : e.key === "Tab" ? "Tab"
+        : e.key === "Escape" ? "Escape"
+        : e.key === "ArrowUp" ? "ArrowUp"
+        : e.key === "ArrowDown" ? "ArrowDown"
+        : e.key === "ArrowLeft" ? "ArrowLeft"
+        : e.key === "ArrowRight" ? "ArrowRight"
+        : e.key.length === 1 ? e.key
+        : null;
 
       if (!key) return;
 
@@ -324,13 +316,18 @@ export function BrowserView({
           <img
             src={screenshot}
             alt="Browser view"
-            className={cn("size-full object-contain", userControlActive && "cursor-crosshair")}
+            className={cn(
+              "size-full object-contain",
+              userControlActive && "cursor-crosshair"
+            )}
             onClick={userControlActive ? handleScreenshotClick : undefined}
             draggable={false}
           />
         ) : searchResults && searchResults.length > 0 ? (
           <div className="h-full overflow-y-auto p-4">
-            {title && <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>}
+            {title && (
+              <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
+            )}
             <div className="space-y-3">
               {searchResults.map((result, i) => (
                 <div
@@ -345,7 +342,9 @@ export function BrowserView({
                   >
                     {result.title}
                   </a>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground/50">{result.url}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground/50">
+                    {result.url}
+                  </p>
                   {result.snippet && (
                     <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
                       {result.snippet}
@@ -357,7 +356,9 @@ export function BrowserView({
           </div>
         ) : content ? (
           <div className="h-full overflow-y-auto p-4">
-            {title && <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>}
+            {title && (
+              <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
+            )}
             <div className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground/70">
               {content.slice(0, 5000)}
             </div>

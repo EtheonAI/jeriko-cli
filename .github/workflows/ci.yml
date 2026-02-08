@@ -59,6 +59,33 @@ jobs:
           TURBO_SCM_HEAD: ${{ github.sha }}
 
   # ─────────────────────────────────────────────
+  # Dependency Boundaries
+  # ─────────────────────────────────────────────
+  boundaries:
+    name: Dependency Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check dependency boundaries
+        run: pnpm boundaries:cruise
+
+  # ─────────────────────────────────────────────
   # Unit & Integration Tests (affected-only)
   # ─────────────────────────────────────────────
   test:

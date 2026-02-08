@@ -1,6 +1,6 @@
 import { auth } from "@repo/auth";
-import createMiddleware from "@repo/internationalization/middleware";
-import { routing } from "@repo/internationalization/routing";
+import createMiddleware from '@repo/internationalization/middleware';
+import { routing } from '@repo/internationalization/routing';
 import { parseError } from "@repo/observability/error";
 import { secure } from "@repo/security";
 import {
@@ -14,7 +14,6 @@ import { env } from "@/env";
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|ingest|favicon.ico).*)"],
-  runtime: "nodejs",
 };
 
 const securityHeaders = env.FLAGS_SECRET
@@ -29,7 +28,14 @@ const arcjetMiddleware = async (request: NextRequest) => {
   }
 
   try {
-    await secure(["CATEGORY:SEARCH_ENGINE", "CATEGORY:PREVIEW", "CATEGORY:MONITOR"], request);
+    await secure(
+      [
+        "CATEGORY:SEARCH_ENGINE",
+        "CATEGORY:PREVIEW",
+        "CATEGORY:MONITOR",
+      ],
+      request
+    );
   } catch (error) {
     const message = parseError(error);
     return NextResponse.json({ error: message }, { status: 403 });
@@ -43,7 +49,7 @@ const composedMiddleware = createNEMO(
   }
 );
 
-export const proxy = auth(async (req) => {
+export default auth(async (req) => {
   const headersResponse = securityHeaders();
 
   // Run i18n middleware first
@@ -51,7 +57,9 @@ export const proxy = auth(async (req) => {
   if (i18nResponse) return i18nResponse;
 
   // Then run other middleware
-  const middlewareResponse = await composedMiddleware(req as unknown as NextRequest);
+  const middlewareResponse = await composedMiddleware(
+    req as unknown as NextRequest,
+  );
 
   return middlewareResponse || headersResponse;
 });

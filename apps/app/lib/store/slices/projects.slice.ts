@@ -102,7 +102,7 @@ const initialState: ProjectsState = {
   error: null,
 };
 
-export const projectsSlice = createSlice({
+const projectsSlice = createSlice({
   name: "projects",
   initialState,
   reducers: {
@@ -331,11 +331,11 @@ export const projectsSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility (project slice name)
-    builder.addCase("project/setInitProjectLoading", (state, action: PayloadAction<boolean>) => {
-      state.isLoading = action.payload;
+    builder.addCase("project/setInitProjectLoading", (state, action) => {
+      state.isLoading = (action as any).payload;
     });
-    builder.addCase("project/setProjectList", (state, action: PayloadAction<Project[]>) => {
-      state.projects = action.payload ?? [];
+    builder.addCase("project/setProjectList", (state, action) => {
+      state.projects = (action as any).payload ?? [];
       state.isLoading = false;
     });
   },

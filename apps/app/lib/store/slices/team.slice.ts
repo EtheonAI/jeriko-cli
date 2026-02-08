@@ -147,7 +147,7 @@ const initialState: TeamState = {
   listTeamResponse: null,
 };
 
-export const teamSlice = createSlice({
+const teamSlice = createSlice({
   name: "team",
   initialState,
   reducers: {
@@ -349,16 +349,17 @@ export const teamSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility
-    builder.addCase("team/setListTeamResponse", (state, action: PayloadAction<any>) => {
-      state.listTeamResponse = action.payload ?? null;
-      const teams = action.payload?.teams ?? action.payload?.list ?? null;
+    builder.addCase("team/setListTeamResponse", (state, action) => {
+      const payload = (action as any).payload;
+      state.listTeamResponse = payload ?? null;
+      const teams = payload?.teams ?? payload?.list ?? null;
       if (Array.isArray(teams)) {
         state.teams = teams;
       }
       state.isLoadingTeams = false;
     });
-    builder.addCase("team/setTeamListLoading", (state, action: PayloadAction<boolean>) => {
-      state.isLoadingTeams = action.payload;
+    builder.addCase("team/setTeamListLoading", (state, action) => {
+      state.isLoadingTeams = (action as any).payload;
     });
   },
 });

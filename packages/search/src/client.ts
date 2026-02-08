@@ -1,11 +1,12 @@
 import "server-only";
 import Typesense from "typesense";
+import type Client from "typesense/lib/Typesense/Client";
 import { env } from "./env";
 
 // Singleton pattern for Typesense client
-let typesenseClient: Typesense.Client | null = null;
+let typesenseClient: Client | null = null;
 
-export function getTypesenseClient(): Typesense.Client {
+export function getTypesenseClient(): Client {
   if (!typesenseClient) {
     typesenseClient = new Typesense.Client({
       nodes: [

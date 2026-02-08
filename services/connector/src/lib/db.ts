@@ -1,23 +1,23 @@
-import { eq, and, or, desc, asc, inArray, isNull, sql, count } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql, count } from "drizzle-orm";
+import { inArray, isNull } from "drizzle-orm";
 
 // Database and schema references - populated by initDb()
 export let db: any;
 export let connectorDefinitions: any;
 export let userConnectors: any;
 export let connectorSyncLogs: any;
-export let schema: any;
 
 export async function initDb() {
   const mod = await import("@repo/database");
-  db = mod.db;
-  schema = mod.schema;
-  connectorDefinitions = mod.connectorDefinitions;
-  userConnectors = mod.userConnectors;
-  connectorSyncLogs = mod.connectorSyncLogs;
+  const resolved = (mod as any).default ?? mod;
+  db = resolved.db;
+  connectorDefinitions = resolved.connectorDefinitions;
+  userConnectors = resolved.userConnectors;
+  connectorSyncLogs = resolved.connectorSyncLogs;
 }
 
 // Re-export drizzle helpers (direct dependency, no resolution issue)
-export { eq, and, or, desc, asc, inArray, isNull, sql, count };
+export { eq, and, or, desc, asc, sql, count, inArray, isNull };
 
 // Re-export types
 export type {
