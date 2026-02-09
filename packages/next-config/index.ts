@@ -40,7 +40,7 @@ const securityHeaders = [
       "img-src 'self' blob: data: https:",
       "font-src 'self' data:",
       "connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.sentry.io wss: ws:",
-      "frame-src 'self'",
+      "frame-src 'self' https://*.e2b.dev https://*.e2b.dev:* https://*.e2b.app https://*.e2b.app:* data:",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

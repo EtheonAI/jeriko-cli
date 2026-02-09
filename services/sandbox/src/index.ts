@@ -202,12 +202,20 @@ async function main() {
       // Create E2B sandbox with Desktop template
       let e2bSandbox: E2BSandbox;
       try {
-        e2bSandbox = await E2BSandbox.create({
-          apiKey: E2B_API_KEY,
-          template: templateId !== "default" ? templateId : undefined,
-          timeoutMs,
-          envs: config?.env,
-        });
+        // E2B SDK: create(template, opts) or create(opts)
+        if (templateId && templateId !== "default") {
+          e2bSandbox = await E2BSandbox.create(templateId, {
+            apiKey: E2B_API_KEY,
+            timeoutMs,
+            envs: config?.env,
+          });
+        } else {
+          e2bSandbox = await E2BSandbox.create({
+            apiKey: E2B_API_KEY,
+            timeoutMs,
+            envs: config?.env,
+          });
+        }
       } catch (error) {
         logger.error(error, "Failed to create E2B sandbox");
         const message =

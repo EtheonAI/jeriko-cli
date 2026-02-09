@@ -12,7 +12,7 @@ from .config import settings
 from .db import close_db, init_db, fetchrow, execute
 from .e2b_manager import cleanup_expired_sandboxes, shutdown_all_sandboxes
 from .tool_executor import close_http_client
-from .routes import completion, tools, health
+from .routes import completion, tools, health, browser_control, test_browser
 
 # Configure structured logging
 structlog.configure(
@@ -200,6 +200,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router)
 app.include_router(completion.router, prefix="/v1")
 app.include_router(tools.router, prefix="/v1")
+app.include_router(browser_control.router)
+app.include_router(test_browser.router)
 
 
 _sandbox_cleanup_task: asyncio.Task | None = None

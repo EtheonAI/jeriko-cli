@@ -56,8 +56,13 @@ export const publicProcedure = t.procedure;
 /**
  * Protected (authenticated) procedure
  */
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+export const protectedProcedure = t.procedure.use(({ ctx, next, path }) => {
   if (!ctx.session || !ctx.user) {
+    console.error(`[tRPC] UNAUTHORIZED on ${path}:`, {
+      hasSession: !!ctx.session,
+      hasUser: !!ctx.user,
+      session: ctx.session,
+    });
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
   return next({

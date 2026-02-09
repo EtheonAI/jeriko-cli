@@ -263,8 +263,9 @@ export function BrowserView({
       const y = Math.round((e.clientY - rect.top) * scaleY);
 
       const result = await sendBrowserAction("click", {
-        coordinate_x: x,
-        coordinate_y: y,
+        x,
+        y,
+        button: "left",
       });
 
       if (result?.screenshot && onScreenshotUpdate) {
@@ -303,13 +304,11 @@ export function BrowserView({
 
       let result;
       if (key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        result = await sendBrowserAction("input", {
+        result = await sendBrowserAction("type", {
           text: key,
-          coordinate_x: 640,
-          coordinate_y: 360,
         });
       } else {
-        result = await sendBrowserAction("press_key", { key });
+        result = await sendBrowserAction("key", { key });
       }
 
       if (result?.screenshot && onScreenshotUpdate) {
@@ -350,10 +349,13 @@ export function BrowserView({
             src={liveStreamUrl}
             title="Rubic Virtual Computer — Live Desktop"
             className="size-full border-0"
-            allow="clipboard-read; clipboard-write; autoplay"
+            allow="clipboard-read; clipboard-write; autoplay; microphone; camera; display-capture"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+            referrerPolicy="no-referrer"
           />
         ) : screenshot ? (
           /* Priority 2: Screenshot (from agent tool results or polling) */
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={screenshot}
             alt="Browser view"

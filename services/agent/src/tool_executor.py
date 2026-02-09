@@ -30,6 +30,7 @@ from .config import settings
 from .runtime import SandboxRuntime
 from .tools.browser import browser_navigate, browser_web_search
 from .tools.image_gen import nano_banana_generate
+from .tools.s3_sync import s3_download, s3_upload
 
 logger = structlog.get_logger()
 
@@ -175,6 +176,27 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
     # ── Outcome tracking ──
     if name == "check_outcomes":
         return await execute_check_outcomes(ctx.user_id, tool_input)
+
+    # ── S3 file sync ──
+    if name == "s3_download":
+        if not ctx.runtime:
+            return {"error": "No sandbox available for S3 download"}
+        return await s3_download(
+            ctx.user_id,
+            tool_input.get("file_id", ""),
+            tool_input.get("destination", "/home/user/download"),
+            ctx.runtime,
+        )
+
+    if name == "s3_upload":
+        if not ctx.runtime:
+            return {"error": "No sandbox available for S3 upload"}
+        return await s3_upload(
+            ctx.user_id,
+            tool_input.get("source", ""),
+            tool_input.get("filename", "output.txt"),
+            ctx.runtime,
+        )
 
     return {"error": f"Unknown tool: {name}"}
 

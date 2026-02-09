@@ -143,38 +143,38 @@ export const messagesRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify session ownership
-      const [session] = await db
-        .select()
-        .from(agentSessions)
-        .where(and(eq(agentSessions.id, input.chatId), eq(agentSessions.userId, ctx.user.id)))
-        .limit(1);
+      try {
+        // Verify session ownership
+        const [session] = await db
+          .select()
+          .from(agentSessions)
+          .where(and(eq(agentSessions.id, input.chatId), eq(agentSessions.userId, ctx.user.id)))
+          .limit(1);
 
-      if (!session) {
-        throw new Error("Session not found");
+        if (!session) {
+          throw new Error("Session not found");
+        }
+
+        // Use PostgreSQL UPSERT (INSERT ... ON CONFLICT ... DO UPDATE)
+        // This is atomic and prevents duplicate key errors
+        const [vote] = await db
+          .insert(votes)
+          .values({
+            chatId: input.chatId,
+            messageId: input.messageId,
+            rating: input.rating,
+          })
+          .onConflictDoUpdate({
+            target: [votes.chatId, votes.messageId],
+            set: { rating: input.rating },
+          })
+          .returning();
+
+        return { success: true, vote };
+      } catch (error) {
+        console.error("[messages.vote] Error:", error);
+        throw error;
       }
-
-      // Upsert: check if vote exists, then insert or update
-      const [existing] = await db
-        .select()
-        .from(votes)
-        .where(and(eq(votes.chatId, input.chatId), eq(votes.messageId, input.messageId)))
-        .limit(1);
-
-      if (existing) {
-        await db
-          .update(votes)
-          .set({ rating: input.rating })
-          .where(and(eq(votes.chatId, input.chatId), eq(votes.messageId, input.messageId)));
-      } else {
-        await db.insert(votes).values({
-          chatId: input.chatId,
-          messageId: input.messageId,
-          rating: input.rating,
-        });
-      }
-
-      return { success: true };
     }),
 
   // Remove a vote (toggle off)

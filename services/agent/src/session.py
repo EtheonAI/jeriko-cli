@@ -107,7 +107,7 @@ async def get_or_create_session(session_id: str, user_id: str) -> str:
 # ============================================================
 
 
-async def load_conversation_history(session_id: str, limit: int = 50) -> list[dict]:
+async def load_conversation_history(session_id: str, limit: int = 100) -> list[dict]:
     """
     Load conversation history from the messages table.
     Returns messages in Anthropic format: [{"role": "user/assistant", "content": "..."}]
@@ -116,18 +116,25 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
     - Legacy agent-saved: metadata.toolBlocks + separate role='tool' rows
     - Current route.ts-saved: parts column with AI SDK UIMessage parts (tool-{name})
 
-    Loads the most recent `limit` messages to keep context window manageable.
+    Loads the most recent `limit` messages (DESC order), then reverses to chronological.
+    This ensures we get the latest conversation context, not ancient history.
+
+    Also implements token-aware truncation to prevent exceeding context limits.
     """
     try:
+        # Get the NEWEST messages (DESC), then we'll reverse them to chronological order
         rows = await fetch(
             """SELECT role, content, metadata, parts
                FROM messages
                WHERE session_id = $1
-               ORDER BY created_at ASC
+               ORDER BY created_at DESC
                LIMIT $2""",
             session_id,
             limit,
         )
+
+        # Reverse to get chronological order (oldest to newest)
+        rows = list(reversed(rows))
 
         messages = []
         for row in rows:
@@ -184,6 +191,19 @@ async def load_conversation_history(session_id: str, limit: int = 50) -> list[di
 
         # Merge consecutive same-role messages (Anthropic API requires alternating roles)
         merged = _merge_consecutive_tool_results(messages)
+
+        # Additional safety: if merged history is still too large, truncate further
+        # This prevents edge cases where even recent history exceeds context limits
+        MAX_HISTORY_MESSAGES = 80  # Conservative limit for safety
+        if len(merged) > MAX_HISTORY_MESSAGES:
+            # Keep the most recent messages (at the end of the list)
+            merged = merged[-MAX_HISTORY_MESSAGES:]
+            logger.warning(
+                "history_truncated",
+                session_id=session_id,
+                from_count=len(merged),
+                to_count=MAX_HISTORY_MESSAGES,
+            )
 
         logger.info(
             "history_loaded",

@@ -16,6 +16,7 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 
+import httpx
 import structlog
 
 from .config import settings
@@ -157,6 +158,16 @@ async def get_or_create_sandbox(
             sandbox = await _reconnect_sandbox(persisted_id, use_desktop)
             if sandbox:
                 sandbox_id = _get_sandbox_id(sandbox)
+
+                # Start E2B Desktop stream on reconnect
+                if use_desktop and hasattr(sandbox, "stream"):
+                    try:
+                        logger.info("starting_e2b_stream_on_reconnect", session_id=session_id, sandbox_id=sandbox_id)
+                        await asyncio.to_thread(sandbox.stream.start)
+                        logger.info("e2b_stream_started_on_reconnect", session_id=session_id, sandbox_id=sandbox_id)
+                    except Exception as e:
+                        logger.warning("e2b_stream_start_failed_on_reconnect", session_id=session_id, error=str(e))
+
                 entry = SandboxEntry(
                     sandbox=sandbox,
                     sandbox_id=sandbox_id,
@@ -179,6 +190,16 @@ async def get_or_create_sandbox(
             return None
 
         sandbox_id = _get_sandbox_id(sandbox)
+
+        # Start E2B Desktop stream if available
+        if use_desktop and hasattr(sandbox, "stream"):
+            try:
+                logger.info("starting_e2b_desktop_stream", session_id=session_id, sandbox_id=sandbox_id)
+                await asyncio.to_thread(sandbox.stream.start)
+                logger.info("e2b_desktop_stream_started", session_id=session_id, sandbox_id=sandbox_id)
+                # E2B Desktop stream is immediately ready, no need to wait for port
+            except Exception as e:
+                logger.warning("e2b_stream_start_failed", session_id=session_id, error=str(e))
 
         # Persist to DB
         await _persist_sandbox_id(session_id, sandbox_id)
@@ -340,11 +361,14 @@ async def _create_sandbox(use_desktop: bool) -> object | None:
             try:
                 from e2b_desktop import Sandbox as DesktopSandbox
 
+                # Don't specify template - use default DesktopSandbox
+                # (custom template with Neko not built yet)
                 sandbox = await asyncio.to_thread(
                     DesktopSandbox.create,
-                    template=settings.e2b_template,
                     timeout=settings.e2b_warm_idle_ttl,
+                    api_key=settings.e2b_api_key,
                 )
+                logger.info("desktop_sandbox_created", sandbox_id=_get_sandbox_id(sandbox))
                 return sandbox
             except ImportError:
                 logger.warning("e2b_desktop_not_installed_falling_back")
@@ -356,6 +380,7 @@ async def _create_sandbox(use_desktop: bool) -> object | None:
             Sandbox.create,
             template=settings.e2b_template if settings.e2b_template else None,
             timeout=settings.e2b_warm_idle_ttl,
+            api_key=settings.e2b_api_key,
         )
         return sandbox
 
@@ -374,6 +399,7 @@ async def _reconnect_sandbox(sandbox_id: str, use_desktop: bool) -> object | Non
                 sandbox = await asyncio.to_thread(
                     DesktopSandbox.connect,
                     sandbox_id,
+                    api_key=settings.e2b_api_key,
                 )
                 # Reset timeout on reconnect
                 await asyncio.to_thread(
@@ -389,6 +415,7 @@ async def _reconnect_sandbox(sandbox_id: str, use_desktop: bool) -> object | Non
         sandbox = await asyncio.to_thread(
             Sandbox.connect,
             sandbox_id,
+            api_key=settings.e2b_api_key,
         )
         await asyncio.to_thread(sandbox.set_timeout, settings.e2b_warm_idle_ttl)
         return sandbox
@@ -413,6 +440,51 @@ async def _is_sandbox_alive(entry: SandboxEntry) -> bool:
         return True
     except Exception:
         return False
+
+
+async def _wait_for_neko_ready(
+    sandbox: object,
+    session_id: str,
+    sandbox_id: str,
+    timeout_s: int = 25,
+) -> bool:
+    """
+    Wait until Neko is reachable on sandbox port 8080.
+
+    Prevents returning a `nekoUrl` before the service is actually listening.
+    """
+    deadline = time.monotonic() + timeout_s
+    last_error = None
+
+    while time.monotonic() < deadline:
+        host = None
+        try:
+            host = sandbox.get_host(8080)
+        except Exception as e:
+            last_error = str(e)
+
+        if host:
+            url = f"https://{host}"
+            try:
+                async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as client:
+                    response = await client.get(url)
+                if response.status_code < 500:
+                    logger.info("neko_ready", session_id=session_id, sandbox_id=sandbox_id, status=response.status_code)
+                    return True
+                last_error = f"http_status_{response.status_code}"
+            except Exception as e:
+                last_error = str(e)
+
+        await asyncio.sleep(0.75)
+
+    logger.warning(
+        "neko_ready_timeout",
+        session_id=session_id,
+        sandbox_id=sandbox_id,
+        timeout_s=timeout_s,
+        last_error=last_error,
+    )
+    return False
 
 
 def _get_sandbox_id(sandbox: object) -> str:

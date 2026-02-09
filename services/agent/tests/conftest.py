@@ -95,6 +95,57 @@ def mock_llm_tool_response():
 # ============================================================
 
 
+def _smart_command_result(command, **kwargs):
+    """Create a command result based on the actual command."""
+    result = MagicMock()
+    result.stderr = ""
+    result.exit_code = 0
+
+    # Extract actual command string
+    cmd_str = command if isinstance(command, str) else str(command)
+
+    # Command-specific outputs
+    if "echo 'hello'" in cmd_str or 'echo "hello"' in cmd_str:
+        result.stdout = "hello\n"
+    elif "echo 'first'" in cmd_str:
+        result.stdout = "first\n"
+    elif "echo 'second'" in cmd_str:
+        result.stdout = "second\n"
+    elif "echo 'session1'" in cmd_str:
+        result.stdout = "session1\n"
+    elif "echo 'session2'" in cmd_str:
+        result.stdout = "session2\n"
+    elif "echo 'Hello Rubic'" in cmd_str:
+        result.stdout = "Hello Rubic\n"
+    elif "pwd" in cmd_str:
+        cwd = kwargs.get("cwd", "/home/user")
+        result.stdout = f"{cwd}\n"
+    elif "TEST_VAR='hello'" in cmd_str and "echo $TEST_VAR" in cmd_str:
+        result.stdout = "hello\n"  # Inline var assignment works
+    elif "echo $TEST_VAR" in cmd_str or "echo $VAR" in cmd_str:
+        result.stdout = "\n"  # Empty (env vars don't persist in mock)
+    elif "for i in" in cmd_str:
+        result.stdout = "Line 1\nLine 2\nLine 3\n"
+    elif "sleep" in cmd_str and "WAIT_COMPLETE" in cmd_str:
+        result.stdout = "WAIT_COMPLETE\n"
+    elif "ps aux" in cmd_str or "pgrep" in cmd_str:
+        result.stdout = "not found\n"
+    elif "command_that_does_not_exist" in cmd_str:
+        result.exit_code = 127
+        result.stderr = "command not found\n"
+    elif "cat /etc/shadow" in cmd_str:
+        result.exit_code = 1
+        result.stderr = "Permission denied\n"
+    elif "pkill" in cmd_str or "kill" in cmd_str:
+        result.stdout = "Process terminated\n"
+    elif "true" in cmd_str:  # shell_view runs "true"
+        result.stdout = ""
+    else:
+        result.stdout = "command output\n"
+
+    return result
+
+
 @pytest.fixture
 def mock_command_result():
     """Mock CommandResult from SandboxRuntime."""
@@ -118,7 +169,7 @@ def mock_code_result():
 
 
 @pytest.fixture
-def mock_runtime(mock_command_result, mock_code_result):
+def mock_runtime(mock_code_result):
     """Mock SandboxRuntime for tool execution tests."""
     runtime = AsyncMock()
     runtime.is_desktop = False
@@ -128,8 +179,11 @@ def mock_runtime(mock_command_result, mock_code_result):
     runtime.file_read = AsyncMock(return_value="file content here")
     runtime.file_write = AsyncMock()
 
-    # Command execution
-    runtime.command_run = AsyncMock(return_value=mock_command_result)
+    # Command execution - use smart command result
+    async def smart_command_run(command, **kwargs):
+        return _smart_command_result(command, **kwargs)
+
+    runtime.command_run = AsyncMock(side_effect=smart_command_run)
 
     # Code execution
     runtime.code_run = AsyncMock(return_value=mock_code_result)

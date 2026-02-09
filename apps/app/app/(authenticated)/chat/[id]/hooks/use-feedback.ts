@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc/client";
 
@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc/client";
 export function useFeedback(chatId: string) {
   // messageId → rating (1-5)
   const [feedback, setFeedback] = useState<Record<string, number>>({});
+  const initializedRef = useRef(false);
 
   // Load existing votes from DB
   const { data: existingVotes } = trpc.messages.getVotes.useQuery(
@@ -18,15 +19,18 @@ export function useFeedback(chatId: string) {
     { enabled: !!chatId },
   );
 
-  // Hydrate local state from DB on load
+  // Hydrate local state from DB on first load only
   useEffect(() => {
-    if (existingVotes && existingVotes.length > 0) {
+    if (existingVotes && existingVotes.length > 0 && !initializedRef.current) {
       const map: Record<string, number> = {};
       for (const v of existingVotes) {
         map[v.messageId] = v.rating;
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFeedback(map);
+      initializedRef.current = true;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingVotes]);
 
   // Mutations
@@ -50,7 +54,15 @@ export function useFeedback(chatId: string) {
         // Save to DB
         voteMutation.mutate(
           { chatId, messageId, rating },
-          { onError: () => toast.error("Failed to save rating") },
+          {
+            onSuccess: (data) => {
+              console.log("[useFeedback] Vote saved:", data);
+            },
+            onError: (error) => {
+              console.error("[useFeedback] Vote save failed:", error);
+              toast.error("Failed to save rating");
+            },
+          },
         );
         return { ...prev, [messageId]: rating };
       });

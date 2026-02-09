@@ -268,11 +268,26 @@ async def agent_loop(
                 "tool_use_id": block["id"],
             })
 
-            # Serialize result for the tool_result content
+            # Serialize result for the tool_result content with smart truncation
+            # to prevent context window overflow
             if isinstance(result, dict):
-                content_str = json.dumps(result)
+                content_str = json.dumps(result, default=str)
             else:
                 content_str = str(result)
+
+            # Truncate large tool results to prevent prompt bloat
+            # Browser screenshots, large files, etc. can exceed context limits
+            MAX_TOOL_RESULT_LENGTH = 8000  # ~2K tokens, allows ~25 tools before hitting limits
+
+            if len(content_str) > MAX_TOOL_RESULT_LENGTH:
+                # For very long results, keep beginning + end with truncation notice
+                keep_chars = MAX_TOOL_RESULT_LENGTH // 2
+                truncated_content = (
+                    content_str[:keep_chars]
+                    + f"\n\n... [TRUNCATED: {len(content_str) - MAX_TOOL_RESULT_LENGTH} characters omitted] ...\n\n"
+                    + content_str[-keep_chars:]
+                )
+                content_str = truncated_content
 
             tool_results.append({
                 "type": "tool_result",

@@ -5,6 +5,7 @@ import { Suspense, useState, useCallback } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import { CheckIcon, CopyIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import type { TextUIPart } from "../../lib/types/ui-message";
+import remarkGfm from "remark-gfm";
 
 const Markdown = React.lazy(() => import("react-markdown"));
 
@@ -34,6 +35,7 @@ export function TextPart({ part, className, enableMarkdown = true }: TextPartPro
     <div className={cn("text-sm leading-relaxed", className)}>
       <Suspense fallback={<p className="whitespace-pre-wrap">{part.text}</p>}>
         <Markdown
+          remarkPlugins={[remarkGfm]}
           components={{
             h1: ({ children }) => (
               <h1 className="mb-4 mt-6 text-2xl font-semibold tracking-tight first:mt-0">

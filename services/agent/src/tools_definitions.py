@@ -372,8 +372,9 @@ CORE_TOOLS = [
     {
         "name": "browser_navigate",
         "description": (
-            "Navigate browser to specified URL. Use when accessing new pages "
-            "is needed."
+            "Navigate browser to an EXTERNAL website (like google.com, anthropic.com, etc.). "
+            "Use this to browse the web, view websites, or access URLs that already exist. "
+            "Do NOT use this for local files you created - use deploy_expose_port for those."
         ),
         "input_schema": {
             "type": "object",
@@ -601,8 +602,10 @@ CORE_TOOLS = [
     {
         "name": "deploy_expose_port",
         "description": (
-            "Expose specified local port for temporary public access. Use "
-            "when providing temporary public access for services."
+            "Expose a LOCAL web server port to get a public URL. ONLY use this AFTER you've "
+            "created local files AND started an HTTP server (python3 -m http.server 8080). "
+            "Do NOT use this for browsing external websites - use browser_navigate for that. "
+            "This tool exposes YOUR created content to the user."
         ),
         "input_schema": {
             "type": "object",

@@ -2,13 +2,13 @@ import { auth } from "@repo/auth";
 import { headers } from "next/headers";
 import { log } from "@repo/observability/log";
 
-const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
+const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || "http://localhost:8000";
 
 /**
  * POST /api/sandbox/browser
  *
- * Proxies browser actions to the sandbox service for user "Take Control" mode.
- * Body: { sandboxId: string, action: string, params?: Record<string, unknown> }
+ * Proxies browser actions to the agent service for user "Take Control" mode.
+ * Body: { sandboxId: string, action: "click" | "move" | "key" | "type", x?: number, y?: number, key?: string, text?: string, button?: string }
  */
 export const POST = async (req: Request) => {
   try {
@@ -23,10 +23,15 @@ export const POST = async (req: Request) => {
     }
 
     const body = await req.json();
-    const { sandboxId, action, params } = body as {
+    const { sandboxId, action, ...params } = body as {
       sandboxId: string;
-      action: string;
-      params?: Record<string, unknown>;
+      action: "click" | "move" | "key" | "type" | "navigate";
+      x?: number;
+      y?: number;
+      key?: string;
+      text?: string;
+      button?: string;
+      url?: string;
     };
 
     if (!sandboxId || !action) {
@@ -36,17 +41,32 @@ export const POST = async (req: Request) => {
       );
     }
 
-    const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/browser`, {
+    // Map action to agent service endpoint
+    const endpoint = `${AGENT_SERVICE_URL}/browser/${action}`;
+    const requestBody = { sandbox_id: sandboxId, ...params };
+
+    const resp = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, params }),
-      signal: AbortSignal.timeout(50000),
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-id": session.user.id,
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(10000),
     });
 
-    const raw = await resp.json();
-    const data = raw.data ?? raw; // Unwrap service envelope
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      log.error("Agent service browser control error:", errorText);
+      return new Response(errorText, {
+        status: resp.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const data = await resp.json();
     return new Response(JSON.stringify(data), {
-      status: resp.status,
+      status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
