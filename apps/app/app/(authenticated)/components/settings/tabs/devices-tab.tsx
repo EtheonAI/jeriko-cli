@@ -257,7 +257,7 @@ export function DevicesTab() {
         <div className="space-y-3">
           {devices.map((device: any) => {
             const DeviceIcon = deviceIcons[device.type] || MonitorIcon;
-            const status = statusConfig[device.status] || statusConfig.offline;
+            const status = (statusConfig[device.status] ?? statusConfig.offline)!;
             const StatusIcon = status.icon;
 
             return (

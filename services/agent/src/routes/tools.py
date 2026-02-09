@@ -191,22 +191,26 @@ async def execute_tool(
         # For device-related tools, forward to device service
         return await execute_device_tool(request, x_user_id, x_task_id)
 
-    # Resolve sandbox from session cache or explicit header
+    # Resolve runtime + sandbox_id from session cache or explicit header
     sandbox_id = x_sandbox_id
-    if not sandbox_id and x_session_id:
+    runtime = None
+    if x_session_id:
         cached = get_cached_session(x_session_id)
-        if cached and cached.sandbox_id:
-            sandbox_id = cached.sandbox_id
+        if cached:
+            sandbox_id = sandbox_id or cached.sandbox_id
+            runtime = cached.runtime
         else:
             try:
                 session_ctx = await setup_session_context(x_session_id, x_user_id)
-                sandbox_id = session_ctx.sandbox_id
+                sandbox_id = sandbox_id or session_ctx.sandbox_id
+                runtime = session_ctx.runtime
             except Exception as e:
                 logger.warning("tool_session_setup_failed", error=str(e))
 
     exec_ctx = ExecutionContext(
         user_id=x_user_id,
         session_id=x_session_id or x_task_id or "tool",
+        runtime=runtime,
         sandbox_id=sandbox_id,
     )
 

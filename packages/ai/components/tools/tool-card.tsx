@@ -20,6 +20,8 @@ import {
   CodeIcon,
   BellIcon,
   RocketIcon,
+  BarChart3Icon,
+  ListTodoIcon,
 } from "lucide-react";
 import type { StaticToolUIPart, DynamicToolUIPart, ToolInvocationState } from "../../lib/types/ui-message";
 import { getToolName } from "../../lib/types/ui-message";
@@ -84,8 +86,9 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   // Schedule & Analytics
   schedule_recurring_task: ClockIcon,
   check_outcomes: SearchIcon,
+  track_analytics: BarChart3Icon,
   // Planning
-  show_plan: CodeIcon,
+  show_plan: ListTodoIcon,
 };
 
 // ============================================================================

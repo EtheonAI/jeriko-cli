@@ -59,7 +59,7 @@ function TodoIcon({ status }: { status: PlanStepStatus }) {
   if (status === "in_progress") {
     return (
       <span
-        className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-[0_0_0_3px_hsl(var(--primary)/0.1)] motion-safe:transition-all motion-safe:duration-300"
+        className="flex size-5 shrink-0 items-center justify-center rounded-full border border-primary/50 bg-primary/10 shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_15%,transparent)] motion-safe:transition-all motion-safe:duration-300"
         aria-hidden="true"
       >
         <Loader2 className="size-3.5 text-primary motion-safe:animate-[spin_0.7s_linear_infinite]" />
@@ -130,7 +130,7 @@ function StepItem({
           <div
             className={cn(
               "absolute left-[9px] top-7 w-px",
-              step.status === "completed" ? "bg-primary/30" : "bg-border/50"
+              step.status === "completed" ? "bg-primary/30" : step.status === "in_progress" ? "bg-primary/20" : "bg-border/50"
             )}
             style={{ height: "calc(100% - 0.5rem)" }}
             aria-hidden="true"
@@ -146,7 +146,7 @@ function StepItem({
         <span
           className={cn(
             "break-words text-sm leading-5",
-            step.status === "in_progress" && "shimmer shimmer-invert font-medium text-foreground motion-safe:shimmer",
+            step.status === "in_progress" && "font-medium text-foreground shimmer",
             step.status === "completed" && "text-muted-foreground",
             step.status === "pending" && "text-muted-foreground/60",
             step.status === "error" && "font-medium text-destructive"
@@ -269,7 +269,7 @@ export function PlannerBar({
                 isActive ? "font-medium text-foreground" : "text-muted-foreground"
               )}
             >
-              {activeStep?.title ?? (isActive ? "Working..." : "All steps complete")}
+              {allComplete ? "All steps complete" : (activeStep?.title ?? (isActive ? "Working..." : "Plan"))}
             </span>
 
             {/* Step counter */}

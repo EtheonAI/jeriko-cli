@@ -211,7 +211,7 @@ export function ScheduledTasksTab() {
     try {
       setPendingAction({ type: "update", id: editingTask.id });
       const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData as any);
-      dispatch(updateScheduledTask({ id: updated.id, updates: normalizeScheduledTask(updated) }));
+      dispatch(updateScheduledTask({ id: updated!.id, updates: normalizeScheduledTask(updated!) }));
       toast.success("Task updated");
       setEditingTask(null);
     } catch (error: any) {
@@ -446,7 +446,7 @@ export function ScheduledTasksTab() {
       {tasks && tasks.length > 0 ? (
         <div className="space-y-3">
           {tasks.map((task: any) => {
-            const status = statusConfig[task.status] || statusConfig.pending;
+            const status = (statusConfig[task.status] ?? statusConfig.pending)!;
             const StatusIcon = status.icon;
 
             return (
@@ -546,8 +546,8 @@ export function ScheduledTasksTab() {
                           });
                           dispatch(
                             updateScheduledTask({
-                              id: updated.id,
-                              updates: normalizeScheduledTask(updated),
+                              id: updated!.id,
+                              updates: normalizeScheduledTask(updated!),
                             })
                           );
                           toast.success("Task paused");
@@ -576,8 +576,8 @@ export function ScheduledTasksTab() {
                           });
                           dispatch(
                             updateScheduledTask({
-                              id: updated.id,
-                              updates: normalizeScheduledTask(updated),
+                              id: updated!.id,
+                              updates: normalizeScheduledTask(updated!),
                             })
                           );
                           toast.success("Task resumed");

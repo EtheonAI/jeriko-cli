@@ -17,9 +17,6 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.38",
-    "@ai-sdk/google": "^3.0.22",
-    "@ai-sdk/openai": "^3.0.7",
     "@ai-sdk/react": "^3.0.19",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",

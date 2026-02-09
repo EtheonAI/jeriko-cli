@@ -182,7 +182,7 @@ export function useSearch() {
           const nextIndex = e.shiftKey
             ? (currentIndex - 1 + filters.length) % filters.length
             : (currentIndex + 1) % filters.length;
-          dispatch(setActiveFilter(filters[nextIndex]));
+          dispatch(setActiveFilter(filters[nextIndex]!));
           break;
       }
     },

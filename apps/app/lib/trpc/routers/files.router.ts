@@ -114,7 +114,7 @@ export const filesRouter = createTRPCRouter({
         .returning();
 
       // Sync to search index (non-blocking)
-      syncFileToSearch(file).catch(() => {});
+      syncFileToSearch(file!).catch(() => {});
 
       return file;
     }),
@@ -142,7 +142,7 @@ export const filesRouter = createTRPCRouter({
       const [file] = await db.update(files).set(updates).where(eq(files.id, id)).returning();
 
       // Sync to search index (non-blocking)
-      syncFileToSearch(file).catch(() => {});
+      syncFileToSearch(file!).catch(() => {});
 
       return file;
     }),

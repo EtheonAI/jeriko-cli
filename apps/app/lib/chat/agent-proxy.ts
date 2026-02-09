@@ -24,6 +24,7 @@ export interface AgentProxyOpts {
   model: string | undefined;
   sessionId: string | undefined;
   lastUserText: string;
+  lastUserParts?: Record<string, unknown>[] | null;
   fallbackSystemPrompt: string;
 }
 
@@ -44,7 +45,7 @@ export function createAgentProxySseStream(
   agentBody: ReadableStream<Uint8Array>,
   opts: AgentProxyOpts,
 ): ReadableStream<string> {
-  const { model, sessionId, lastUserText, fallbackSystemPrompt } = opts;
+  const { model, sessionId, lastUserText, lastUserParts, fallbackSystemPrompt } = opts;
 
   const agentReader = agentBody.getReader();
   const decoder = new TextDecoder();
@@ -52,14 +53,51 @@ export function createAgentProxySseStream(
   // Stateful SSE processor that emits proper AI SDK v6 lifecycle events
   const processor = new SSEProcessor();
 
+  let streamClosed = false;
+  const PING_INTERVAL_MS = Number(process.env.CHAT_SSE_PING_INTERVAL_MS ?? 15_000);
+
   return new ReadableStream<string>({
-    async pull(controller) {
-      // Internal pump that reads until we have something to enqueue
-      // or the stream ends. We handle the full lifecycle here.
+    cancel() {
+      // Client disconnected — flag so pump doesn't try to enqueue after cancel
+      streamClosed = true;
     },
     async start(controller) {
       let buffer = "";
       let hasStarted = false;
+      let pingTimer: ReturnType<typeof setInterval> | null = null;
+
+      /** Safe enqueue — skips if stream was cancelled or closed */
+      function enqueue(chunk: string) {
+        if (streamClosed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          streamClosed = true;
+        }
+      }
+
+      /** Safe close */
+      function close() {
+        if (streamClosed) return;
+        streamClosed = true;
+        if (pingTimer) {
+          clearInterval(pingTimer);
+          pingTimer = null;
+        }
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      }
+
+      // Keepalive pings to prevent idle timeouts during long tool execution
+      if (PING_INTERVAL_MS > 0) {
+        pingTimer = setInterval(() => {
+          if (streamClosed) return;
+          enqueue(":\n\n");
+        }, PING_INTERVAL_MS);
+      }
 
       const pump = async () => {
         try {
@@ -72,17 +110,17 @@ export function createAgentProxySseStream(
                 for (const part of buffer.split("\n\n")) {
                   if (!part.trim()) continue;
                   const output = processor.process(part.trim());
-                  if (output) controller.enqueue(output);
+                  if (output) enqueue(output);
                 }
               }
               // Close all open parts (text, reasoning, step boundaries)
               const { closingSSE } = processor.finalize();
-              if (closingSSE) controller.enqueue(closingSSE);
+              if (closingSSE) enqueue(closingSSE);
               // Send finish event
-              controller.enqueue(
+              enqueue(
                 `data: ${JSON.stringify({ type: "finish", finishReason: "stop" })}\n\n`
               );
-              controller.close();
+              close();
               break;
             }
 
@@ -121,29 +159,29 @@ export function createAgentProxySseStream(
                 // Send start event on first output for immediate UI feedback
                 if (!hasStarted) {
                   hasStarted = true;
-                  controller.enqueue(
+                  enqueue(
                     `data: ${JSON.stringify({ type: "start" })}\n\n`
                   );
                 }
-                controller.enqueue(output);
+                enqueue(output);
               }
             }
           }
         } catch (error) {
-          log.error("Stream pump error:", error as Error);
-          try {
-            controller.enqueue(
-              `data: ${JSON.stringify({ type: "error", errorText: "Stream error" })}\n\n`
+          const errMsg = error instanceof Error ? error.message : String(error);
+          log.error("Stream pump error:", { error: errMsg, stack: error instanceof Error ? error.stack : undefined });
+          // Only send error to client if stream is still open (not cancelled by disconnect)
+          if (!streamClosed) {
+            enqueue(
+              `data: ${JSON.stringify({ type: "error", errorText: errMsg })}\n\n`
             );
-          } catch {
-            /* controller may be closed */
-          }
-          try {
-            controller.close();
-          } catch {
-            /* ignore */
+            close();
           }
         } finally {
+          if (pingTimer) {
+            clearInterval(pingTimer);
+            pingTimer = null;
+          }
           // Server-side persistence — save user + assistant messages with full parts.
           // This runs on the server after the stream ends, surviving client disconnects.
           if (sessionId) {
@@ -151,8 +189,14 @@ export function createAgentProxySseStream(
             const collectedParts = processor.collectedParts;
 
             // Save user message (text-only)
-            if (lastUserText) {
-              saveMessageToDB(sessionId, "user", lastUserText).catch(() => {});
+            if (lastUserText || (lastUserParts?.length ?? 0) > 0) {
+              saveMessageToDB(
+                sessionId,
+                "user",
+                lastUserText,
+                undefined,
+                lastUserParts ?? null,
+              ).catch(() => {});
             }
 
             // Save assistant message with full parts (tool calls, plan, etc.)

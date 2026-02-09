@@ -1,8 +1,7 @@
-import { auth } from "@repo/auth";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { db, messages as messagesTable, eq, asc } from "@repo/database";
+import { getSession } from "@/lib/dal";
 import type { Message } from "@/lib/store/slices/chat.slice";
 import { ChatClient } from "./components/chat-client";
 
@@ -22,10 +21,7 @@ export async function generateMetadata({ params }: ChatPageProps): Promise<Metad
 
 export default async function ChatPage({ params }: ChatPageProps) {
   const { id } = await params;
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  const session = await getSession();
 
   if (!id) {
     notFound();
@@ -97,6 +93,9 @@ export default async function ChatPage({ params }: ChatPageProps) {
     // If DB query fails, render empty chat
   }
 
+  // loading.tsx in this directory already creates an implicit <Suspense> boundary
+  // around this page — no need for an inner <Suspense> wrapping ChatClient,
+  // which is a sync client component that receives pre-fetched data.
   return (
     <div className="absolute inset-0 flex flex-col overflow-hidden">
       <ChatClient

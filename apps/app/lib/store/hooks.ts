@@ -8,7 +8,7 @@ import type { Connector, InstalledConnector } from "./slices/connectors.slice";
 import type { Notification } from "./slices/notifications.slice";
 import type { Project } from "./slices/projects.slice";
 import type { ScheduledTask } from "./slices/scheduledTasks.slice";
-import type { Attachment } from "./slices/knowledge.slice";
+import type { KnowledgeItem } from "./slices/knowledge.slice";
 
 // Use throughout your app instead of plain `useDispatch` and `useSelector`
 export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
@@ -184,15 +184,15 @@ export const useScheduledTaskExecutions = (taskId: string | null) =>
   });
 
 // ================== KNOWLEDGE SELECTORS ==================
-export const useAttachments = () => useAppSelector((state) => state.knowledge.attachments);
+export const useKnowledgeItems = () => useAppSelector((state) => state.knowledge.userKnowledgeList);
 
-export const useAttachmentGroups = () => useAppSelector((state) => state.knowledge.groups);
+export const useKnowledgeGroups = () => useAppSelector((state) => state.knowledge.selectedTags);
 
-const selectFavoriteAttachments = createSelector(
-  [(state: RootState) => state.knowledge.attachments],
-  (attachments): Attachment[] => attachments.filter((a: Attachment) => a.isFavorite)
+const selectFavoriteKnowledge = createSelector(
+  [(state: RootState) => state.knowledge.userKnowledgeList],
+  (items): KnowledgeItem[] => items.filter((a: KnowledgeItem) => a.tags.includes("favorite"))
 );
-export const useFavoriteAttachments = () => useAppSelector(selectFavoriteAttachments);
+export const useFavoriteAttachments = () => useAppSelector(selectFavoriteKnowledge);
 
 // ================== EXPERIMENT/FEATURE FLAG SELECTORS ==================
 export const useFeatureFlag = (featureKey: string) =>

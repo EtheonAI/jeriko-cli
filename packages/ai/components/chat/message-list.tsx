@@ -137,24 +137,29 @@ export function MessageList({
             )
           )}
 
-          {/* Streaming indicator */}
-          {isStreaming && messages.length > 0 && (
-            (() => {
-              const last = messages[messages.length - 1];
-              const hasContent = last?.role === "assistant" && last.parts.length > 0;
-              if (hasContent) return null; // Text cursor shows in TextPart
-              return (
-                <div className="mb-6 flex items-center gap-3 pl-11">
-                  <div className="flex items-center gap-1">
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "0ms" }} />
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "150ms" }} />
-                    <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "300ms" }} />
-                  </div>
-                  <span className="text-sm text-muted-foreground">Thinking...</span>
+          {/* Streaming indicator — show when waiting for first token or no assistant message yet */}
+          {isStreaming && (() => {
+            const last = messages[messages.length - 1];
+            // Show indicator if:
+            // 1. No messages at all
+            // 2. Last message is from user (agent hasn't responded yet — "submitted" state)
+            // 3. Last message is assistant but has no parts yet (stream just started)
+            const needsIndicator =
+              messages.length === 0 ||
+              last?.role === "user" ||
+              (last?.role === "assistant" && (!last.parts || last.parts.length === 0));
+            if (!needsIndicator) return null;
+            return (
+              <div className="mb-6 flex items-center gap-3 pl-11">
+                <div className="flex items-center gap-1">
+                  <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "0ms" }} />
+                  <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "150ms" }} />
+                  <span className="size-2 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "300ms" }} />
                 </div>
-              );
-            })()
-          )}
+                <span className="text-sm text-muted-foreground">Thinking...</span>
+              </div>
+            );
+          })()}
 
           {/* Scroll anchor */}
           <div ref={bottomRef} />

@@ -422,18 +422,35 @@ async def _ensure_controller_running(sandbox_id: str, user_id: str = "") -> bool
     # Write controller script
     await _sandbox_write_file(sandbox_id, "/tmp/browser_controller.py", BROWSER_CONTROLLER_SCRIPT, user_id=user_id)
 
-    # Install playwright if needed & start controller in background
-    startup_cmd = (
-        "pip install playwright -q 2>/dev/null; "
-        "python -m playwright install chromium 2>/dev/null; "
-        "playwright install-deps chromium 2>/dev/null; "
-        f"nohup python /tmp/browser_controller.py > /tmp/browser_controller.log 2>&1 &"
+    # Check if Playwright is already installed (skip install if present)
+    check_result = await _sandbox_shell(
+        sandbox_id,
+        "python -c 'import playwright; print(\"installed\")' 2>/dev/null && "
+        "ls ~/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null && echo 'browser_ok'",
+        timeout=10,
+        user_id=user_id,
     )
-    await _sandbox_shell(sandbox_id, startup_cmd, timeout=120, user_id=user_id)
+    check_stdout = check_result.get("stdout", "")
+    needs_pip = "installed" not in check_stdout
+    needs_browser = "browser_ok" not in check_stdout
 
-    # Wait for controller to be ready
+    # Build startup command — skip steps that aren't needed
+    install_steps = []
+    if needs_pip:
+        install_steps.append("pip install playwright -q 2>/dev/null")
+    if needs_browser:
+        install_steps.append("python -m playwright install chromium 2>/dev/null")
+        install_steps.append("playwright install-deps chromium 2>/dev/null")
+    install_steps.append(f"nohup python /tmp/browser_controller.py > /tmp/browser_controller.log 2>&1 &")
+
+    startup_cmd = "; ".join(install_steps)
+    timeout = 30 if not needs_pip and not needs_browser else 120
+    await _sandbox_shell(sandbox_id, startup_cmd, timeout=timeout, user_id=user_id)
+
+    # Wait for controller to be ready (shorter timeout if skipped install)
     import asyncio
-    for _ in range(20):
+    max_checks = 10 if not needs_pip and not needs_browser else 20
+    for _ in range(max_checks):
         await asyncio.sleep(1)
         try:
             check_resp = await _sandbox_shell(

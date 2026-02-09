@@ -10,6 +10,7 @@ import {
   ExternalLinkIcon,
   LoaderIcon,
   MousePointerIcon,
+  MonitorIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 
@@ -30,10 +31,14 @@ export interface BrowserViewProps {
   onRefresh?: () => void;
   canGoBack?: boolean;
   canGoForward?: boolean;
-  /** Active sandbox ID — enables Take Control mode */
+  /** Active sandbox ID — enables Take Control mode and live streaming */
   sandboxId?: string;
   /** Called when user control actions return a new screenshot */
   onScreenshotUpdate?: (screenshot: string, url?: string, title?: string) => void;
+  /** Neko WebRTC URL — primary live desktop stream (port 8080 inside sandbox) */
+  nekoUrl?: string;
+  /** E2B stream URL — fallback live desktop stream (noVNC) */
+  streamUrl?: string;
 }
 
 // ============================================================================
@@ -52,6 +57,7 @@ function BrowserUrlBar({
   sandboxId,
   userControlActive,
   onToggleUserControl,
+  isLiveStream,
 }: {
   url: string;
   loading?: boolean;
@@ -64,6 +70,7 @@ function BrowserUrlBar({
   sandboxId?: string;
   userControlActive: boolean;
   onToggleUserControl: () => void;
+  isLiveStream: boolean;
 }) {
   const [inputValue, setInputValue] = useState(url);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -142,8 +149,9 @@ function BrowserUrlBar({
           />
         </div>
       </form>
-      {/* Take Control button — only shown when sandbox is available */}
-      {sandboxId && (
+      {/* Take Control button — only shown when sandbox is available AND not in live stream mode
+          (Neko/noVNC iframe handles mouse/keyboard natively) */}
+      {sandboxId && !isLiveStream && (
         <button
           type="button"
           className={cn(
@@ -191,16 +199,35 @@ export function BrowserView({
   canGoForward,
   sandboxId,
   onScreenshotUpdate,
+  nekoUrl,
+  streamUrl,
 }: BrowserViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [userControlActive, setUserControlActive] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
 
+  // Live stream mode — Neko WebRTC (primary) or E2B noVNC stream (fallback)
+  // Neko handles mouse/keyboard natively via WebRTC data channel
+  const liveStreamUrl = nekoUrl || streamUrl || null;
+  const isLiveStreamMode = !!liveStreamUrl;
+
   const toggleUserControl = useCallback(() => {
     setUserControlActive((prev) => !prev);
   }, []);
 
-  // Send a browser action to the sandbox
+  // Deactivate Take Control on outside click
+  React.useEffect(() => {
+    if (!userControlActive) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setUserControlActive(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [userControlActive]);
+
+  // Send a browser action to the sandbox (for screenshot-based Take Control)
   const sendBrowserAction = useCallback(
     async (action: string, params: Record<string, unknown>) => {
       if (!sandboxId) return null;
@@ -221,7 +248,7 @@ export function BrowserView({
     [sandboxId]
   );
 
-  // Handle clicks on the screenshot when in user control mode
+  // Handle clicks on the screenshot when in user control mode (non-VNC fallback)
   const handleScreenshotClick = useCallback(
     async (e: React.MouseEvent<HTMLImageElement>) => {
       if (!userControlActive || !sandboxId) return;
@@ -247,19 +274,22 @@ export function BrowserView({
     [userControlActive, sandboxId, sendBrowserAction, onScreenshotUpdate]
   );
 
-  // Handle keyboard input in user control mode
+  // Handle keyboard input in user control mode (non-VNC fallback)
   const handleKeyDown = useCallback(
     async (e: React.KeyboardEvent) => {
       if (!userControlActive || !sandboxId) return;
 
-      e.preventDefault();
-      e.stopPropagation();
+      // Escape deactivates Take Control mode
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setUserControlActive(false);
+        return;
+      }
 
       // Map common keys
       const key = e.key === "Enter" ? "Enter"
         : e.key === "Backspace" ? "Backspace"
         : e.key === "Tab" ? "Tab"
-        : e.key === "Escape" ? "Escape"
         : e.key === "ArrowUp" ? "ArrowUp"
         : e.key === "ArrowDown" ? "ArrowDown"
         : e.key === "ArrowLeft" ? "ArrowLeft"
@@ -268,10 +298,11 @@ export function BrowserView({
         : null;
 
       if (!key) return;
+      e.preventDefault();
+      e.stopPropagation();
 
       let result;
       if (key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        // Type single character
         result = await sendBrowserAction("input", {
           text: key,
           coordinate_x: 640,
@@ -302,17 +333,27 @@ export function BrowserView({
         sandboxId={sandboxId}
         userControlActive={userControlActive}
         onToggleUserControl={toggleUserControl}
+        isLiveStream={isLiveStreamMode}
       />
       <div
         ref={containerRef}
         className={cn(
           "relative flex-1 overflow-hidden bg-canvas-deep",
-          userControlActive && "cursor-crosshair"
+          userControlActive && !isLiveStreamMode && "cursor-crosshair"
         )}
-        tabIndex={userControlActive ? 0 : undefined}
-        onKeyDown={userControlActive ? handleKeyDown : undefined}
+        tabIndex={userControlActive && !isLiveStreamMode ? 0 : undefined}
+        onKeyDown={userControlActive && !isLiveStreamMode ? handleKeyDown : undefined}
       >
-        {screenshot ? (
+        {/* Priority 1: Live desktop stream — Neko WebRTC (primary) or E2B noVNC (fallback) */}
+        {isLiveStreamMode ? (
+          <iframe
+            src={liveStreamUrl}
+            title="Rubic Virtual Computer — Live Desktop"
+            className="size-full border-0"
+            allow="clipboard-read; clipboard-write; autoplay"
+          />
+        ) : screenshot ? (
+          /* Priority 2: Screenshot (from agent tool results or polling) */
           <img
             src={screenshot}
             alt="Browser view"
@@ -324,6 +365,7 @@ export function BrowserView({
             draggable={false}
           />
         ) : searchResults && searchResults.length > 0 ? (
+          /* Priority 3: Search results */
           <div className="h-full overflow-y-auto p-4">
             {title && (
               <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
@@ -355,6 +397,7 @@ export function BrowserView({
             </div>
           </div>
         ) : content ? (
+          /* Priority 4: Page content text */
           <div className="h-full overflow-y-auto p-4">
             {title && (
               <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
@@ -364,6 +407,7 @@ export function BrowserView({
             </div>
           </div>
         ) : (
+          /* Priority 5: Placeholder */
           <div className="flex h-full items-center justify-center text-muted-foreground/40">
             <div className="text-center">
               {loading ? (
@@ -373,23 +417,33 @@ export function BrowserView({
                 </>
               ) : (
                 <>
-                  <GlobeIcon className="mx-auto mb-3 size-12 opacity-30" />
-                  <p className="text-sm">Waiting for browser content...</p>
+                  <MonitorIcon className="mx-auto mb-3 size-12 opacity-30" />
+                  <p className="text-sm">Waiting for virtual computer...</p>
+                  <p className="mt-1 text-xs text-muted-foreground/30">
+                    The desktop will appear when the agent starts browsing
+                  </p>
                 </>
               )}
             </div>
           </div>
         )}
-        {loading && (
+        {loading && !isLiveStreamMode && (
           <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-blue-500/10">
             <div className="browser-loading-bar h-full bg-blue-500" />
           </div>
         )}
-        {/* User control indicator */}
-        {userControlActive && (
+        {/* User control indicator — screenshot-based Take Control (non-VNC mode) */}
+        {userControlActive && !isLiveStreamMode && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-blue-500/90 px-2.5 py-1 text-xs font-medium text-white shadow-lg">
             <MousePointerIcon className="size-3" />
             You have control
+          </div>
+        )}
+        {/* Live indicator badge */}
+        {isLiveStreamMode && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-green-500/80 px-2 py-0.5 text-[10px] font-medium text-white shadow-lg">
+            <div className="size-1.5 animate-pulse rounded-full bg-white" />
+            {nekoUrl ? "LIVE DESKTOP" : "LIVE STREAM"}
           </div>
         )}
       </div>

@@ -4,11 +4,10 @@ import { z } from "zod";
 export const keys = () =>
   createEnv({
     server: {
-      OPENAI_API_KEY: z.string().startsWith("sk-").optional(),
-      ANTHROPIC_API_KEY: z.string().startsWith("sk-ant-").optional(),
+      // Agent service URL — all AI completions go through this service
+      AGENT_SERVICE_URL: z.string().url().optional(),
     },
     runtimeEnv: {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      AGENT_SERVICE_URL: process.env.AGENT_SERVICE_URL,
     },
   });

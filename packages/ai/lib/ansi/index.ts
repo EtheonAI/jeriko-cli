@@ -58,7 +58,7 @@ export function parseAnsi(text: string): AnsiSegment[] {
       });
     }
 
-    const codes = match[1].split(";").map(Number).filter(Boolean);
+    const codes = (match[1] ?? "").split(";").map(Number).filter(Boolean);
 
     for (const code of codes) {
       if (code === 0) {

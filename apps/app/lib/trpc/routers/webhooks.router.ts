@@ -60,7 +60,7 @@ export const webhooksRouter = createTRPCRouter({
         description: z.string().max(500).optional(),
         url: z.string().url(),
         events: z.array(z.enum(webhookEventTypes)).min(1),
-        headers: z.record(z.string()).optional(),
+        headers: z.record(z.string(), z.string()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -94,7 +94,7 @@ export const webhooksRouter = createTRPCRouter({
         description: z.string().max(500).optional(),
         url: z.string().url().optional(),
         events: z.array(z.enum(webhookEventTypes)).min(1).optional(),
-        headers: z.record(z.string()).optional(),
+        headers: z.record(z.string(), z.string()).optional(),
         status: z.enum(["active", "inactive"]).optional(),
       })
     )

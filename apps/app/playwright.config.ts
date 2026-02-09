@@ -72,6 +72,29 @@ export default defineConfig({
       },
       dependencies: ["auth-setup"],
     },
+
+    // Tablet viewport
+    {
+      name: "tablet",
+      use: {
+        viewport: { width: 1024, height: 1366 },
+        storageState: "e2e/.auth/user.json",
+      },
+      dependencies: ["auth-setup"],
+      testMatch: /features\/(smoke|devices|applications)\.spec\.ts/,
+    },
+
+    // Visual regression
+    {
+      name: "visual-regression",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "e2e/.auth/user.json",
+      },
+      dependencies: ["auth-setup"],
+      testDir: "./e2e/visual",
+    },
   ],
 
   webServer: process.env.CI

@@ -1,0 +1,8 @@
+{
+  "vitest.maximumConfigs": 20,
+  "vitest.configSearchPatternExclude": [
+    "**/node_modules/**",
+    "**/docs/**",
+    "**/.react-email/**"
+  ]
+}

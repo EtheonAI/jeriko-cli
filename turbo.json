@@ -22,8 +22,30 @@
     "test": {
       "dependsOn": ["^test"]
     },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["DATABASE_URL", "REDIS_URL"]
+    },
+    "test:security": {
+      "dependsOn": ["^build"]
+    },
+    "test:contract": {
+      "dependsOn": ["^build"]
+    },
     "test:e2e": {
       "dependsOn": ["build"],
+      "cache": false
+    },
+    "test:a11y": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "test:visual": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "test:load": {
       "cache": false
     },
     "analyze": {

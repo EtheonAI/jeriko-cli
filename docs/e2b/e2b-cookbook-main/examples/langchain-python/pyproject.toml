@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "langchain_e2b_python"
+version = "0.1.0"
+description = "Example project for showcasing E2B code interpreter with LangChain"
+authors = ["Vasek Mlejnsky <vasek@e2b.dev>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+e2b-code-interpreter = "^1.0.1"
+langchain = "0.3.1"
+python-dotenv = "^1.0.1"
+langchain-groq = "0.2.0"
+langchainhub = "0.1.21"
+langchain-openai = "0.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+start = "langchain_e2b_python.main:main"

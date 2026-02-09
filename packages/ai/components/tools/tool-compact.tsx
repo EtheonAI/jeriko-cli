@@ -15,6 +15,9 @@ import {
   CodeIcon,
   BellIcon,
   RocketIcon,
+  BarChart3Icon,
+  ListTodoIcon,
+  ClockIcon,
 } from "lucide-react";
 import type { ToolInvocationState } from "../../lib/types/ui-message";
 
@@ -63,8 +66,10 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   generate_image: ImageIcon,
   message_notify_user: BellIcon,
   message_ask_user: BellIcon,
-  schedule_recurring_task: BellIcon,
+  schedule_recurring_task: ClockIcon,
   check_outcomes: SearchIcon,
+  track_analytics: BarChart3Icon,
+  show_plan: ListTodoIcon,
   deploy_expose_port: RocketIcon,
   deploy_apply_deployment: RocketIcon,
 };

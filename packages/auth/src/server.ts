@@ -10,7 +10,9 @@ import {
   organizations,
   members,
   invitations,
+  apiKeys,
 } from "@repo/database";
+import crypto from "node:crypto";
 import {
   sendEmail,
   VerificationEmail,
@@ -150,6 +152,31 @@ export const auth = betterAuth({
     process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
     process.env.NEXT_PUBLIC_WEB_URL || "http://localhost:3001",
   ].filter(Boolean),
+
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          // Auto-generate a default API key for every new user
+          try {
+            const random = crypto.randomBytes(24).toString("base64url");
+            const key = `rk_live_${random}`;
+            const prefix = key.slice(0, 12) + "...";
+
+            await db.insert(apiKeys).values({
+              id: crypto.randomBytes(12).toString("base64url"),
+              userId: user.id,
+              key,
+              keyPrefix: prefix,
+              name: "Default",
+            });
+          } catch {
+            // Non-fatal — user can create keys manually from Settings
+          }
+        },
+      },
+    },
+  },
 });
 
 // Type exports

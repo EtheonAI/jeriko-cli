@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 
 // Public routes that don't require authentication
 const publicRoutes = [
-  "/",
   "/login",
   "/login/password",
   "/verify-email",
@@ -17,6 +16,11 @@ const authPages = ["/login", "/register"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const e2eAuthBypass = process.env.E2E_AUTH_BYPASS === "true";
+
+  if (e2eAuthBypass) {
+    return NextResponse.next();
+  }
 
   // Allow all auth API routes
   if (pathname.startsWith("/api/auth")) {

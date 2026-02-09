@@ -158,7 +158,7 @@ function SearchResultItemComponent({
           <span className="truncate font-medium">{result.title}</span>
           {result.highlights && result.highlights.length > 0 && (
             <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-              {result.highlights[0].snippet}
+              {result.highlights[0]?.snippet}
             </span>
           )}
         </div>

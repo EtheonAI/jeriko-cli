@@ -242,7 +242,7 @@ export function FilesPageClient() {
   const confirmDelete = useCallback(() => {
     if (!deleteTarget) return;
     if (deleteTarget.ids.length === 1) {
-      deleteMutation.mutate({ id: deleteTarget.ids[0] });
+      deleteMutation.mutate({ id: deleteTarget.ids[0]! });
     } else {
       bulkDeleteMutation.mutate({ ids: deleteTarget.ids });
     }

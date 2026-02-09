@@ -1,6 +1,5 @@
-import { auth } from "@repo/auth";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { getSession } from "@/lib/dal";
 import { Header } from "../components/header/index";
 import { CalendarIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { Button } from "@repo/design-system/components/ui/button";
@@ -37,10 +36,7 @@ function EmptyState({
 }
 
 export default async function ActionsPage() {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  const session = await getSession();
 
   return (
     <>

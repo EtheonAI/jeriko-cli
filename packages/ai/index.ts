@@ -1,6 +1,26 @@
 // Re-export from Vercel AI SDK
 export * from "ai";
 
+// ============================================================================
+// RubicAI — Custom AI Provider (routes all completions through agent service)
+// ============================================================================
+export {
+  RubicAI,
+  createRubicAI,
+  getRubicAI,
+  type RubicAIConfig,
+  type RubicCompletionOptions,
+  type RubicCompletionResult,
+  type RubicHealthResult,
+} from "./lib/rubic-provider";
+
+// Model name resolution (no direct provider access)
+export {
+  resolveModelName,
+  DEFAULT_MODEL,
+  MODEL_ALIASES,
+} from "./lib/models";
+
 // Export our custom types (prefixed to avoid conflicts with 'ai' package)
 export type {
   // UIMessage types (with Rubic prefix to avoid conflicts)

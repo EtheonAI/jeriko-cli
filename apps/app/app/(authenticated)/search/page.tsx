@@ -1,7 +1,5 @@
-import { auth } from "@repo/auth/server";
-import { redirect } from "next/navigation";
 import { Header } from "../components/header";
-import { headers } from "next/headers";
+import { verifySession } from "@/lib/dal";
 import { SearchResultsClient } from "./search-results-client";
 
 type SearchPageProperties = {
@@ -24,14 +22,7 @@ export const generateMetadata = async ({
 
 const SearchPage = async ({ searchParams }: SearchPageProperties) => {
   const { q, type } = await searchParams;
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session?.user) {
-    redirect("/login");
-  }
+  const session = await verifySession();
 
   return (
     <>

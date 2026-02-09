@@ -204,8 +204,8 @@ export function ConnectorsTab() {
 
           <div className="space-y-3">
             {installedConnectors.map(({ connector, definition }) => {
-              const Icon = connectorIcons[definition.type] || connectorIcons.default;
-              const status = statusVariants[connector.status] || statusVariants.disconnected;
+              const Icon = connectorIcons[definition.type] ?? connectorIcons.default ?? LinkIcon;
+              const status = (statusVariants[connector.status] ?? statusVariants.disconnected)!;
               const StatusIcon = status.icon;
 
               return (
@@ -335,7 +335,7 @@ export function ConnectorsTab() {
 
               <div className="grid gap-3 md:grid-cols-2">
                 {availableDefs.map((definition) => {
-                  const Icon = connectorIcons[definition.type] || connectorIcons.default;
+                  const Icon = connectorIcons[definition.type] ?? connectorIcons.default ?? LinkIcon;
 
                   return (
                     <Card key={definition.id} className="flex items-center p-4">

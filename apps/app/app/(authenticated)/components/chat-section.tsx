@@ -35,6 +35,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
         const session = await createSession.mutateAsync({
           title: input.slice(0, 100),
         });
+        if (!session) throw new Error("Failed to create session");
 
         // Update Redux session list so sidebar renders immediately
         const normalized: AgentSession = {

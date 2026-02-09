@@ -91,6 +91,18 @@ export interface AgentCanvasProps {
 
   // Terminal view
   terminalOutput?: string[];
+  /** Live PTY output from WebSocket stream */
+  liveTerminalOutput?: string[];
+  /** Whether the live PTY stream is connected */
+  liveTerminalConnected?: boolean;
+  /** Send keyboard input to the live PTY */
+  onTerminalSendInput?: (data: string) => void;
+
+  // Live browser streaming
+  /** Neko WebRTC URL for live desktop streaming */
+  nekoUrl?: string;
+  /** E2B stream URL (noVNC fallback for desktop streaming) */
+  streamUrl?: string;
 
   // File preview
   previewFileName?: string;
@@ -313,6 +325,11 @@ export function AgentCanvas({
   previewUrl,
   fileContents,
   terminalOutput,
+  liveTerminalOutput,
+  liveTerminalConnected,
+  onTerminalSendInput,
+  nekoUrl,
+  streamUrl,
   previewFileName,
   previewContent,
   previewFileType,
@@ -449,6 +466,8 @@ export function AgentCanvas({
             canGoForward={canGoForward}
             sandboxId={sandboxId}
             onScreenshotUpdate={onBrowserScreenshotUpdate}
+            nekoUrl={nekoUrl}
+            streamUrl={streamUrl}
           />
         )}
         {viewType === "code" && (
@@ -462,7 +481,14 @@ export function AgentCanvas({
             onCloseTab={onCloseTab}
           />
         )}
-        {viewType === "terminal" && <TerminalView output={terminalOutput} />}
+        {viewType === "terminal" && (
+          <TerminalView
+            output={terminalOutput}
+            liveOutput={liveTerminalOutput}
+            liveConnected={liveTerminalConnected}
+            onSendInput={onTerminalSendInput}
+          />
+        )}
         {viewType === "filePreview" && (
           <FilePreviewView
             fileName={previewFileName}

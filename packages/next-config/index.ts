@@ -54,7 +54,17 @@ export const config: NextConfig = {
   // React Compiler for automatic memoization (React 19+)
   reactCompiler: true,
 
+  // Turbopack exposes source maps by default — disable for security
+  productionBrowserSourceMaps: false,
+
   // Auto-transform barrel imports to direct imports at build time.
+  // Prevent Turbopack hash mismatches in pnpm monorepo (GitHub #87737)
+  serverExternalPackages: [
+    "@node-rs/argon2",
+    "@node-rs/bcrypt",
+    "sharp",
+  ],
+
   experimental: {
     optimizePackageImports: [
       "lucide-react",

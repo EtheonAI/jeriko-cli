@@ -95,10 +95,10 @@ export const userRouter = createTRPCRouter({
         .returning();
 
       return {
-        id: updated.id,
-        name: updated.name,
-        email: updated.email,
-        image: updated.image,
+        id: updated!.id,
+        name: updated!.name,
+        email: updated!.email,
+        image: updated!.image,
       };
     }),
 
@@ -326,7 +326,7 @@ export const userRouter = createTRPCRouter({
         .where(eq(users.id, ctx.user.id))
         .returning({ preferences: users.preferences });
 
-      return (updated.preferences ?? {}) as UserPreferences;
+      return (updated!.preferences ?? {}) as UserPreferences;
     }),
 
   // Export user data as JSON

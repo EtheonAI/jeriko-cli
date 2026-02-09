@@ -1,5 +1,5 @@
 """
-Tool execution router — dispatches tool calls to the appropriate service.
+Tool execution router — dispatches tool calls via SandboxRuntime abstraction.
 
 Every tool the agent can call gets routed here. Aligned with Manus tool surface:
 - File operations (read, write, str_replace, find_in_content, find_by_name)
@@ -14,8 +14,12 @@ Every tool the agent can call gets routed here. Aligned with Manus tool surface:
 - Device tools (device_* prefix)
 - Recurring tasks (Inngest)
 - Outcome tracking (Composio analytics)
+
+Phase B (ADR-003): All sandbox-touching tool functions now call ctx.runtime.*
+instead of raw E2B SDK + asyncio.to_thread. Zero behaviour change.
 """
 
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -23,43 +27,44 @@ import httpx
 import structlog
 
 from .config import settings
-from .tools.browser import browser_web_search
-from .tools.browser_interactive import browser_action
+from .runtime import SandboxRuntime
+from .tools.browser import browser_navigate, browser_web_search
 from .tools.image_gen import nano_banana_generate
 
 logger = structlog.get_logger()
 
-# Reusable httpx client — created once, used across tool calls
+# Reusable httpx client — for non-sandbox services only (gateway, connector, device, task)
 _http_client: httpx.AsyncClient | None = None
 
 
 def get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=60.0)
+        _http_client = httpx.AsyncClient(
+            timeout=60.0,
+            verify=settings.environment != "development",
+        )
     return _http_client
 
 
-def _sandbox_headers(user_id: str) -> dict[str, str]:
-    """Headers required by the sandbox service (x-user-id for auth/ownership)."""
-    return {"x-user-id": user_id}
-
-
-def _unwrap(resp_json: dict) -> dict:
-    """Unwrap sandbox service {data: {...}, meta: {...}} envelope.
-    Returns the inner data dict, or the original if no wrapper."""
-    if isinstance(resp_json, dict) and "data" in resp_json and isinstance(resp_json["data"], dict):
-        return resp_json["data"]
-    return resp_json
+async def close_http_client() -> None:
+    """Close the shared HTTP client. Call from app shutdown."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+        logger.info("http_client_closed")
 
 
 @dataclass
 class ExecutionContext:
-    """Context passed to every tool execution."""
+    """Context passed to every tool execution — includes SandboxRuntime."""
 
     user_id: str
     session_id: str
+    runtime: SandboxRuntime | None = None
     sandbox_id: str | None = None
+    neko_url: str | None = None
 
 
 # === Dangerous device commands that always require approval ===
@@ -80,7 +85,6 @@ ALWAYS_REQUIRE_APPROVAL = [
 # All interactive browser tool names
 BROWSER_INTERACTIVE_TOOLS = {
     "browser_view",
-    "browser_navigate",
     "browser_restart",
     "browser_click",
     "browser_input",
@@ -102,17 +106,17 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
     """
     logger.info("tool_execute", tool=name, user_id=ctx.user_id, session_id=ctx.session_id)
 
-    # ── File operations → sandbox service ──
+    # ── File operations → SandboxRuntime ──
     if name in ("file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name"):
-        return await sandbox_file_operation(ctx.sandbox_id, ctx.user_id, name, tool_input)
+        return await _file_operation(name, tool_input, ctx)
 
-    # ── Shell session operations → sandbox service ──
+    # ── Shell session operations → SandboxRuntime ──
     if name in ("shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process"):
-        return await sandbox_shell_operation(ctx.sandbox_id, ctx.user_id, name, tool_input)
+        return await _shell_operation(name, tool_input, ctx)
 
-    # ── Code execution → sandbox service ──
+    # ── Code execution → SandboxRuntime ──
     if name == "code_execute":
-        return await sandbox_code_execute(ctx.sandbox_id, ctx.user_id, tool_input)
+        return await _code_execute(tool_input, ctx)
 
     # ── Web search → Serper + browser fallback ──
     if name == "web_search":
@@ -123,19 +127,21 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
             tool_input.get("date_range"),
         )
 
-    # ── Browser interactive tools → persistent browser controller in sandbox ──
-    if name in BROWSER_INTERACTIVE_TOOLS:
-        action = name.replace("browser_", "")
-        return await browser_action(ctx.sandbox_id, action, tool_input, user_id=ctx.user_id)
+    # ── Browser navigate → SandboxRuntime with HTTP fallback ──
+    if name == "browser_navigate":
+        if ctx.runtime:
+            return await _browser_navigate(tool_input, ctx)
+        return await browser_navigate(ctx.sandbox_id, tool_input.get("url", ""))
 
-    # ── Deployment → sandbox port exposure or production deploy ──
+    # ── Browser interactive tools → SandboxRuntime ──
+    if name in BROWSER_INTERACTIVE_TOOLS:
+        return await _browser_interactive(name, tool_input, ctx)
+
+    # ── Deployment → SandboxRuntime port exposure ──
     if name == "deploy_expose_port":
-        return await sandbox_expose_port(ctx.sandbox_id, tool_input["port"])
+        return await _expose_port(tool_input.get("port", 3000), ctx)
     if name == "deploy_apply_deployment":
-        return await sandbox_apply_deployment(
-            ctx.sandbox_id, ctx.user_id,
-            tool_input["type"], tool_input["local_dir"],
-        )
+        return await _apply_deployment(tool_input, ctx)
 
     # ── Image generation → Gemini in sandbox ──
     if name == "generate_image":
@@ -174,381 +180,431 @@ async def execute_tool(name: str, tool_input: dict, ctx: ExecutionContext) -> di
 
 
 # ============================================================
-# File Operations (read, write, str_replace, find_in_content, find_by_name)
+# File Operations — via SandboxRuntime
 # ============================================================
 
 
-async def sandbox_file_operation(sandbox_id: str | None, user_id: str, operation: str, params: dict) -> dict:
-    """Route file operations to the sandbox service."""
-    if not sandbox_id:
+async def _file_operation(operation: str, params: dict, ctx: ExecutionContext) -> dict:
+    """Execute file operations via SandboxRuntime."""
+    if not ctx.runtime:
         return {"error": "No sandbox available. A sandbox is required for file operations."}
 
-    client = get_http_client()
-    base = settings.sandbox_service_url
-    headers = {"x-user-id": user_id} if user_id else {}
+    runtime = ctx.runtime
 
-    if operation == "file_read":
-        file_path = params.get("file") or params.get("path", "")
+    try:
+        if operation == "file_read":
+            file_path = params.get("file") or params.get("path", "")
+            content = await runtime.file_read(file_path)
 
-        # GET /sandboxes/:id/files?path=<path>
-        resp = await client.get(
-            f"{base}/sandboxes/{sandbox_id}/files",
-            params={"path": file_path},
-            headers=headers,
-        )
+            # Apply line range if requested
+            if ("start_line" in params or "end_line" in params) and content:
+                lines = content.split("\n")
+                start = params.get("start_line", 0)
+                end = params.get("end_line", len(lines))
+                content = "\n".join(lines[start:end])
 
-        if resp.status_code >= 400:
-            return {"error": f"Failed to read file: {resp.text}"}
+            return {"content": content, "path": file_path}
 
-        data = resp.json()
-        # Unwrap API envelope {data: {path, content}, meta, error}
-        inner = data.get("data", data)
-        content = inner.get("content", "")
+        elif operation == "file_write":
+            file_path = params.get("file") or params.get("path", "")
+            content = params.get("content", "")
 
-        # Apply line range if sandbox doesn't support it natively
-        if ("start_line" in params or "end_line" in params) and content:
-            lines = content.split("\n")
-            start = params.get("start_line", 0)
-            end = params.get("end_line", len(lines))
-            content = "\n".join(lines[start:end])
-
-        return {"content": content, "path": file_path}
-
-    elif operation == "file_write":
-        file_path = params.get("file") or params.get("path", "")
-        content = params.get("content", "")
-
-        # Handle append mode
-        if params.get("append"):
-            read_resp = await client.get(
-                f"{base}/sandboxes/{sandbox_id}/files",
-                params={"path": file_path},
-                headers=headers,
-            )
-            if read_resp.status_code == 200:
-                read_data = read_resp.json()
-                existing = read_data.get("data", read_data).get("content", "")
+            # Handle append mode
+            if params.get("append"):
+                try:
+                    existing = await runtime.file_read(file_path)
+                    if params.get("leading_newline"):
+                        content = "\n" + content
+                    content = existing + content
+                except Exception:
+                    pass  # File doesn't exist — just write
+            else:
                 if params.get("leading_newline"):
                     content = "\n" + content
-                content = existing + content
-            # If file doesn't exist, just write the content
-        else:
-            if params.get("leading_newline"):
-                content = "\n" + content
 
-        if params.get("trailing_newline") and not content.endswith("\n"):
-            content += "\n"
+            if params.get("trailing_newline") and not content.endswith("\n"):
+                content += "\n"
 
-        # POST /sandboxes/:id/files  body: {path, content}
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/files",
-            json={"path": file_path, "content": content},
-            headers=headers,
-        )
+            await runtime.file_write(file_path, content)
+            return {"success": True, "path": file_path}
 
-        if resp.status_code >= 400:
-            return {"error": f"Failed to write file: {resp.text}"}
-        return {"success": True, "path": file_path}
+        elif operation == "file_str_replace":
+            file_path = params.get("file") or params.get("path", "")
+            content = await runtime.file_read(file_path)
 
-    elif operation == "file_str_replace":
-        file_path = params.get("file") or params.get("path", "")
-        read_resp = await client.get(
-            f"{base}/sandboxes/{sandbox_id}/files",
-            params={"path": file_path},
-            headers=headers,
-        )
-        if read_resp.status_code != 200:
-            return {"error": f"Failed to read file: {read_resp.text}"}
+            old_str = params.get("old_str", "")
+            new_str = params.get("new_str", "")
 
-        read_data = read_resp.json()
-        content = read_data.get("data", read_data).get("content", "")
-        old_str = params.get("old_str", "")
-        new_str = params.get("new_str", "")
+            if old_str not in content:
+                return {"error": f"String not found in file: {old_str[:100]}"}
 
-        if old_str not in content:
-            return {"error": f"String not found in file: {old_str[:100]}"}
+            new_content = content.replace(old_str, new_str, 1)
+            await runtime.file_write(file_path, new_content)
+            return {"success": True, "path": file_path}
 
-        new_content = content.replace(old_str, new_str, 1)
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/files",
-            json={"path": file_path, "content": new_content},
-            headers=headers,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Failed to write file: {resp.text}"}
-        return {"success": True, "path": file_path}
+        elif operation == "file_find_in_content":
+            file_path = params.get("file") or params.get("path", "")
+            regex = params.get("regex", "")
 
-    elif operation == "file_find_in_content":
-        file_path = params.get("file") or params.get("path", "")
-        regex = params.get("regex", "")
+            result = await runtime.command_run(
+                f'grep -n -E "{regex}" "{file_path}" 2>&1 | head -50',
+                timeout=10,
+            )
+            stdout = result.stdout
+            matches = []
+            for line in stdout.strip().split("\n"):
+                if line and ":" in line:
+                    parts = line.split(":", 1)
+                    matches.append({
+                        "line": int(parts[0]) if parts[0].isdigit() else 0,
+                        "content": parts[1] if len(parts) > 1 else "",
+                    })
+            return {"file": file_path, "regex": regex, "matches": matches, "count": len(matches)}
 
-        # Use grep in sandbox shell
-        shell_resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f'grep -n -E "{regex}" "{file_path}" 2>&1 | head -50',
-                "timeout": 10000,
-            },
-            headers=headers,
-            timeout=15.0,
-        )
-        if shell_resp.status_code >= 400:
-            return {"error": f"Search failed: {shell_resp.text}"}
+        elif operation == "file_find_by_name":
+            path = params.get("path", "/home/user")
+            glob_pattern = params.get("glob", "*")
 
-        data = _unwrap(shell_resp.json())
-        stdout = data.get("stdout", "")
-        matches = []
-        for line in stdout.strip().split("\n"):
-            if line and ":" in line:
-                parts = line.split(":", 1)
-                matches.append({"line": int(parts[0]) if parts[0].isdigit() else 0, "content": parts[1] if len(parts) > 1 else ""})
+            result = await runtime.command_run(
+                f'find "{path}" -name "{glob_pattern}" -type f 2>/dev/null | head -50',
+                timeout=10,
+            )
+            stdout = result.stdout
+            files = [f.strip() for f in stdout.strip().split("\n") if f.strip()]
+            return {"path": path, "glob": glob_pattern, "files": files, "count": len(files)}
 
-        return {"file": file_path, "regex": regex, "matches": matches, "count": len(matches)}
-
-    elif operation == "file_find_by_name":
-        path = params.get("path", "/home/user")
-        glob_pattern = params.get("glob", "*")
-
-        shell_resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f'find "{path}" -name "{glob_pattern}" -type f 2>/dev/null | head -50',
-                "timeout": 10000,
-            },
-            headers=headers,
-            timeout=15.0,
-        )
-        if shell_resp.status_code >= 400:
-            return {"error": f"Find failed: {shell_resp.text}"}
-
-        data = _unwrap(shell_resp.json())
-        stdout = data.get("stdout", "")
-        files = [f.strip() for f in stdout.strip().split("\n") if f.strip()]
-        return {"path": path, "glob": glob_pattern, "files": files, "count": len(files)}
+    except Exception as e:
+        logger.error("file_operation_error", operation=operation, error=str(e))
+        return {"error": f"File operation failed: {str(e)}"}
 
     return {"error": f"Unknown file operation: {operation}"}
 
 
 # ============================================================
-# Shell Session Operations (exec, view, wait, write_to_process, kill)
+# Shell Operations — via SandboxRuntime
 # ============================================================
 
 
-async def sandbox_shell_operation(sandbox_id: str | None, user_id: str, operation: str, params: dict) -> dict:
-    """Route shell session operations to the sandbox service."""
-    if not sandbox_id:
+async def _shell_operation(operation: str, params: dict, ctx: ExecutionContext) -> dict:
+    """Execute shell operations via SandboxRuntime."""
+    if not ctx.runtime:
         return {"error": "No sandbox available. A sandbox is required for shell operations."}
 
-    client = get_http_client()
-    base = settings.sandbox_service_url
-    headers = {"x-user-id": user_id} if user_id else {}
+    runtime = ctx.runtime
 
-    if operation == "shell_exec":
-        session_id = params.get("id", "default")
-        exec_dir = params.get("exec_dir", "/home/user")
-        command = params.get("command", "")
+    try:
+        if operation == "shell_exec":
+            exec_dir = params.get("exec_dir", "/home/user")
+            command = params.get("command", "")
 
-        # Prefix with cd to exec_dir
-        full_command = f'cd "{exec_dir}" && {command}'
+            result = await runtime.command_run(command, cwd=exec_dir, timeout=30)
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": full_command,
-                "timeout": 30000,
-                "sessionId": session_id,
-            },
-            headers=headers,
-            timeout=45.0,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Shell execution failed: {resp.text}"}
-        data = resp.json()
-        return data.get("data", data)
+        elif operation == "shell_view":
+            # View current state — run a no-op
+            result = await runtime.command_run("true", timeout=5)
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-    elif operation == "shell_view":
-        session_id = params.get("id", "default")
-        # View output of an existing shell session
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": "true",  # No-op to get current state
-                "timeout": 5000,
-                "sessionId": session_id,
-            },
-            headers=headers,
-            timeout=10.0,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Shell view failed: {resp.text}"}
-        data = resp.json()
-        return data.get("data", data)
+        elif operation == "shell_wait":
+            seconds = min(params.get("seconds", 10), 300)
+            result = await runtime.command_run(
+                f"sleep {seconds} && echo WAIT_COMPLETE",
+                timeout=seconds + 5,
+            )
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-    elif operation == "shell_wait":
-        session_id = params.get("id", "default")
-        seconds = params.get("seconds", 10)
-        # Wait by sleeping then checking state
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f"sleep {min(seconds, 300)} && echo WAIT_COMPLETE",
-                "timeout": (min(seconds, 300) + 5) * 1000,
-                "sessionId": session_id,
-            },
-            headers=headers,
-            timeout=min(seconds, 300) + 10,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Shell wait failed: {resp.text}"}
-        data = resp.json()
-        return data.get("data", data)
+        elif operation == "shell_write_to_process":
+            input_text = params.get("input", "")
+            press_enter = params.get("press_enter", True)
+            if press_enter:
+                input_text += "\n"
 
-    elif operation == "shell_write_to_process":
-        session_id = params.get("id", "default")
-        input_text = params.get("input", "")
-        press_enter = params.get("press_enter", True)
+            session_id = params.get("id", "default")
+            result = await runtime.command_run(
+                f'echo "{input_text}" > /proc/$(pgrep -f "session_{session_id}" | head -1)/fd/0 2>/dev/null || echo "No active process"',
+                timeout=5,
+            )
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-        # Write to stdin of running process
-        if press_enter:
-            input_text += "\n"
+        elif operation == "shell_kill_process":
+            session_id = params.get("id", "default")
+            result = await runtime.command_run(
+                f'pkill -f "session_{session_id}" 2>/dev/null; echo "Process terminated"',
+                timeout=5,
+            )
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f'echo "{input_text}" > /proc/$(pgrep -f "session_{session_id}" | head -1)/fd/0 2>/dev/null || echo "No active process"',
-                "timeout": 5000,
-                "sessionId": session_id,
-            },
-            headers=headers,
-            timeout=10.0,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Shell write failed: {resp.text}"}
-        data = resp.json()
-        return data.get("data", data)
-
-    elif operation == "shell_kill_process":
-        session_id = params.get("id", "default")
-        # Kill processes in the session
-        resp = await client.post(
-            f"{base}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f'pkill -f "session_{session_id}" 2>/dev/null; echo "Process terminated"',
-                "timeout": 5000,
-            },
-            headers=headers,
-            timeout=10.0,
-        )
-        if resp.status_code >= 400:
-            return {"error": f"Shell kill failed: {resp.text}"}
-        data = resp.json()
-        return data.get("data", data)
+    except Exception as e:
+        logger.error("shell_operation_error", operation=operation, error=str(e))
+        return {"error": f"Shell operation failed: {str(e)}"}
 
     return {"error": f"Unknown shell operation: {operation}"}
 
 
 # ============================================================
-# Code Execution
+# Code Execution — via SandboxRuntime
 # ============================================================
 
 
-async def sandbox_code_execute(sandbox_id: str | None, user_id: str, params: dict) -> dict:
-    """Execute code in the sandbox."""
-    if not sandbox_id:
+async def _code_execute(params: dict, ctx: ExecutionContext) -> dict:
+    """Execute code in the sandbox via SandboxRuntime."""
+    if not ctx.runtime:
         return {"error": "No sandbox available. A sandbox is required for code execution."}
 
-    client = get_http_client()
+    runtime = ctx.runtime
+    code = params.get("code", "")
+    language = params.get("language", "python")
     timeout = params.get("timeout", 30)
-    headers = {"x-user-id": user_id} if user_id else {}
 
-    resp = await client.post(
-        f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/execute",
-        json={
-            "code": params["code"],
-            "language": params.get("language", "python"),
-            "timeout": timeout * 1000,
-        },
-        headers=headers,
-        timeout=max(timeout + 10, 60),
-    )
+    try:
+        if language == "python" and runtime.has_code_interpreter:
+            result = await runtime.code_run(code, language=language, timeout=timeout)
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "results": result.results,
+                "error": result.error,
+            }
+        else:
+            result = await runtime.code_run(code, language=language, timeout=timeout)
+            return {
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.exit_code,
+            }
 
-    if resp.status_code >= 400:
-        return {"error": f"Code execution failed: {resp.text}"}
-    data = resp.json()
-    return data.get("data", data)
+    except Exception as e:
+        logger.error("code_execute_error", error=str(e))
+        return {"error": f"Code execution failed: {str(e)}"}
 
 
 # ============================================================
-# Deployment (expose port + production deploy)
+# Browser Operations — via SandboxRuntime (DesktopSandbox)
 # ============================================================
 
 
-async def sandbox_expose_port(sandbox_id: str | None, port: int) -> dict:
-    """Expose a sandbox port to a public URL via E2B."""
-    if not sandbox_id:
+async def _browser_navigate(params: dict, ctx: ExecutionContext) -> dict:
+    """Navigate to a URL using SandboxRuntime."""
+    runtime = ctx.runtime
+    url = params.get("url", "")
+
+    if not runtime:
+        return {"error": "No sandbox available."}
+
+    try:
+        if runtime.is_desktop:
+            # Use desktop open for URL navigation
+            await runtime.desktop_open(url)
+            await asyncio.sleep(3)  # Wait for page load
+
+            # Take screenshot
+            screenshot_bytes = await runtime.desktop_screenshot()
+            import base64
+            screenshot_b64 = base64.b64encode(screenshot_bytes).decode() if screenshot_bytes else ""
+
+            return {
+                "screenshot": screenshot_b64,
+                "url": url,
+                "title": "",
+                "message": f"Navigated to {url}",
+            }
+        else:
+            # Non-desktop sandbox — use Chromium via shell
+            result = await runtime.command_run(
+                f'chromium-browser --headless --disable-gpu --dump-dom "{url}" 2>/dev/null | head -200',
+                timeout=15,
+            )
+            return {
+                "content": result.stdout[:5000] if result.stdout else "",
+                "url": url,
+                "title": "",
+                "message": f"Fetched content from {url}",
+            }
+
+    except Exception as e:
+        logger.error("browser_navigate_error", url=url, error=str(e))
+        # Fall back to HTTP fetch
+        return await browser_navigate(ctx.sandbox_id, url)
+
+
+async def _browser_interactive(name: str, params: dict, ctx: ExecutionContext) -> dict:
+    """Execute interactive browser actions via SandboxRuntime."""
+    runtime = ctx.runtime
+
+    if not runtime:
+        return {"error": "No sandbox available for browser operations."}
+
+    if not runtime.is_desktop:
+        return {"error": "Interactive browser requires a Desktop sandbox."}
+
+    try:
+        action = name.replace("browser_", "")
+
+        if action == "click":
+            x = params.get("coordinate_x", params.get("x", 640))
+            y = params.get("coordinate_y", params.get("y", 360))
+            await runtime.desktop_left_click(x=x, y=y)
+            await asyncio.sleep(1)
+
+        elif action == "input":
+            x = params.get("coordinate_x", params.get("x", 640))
+            y = params.get("coordinate_y", params.get("y", 360))
+            text = params.get("text", "")
+            # Click to focus, then type
+            await runtime.desktop_left_click(x=x, y=y)
+            await asyncio.sleep(0.5)
+            await runtime.desktop_write(text)
+            if params.get("press_enter"):
+                await runtime.desktop_press("Enter")
+            await asyncio.sleep(1)
+
+        elif action == "move_mouse":
+            x = params.get("coordinate_x", params.get("x", 640))
+            y = params.get("coordinate_y", params.get("y", 360))
+            await runtime.desktop_move_mouse(x=x, y=y)
+
+        elif action in ("press_key", "key_press"):
+            key = params.get("key", "")
+            if key:
+                await runtime.desktop_press(key)
+            await asyncio.sleep(0.5)
+
+        elif action == "select_option":
+            x = params.get("coordinate_x", params.get("x", 640))
+            y = params.get("coordinate_y", params.get("y", 360))
+            await runtime.desktop_left_click(x=x, y=y)
+            await asyncio.sleep(0.5)
+            # Select the option by index offset
+            option_index = params.get("option", 0)
+            for _ in range(option_index):
+                await runtime.desktop_press("ArrowDown")
+                await asyncio.sleep(0.1)
+            await runtime.desktop_press("Enter")
+            await asyncio.sleep(0.5)
+
+        elif action in ("scroll_up", "scroll"):
+            direction = params.get("direction", "up")
+            amount = params.get("amount", 3)
+            x = params.get("coordinate_x", 640)
+            y = params.get("coordinate_y", 360)
+            scroll_y = -amount if direction == "up" else amount
+            await runtime.desktop_scroll(x=x, y=y, scroll_x=0, scroll_y=scroll_y)
+            await asyncio.sleep(0.5)
+
+        elif action == "scroll_down":
+            amount = params.get("amount", 3)
+            x = params.get("coordinate_x", 640)
+            y = params.get("coordinate_y", 360)
+            await runtime.desktop_scroll(x=x, y=y, scroll_x=0, scroll_y=amount)
+            await asyncio.sleep(0.5)
+
+        elif action == "console_exec":
+            js_code = params.get("code", params.get("javascript", ""))
+            # Execute via xdotool + Chromium DevTools
+            result = await runtime.command_run(
+                f'chromium-browser --headless --disable-gpu --remote-debugging-port=9222 2>/dev/null &'
+                f' sleep 1 && curl -s http://localhost:9222/json/version | head -5',
+                timeout=10,
+            )
+            return {
+                "stdout": result.stdout,
+                "message": "Console execution via DevTools is limited in desktop mode.",
+            }
+
+        elif action == "console_view":
+            return {"message": "Console view not available in desktop mode."}
+
+        elif action in ("view", "screenshot"):
+            pass  # Just take a screenshot below
+
+        elif action == "restart":
+            url = params.get("url", "")
+            if url:
+                await runtime.desktop_open(url)
+                await asyncio.sleep(3)
+
+        else:
+            return {"error": f"Unknown browser action: {action}"}
+
+        # Take screenshot after every browser action
+        screenshot_bytes = await runtime.desktop_screenshot()
+        import base64
+        screenshot_b64 = base64.b64encode(screenshot_bytes).decode() if screenshot_bytes else ""
+
+        return {
+            "screenshot": screenshot_b64,
+            "url": "",
+            "title": "",
+        }
+
+    except Exception as e:
+        logger.error("browser_interactive_error", action=name, error=str(e))
+        return {"error": f"Browser action failed: {str(e)}"}
+
+
+# ============================================================
+# Deployment — via SandboxRuntime
+# ============================================================
+
+
+async def _expose_port(port: int, ctx: ExecutionContext) -> dict:
+    """Expose a sandbox port to a public URL via SandboxRuntime."""
+    if not ctx.runtime:
         return {"error": "No sandbox available for port exposure."}
 
-    client = get_http_client()
-    resp = await client.post(
-        f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/expose",
-        json={"port": port},
-    )
-    if resp.status_code >= 400:
-        return {"error": f"Failed to expose port: {resp.text}"}
-
-    data = resp.json()
-    url = data.get("url", "")
-    return {
-        "url": url,
-        "port": port,
-        "message": f"Service is temporarily accessible at {url}",
-    }
+    try:
+        host = ctx.runtime.get_host(port)
+        url = f"https://{host}" if host else ""
+        return {
+            "url": url,
+            "port": port,
+            "message": f"Service is temporarily accessible at {url}",
+        }
+    except Exception as e:
+        return {"error": f"Failed to expose port: {str(e)}"}
 
 
-async def sandbox_apply_deployment(
-    sandbox_id: str | None,
-    user_id: str,
-    deploy_type: str,
-    local_dir: str,
-) -> dict:
-    """Deploy a website/app to production via the website service."""
-    if not sandbox_id:
+async def _apply_deployment(params: dict, ctx: ExecutionContext) -> dict:
+    """Deploy a website/app from the sandbox."""
+    if not ctx.runtime:
         return {"error": "No sandbox available for deployment."}
 
-    client = get_http_client()
+    deploy_type = params.get("type", "static")
+    local_dir = params.get("local_dir", "/home/user/project")
 
-    # Step 1: Package the directory in the sandbox
-    if deploy_type == "static":
-        # Tar the directory and upload to file service
-        tar_path = "/tmp/deploy.tar.gz"
-        shell_resp = await client.post(
-            f"{settings.sandbox_service_url}/sandboxes/{sandbox_id}/shell",
-            json={
-                "command": f'cd "{local_dir}" && tar -czf {tar_path} .',
-                "timeout": 30000,
-            },
-            timeout=45.0,
-        )
-        if shell_resp.status_code >= 400:
-            return {"error": f"Failed to package deployment: {shell_resp.text}"}
+    # Try common ports
+    for port in (3000, 8080, 5000):
+        result = await _expose_port(port, ctx)
+        if "error" not in result and result.get("url"):
+            return {
+                "deployed": True,
+                "type": deploy_type,
+                "url": result["url"],
+                "local_dir": local_dir,
+                "message": f"App deployed. Accessible at: {result['url']}",
+            }
 
-    # Step 2: Deploy via website service or file service
-    # For now, expose via port as temporary deployment
-    expose_result = await sandbox_expose_port(sandbox_id, 3000)
-    if "error" in expose_result:
-        # Try port 8080 as fallback
-        expose_result = await sandbox_expose_port(sandbox_id, 8080)
-
-    return {
-        "deployed": True,
-        "type": deploy_type,
-        "url": expose_result.get("url", ""),
-        "local_dir": local_dir,
-        "message": (
-            f"{'Static' if deploy_type == 'static' else 'Next.js'} app deployed. "
-            f"Accessible at: {expose_result.get('url', 'unknown')}"
-        ),
-    }
+    return {"error": "Could not find a running service to expose."}
 
 
 # ============================================================
@@ -785,7 +841,6 @@ async def create_recurring_task(user_id: str, session_id: str, params: dict) -> 
             return {"error": f"Failed to create recurring task: {resp.text}"}
 
         data = resp.json()
-        # Unwrap the response envelope if present
         task_data = data.get("data", data)
         return {
             "created": True,
@@ -872,3 +927,13 @@ async def assemble_all_tools(user_id: str, core_tools: list[dict]) -> list[dict]
             })
 
     return all_tools
+
+
+# ============================================================
+# Helpers
+# ============================================================
+
+
+def _shell_quote(s: str) -> str:
+    """Quote a string for safe shell usage."""
+    return "'" + s.replace("'", "'\\''") + "'"

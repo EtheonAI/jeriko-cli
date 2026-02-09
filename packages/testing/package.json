@@ -16,6 +16,18 @@
       "types": "./src/factories/index.ts",
       "default": "./src/factories/index.ts"
     },
+    "./db": {
+      "types": "./src/db/test-db.ts",
+      "default": "./src/db/test-db.ts"
+    },
+    "./db/seed": {
+      "types": "./src/db/seed.ts",
+      "default": "./src/db/seed.ts"
+    },
+    "./helpers/trpc-caller": {
+      "types": "./src/helpers/trpc-caller.ts",
+      "default": "./src/helpers/trpc-caller.ts"
+    },
     "./msw": {
       "types": "./src/msw/index.ts",
       "default": "./src/msw/index.ts"

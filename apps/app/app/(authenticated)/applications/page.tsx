@@ -1,6 +1,5 @@
-import { auth } from "@repo/auth";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { getSession } from "@/lib/dal";
 import { Header } from "../components/header/index";
 import { ApplicationsPageClient } from "./applications-page-client";
 
@@ -10,10 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ApplicationsPage() {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  const session = await getSession();
 
   return (
     <>

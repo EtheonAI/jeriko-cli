@@ -3,6 +3,10 @@
  *
  * Motion-safe animations for tool execution states.
  * All animations respect prefers-reduced-motion.
+ *
+ * Color format: CSS variables use oklch() values (Tailwind v4 / globals.css).
+ * Full opacity  → var(--name)
+ * With opacity  → color-mix(in oklch, var(--name) <percent>, transparent)
  */
 
 /* ============================================================================
@@ -21,11 +25,11 @@
 .shimmer {
   background: linear-gradient(
     90deg,
-    currentColor 0%,
-    hsl(var(--primary)) 40%,
-    hsl(var(--primary) / 0.8) 50%,
-    hsl(var(--primary)) 60%,
-    currentColor 100%
+    var(--foreground) 0%,
+    var(--primary) 40%,
+    color-mix(in oklch, var(--primary) 80%, transparent) 50%,
+    var(--primary) 60%,
+    var(--foreground) 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -43,11 +47,11 @@
 .shimmer-invert {
   background: linear-gradient(
     90deg,
-    hsl(var(--foreground)) 0%,
-    hsl(var(--primary-foreground)) 40%,
-    hsl(var(--primary-foreground) / 0.8) 50%,
-    hsl(var(--primary-foreground)) 60%,
-    hsl(var(--foreground)) 100%
+    var(--foreground) 0%,
+    var(--primary-foreground) 40%,
+    color-mix(in oklch, var(--primary-foreground) 80%, transparent) 50%,
+    var(--primary-foreground) 60%,
+    var(--foreground) 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -238,11 +242,11 @@
 }
 
 .typing-cursor::after {
-  content: "▊";
+  content: "\2588";
   display: inline-block;
   margin-left: 2px;
   animation: blink 1s step-end infinite;
-  color: hsl(var(--primary));
+  color: var(--primary);
 }
 
 /* ============================================================================
@@ -262,9 +266,9 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    hsl(var(--muted)) 0%,
-    hsl(var(--muted-foreground) / 0.1) 50%,
-    hsl(var(--muted)) 100%
+    var(--muted) 0%,
+    color-mix(in oklch, var(--muted-foreground) 10%, transparent) 50%,
+    var(--muted) 100%
   );
   background-size: 200% 100%;
   border-radius: 4px;
@@ -283,19 +287,19 @@
 .connector-line {
   position: absolute;
   width: 2px;
-  background: hsl(var(--border));
+  background: var(--border);
   transition: background-color 300ms ease;
 }
 
 .connector-line.completed {
-  background: hsl(var(--primary) / 0.5);
+  background: color-mix(in oklch, var(--primary) 50%, transparent);
 }
 
 .connector-line.active {
   background: linear-gradient(
     to bottom,
-    hsl(var(--primary)),
-    hsl(var(--border))
+    var(--primary),
+    var(--border)
   );
 }
 
@@ -316,24 +320,24 @@
 }
 
 .status-badge.pending {
-  background: hsl(var(--muted));
-  color: hsl(var(--muted-foreground));
+  background: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .status-badge.running {
-  background: hsl(var(--primary) / 0.1);
-  color: hsl(var(--primary));
-  border: 1px solid hsl(var(--primary) / 0.3);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 .status-badge.completed {
-  background: hsl(142.1 76.2% 36.3% / 0.1);
-  color: hsl(142.1 76.2% 36.3%);
+  background: color-mix(in oklch, var(--success) 10%, transparent);
+  color: var(--success);
 }
 
 .status-badge.failed {
-  background: hsl(var(--destructive) / 0.1);
-  color: hsl(var(--destructive));
+  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+  color: var(--destructive);
 }
 
 /* ============================================================================
@@ -348,24 +352,24 @@
 }
 
 .tool-card:hover {
-  border-color: hsl(var(--border) / 0.8);
+  border-color: color-mix(in oklch, var(--border) 80%, transparent);
 }
 
 .tool-card.streaming {
-  border-color: hsl(var(--primary) / 0.5);
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.1);
+  border-color: color-mix(in oklch, var(--primary) 50%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 10%, transparent);
 }
 
 .tool-card.executing {
-  border-color: hsl(var(--primary) / 0.3);
+  border-color: color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
 .tool-card.completed {
-  border-color: hsl(142.1 76.2% 36.3% / 0.3);
+  border-color: color-mix(in oklch, var(--success) 30%, transparent);
 }
 
 .tool-card.error {
-  border-color: hsl(var(--destructive) / 0.3);
+  border-color: color-mix(in oklch, var(--destructive) 30%, transparent);
 }
 
 /* ============================================================================
@@ -447,12 +451,12 @@
   width: 3ch;
   margin-right: 1ch;
   text-align: right;
-  color: hsl(var(--muted-foreground) / 0.5);
+  color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
   user-select: none;
 }
 
 .code-highlight .line.highlighted {
-  background: hsl(var(--primary) / 0.1);
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
   margin: 0 -16px;
   padding: 0 16px;
 }
@@ -521,35 +525,35 @@
 }
 
 /* ============================================================================
- * Browser Loading Bar - Smooth left-to-right progress
+ * Browser Loading Bar - Indeterminate sliding bar (like Chrome/Safari)
  * ============================================================================ */
 
 @keyframes browser-loading-bar {
   0% {
-    width: 0;
-  }
-  20% {
-    width: 30%;
+    left: -40%;
+    width: 40%;
   }
   50% {
+    left: 20%;
     width: 60%;
   }
-  80% {
-    width: 85%;
-  }
   100% {
-    width: 100%;
+    left: 100%;
+    width: 10%;
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .browser-loading-bar {
-    animation: browser-loading-bar 2s ease-in-out infinite;
+    position: absolute;
+    animation: browser-loading-bar 1.5s ease-in-out infinite;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .browser-loading-bar {
+    position: absolute;
+    left: 0;
     width: 60%;
   }
 }

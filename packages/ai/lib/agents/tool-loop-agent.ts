@@ -399,29 +399,14 @@ export class RubicToolLoopAgent implements Agent {
     }
   }
 
-  private async getModelInstance(modelId: string): Promise<unknown> {
-    const [provider, ...modelParts] = modelId.split('/');
-    const modelName = modelParts.join('/') || modelId;
-
-    switch (provider) {
-      case 'anthropic': {
-        const { anthropic } = await import('@ai-sdk/anthropic');
-        return anthropic(modelName);
-      }
-      case 'openai': {
-        const { openai } = await import('@ai-sdk/openai');
-        return openai(modelName);
-      }
-      case 'google': {
-        const { google } = await import('@ai-sdk/google');
-        return google(modelName);
-      }
-      default: {
-        // Assume anthropic by default
-        const { anthropic } = await import('@ai-sdk/anthropic');
-        return anthropic(modelId);
-      }
-    }
+  private async getModelInstance(_modelId: string): Promise<unknown> {
+    // Direct provider access has been removed.
+    // All AI completions go through the agent service (POST /v1/complete).
+    throw new Error(
+      'Direct LLM provider access is not available. ' +
+      'All AI completions must go through the agent service at /v1/complete. ' +
+      'Use the agent-proxy module instead of RubicToolLoopAgent.'
+    );
   }
 
   private convertToAIMessages(messages: UIMessage[]): Array<{

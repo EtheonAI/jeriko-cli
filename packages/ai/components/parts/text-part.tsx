@@ -182,6 +182,30 @@ const SQL_KEYWORDS = new Set([
   "values", "into", "distinct",
 ]);
 
+const HTML_KEYWORDS = new Set([
+  "html", "head", "body", "div", "span", "p", "a", "img", "ul", "ol",
+  "li", "table", "tr", "td", "th", "form", "input", "button", "select",
+  "option", "textarea", "label", "h1", "h2", "h3", "h4", "h5", "h6",
+  "header", "footer", "nav", "main", "section", "article", "aside",
+  "script", "style", "link", "meta", "title", "class", "id", "src",
+  "href", "type", "name", "value", "placeholder", "alt", "width", "height",
+]);
+
+const CSS_KEYWORDS = new Set([
+  "display", "flex", "grid", "block", "inline", "none", "position",
+  "relative", "absolute", "fixed", "sticky", "top", "right", "bottom",
+  "left", "width", "height", "margin", "padding", "border", "background",
+  "color", "font", "text", "align", "justify", "items", "content",
+  "overflow", "opacity", "transition", "transform", "animation", "z-index",
+  "important", "hover", "focus", "active", "before", "after", "var",
+  "calc", "inherit", "initial", "unset", "auto", "solid", "dashed",
+  "media", "keyframes", "import", "from", "to",
+]);
+
+const YAML_KEYWORDS = new Set([
+  "true", "false", "null", "yes", "no", "on", "off",
+]);
+
 function getKeywordSet(lang: string): Set<string> | null {
   switch (lang) {
     case "python": case "py": return PYTHON_KEYWORDS;
@@ -191,6 +215,10 @@ function getKeywordSet(lang: string): Set<string> | null {
     case "rust": case "rs": return RUST_KEYWORDS;
     case "bash": case "sh": case "shell": case "zsh": return BASH_KEYWORDS;
     case "sql": case "postgresql": case "mysql": return SQL_KEYWORDS;
+    case "html": case "xml": case "svg": return HTML_KEYWORDS;
+    case "css": case "scss": case "less": return CSS_KEYWORDS;
+    case "yaml": case "yml": return YAML_KEYWORDS;
+    case "json": case "jsonc": return null; // JSON uses string/number/keyword highlighting only
     default: return null;
   }
 }
@@ -200,8 +228,11 @@ function isCommentStart(lang: string, text: string): boolean {
     return text.startsWith("#");
   }
   if (["javascript", "js", "jsx", "typescript", "ts", "tsx", "go", "golang",
-       "rust", "rs", "c", "cpp", "java", "kotlin", "swift", "css", "scss"].includes(lang)) {
+       "rust", "rs", "c", "cpp", "java", "kotlin", "swift", "css", "scss", "less"].includes(lang)) {
     return text.startsWith("//");
+  }
+  if (["html", "xml", "svg"].includes(lang)) {
+    return text.startsWith("<!--");
   }
   return false;
 }

@@ -1,9 +1,11 @@
-import type { Page, Locator } from "@playwright/test";
+import { type Page, type Locator, type FilePayload } from "@playwright/test";
 import { BasePage } from "./base-page";
 
 export class ChatPage extends BasePage {
   readonly promptInput: Locator;
   readonly sendButton: Locator;
+  readonly fileInput: Locator;
+  readonly micButton: Locator;
   readonly messageList: Locator;
   readonly toolCard: Locator;
   readonly toolCompact: Locator;
@@ -13,12 +15,14 @@ export class ChatPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
-    this.promptInput = page.locator(
-      "textarea[placeholder*='message'], textarea[placeholder*='Ask'], [data-testid='prompt-input']"
-    );
+    this.promptInput = page.getByRole("textbox", { name: /send a message/i });
     this.sendButton = page.locator(
-      "button[type='submit'], [data-testid='send-button']"
+      "button[aria-label='Send message']:visible, [data-testid='send-button']:visible"
     );
+    this.fileInput = page.locator("input[type='file']").first();
+    this.micButton = page
+      .getByRole("button", { name: /Voice input|Stop recording/i })
+      .first();
     this.messageList = page.locator(
       "[data-testid='message-list'], [role='log']"
     );
@@ -26,12 +30,25 @@ export class ChatPage extends BasePage {
     this.toolCompact = page.locator("[data-testid='tool-compact']");
     this.plannerBar = page.locator("[data-testid='planner-bar']");
     this.canvasPanel = page.locator("[data-testid='agent-canvas']");
-    this.assistantMessage = page.locator("[data-role='assistant']");
+    this.assistantMessage = page.locator("[data-role='assistant']:visible");
   }
 
   async sendMessage(text: string) {
-    await this.promptInput.fill(text);
-    await this.sendButton.click();
+    const input = this.promptInput.first();
+    await input.waitFor({ state: "visible", timeout: 10_000 });
+    await input.click({ force: true });
+    await input.press("Meta+A");
+    await input.press("Backspace");
+    await input.type(text, { delay: 10 });
+    await input.press("Enter");
+  }
+
+  async uploadFiles(paths: string | string[] | FilePayload | FilePayload[]) {
+    const activePromptFileInput = this.promptInput
+      .first()
+      .locator("xpath=ancestor::label[1]//input[@type='file']")
+      .first();
+    await activePromptFileInput.setInputFiles(paths);
   }
 
   async waitForResponse(timeout = 30_000) {

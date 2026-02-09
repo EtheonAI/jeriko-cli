@@ -63,7 +63,7 @@ function groupSessionsByDate(sessions: Session[]) {
     else label = "Older";
 
     if (!buckets[label]) buckets[label] = [];
-    buckets[label].push(session);
+    buckets[label]!.push(session);
   }
 
   for (const label of order) {

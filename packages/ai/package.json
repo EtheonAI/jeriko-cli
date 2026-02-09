@@ -36,6 +36,14 @@
       "types": "./hooks/use-file-upload.ts",
       "default": "./hooks/use-file-upload.ts"
     },
+    "./hooks/use-e2b-stream": {
+      "types": "./hooks/use-e2b-stream.ts",
+      "default": "./hooks/use-e2b-stream.ts"
+    },
+    "./hooks/use-e2b-terminal": {
+      "types": "./hooks/use-e2b-terminal.ts",
+      "default": "./hooks/use-e2b-terminal.ts"
+    },
     "./providers": {
       "types": "./providers/index.tsx",
       "default": "./providers/index.tsx"
@@ -55,6 +63,10 @@
     "./lib/models": {
       "types": "./lib/models.ts",
       "default": "./lib/models.ts"
+    },
+    "./lib/rubic-provider": {
+      "types": "./lib/rubic-provider.ts",
+      "default": "./lib/rubic-provider.ts"
     },
     "./lib/react": {
       "types": "./lib/react.ts",
@@ -121,9 +133,6 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.38",
-    "@ai-sdk/google": "^3.0.22",
-    "@ai-sdk/openai": "^3.0.7",
     "@ai-sdk/react": "^3.0.19",
     "@assistant-ui/react": "^0.12.9",
     "@repo/auth": "workspace:*",

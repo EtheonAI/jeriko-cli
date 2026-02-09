@@ -14,18 +14,31 @@ export type AgentSSEEvent =
   | { type: "reasoning_end" }
   | { type: "source_url"; url: string; title?: string; sourceId?: string }
   | {
-      type: "tool_start";
+      type: "tool_start" | "tool_call_started";
       toolCallId?: string;
       tool: string;
       input: unknown;
     }
   | {
-      type: "tool_result";
+      type: "tool_result" | "tool_call_completed";
       toolCallId?: string;
       tool: string;
       success: boolean;
       result?: unknown;
       summary?: unknown;
+    }
+  | {
+      type: "tool_call_failed";
+      toolCallId?: string;
+      tool: string;
+      success: false;
+      error?: string;
+    }
+  | {
+      type: "tool_stream_chunk";
+      toolCallId?: string;
+      chunk: string;
+      stream?: "stdout" | "stderr";
     }
   | {
       type: "usage";
@@ -35,12 +48,47 @@ export type AgentSSEEvent =
     }
   | { type: "error"; error: unknown }
   | { type: "warning"; message: string }
-  | { type: "sandbox_info"; sandboxId: string }
+  | {
+      type: "sandbox_info";
+      sandboxId: string;
+      vncUrl?: string;
+      nekoUrl?: string;
+      streamUrl?: string;
+    }
+  | {
+      type: "session_created";
+      sessionId: string;
+      sandboxId: string;
+      nekoUrl?: string;
+    }
+  | {
+      type: "session_reconnected";
+      sessionId: string;
+      sandboxId: string;
+    }
+  | { type: "session_expired"; sessionId: string }
+  | { type: "session_terminated"; sessionId: string }
+  | {
+      type: "neko_ready";
+      sandboxId: string;
+      nekoUrl: string;
+    }
   | {
       type: "browser_frame";
       screenshot: string;
       url?: string;
       title?: string;
+    }
+  | {
+      type: "browser_state";
+      url?: string;
+      title?: string;
+      loading?: boolean;
+    }
+  | {
+      type: "file_created" | "file_updated" | "file_read";
+      path: string;
+      contentPreview?: string;
     };
 
 /**
@@ -61,6 +109,19 @@ export class SSEProcessor {
 
   private stepOpen = false;
   private stepCounter = 0;
+
+  /**
+   * Track active tool calls by toolCallId for correlation.
+   * Maps toolCallId → toolName for tools that have started but not yet received results.
+   * Used to:
+   * 1. Resolve tool_result events that arrive without toolCallId
+   * 2. Ensure tool_result always has a matching tool_start (emit synthetic start if needed)
+   */
+  private activeToolCalls = new Map<string, string>();
+  /** Stack of toolCallIds in order of tool_start arrival (most recent last) */
+  private toolCallStack: string[] = [];
+  /** Counter for generating unique fallback tool IDs */
+  private toolIdCounter = 0;
 
   collectedText: string[] = [];
   collectedToolSteps: Array<{
@@ -163,6 +224,8 @@ export class SSEProcessor {
         case "content": {
           const text = event.content || "";
           if (text) {
+            // Close any open reasoning part — content is separate
+            output += this.closeReasoningPart();
             this.collectedText.push(text);
             this.currentTextAccum += text;
             // Open a text part if not already open
@@ -217,8 +280,14 @@ export class SSEProcessor {
           // Open a step boundary if not already open
           output += this.openStep();
 
-          const toolCallId = event.toolCallId || `tool_${Date.now()}`;
+          // Generate unique fallback ID if agent doesn't provide one
+          this.toolIdCounter++;
+          const toolCallId = event.toolCallId || `tool_${Date.now()}_${this.toolIdCounter}`;
           const toolName = event.tool || "unknown";
+
+          // Track this tool call for correlation with tool_result
+          this.activeToolCalls.set(toolCallId, toolName);
+          this.toolCallStack.push(toolCallId);
 
           // Emit tool-input-start to open the tool part (input-streaming state)
           output += this.toSSE({
@@ -255,9 +324,54 @@ export class SSEProcessor {
 
         case "tool_result": {
           output += this.closeTextPart();
-          const toolCallId = event.toolCallId || "";
           const toolName = event.tool || "unknown";
           const success = event.success;
+
+          // Resolve toolCallId: use provided ID, or look up from active tools
+          let toolCallId = event.toolCallId || "";
+          if (!toolCallId || !this.activeToolCalls.has(toolCallId)) {
+            // No ID or unknown ID — match by toolName or use last active tool
+            const matchByName = this.toolCallStack.find(
+              (id) => this.activeToolCalls.get(id) === toolName
+            );
+            if (matchByName) {
+              toolCallId = matchByName;
+            } else if (this.toolCallStack.length > 0) {
+              // Fall back to most recent active tool
+              toolCallId = this.toolCallStack[this.toolCallStack.length - 1]!;
+            }
+          }
+
+          // If we still have no matching tool_start, emit a synthetic one first.
+          // The AI SDK's getToolInvocation() REQUIRES a matching tool part to exist
+          // in state.message.parts before processing tool-output-available.
+          if (!this.activeToolCalls.has(toolCallId)) {
+            this.toolIdCounter++;
+            if (!toolCallId) toolCallId = `tool_${Date.now()}_${this.toolIdCounter}`;
+            output += this.openStep();
+            output += this.toSSE({
+              type: "tool-input-start",
+              toolCallId,
+              toolName,
+            });
+            output += this.toSSE({
+              type: "tool-input-available",
+              toolCallId,
+              toolName,
+              input: {},
+            });
+            this.collectedParts.push({
+              type: `tool-${toolName}`,
+              toolCallId,
+              toolName,
+              state: "input-available",
+              input: {},
+            });
+          }
+
+          // Remove from active tracking
+          this.activeToolCalls.delete(toolCallId);
+          this.toolCallStack = this.toolCallStack.filter((id) => id !== toolCallId);
 
           if (success) {
             // AI SDK v6 tool-output-available schema: { type, toolCallId, output }
@@ -331,22 +445,182 @@ export class SSEProcessor {
         }
 
         case "sandbox_info": {
-          // Forward sandbox ID to client as message metadata so the
-          // canvas can make direct browser control requests.
+          // Forward sandbox ID + Neko/VNC URL to client as message metadata
+          // so the canvas can make direct browser control requests and embed Neko/noVNC.
+          const sandboxMeta: Record<string, unknown> = {
+            sandboxId: event.sandboxId,
+          };
+          if (event.nekoUrl) {
+            sandboxMeta.nekoUrl = event.nekoUrl;
+          }
+          if (event.vncUrl) {
+            sandboxMeta.vncUrl = event.vncUrl;
+          }
+          if (event.streamUrl) {
+            sandboxMeta.streamUrl = event.streamUrl;
+          }
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: sandboxMeta,
+          });
+          break;
+        }
+
+        case "session_created":
+        case "session_reconnected": {
+          // Session lifecycle events — forward sandbox + Neko info as metadata
+          const sessionMeta: Record<string, unknown> = {
+            sandboxId: event.sandboxId,
+            sessionEvent: event.type,
+          };
+          if ("nekoUrl" in event && event.nekoUrl) {
+            sessionMeta.nekoUrl = event.nekoUrl;
+          }
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: sessionMeta,
+          });
+          break;
+        }
+
+        case "session_expired":
+        case "session_terminated": {
           output += this.toSSE({
             type: "message-metadata",
             messageMetadata: {
-              sandboxId: event.sandboxId,
+              sessionEvent: event.type,
+              sessionId: event.sessionId,
             },
           });
+          break;
+        }
+
+        case "neko_ready": {
+          // Neko WebRTC server is ready — forward connection info to canvas
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: {
+              nekoUrl: event.nekoUrl,
+              sandboxId: event.sandboxId,
+              nekoReady: true,
+            },
+          });
+          break;
+        }
+
+        case "tool_stream_chunk": {
+          // Real-time streaming output from shell/code tools.
+          // Forward as message-metadata so terminal-view can display live.
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: {
+              toolStreamChunk: {
+                toolCallId: event.toolCallId || "",
+                chunk: event.chunk,
+                stream: event.stream || "stdout",
+              },
+            },
+          });
+          break;
+        }
+
+        case "tool_call_started": {
+          // Alias for "tool_start" — handle identically
+          output += this.closeTextPart();
+          output += this.closeReasoningPart();
+          output += this.openStep();
+
+          this.toolIdCounter++;
+          const tcId = event.toolCallId || `tool_${Date.now()}_${this.toolIdCounter}`;
+          const tcName = event.tool || "unknown";
+
+          this.activeToolCalls.set(tcId, tcName);
+          this.toolCallStack.push(tcId);
+
+          output += this.toSSE({ type: "tool-input-start", toolCallId: tcId, toolName: tcName });
+          output += this.toSSE({
+            type: "tool-input-available",
+            toolCallId: tcId,
+            toolName: tcName,
+            input: event.input || {},
+          });
+
+          this.collectedToolSteps.push({
+            id: tcId,
+            toolName: tcName,
+            label: tcName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            status: "in_progress",
+          });
+          this.collectedParts.push({
+            type: `tool-${tcName}`,
+            toolCallId: tcId,
+            toolName: tcName,
+            state: "input-available",
+            input: event.input || {},
+          });
+          break;
+        }
+
+        case "tool_call_completed": {
+          // Alias for "tool_result" with success=true — handle identically
+          output += this.closeTextPart();
+          const tcName2 = event.tool || "unknown";
+          let tcId2 = event.toolCallId || "";
+          if (!tcId2 || !this.activeToolCalls.has(tcId2)) {
+            const match = this.toolCallStack.find((id) => this.activeToolCalls.get(id) === tcName2);
+            if (match) tcId2 = match;
+            else if (this.toolCallStack.length > 0) tcId2 = this.toolCallStack[this.toolCallStack.length - 1]!;
+          }
+          if (!this.activeToolCalls.has(tcId2)) {
+            this.toolIdCounter++;
+            if (!tcId2) tcId2 = `tool_${Date.now()}_${this.toolIdCounter}`;
+            output += this.openStep();
+            output += this.toSSE({ type: "tool-input-start", toolCallId: tcId2, toolName: tcName2 });
+            output += this.toSSE({ type: "tool-input-available", toolCallId: tcId2, toolName: tcName2, input: {} });
+            this.collectedParts.push({ type: `tool-${tcName2}`, toolCallId: tcId2, toolName: tcName2, state: "input-available", input: {} });
+          }
+          this.activeToolCalls.delete(tcId2);
+          this.toolCallStack = this.toolCallStack.filter((id) => id !== tcId2);
+          output += this.toSSE({ type: "tool-output-available", toolCallId: tcId2, output: event.result ?? event.summary });
+          const tp2 = [...this.collectedParts].reverse().find((p) => (p as Record<string, unknown>).toolCallId === tcId2);
+          if (tp2) { tp2.state = "output-available"; tp2.output = event.result ?? event.summary; }
+          const step2 = this.collectedToolSteps.find((s) => s.id === tcId2);
+          if (step2) step2.status = "completed";
+          break;
+        }
+
+        case "tool_call_failed": {
+          // Alias for "tool_result" with success=false — handle identically
+          output += this.closeTextPart();
+          const tcName3 = event.tool || "unknown";
+          let tcId3 = event.toolCallId || "";
+          if (!tcId3 || !this.activeToolCalls.has(tcId3)) {
+            const match = this.toolCallStack.find((id) => this.activeToolCalls.get(id) === tcName3);
+            if (match) tcId3 = match;
+            else if (this.toolCallStack.length > 0) tcId3 = this.toolCallStack[this.toolCallStack.length - 1]!;
+          }
+          if (!this.activeToolCalls.has(tcId3)) {
+            this.toolIdCounter++;
+            if (!tcId3) tcId3 = `tool_${Date.now()}_${this.toolIdCounter}`;
+            output += this.openStep();
+            output += this.toSSE({ type: "tool-input-start", toolCallId: tcId3, toolName: tcName3 });
+            output += this.toSSE({ type: "tool-input-available", toolCallId: tcId3, toolName: tcName3, input: {} });
+            this.collectedParts.push({ type: `tool-${tcName3}`, toolCallId: tcId3, toolName: tcName3, state: "input-available", input: {} });
+          }
+          this.activeToolCalls.delete(tcId3);
+          this.toolCallStack = this.toolCallStack.filter((id) => id !== tcId3);
+          const errText = event.error || "Tool execution failed";
+          output += this.toSSE({ type: "tool-output-error", toolCallId: tcId3, errorText: errText });
+          const tp3 = [...this.collectedParts].reverse().find((p) => (p as Record<string, unknown>).toolCallId === tcId3);
+          if (tp3) tp3.state = "output-error";
+          const step3 = this.collectedToolSteps.find((s) => s.id === tcId3);
+          if (step3) step3.status = "cancelled";
           break;
         }
 
         case "browser_frame": {
           // Dedicated live browser frame event -- the client can use this
           // for real-time canvas updates without waiting for tool_result.
-          // We emit it as message-metadata with a special key that
-          // use-canvas can detect and render immediately.
           output += this.toSSE({
             type: "message-metadata",
             messageMetadata: {
@@ -360,12 +634,45 @@ export class SSEProcessor {
           break;
         }
 
+        case "browser_state": {
+          // Browser state update (URL, title, loading) without screenshot
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: {
+              browserState: {
+                url: event.url || "",
+                title: event.title || "",
+                loading: event.loading ?? false,
+              },
+            },
+          });
+          break;
+        }
+
+        case "file_created":
+        case "file_updated":
+        case "file_read": {
+          // File operation events — forward as metadata for canvas code view
+          output += this.toSSE({
+            type: "message-metadata",
+            messageMetadata: {
+              fileEvent: {
+                type: event.type,
+                path: event.path,
+                contentPreview: event.contentPreview,
+              },
+            },
+          });
+          break;
+        }
+
         default:
           break;
       }
 
       return output;
-    } catch {
+    } catch (err) {
+      console.warn("[SSEProcessor] Failed to parse SSE event:", data.slice(0, 200), err);
       return "";
     }
   }

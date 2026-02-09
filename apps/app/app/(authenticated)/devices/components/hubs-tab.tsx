@@ -221,7 +221,7 @@ export function HubsTab() {
       {hubs && hubs.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2">
           {hubs.map((hub) => {
-            const badge = statusBadge[hub.status] || statusBadge.disconnected;
+            const badge = (statusBadge[hub.status] ?? statusBadge.disconnected)!;
             const StatusIcon =
               hub.status === "connected"
                 ? CheckCircleIcon

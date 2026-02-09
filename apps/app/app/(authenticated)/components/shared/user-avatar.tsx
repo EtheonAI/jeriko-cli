@@ -59,7 +59,7 @@ function getColorFromName(name: string | null): string {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  return colors[Math.abs(hash) % colors.length];
+  return colors[Math.abs(hash) % colors.length]!;
 }
 
 function getInitials(name: string | null): string {
@@ -67,9 +67,9 @@ function getInitials(name: string | null): string {
 
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) {
-    return parts[0].charAt(0).toUpperCase();
+    return parts[0]!.charAt(0).toUpperCase();
   }
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase();
 }
 
 export function UserAvatar({

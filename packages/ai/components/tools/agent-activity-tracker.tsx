@@ -174,7 +174,7 @@ function TypeIcon({ type, toolName }: { type: ActivityStep["type"]; toolName?: s
     case "message":
       return <MessageSquareIcon className={cn(iconClasses, "text-blue-500")} />;
     case "tool": {
-      const Icon = TOOL_ICONS[toolName ?? "default"] ?? TOOL_ICONS.default;
+      const Icon = TOOL_ICONS[toolName ?? "default"] ?? TOOL_ICONS.default ?? WrenchIcon;
       return <Icon className={cn(iconClasses, "text-primary")} />;
     }
   }
@@ -268,7 +268,7 @@ function ActivityStepItem({
             <span
               className={cn(
                 "text-sm font-medium truncate",
-                isActive && "motion-safe:shimmer",
+                isActive && "shimmer",
                 step.status === "failed" && "text-red-500"
               )}
             >
@@ -322,7 +322,7 @@ function ActivityStepItem({
                   <StatusIcon status={substep.status} animate={false} />
                   <span
                     className={cn(
-                      substep.status === "running" && "motion-safe:shimmer",
+                      substep.status === "running" && "shimmer",
                       substep.status === "failed" && "text-red-500"
                     )}
                   >
@@ -410,7 +410,7 @@ export function AgentActivityTracker({
             <span
               className={cn(
                 "text-xs text-muted-foreground truncate flex-1 text-left",
-                isActive && "motion-safe:shimmer"
+                isActive && "shimmer"
               )}
             >
               {currentStep.label}

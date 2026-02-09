@@ -131,7 +131,7 @@ export function useAuthIntegration() {
         const result = await signUp.email({
           email,
           password,
-          name: name || email.split("@")[0],
+          name: name || email.split("@")[0]!,
         });
 
         if (result.error) {

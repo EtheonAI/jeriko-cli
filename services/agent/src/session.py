@@ -15,10 +15,11 @@ from dataclasses import dataclass, field
 import structlog
 
 from .db import execute, fetch, fetchrow, fetchval, generate_id
+from .runtime import SandboxRuntime
 
 logger = structlog.get_logger()
 
-# In-memory session cache — tools/sandbox don't change during a session
+# In-memory session cache — tools/runtime don't change during a session
 _session_cache: dict[str, "SessionContext"] = {}
 SESSION_CACHE_TTL = 3600  # 1 hour
 
@@ -30,6 +31,9 @@ class SessionContext:
     session_id: str
     user_id: str
     sandbox_id: str | None = None
+    runtime: SandboxRuntime | None = None  # Abstracted sandbox runtime
+    neko_url: str | None = None  # Neko WebRTC streaming URL
+    stream_url: str | None = None  # E2B Desktop stream URL (fallback)
     tools: list[dict] = field(default_factory=list)
     connected_apps: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.monotonic)

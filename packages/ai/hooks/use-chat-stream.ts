@@ -582,6 +582,7 @@ export function useChatStream(options: UseChatStreamOptions = {}): UseChatStream
 
     // Remove messages from target onwards
     const userMessage = messages[targetIndex];
+    if (!userMessage) return;
     setMessages((prev) => prev.slice(0, targetIndex));
 
     // Re-send the user message

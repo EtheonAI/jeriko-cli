@@ -1,0 +1,239 @@
+"""
+Shared fixtures for agent service tests.
+
+Provides mock objects for database, LLM responses, sandbox runtime,
+HTTP clients, and session contexts to isolate unit tests from
+external dependencies.
+"""
+
+import time
+from dataclasses import dataclass, field
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+
+# ============================================================
+# Database fixtures
+# ============================================================
+
+
+@pytest.fixture
+def mock_db_pool():
+    """Mock asyncpg connection pool."""
+    pool = AsyncMock()
+    pool.fetch = AsyncMock(return_value=[])
+    pool.fetchrow = AsyncMock(return_value=None)
+    pool.fetchval = AsyncMock(return_value=None)
+    pool.execute = AsyncMock(return_value="INSERT 0 1")
+    pool.close = AsyncMock()
+    return pool
+
+
+@pytest.fixture
+def patch_db(mock_db_pool):
+    """Patch the db module's pool and helper functions to use mock_db_pool."""
+    with (
+        patch("src.db._pool", mock_db_pool),
+        patch("src.db.get_pool", return_value=mock_db_pool),
+        patch("src.session.fetch", new_callable=AsyncMock) as mock_fetch,
+        patch("src.session.fetchrow", new_callable=AsyncMock) as mock_fetchrow,
+        patch("src.session.fetchval", new_callable=AsyncMock) as mock_fetchval,
+        patch("src.session.execute", new_callable=AsyncMock) as mock_execute,
+        patch("src.session.generate_id", return_value="test_id_123") as mock_gen_id,
+    ):
+        yield {
+            "pool": mock_db_pool,
+            "fetch": mock_fetch,
+            "fetchrow": mock_fetchrow,
+            "fetchval": mock_fetchval,
+            "execute": mock_execute,
+            "generate_id": mock_gen_id,
+        }
+
+
+# ============================================================
+# LLM response fixtures
+# ============================================================
+
+
+@pytest.fixture
+def mock_llm_response():
+    """Standard Anthropic-format LLM response."""
+    return {
+        "id": "msg_test_001",
+        "content": [{"type": "text", "text": "Hello, I can help with that."}],
+        "model": "claude-sonnet-4-5-20250929",
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 10, "output_tokens": 5},
+    }
+
+
+@pytest.fixture
+def mock_llm_tool_response():
+    """LLM response that includes a tool_use block."""
+    return {
+        "id": "msg_test_002",
+        "content": [
+            {"type": "text", "text": "Let me search for that."},
+            {
+                "type": "tool_use",
+                "id": "toolu_test_001",
+                "name": "web_search",
+                "input": {"query": "latest news"},
+            },
+        ],
+        "model": "claude-sonnet-4-5-20250929",
+        "stop_reason": "tool_use",
+        "usage": {"input_tokens": 20, "output_tokens": 15},
+    }
+
+
+# ============================================================
+# Runtime / sandbox fixtures
+# ============================================================
+
+
+@pytest.fixture
+def mock_command_result():
+    """Mock CommandResult from SandboxRuntime."""
+    result = MagicMock()
+    result.stdout = "command output"
+    result.stderr = ""
+    result.exit_code = 0
+    return result
+
+
+@pytest.fixture
+def mock_code_result():
+    """Mock CodeResult from SandboxRuntime."""
+    result = MagicMock()
+    result.stdout = "code output"
+    result.stderr = ""
+    result.exit_code = 0
+    result.results = []
+    result.error = None
+    return result
+
+
+@pytest.fixture
+def mock_runtime(mock_command_result, mock_code_result):
+    """Mock SandboxRuntime for tool execution tests."""
+    runtime = AsyncMock()
+    runtime.is_desktop = False
+    runtime.has_code_interpreter = True
+
+    # File operations
+    runtime.file_read = AsyncMock(return_value="file content here")
+    runtime.file_write = AsyncMock()
+
+    # Command execution
+    runtime.command_run = AsyncMock(return_value=mock_command_result)
+
+    # Code execution
+    runtime.code_run = AsyncMock(return_value=mock_code_result)
+
+    # Desktop operations
+    runtime.desktop_screenshot = AsyncMock(return_value=b"fake_png_bytes")
+    runtime.desktop_open = AsyncMock()
+    runtime.desktop_left_click = AsyncMock()
+    runtime.desktop_write = AsyncMock()
+    runtime.desktop_press = AsyncMock()
+    runtime.desktop_move_mouse = AsyncMock()
+    runtime.desktop_scroll = AsyncMock()
+
+    # Port exposure
+    runtime.get_host = MagicMock(return_value="sbx-123.e2b.dev")
+
+    return runtime
+
+
+# ============================================================
+# HTTP client fixtures
+# ============================================================
+
+
+@pytest.fixture
+def mock_http_client():
+    """Mock httpx.AsyncClient for service-to-service calls."""
+    client = AsyncMock()
+
+    # Default successful response
+    response = MagicMock()
+    response.status_code = 200
+    response.json = MagicMock(return_value={"success": True})
+    response.text = '{"success": true}'
+    response.headers = {"content-type": "application/json"}
+
+    client.post = AsyncMock(return_value=response)
+    client.get = AsyncMock(return_value=response)
+    client.aclose = AsyncMock()
+
+    return client
+
+
+# ============================================================
+# Session context fixtures
+# ============================================================
+
+
+@pytest.fixture
+def sample_session_context():
+    """Pre-built SessionContext for testing."""
+    from src.session import SessionContext
+
+    return SessionContext(
+        session_id="sess_test_001",
+        user_id="user_test_001",
+        sandbox_id="sbx_test_001",
+        runtime=None,
+        neko_url=None,
+        stream_url=None,
+        tools=[
+            {
+                "name": "web_search",
+                "description": "Search the web",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            },
+            {
+                "name": "show_plan",
+                "description": "Show a plan",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"title": {"type": "string"}},
+                },
+            },
+        ],
+        connected_apps=["gmail", "github"],
+        created_at=time.monotonic(),
+    )
+
+
+@pytest.fixture
+def execution_context(mock_runtime):
+    """Pre-built ExecutionContext for tool executor tests."""
+    from src.tool_executor import ExecutionContext
+
+    return ExecutionContext(
+        user_id="user_test_001",
+        session_id="sess_test_001",
+        runtime=mock_runtime,
+        sandbox_id="sbx_test_001",
+    )
+
+
+@pytest.fixture
+def execution_context_no_sandbox():
+    """ExecutionContext without a sandbox (for fallback tests)."""
+    from src.tool_executor import ExecutionContext
+
+    return ExecutionContext(
+        user_id="user_test_001",
+        session_id="sess_test_001",
+        runtime=None,
+        sandbox_id=None,
+    )

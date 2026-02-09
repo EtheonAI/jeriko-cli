@@ -52,7 +52,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc/client";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
 import {
@@ -87,7 +87,7 @@ function getIconForChat(title: string): LucideIcon {
       return icon;
     }
   }
-  return chatIconMap.default;
+  return chatIconMap.default!;
 }
 
 type Chat = {
@@ -114,6 +114,7 @@ export function ChatItem({ chat }: ChatItemProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const isActive = pathname === `/chat/${chat.id}`;
   const { isStreaming, currentStreamingSessionId } = useAppSelector((state) => state.chat);
   const session = useAppSelector((state) =>
@@ -127,7 +128,7 @@ export function ChatItem({ chat }: ChatItemProps) {
 
   const updateSession = trpc.sessions.update.useMutation({
     onSuccess: (updated) => {
-      dispatch(updateSessionAction({ id: updated.id, updates: updated as any }));
+      dispatch(updateSessionAction({ id: updated!.id, updates: updated as any }));
     },
     onError: () => utils.sessions.list.invalidate(),
   });
@@ -135,6 +136,7 @@ export function ChatItem({ chat }: ChatItemProps) {
   const deleteSession = trpc.sessions.delete.useMutation({
     onSuccess: () => {
       dispatch(removeSession(chat.id));
+      utils.sessions.list.invalidate();
     },
     onError: () => utils.sessions.list.invalidate(),
   });
@@ -224,10 +226,18 @@ export function ChatItem({ chat }: ChatItemProps) {
   }, [selectedProjectId, chat.id, addSessionToProject]);
 
   const handleDelete = useCallback(() => {
+    // Optimistically remove from tRPC cache for instant UI update
+    utils.sessions.list.setData(undefined, (old) =>
+      old?.filter((s) => s.id !== chat.id)
+    );
     dispatch(removeSession(chat.id));
     deleteSession.mutate({ id: chat.id });
     setShowDeleteDialog(false);
-  }, [chat.id, dispatch, deleteSession]);
+    // If user is viewing this chat, redirect to dashboard
+    if (isActive) {
+      router.push("/");
+    }
+  }, [chat.id, dispatch, deleteSession, utils, isActive, router]);
 
   const isFavorite = session?.isFavorite ?? chat.isFavorite ?? false;
   const filteredProjects = (projects ?? []).filter((p) =>

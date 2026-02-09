@@ -6,6 +6,7 @@ import { ShieldXIcon, MonitorIcon } from "lucide-react";
 import type { StaticToolUIPart, DynamicToolUIPart } from "../../lib/types/ui-message";
 import { getToolName } from "../../lib/types/ui-message";
 import { ToolCompact } from "../tools/tool-compact";
+import { ToolInlineCompact } from "../tools/renderers/tool-inline-compact";
 import { useToolRegistry } from "../tools/tool-registry";
 import { ApprovalCard } from "../tools/renderers/approval-card";
 import { TOOL_VIEW_MAP } from "../canvas/use-canvas";
@@ -22,13 +23,21 @@ export interface ToolPartProps {
   variant?: "auto" | "compact" | "expanded";
 }
 
-// Tools that display as compact inline pills
-const COMPACT_TOOLS = new Set([
+// Tools that keep their full custom renderers inline (no canvas view)
+const NON_CANVAS_FULL_RENDERERS = new Set([
+  "show_plan",
   "message_notify_user",
   "message_ask_user",
   "schedule_recurring_task",
   "check_outcomes",
+  "generate_image",
 ]);
+
+// Debug mode — set NEXT_PUBLIC_DEBUG_TOOLS=true to restore full inline rendering
+const DEBUG_TOOLS = typeof window !== "undefined"
+  && (globalThis as Record<string, unknown>).__NEXT_DATA__
+  ? process.env.NEXT_PUBLIC_DEBUG_TOOLS === "true"
+  : false;
 
 // ============================================================================
 // Component
@@ -49,26 +58,7 @@ export function ToolPart({
   const toolName = getToolName(part);
   const hasCanvasView = !!TOOL_VIEW_MAP[toolName];
 
-  // Determine display variant
-  const useCompact =
-    variant === "compact" ||
-    (variant === "auto" && COMPACT_TOOLS.has(toolName));
-
-  if (useCompact) {
-    const summary = getCompactSummary(toolName, part);
-    const title = (part as { title?: string }).title;
-    return (
-      <ToolCompact
-        toolName={toolName}
-        state={part.state}
-        title={title}
-        summary={summary}
-        className={className}
-      />
-    );
-  }
-
-  // Approval requested — show approval card
+  // Approval requested — always show approval card regardless of variant
   if (part.state === "approval-requested") {
     return (
       <div
@@ -89,7 +79,7 @@ export function ToolPart({
     );
   }
 
-  // Denied — show denied message
+  // Denied — always show denied message
   if (part.state === "output-denied") {
     return (
       <div
@@ -111,7 +101,65 @@ export function ToolPart({
     );
   }
 
-  // All other states — render directly (renderers handle their own loading/error/output)
+  // Canvas-mapped tools → compact inline indicator (unless debug mode)
+  if (hasCanvasView && !DEBUG_TOOLS && variant !== "expanded") {
+    return (
+      <div
+        data-testid="tool-card"
+        data-tool-name={toolName}
+        data-tool-state={part.state}
+        className={cn("group/tool relative my-0.5", className)}
+      >
+        <ToolInlineCompact
+          toolName={toolName}
+          state={part.state}
+          input={part.input as Record<string, unknown> | undefined}
+          output={part.output as Record<string, unknown> | undefined}
+        />
+
+        {/* "View in Canvas" pin — hover to reveal */}
+        {onViewInCanvas && part.state === "output-available" && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onViewInCanvas(part.toolCallId)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onViewInCanvas(part.toolCallId);
+              }
+            }}
+            title="View in canvas"
+            className="absolute right-0 top-0.5 flex size-6 cursor-pointer items-center justify-center rounded-md bg-muted/80 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover/tool:opacity-100"
+          >
+            <MonitorIcon className="size-3" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Non-canvas tools with compact pills (message_notify_user, etc.)
+  const useCompactPill =
+    variant === "compact" ||
+    (variant === "auto" && NON_CANVAS_FULL_RENDERERS.has(toolName) &&
+      toolName !== "show_plan" && toolName !== "generate_image");
+
+  if (useCompactPill) {
+    const summary = getCompactSummary(toolName, part);
+    const title = (part as { title?: string }).title;
+    return (
+      <ToolCompact
+        toolName={toolName}
+        state={part.state}
+        title={title}
+        summary={summary}
+        className={className}
+      />
+    );
+  }
+
+  // Full renderers — non-canvas tools (show_plan, generate_image) + debug mode
   const ToolRenderer = getRenderer(toolName);
 
   return (

@@ -164,7 +164,7 @@ export const projectsRouter = createTRPCRouter({
         .returning();
 
       // Sync to search index (non-blocking)
-      syncProjectToSearch(project).catch(() => {});
+      syncProjectToSearch(project!).catch(() => {});
 
       return project;
     }),
@@ -226,7 +226,7 @@ export const projectsRouter = createTRPCRouter({
         .returning();
 
       // Sync to search index (non-blocking)
-      syncProjectToSearch(updated).catch(() => {});
+      syncProjectToSearch(updated!).catch(() => {});
 
       return updated;
     }),

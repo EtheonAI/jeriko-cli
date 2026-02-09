@@ -10,6 +10,14 @@ export {
   type UserPreferences,
 } from "./users";
 
+// API Keys schemas
+export {
+  apiKeys,
+  apiKeysRelations,
+  type ApiKey,
+  type NewApiKey,
+} from "./apiKeys";
+
 // Agent session schemas
 export {
   agentSessions,

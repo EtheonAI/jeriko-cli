@@ -202,7 +202,7 @@ export default function LoginPage() {
   async function handleSignUp(data: SignUpFormData) {
     startTransition(async () => {
       // Use email prefix as default name
-      const name = email.split("@")[0];
+      const name = email.split("@")[0]!;
 
       const result = await signUp.email({
         email,

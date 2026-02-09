@@ -326,10 +326,11 @@ export function IntegrationsTab() {
   const groupedEvents =
     eventTypes?.reduce(
       (acc, event) => {
-        if (!acc[event.category]) {
-          acc[event.category] = [];
+        const cat = event.category ?? "other";
+        if (!acc[cat]) {
+          acc[cat] = [];
         }
-        acc[event.category].push(event);
+        acc[cat]!.push(event);
         return acc;
       },
       {} as Record<string, typeof eventTypes>
@@ -668,24 +669,355 @@ export function IntegrationsTab() {
       <Separator />
 
       {/* API Keys Section */}
+      <ApiKeysSection />
+    </div>
+  );
+}
+
+// ============================================================
+// API Keys Section
+// ============================================================
+
+function ApiKeysSection() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("Default");
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const {
+    data: apiKeysList,
+    isLoading: isLoadingKeys,
+    isError: isKeysError,
+    refetch: refetchKeys,
+  } = trpc.apiKeys.list.useQuery(undefined, { retry: 1 });
+
+  const utils = trpc.useUtils();
+
+  const createKey = trpc.apiKeys.create.useMutation({
+    onSuccess: (data) => {
+      setRevealedKey(data.key);
+      utils.apiKeys.list.invalidate();
+      setIsCreateOpen(false);
+      setNewKeyName("Default");
+      toast.success("API key created. Copy it now — it won't be shown again.");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to create API key");
+    },
+  });
+
+  const revokeKey = trpc.apiKeys.revoke.useMutation({
+    onSuccess: () => {
+      toast.success("API key revoked");
+      utils.apiKeys.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to revoke API key");
+    },
+  });
+
+  const deleteKey = trpc.apiKeys.delete.useMutation({
+    onSuccess: () => {
+      toast.success("API key deleted");
+      utils.apiKeys.list.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete API key");
+    },
+  });
+
+  const renameKey = trpc.apiKeys.rename.useMutation({
+    onSuccess: () => {
+      toast.success("API key renamed");
+      utils.apiKeys.list.invalidate();
+      setEditingKeyId(null);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to rename API key");
+    },
+  });
+
+  const copyApiKey = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    toast.success("Copied to clipboard");
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  if (isLoadingKeys) {
+    return (
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <KeyIcon className="h-5 w-5" />
           <h3 className="text-sm font-medium">API Keys</h3>
         </div>
+        <Skeleton className="h-32" />
+      </div>
+    );
+  }
 
-        <Card className="bg-muted/30">
+  if (isKeysError) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <KeyIcon className="h-5 w-5" />
+          <h3 className="text-sm font-medium">API Keys</h3>
+        </div>
+        <ErrorState
+          title="Failed to load API keys"
+          message="Unable to load your API keys. Please try again."
+          onRetry={() => refetchKeys()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <KeyIcon className="h-5 w-5" />
+          <h3 className="text-sm font-medium">API Keys</h3>
+        </div>
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="gap-2">
+              <PlusIcon className="h-4 w-4" />
+              Create Key
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create API Key</DialogTitle>
+              <DialogDescription>
+                Generate a new API key to access Rubic programmatically. The key will only be shown once.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="key-name">Name</Label>
+              <Input
+                id="key-name"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="My App"
+                maxLength={100}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => createKey.mutate({ name: newKeyName })}
+                disabled={createKey.isPending || !newKeyName.trim()}
+              >
+                {createKey.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                Create Key
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Show newly created key */}
+      {revealedKey && (
+        <Card className="border-green-500/50 bg-green-500/5">
           <CardContent className="pt-6">
-            <div className="text-center py-4">
-              <KeyIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-              <h4 className="text-sm font-medium mb-1">API Access Coming Soon</h4>
-              <p className="text-xs text-muted-foreground">
-                Generate API keys to access Rubic programmatically.
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-green-600">
+                Your new API key (copy it now — it won't be shown again):
               </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono break-all">
+                  {revealedKey}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyApiKey(revealedKey, "new-key")}
+                >
+                  {copiedKey === "new-key" ? (
+                    <CheckIcon className="h-4 w-4" />
+                  ) : (
+                    <CopyIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setRevealedKey(null)}
+              >
+                Dismiss
+              </Button>
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
+
+      {apiKeysList && apiKeysList.length > 0 ? (
+        <div className="space-y-2">
+          {apiKeysList.map((apiKey) => (
+            <Card key={apiKey.id}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    {editingKeyId === apiKey.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-7 text-sm"
+                          maxLength={100}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editName.trim()) {
+                              renameKey.mutate({ id: apiKey.id, name: editName });
+                            }
+                            if (e.key === "Escape") setEditingKeyId(null);
+                          }}
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2"
+                          onClick={() => {
+                            if (editName.trim()) {
+                              renameKey.mutate({ id: apiKey.id, name: editName });
+                            }
+                          }}
+                          disabled={renameKey.isPending}
+                        >
+                          <CheckIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-sm font-medium cursor-pointer hover:underline"
+                          onClick={() => {
+                            setEditingKeyId(apiKey.id);
+                            setEditName(apiKey.name);
+                          }}
+                        >
+                          {apiKey.name}
+                        </span>
+                        <Badge
+                          variant={apiKey.isActive ? "default" : "secondary"}
+                          className="text-xs"
+                        >
+                          {apiKey.isActive ? "Active" : "Revoked"}
+                        </Badge>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs text-muted-foreground font-mono">
+                        {apiKey.keyPrefix}
+                      </code>
+                      <span className="text-xs text-muted-foreground">
+                        {apiKey.totalRequests} requests
+                      </span>
+                      {apiKey.lastUsedAt && (
+                        <span className="text-xs text-muted-foreground">
+                          Last used{" "}
+                          {formatDistanceToNow(new Date(apiKey.lastUsedAt), {
+                            addSuffix: true,
+                          })}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        Created{" "}
+                        {format(new Date(apiKey.createdAt), "MMM d, yyyy")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {apiKey.isActive && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Revoke key"
+                          >
+                            <XCircleIcon className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Revoke API key?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will deactivate the key "{apiKey.name}". Any applications using this key will stop working.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => revokeKey.mutate({ id: apiKey.id })}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Revoke
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          title="Delete key"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete API key?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete the key "{apiKey.name}". This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteKey.mutate({ id: apiKey.id })}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-6">
+              <KeyIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">No API keys</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Create an API key to access Rubic programmatically.
+              </p>
+              <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+                <PlusIcon className="h-4 w-4" />
+                Create your first API key
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

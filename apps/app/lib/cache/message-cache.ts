@@ -95,7 +95,7 @@ export function updateCachedMessage(
     const index = messages.findIndex((m) => m.id === messageId);
     if (index !== -1) {
       const updated = [...messages];
-      updated[index] = { ...updated[index], ...updates };
+      updated[index] = { ...updated[index]!, ...updates };
       messageCache.set(sessionId, updated);
     }
   }

@@ -1,12 +1,11 @@
-import { auth } from "@repo/auth";
 import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { env } from "@/env";
+import { verifySession } from "@/lib/dal";
 import { AvatarStack } from "./components/avatar-stack";
 import { Cursors } from "./components/cursors";
 import { Header } from "./components/header/index";
 import { ChatSection } from "./components/chat-section";
-import { headers } from "next/headers";
 
 const title = "Rubic";
 const description = "AI-powered productivity platform.";
@@ -21,15 +20,14 @@ export const metadata: Metadata = {
 };
 
 const App = async () => {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  // Cached DAL — deduplicates with layout's getSession() call (zero extra DB cost).
+  // verifySession redirects to /login if not authenticated.
+  const session = await verifySession();
 
   const user = {
-    name: session?.user?.name ?? null,
-    email: session?.user?.email ?? "",
-    image: session?.user?.image ?? null,
+    name: session.user.name ?? null,
+    email: session.user.email ?? "",
+    image: session.user.image ?? null,
   };
 
   return (

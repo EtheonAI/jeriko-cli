@@ -225,7 +225,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
         // Calculate RMS volume
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i];
+          sum += (dataArray[i] ?? 0) * (dataArray[i] ?? 0);
         }
         const rms = Math.sqrt(sum / dataArray.length);
         const normalizedVolume = Math.min(rms / 128, 1);
@@ -316,8 +316,8 @@ export function useVoiceInput(options: VoiceInputOptions = {}): UseVoiceInputRet
         let interim = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          const text = result[0].transcript;
+          const result = event.results[i]!;
+          const text = result[0]!.transcript;
 
           if (result.isFinal) {
             final += text;

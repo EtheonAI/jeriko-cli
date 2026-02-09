@@ -1,4 +1,4 @@
-import type { UIMessage } from "ai";
+import type { UIMessage } from "../lib/types/ui-message";
 import { lazy, Suspense, type ComponentProps } from "react";
 import { twMerge } from "tailwind-merge";
 

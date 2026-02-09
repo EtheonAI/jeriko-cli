@@ -41,7 +41,7 @@ export const POST = async () => {
     userInfo: {
       name: session.user.name ?? session.user.email ?? "User",
       avatar: session.user.image ?? undefined,
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
     },
   });
 };

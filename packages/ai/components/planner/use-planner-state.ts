@@ -115,7 +115,13 @@ interface RawPlanData {
   phases?: RawPlanTodo[];
 }
 
-export function usePlannerState(messages: UIMessage[]): PlannerState {
+/**
+ * @param messages - All chat messages (from useChat)
+ * @param isStreaming - Whether the chat is currently streaming. When false and
+ *   steps are still "in_progress", they are auto-completed since the agent is done.
+ *   This prevents the planner from being stuck on a step the agent forgot to update.
+ */
+export function usePlannerState(messages: UIMessage[], isStreaming = false): PlannerState {
   return useMemo(() => {
     let latestPlan: RawPlanData | null = null;
 
@@ -158,14 +164,36 @@ export function usePlannerState(messages: UIMessage[]): PlannerState {
       status: mapStatus(todo.status),
     }));
 
+    // When the agent is done streaming, auto-complete steps.
+    // The agent sometimes forgets to send a final show_plan update, leaving
+    // the planner stuck on steps the agent was working on or hadn't started yet.
+    // For finished chats (not streaming), mark all non-error steps as completed
+    // since the agent finished its entire response.
+    if (!isStreaming) {
+      for (const step of steps) {
+        if (step.status === "in_progress" || step.status === "pending") {
+          step.status = "completed";
+        }
+      }
+    }
+
     const completedSteps = steps.filter((s) => s.status === "completed").length;
-    const currentIndex = steps.findIndex((s) => s.status === "in_progress");
+    const inProgressIndex = steps.findIndex((s) => s.status === "in_progress");
+    const firstPendingIndex = steps.findIndex((s) => s.status === "pending");
     const progress =
       steps.length > 0 ? (completedSteps / steps.length) * 100 : 0;
 
+    // Priority: in_progress step > first pending step > last step (all complete)
+    const currentIndex =
+      inProgressIndex !== -1
+        ? inProgressIndex
+        : firstPendingIndex !== -1
+          ? firstPendingIndex
+          : steps.length - 1;
+
     return {
       steps,
-      currentStepIndex: currentIndex !== -1 ? currentIndex : steps.length - 1,
+      currentStepIndex: currentIndex,
       totalSteps: steps.length,
       completedSteps,
       progress,
@@ -173,5 +201,5 @@ export function usePlannerState(messages: UIMessage[]): PlannerState {
       hasSteps: true,
       title: latestPlan.title || latestPlan.goal,
     };
-  }, [messages]);
+  }, [messages, isStreaming]);
 }

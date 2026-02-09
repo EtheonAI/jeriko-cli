@@ -15,6 +15,7 @@ import { CodeBlockEnhanced } from "./renderers/code-block-enhanced";
 import { TerminalOutputEnhanced } from "./renderers/terminal-output-enhanced";
 import { BrowserViewerEnhanced } from "./renderers/browser-viewer-enhanced";
 import { ShowPlanRenderer } from "./renderers/show-plan";
+import { DeviceCommandRenderer } from "./renderers/device-command";
 
 export interface ToolRendererProps<TInput = unknown, TOutput = unknown> {
   toolName: string;
@@ -98,6 +99,7 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   // Scheduling & Analytics
   schedule_recurring_task: ProgressTool as ToolRenderer,
   check_outcomes: ProgressTool as ToolRenderer,
+  track_analytics: ProgressTool as ToolRenderer,
 
   // Fallback for any unknown tool
   "*": GenericTool,
@@ -115,7 +117,12 @@ export function ToolRegistry({ children, customRenderers = {} }: ToolRegistryPro
   const renderers = useMemo(() => ({ ...defaultRenderers, ...customRenderers }), [customRenderers]);
 
   const getRenderer = (toolName: string): ToolRenderer => {
-    return renderers[toolName] ?? renderers["*"] ?? GenericTool;
+    // Direct match first
+    if (renderers[toolName]) return renderers[toolName];
+    // Dynamic device tools: device_{id}_command → DeviceCommandRenderer
+    if (toolName.startsWith("device_")) return DeviceCommandRenderer as ToolRenderer;
+    // Dynamic Composio tools: app_* → GenericTool
+    return renderers["*"] ?? GenericTool;
   };
 
   const registerRenderer = (toolName: string, renderer: ToolRenderer) => {
@@ -139,8 +146,11 @@ export function useToolRegistry(): ToolRegistryContextValue {
     // Return default implementation if no provider
     return {
       renderers: defaultRenderers,
-      getRenderer: (toolName: string) =>
-        defaultRenderers[toolName] ?? defaultRenderers["*"] ?? GenericTool,
+      getRenderer: (toolName: string) => {
+        if (defaultRenderers[toolName]) return defaultRenderers[toolName];
+        if (toolName.startsWith("device_")) return DeviceCommandRenderer as ToolRenderer;
+        return defaultRenderers["*"] ?? GenericTool;
+      },
       registerRenderer: () => {
         console.warn("ToolRegistryProvider not found. Renderer not registered.");
       },

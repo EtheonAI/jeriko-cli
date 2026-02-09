@@ -5,6 +5,7 @@ import type { UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { toast } from "sonner";
+import type { Attachment } from "@repo/ai/lib/types";
 import { useAppDispatch } from "@/lib/store/hooks";
 import {
   setMessages as setReduxMessages,
@@ -94,8 +95,25 @@ function migrateContentToParts(content: string): UIMessage["parts"] | null {
 }
 
 /**
+ * Deep-sanitize a value to be structuredClone-safe.
+ * Strips functions, symbols, class instances, circular refs, etc.
+ * Uses JSON round-trip which is the most reliable method.
+ */
+function sanitize<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+/**
  * Normalize parts from DB — handles old "tool-invocation" format and
  * filters out malformed parts that would crash the renderer.
+ * CRITICAL: Every tool part MUST have both `state` and `toolName` fields,
+ * otherwise the AI SDK's structuredClone + isStaticToolUIPart checks crash.
+ * All parts are JSON-sanitized to prevent structuredClone failures.
  */
 function normalizeParts(rawParts: unknown[]): UIMessage["parts"] {
   const normalized: unknown[] = [];
@@ -110,11 +128,12 @@ function normalizeParts(rawParts: unknown[]): UIMessage["parts"] {
     if (pType === "tool-invocation") {
       const toolName = (p.toolName as string) || "unknown";
       if (!p.toolCallId) continue; // Skip malformed
-      normalized.push({
+      normalized.push(sanitize({
         ...p,
         type: `tool-${toolName}`,
+        toolName,
         state: p.state || "output-available",
-      });
+      }));
       continue;
     }
 
@@ -124,14 +143,25 @@ function normalizeParts(rawParts: unknown[]): UIMessage["parts"] {
     // Validate UIMessage tool parts (type: "tool-{toolName}")
     if (pType.startsWith("tool-")) {
       if (!p.toolCallId) continue; // Skip malformed — must have toolCallId
-      // Ensure state is always present (old DB records may lack it)
-      if (!p.state) {
-        normalized.push({ ...p, state: "output-available" });
+      // Derive toolName from type if missing (type is "tool-{toolName}")
+      const derivedToolName = (p.toolName as string) || pType.slice(5) || "unknown";
+      // Ensure both state AND toolName are always present
+      if (!p.state || !p.toolName) {
+        normalized.push(sanitize({
+          ...p,
+          state: p.state || "output-available",
+          toolName: derivedToolName,
+        }));
         continue;
       }
     }
 
-    normalized.push(p);
+    // Text parts: ensure they have a text field
+    if (pType === "text" && typeof p.text !== "string") {
+      continue; // Skip malformed text parts
+    }
+
+    normalized.push(sanitize(p));
   }
 
   return normalized as UIMessage["parts"];
@@ -144,26 +174,41 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
   // Convert ReduxMessage[] → UIMessage[] for initialMessages
   const initialUIMessages = useMemo<UIMessage[]>(
     () =>
-      initialMessages.map((msg) => {
-        let parts: UIMessage["parts"];
-        if (msg.parts && (msg.parts as unknown[]).length > 0) {
-          parts = normalizeParts(msg.parts as unknown[]);
-        } else if (msg.role === "assistant") {
-          // Try to migrate old concatenated JSON content to proper parts
-          const migrated = migrateContentToParts(msg.content);
-          parts = migrated ?? [{ type: "text" as const, text: msg.content }];
-        } else {
-          parts = [{ type: "text" as const, text: msg.content }];
-        }
+      initialMessages.reduce<UIMessage[]>((acc, msg) => {
+        try {
+          let parts: UIMessage["parts"];
+          if (msg.parts && (msg.parts as unknown[]).length > 0) {
+            parts = normalizeParts(msg.parts as unknown[]);
+          } else if (msg.role === "assistant") {
+            // Try to migrate old concatenated JSON content to proper parts
+            const migrated = migrateContentToParts(msg.content);
+            parts = migrated ?? [{ type: "text" as const, text: msg.content }];
+          } else {
+            parts = [{ type: "text" as const, text: msg.content }];
+          }
 
-        return {
-          id: msg.id,
-          role: msg.role as "user" | "assistant" | "system",
-          parts,
-          metadata: msg.metadata,
-          createdAt: new Date(msg.createdAt),
-        };
-      }),
+          // Safety: skip messages with empty parts (would crash structuredClone)
+          if (!parts || parts.length === 0) {
+            parts = [{ type: "text" as const, text: msg.content || "" }];
+          }
+
+          // CRITICAL: Every field must be structuredClone-safe.
+          // The AI SDK calls structuredClone(lastMessage) internally during
+          // makeRequest — if it throws, the finally block crashes accessing
+          // this.activeResponse!.state (activeResponse never set).
+          // Sanitize metadata via JSON round-trip to strip non-serializable values.
+          acc.push({
+            id: msg.id,
+            role: msg.role as "user" | "assistant" | "system",
+            parts,
+            metadata: sanitize(msg.metadata),
+          } as any);
+        } catch (err) {
+          // If a message fails to convert, skip it rather than crashing the whole session
+          console.warn("Failed to convert message, skipping:", msg.id, err);
+        }
+        return acc;
+      }, []),
     [initialMessages]
   );
 
@@ -179,14 +224,13 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     transport: transportRef.current,
     messages: initialUIMessages,
     experimental_throttle: 16,
-    // resume: false — disabled because the AI SDK's resumeStream internally
-    // calls structuredClone + isStaticToolUIPart on old assistant message parts
-    // and crashes with "Cannot read properties of undefined (reading 'state')"
-    // when parts from the DB don't perfectly match the SDK's expected shape.
-    // Old chat state is already loaded from DB via initialMessages, so resume
-    // is only useful for reconnecting to an active Redis-backed stream mid-flight.
-    // Re-enable when SDK fixes the null-safety issue in chat.ts:688.
-    resume: false,
+    // resume: DISABLED — causes `Cannot read properties of undefined (reading 'state')`
+    // crash on historical chat pages. The AI SDK's resumeStream sends GET to
+    // /api/chat/{id}/stream; when the server returns 204 (no active stream),
+    // makeRequest's finally block accesses this.activeResponse!.state before
+    // activeResponse is set. We don't have Redis configured in dev, so resume
+    // was always a no-op that only caused crashes. Re-enable when Redis is wired.
+    // resume: true,
     onFinish: ({ messages: finishedMessages }) => {
       const reduxMsgs: ReduxMessage[] = finishedMessages.map((m) => ({
         id: m.id,
@@ -214,11 +258,42 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     },
   });
 
+  function mapAttachmentsToFiles(attachments?: Attachment[]) {
+    if (!attachments || attachments.length === 0) return undefined;
+
+    const fileParts = attachments
+      .filter((a) => a.status === "ready" && a.url)
+      .map((a) => ({
+        type: "file" as const,
+        url: a.url!,
+        mediaType: a.mimeType || "application/octet-stream",
+        filename: a.name,
+      }));
+
+    if (fileParts.length > 0) return fileParts;
+
+    const localFiles = attachments
+      .map((a) => a.file)
+      .filter((f): f is File => Boolean(f));
+
+    return localFiles.length > 0 ? localFiles : undefined;
+  }
+
   // Wrap sendMessage to always include chatId in body
   const sendMessage = useCallback(
-    (text: string, options?: { body?: Record<string, unknown> }) => {
+    (
+      text: string,
+      options?: {
+        body?: Record<string, unknown>;
+        attachments?: Attachment[];
+      },
+    ) => {
       const body = { chatId: sessionId, ...(options?.body ?? {}) };
-      return sdkSendMessage({ text }, { ...options, body });
+      const files = mapAttachmentsToFiles(options?.attachments);
+      return sdkSendMessage(
+        files ? { text, files } : { text },
+        { body },
+      );
     },
     [sdkSendMessage, sessionId]
   );

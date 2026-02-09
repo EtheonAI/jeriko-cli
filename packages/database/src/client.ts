@@ -12,7 +12,7 @@ if (!process.env.DATABASE_URL) {
     const envContent = readFileSync(resolve(__dirname, "../.env"), "utf-8");
     for (const line of envContent.split("\n")) {
       const match = line.match(/^DATABASE_URL\s*=\s*(.+)/);
-      if (match) {
+      if (match?.[1]) {
         process.env.DATABASE_URL = match[1].trim();
         break;
       }

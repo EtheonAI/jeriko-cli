@@ -53,6 +53,10 @@ export interface CanvasState {
   currentAction?: ToolAction;
   /** Active sandbox ID (from agent stream) */
   sandboxId?: string;
+  /** Neko WebRTC URL for live desktop streaming (from Desktop template sandbox) */
+  nekoUrl?: string;
+  /** E2B stream URL (noVNC fallback for desktop streaming) */
+  streamUrl?: string;
   /** Tool call ID currently pinned in canvas (historical state recall) */
   pinnedToolCallId?: string;
   /** Pin a historical tool call to display in the canvas */
@@ -110,6 +114,7 @@ export interface CanvasState {
   timelinePercentage?: number;
   currentStep?: number;
   totalSteps?: number;
+  onTimelineChange?: (percentage: number) => void;
 }
 
 // ============================================================================
@@ -362,7 +367,7 @@ function extractSearchResults(
 // Hook
 // ============================================================================
 
-export function useCanvas(messages: UIMessage[]): CanvasState {
+export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasState {
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
 
@@ -378,6 +383,10 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
 
   // Sandbox ID — set from agent stream metadata
   const [sandboxId, setSandboxId] = useState<string | undefined>();
+  // Neko WebRTC URL — set from sandbox_info metadata (Desktop template with Neko)
+  const [nekoUrl, setNekoUrl] = useState<string | undefined>();
+  // E2B stream URL — set from sandbox_info metadata (noVNC fallback)
+  const [streamUrl, setStreamUrl] = useState<string | undefined>();
 
   // Pinned tool call — when set, canvas shows historical state instead of latest
   const [pinnedToolCallId, setPinnedToolCallId] = useState<string | undefined>();
@@ -399,7 +408,12 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
     Array<{ title: string; url: string; snippet: string }> | undefined
   >();
   const [browserLoading, setBrowserLoading] = useState(false);
-  const [browserHistory, setBrowserHistory] = useState<string[]>([]);
+  interface BrowserHistoryEntry {
+    url: string;
+    screenshot?: string;
+    title?: string;
+  }
+  const [browserHistory, setBrowserHistory] = useState<BrowserHistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   // Ref for historyIndex to avoid circular deps in browser effect
@@ -415,6 +429,17 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       // Pick up sandbox ID
       if (typeof meta.sandboxId === "string" && meta.sandboxId) {
         setSandboxId(meta.sandboxId);
+      }
+      // Pick up Neko WebRTC URL (Desktop template sandbox with Neko)
+      if (typeof meta.nekoUrl === "string" && meta.nekoUrl) {
+        setNekoUrl(meta.nekoUrl);
+      }
+      // Pick up E2B stream URL (noVNC fallback) or legacy vncUrl
+      if (typeof meta.streamUrl === "string" && meta.streamUrl) {
+        setStreamUrl(meta.streamUrl);
+      } else if (typeof meta.vncUrl === "string" && meta.vncUrl) {
+        // Backwards compat: old sandbox_info events may still send vncUrl
+        setStreamUrl(meta.vncUrl);
       }
 
       // Pick up live browser frame
@@ -450,9 +475,12 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
         }
         if (toolName === "file_read" && toolPart.state === "output-available" && output) {
           const path = ((args.path ?? args.file) as string) ?? "";
+          const result = output.result as Record<string, unknown> | undefined;
           const content = typeof output === "string"
             ? output
-            : (output.content as string) ?? JSON.stringify(output);
+            : (output.content as string)
+              ?? (result?.content as string)
+              ?? JSON.stringify(output);
           if (path) contents[path] = typeof content === "string" ? content : String(content);
         }
         if (toolName === "file_str_replace" && toolPart.state === "output-available" && output) {
@@ -482,6 +510,23 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       return changed ? merged : prev;
     });
   }, [allFileContents]);
+
+  // Collect ALL tool call IDs for timeline scrubbing
+  const allToolCallIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const msg of messages) {
+      if (msg.role !== "assistant" || !msg.parts) continue;
+      for (const part of msg.parts) {
+        if (!part || !isToolUIPart(part)) continue;
+        const tp = part as StaticToolUIPart | DynamicToolUIPart;
+        if (tp.toolCallId && tp.state) {
+          const tn = getToolName(tp);
+          if (TOOL_VIEW_MAP[tn]) ids.push(tp.toolCallId);
+        }
+      }
+    }
+    return ids;
+  }, [messages]);
 
   // Count total tool calls and find the latest one
   const { latestTool, totalToolCalls } = useMemo(() => {
@@ -518,10 +563,13 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
         const actionFn = TOOL_ACTION_MAP[toolName];
         const currentAction = actionFn ? actionFn(args) : undefined;
 
-        const isActive =
+        // Tool is working if it hasn't produced output yet AND the stream is still active.
+        // Once streaming ends, treat stuck tools as done (agent moved on without result).
+        const isActive = isStreaming && (
           toolPart.state === "input-streaming" ||
           toolPart.state === "input-available" ||
-          toolPart.state === "approval-responded";
+          toolPart.state === "approval-responded"
+        );
 
         // Count all tool calls across all messages for the step counter
         let total = 0;
@@ -548,7 +596,10 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       }
     }
     return { latestTool: null, totalToolCalls: 0 };
-  }, [messages]);
+    // CRITICAL: isStreaming must be in deps — isActive depends on it.
+    // Without it, when streaming stops the memo won't recompute and
+    // isWorking stays true forever (loading bar loop).
+  }, [messages, isStreaming]);
 
   // Populate availableViews as tools activate new view types
   useEffect(() => {
@@ -560,17 +611,31 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       return next;
     });
 
-    // Auto-switch: if a NEW view type appears, clear any user override
-    if (latestTool.viewType !== prevAutoView.current) {
-      prevAutoView.current = latestTool.viewType;
-      setViewOverride(null);
-    }
+    // Track the auto-detected view type (but don't clear user override).
+    // The user's manual view selection persists until they explicitly change it.
+    prevAutoView.current = latestTool.viewType;
   }, [latestTool?.viewType]);
 
   // View select callback for user manual switching
   const onSelectView = useCallback((view: CanvasViewType) => {
     setViewOverride(view);
   }, []);
+
+  // Timeline scrubber → pin to a specific tool call by percentage
+  const onTimelineChange = useCallback((percentage: number) => {
+    if (allToolCallIds.length === 0) return;
+    if (percentage >= 100) {
+      // Jump to live
+      setPinnedToolCallId(undefined);
+      return;
+    }
+    const index = Math.min(
+      Math.floor((percentage / 100) * allToolCallIds.length),
+      allToolCallIds.length - 1,
+    );
+    const toolCallId = allToolCallIds[index];
+    if (toolCallId) setPinnedToolCallId(toolCallId);
+  }, [allToolCallIds]);
 
   // Accumulate terminal output from shell_exec results
   // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
@@ -663,15 +728,17 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
     const url = extractBrowserUrl(latestTool.output, latestTool.args);
     if (url) {
       setBrowserUrl((prev) => (prev === url ? prev : url));
-      // Push to history on navigation
+      // Push to history on navigation (with screenshot + title snapshot)
       if (
         latestTool.toolName === "browser_navigate" ||
         latestTool.toolName === "browser_restart"
       ) {
+        const shot = latestTool.output ? extractScreenshot(latestTool.output) : undefined;
+        const title = extractBrowserTitle(latestTool.output);
         setBrowserHistory((prev) => {
           const trimmed = prev.slice(0, historyIndexRef.current + 1);
-          if (trimmed[trimmed.length - 1] === url) return prev;
-          return [...trimmed, url];
+          if (trimmed[trimmed.length - 1]?.url === url) return prev;
+          return [...trimmed, { url, screenshot: shot, title: title ?? undefined }];
         });
         setHistoryIndex((prev) => prev + 1);
       }
@@ -752,13 +819,13 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       setBrowserLoading(true);
       setBrowserHistory((prev) => {
         const trimmed = prev.slice(0, historyIndex + 1);
-        return [...trimmed, url];
+        return [...trimmed, { url }];
       });
       setHistoryIndex((prev) => prev + 1);
 
-      // If sandbox is available, actually navigate inside E2B
-      if (sandboxId) {
-        try {
+      try {
+        if (sandboxId) {
+          // Navigate inside E2B sandbox (returns screenshot)
           const resp = await fetch("/api/sandbox/browser", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -775,11 +842,11 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
           if (data.url) setBrowserUrl(data.url);
           if (data.title) setBrowserTitle(data.title);
           if (data.content) setBrowserContent(data.content);
-        } catch {
-          // Ignore — URL bar still updated
-        } finally {
-          setBrowserLoading(false);
         }
+      } catch {
+        // Ignore — URL bar still updated
+      } finally {
+        setBrowserLoading(false);
       }
     },
     [historyIndex, sandboxId]
@@ -788,23 +855,31 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
   const onBrowserBack = useCallback(() => {
     if (historyIndex <= 0) return;
     const newIndex = historyIndex - 1;
+    const entry = browserHistory[newIndex];
+    if (!entry) return;
     setHistoryIndex(newIndex);
-    setBrowserUrl(browserHistory[newIndex]);
+    setBrowserUrl(entry.url);
+    if (entry.screenshot) setBrowserScreenshot(entry.screenshot);
+    if (entry.title) setBrowserTitle(entry.title);
   }, [historyIndex, browserHistory]);
 
   const onBrowserForward = useCallback(() => {
     if (historyIndex >= browserHistory.length - 1) return;
     const newIndex = historyIndex + 1;
+    const entry = browserHistory[newIndex];
+    if (!entry) return;
     setHistoryIndex(newIndex);
-    setBrowserUrl(browserHistory[newIndex]);
+    setBrowserUrl(entry.url);
+    if (entry.screenshot) setBrowserScreenshot(entry.screenshot);
+    if (entry.title) setBrowserTitle(entry.title);
   }, [historyIndex, browserHistory]);
 
   const onBrowserRefresh = useCallback(async () => {
     if (!browserUrl) return;
 
-    if (sandboxId) {
-      setBrowserLoading(true);
-      try {
+    setBrowserLoading(true);
+    try {
+      if (sandboxId) {
         const resp = await fetch("/api/sandbox/browser", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -820,11 +895,11 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
         }
         if (data.title) setBrowserTitle(data.title);
         if (data.content) setBrowserContent(data.content);
-      } catch {
-        // Ignore
-      } finally {
-        setBrowserLoading(false);
       }
+    } catch {
+      // Ignore
+    } finally {
+      setBrowserLoading(false);
     }
   }, [browserUrl, sandboxId]);
 
@@ -877,10 +952,14 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
       isVisible: false,
       viewType: "empty",
       isWorking: false,
+      sandboxId,
+      nekoUrl,
+      streamUrl,
       availableViews,
       onSelectView,
       onPinToolCall,
       onUnpin,
+      onTimelineChange,
     };
   }
 
@@ -897,13 +976,18 @@ export function useCanvas(messages: UIMessage[]): CanvasState {
     isWorking: pinnedTool ? false : (latestTool?.isWorking ?? false),
     statusText: pinnedTool
       ? `Viewing: ${pinnedTool.currentAction?.label ?? pinnedTool.toolName.replace(/_/g, " ")}`
-      : latestTool?.currentAction
-        ? `Rubic is working: ${latestTool.currentAction.label}`
-        : "Rubic is working...",
+      : latestTool?.isWorking
+        ? (latestTool.currentAction
+          ? `Rubic is working: ${latestTool.currentAction.label}`
+          : "Rubic is working...")
+        : undefined,
     currentStep,
     totalSteps: totalToolCalls,
     timelinePercentage: pinnedTool ? 100 : (latestTool?.isWorking ? undefined : 100),
+    onTimelineChange,
     sandboxId,
+    nekoUrl,
+    streamUrl,
     pinnedToolCallId,
     onPinToolCall,
     onUnpin,

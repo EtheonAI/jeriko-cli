@@ -195,11 +195,16 @@ async function main() {
 
       const timeoutMs = config?.timeout || 300_000; // 5 minutes default
 
-      // Create E2B sandbox
+      // Use Desktop template by default for full virtual computer experience
+      // (Ubuntu + XFCE + x11vnc + noVNC on port 6080 + Playwright)
+      const templateId = template || getEnv("E2B_TEMPLATE", "rubic-desktop");
+
+      // Create E2B sandbox with Desktop template
       let e2bSandbox: E2BSandbox;
       try {
         e2bSandbox = await E2BSandbox.create({
           apiKey: E2B_API_KEY,
+          template: templateId !== "default" ? templateId : undefined,
           timeoutMs,
           envs: config?.env,
         });
@@ -212,6 +217,11 @@ async function main() {
 
       const dbId = createId();
 
+      // noVNC URL — Desktop template exposes noVNC web client on port 6080
+      // Format: https://6080-{e2b_sandbox_id}.e2b.app
+      const vncHost = e2bSandbox.getHost(6080);
+      const vncUrl = `https://${vncHost}`;
+
       // Store in DB
       const [sandbox] = await db
         .insert(sandboxes)
@@ -222,7 +232,7 @@ async function main() {
           name: `sandbox-${Date.now()}`,
           type: "code",
           status: "running",
-          templateId: template,
+          templateId,
           config: config || {},
           e2bSandboxId: e2bSandbox.sandboxId,
           hostname: e2bSandbox.getHost(80),
@@ -235,7 +245,7 @@ async function main() {
       sandboxMap.set(dbId, e2bSandbox);
 
       logger.info(
-        { sandboxId: dbId, e2bSandboxId: e2bSandbox.sandboxId, userId, template },
+        { sandboxId: dbId, e2bSandboxId: e2bSandbox.sandboxId, userId, templateId },
         "Sandbox created",
       );
 
@@ -244,7 +254,8 @@ async function main() {
         status: "running",
         e2bSandboxId: e2bSandbox.sandboxId,
         hostname: e2bSandbox.getHost(80),
-        template: template || "default",
+        template: templateId,
+        vncUrl,
       });
     }),
   );
@@ -806,6 +817,45 @@ async function main() {
       }
 
       return reply.success({ deleted: true });
+    }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Stream URLs — Return WebSocket URLs for live browser (noVNC) and terminal (PTY)
+  // -------------------------------------------------------------------------
+
+  // Get noVNC URL for live browser streaming (Desktop template)
+  app.get(
+    "/sandboxes/:id/browser/stream",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
+      const e2bSandbox = await getE2BSandbox(id);
+      // E2B Desktop sandboxes expose noVNC web client on port 6080
+      // The HTTPS URL serves the noVNC HTML page which connects to VNC via WebSocket internally
+      // We return the full URL with autoconnect params so it can be embedded in an iframe
+      const host = e2bSandbox.getHost(6080);
+      const streamUrl = `https://${host}/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000`;
+
+      logger.info({ sandboxId: id }, "Browser stream URL requested");
+      return reply.success({ streamUrl, sandboxId: id });
+    }),
+  );
+
+  // Get PTY WebSocket URL for live terminal streaming
+  app.get(
+    "/sandboxes/:id/terminal/stream",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
+      const e2bSandbox = await getE2BSandbox(id);
+      // E2B sandboxes expose terminal on port 3000 (PTY via WebSocket)
+      const streamUrl = `wss://${e2bSandbox.getHost(3000)}/pty`;
+
+      logger.info({ sandboxId: id }, "Terminal stream URL requested");
+      return reply.success({ streamUrl, sandboxId: id });
     }),
   );
 

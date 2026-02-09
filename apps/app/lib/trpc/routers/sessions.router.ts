@@ -51,7 +51,7 @@ export const sessionsRouter = createTRPCRouter({
         .returning();
 
       // Sync to search index (non-blocking)
-      syncSessionToSearch(session).catch(() => {});
+      syncSessionToSearch(session!).catch(() => {});
       // TODO: Publish session:new event via gateway/backend service (not from Next.js)
 
       return session;
@@ -96,7 +96,7 @@ export const sessionsRouter = createTRPCRouter({
         .returning();
 
       // Sync to search index (non-blocking)
-      syncSessionToSearch(session).catch(() => {});
+      syncSessionToSearch(session!).catch(() => {});
       // TODO: Publish session:update event via gateway/backend service
 
       return session;

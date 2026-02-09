@@ -8,6 +8,7 @@ import { notificationsRouter } from "./notifications.router";
 import { scheduledTasksRouter } from "./scheduledTasks.router";
 import { projectsRouter } from "./projects.router";
 
+import { apiKeysRouter } from "./apiKeys.router";
 import { billingRouter } from "./billing.router";
 import { mailRouter } from "./mail.router";
 import { searchRouter } from "./search.router";
@@ -35,6 +36,8 @@ export const appRouter = createTRPCRouter({
   scheduledTasks: scheduledTasksRouter,
   projects: projectsRouter,
 
+  // API Keys (Rubic AI)
+  apiKeys: apiKeysRouter,
   billing: billingRouter,
   mail: mailRouter,
   // User management

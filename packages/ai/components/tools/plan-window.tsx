@@ -58,7 +58,7 @@ function TodoIcon({ status }: { status: PlanTodoStatus }) {
   if (status === "in_progress") {
     return (
       <span
-        className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-[0_0_0_4px_hsl(var(--primary)/0.1)] motion-safe:transition-all motion-safe:duration-300"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_10%,transparent)] motion-safe:transition-all motion-safe:duration-300"
         aria-hidden="true"
       >
         <Loader2 className="size-5 text-primary motion-safe:animate-[spin_0.7s_linear_infinite]" />
@@ -118,7 +118,7 @@ function PlanTodoItem({ todo, className, style, showConnector }: PlanTodoItemPro
       className={cn(
         "text-sm font-medium leading-6 break-words",
         todo.status === "pending" && "text-muted-foreground",
-        todo.status === "in_progress" && "motion-safe:shimmer shimmer-invert text-foreground",
+        todo.status === "in_progress" && "shimmer text-foreground",
         (todo.status === "completed" || todo.status === "cancelled") && "text-muted-foreground"
       )}
     >

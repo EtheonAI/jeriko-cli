@@ -5,20 +5,19 @@ Flow:
 1. Check session cache → if cached, reuse tools/sandbox/connected_apps
 2. If not cached: load user context in parallel (connected apps, devices)
 3. Proactive check: detect unconnected apps user might need
-4. Get or create sandbox for session
+4. Get or create sandbox for session (direct E2B SDK)
 5. Build system prompt (stable, cacheable — includes memory + connected apps)
 6. Assemble tools ONCE (core + Composio + device), cache per session
 7. Load conversation history from DB if session_id provided
 8. Check should_plan() → inject planning rules if multi-step
 9. Run agent_loop() with streaming → SSE to client
-10. Stream tool activity to client (tool_start, tool_result → SSE events)
+10. Stream tool activity to client (typed SSE events)
 11. Save messages to DB
 12. Deduct credits → billing service
 13. Log telemetry
 """
 
 import asyncio
-import copy
 import json
 from typing import Any, AsyncGenerator
 
@@ -33,16 +32,37 @@ from pydantic import BaseModel
 from ..agent_loop import agent_loop, prepare_messages_with_cache, prepare_tools_with_cache
 from ..billing import calculate_credits, deduct_credits, log_telemetry
 from ..config import settings
+from ..e2b_manager import (
+    get_neko_url,
+    get_or_create_sandbox,
+    get_sandbox_entry,
+    get_sandbox_id_for_session,
+    get_stream_url,
+)
+from ..runtime import DirectSdkRuntime
+from ..events import (
+    BROWSER_FRAME,
+    FILE_CREATED,
+    FILE_READ,
+    FILE_UPDATED,
+    browser_frame_event,
+    file_event,
+    sandbox_info_event,
+    session_created_event,
+    sse_done,
+    sse_event,
+    tool_completed_event,
+    tool_failed_event,
+    tool_started_event,
+)
 from ..session import (
     SessionContext,
+    _merge_consecutive_tool_results,
     cache_session,
     get_cached_session,
     get_or_create_session,
     get_session_message_count,
     load_conversation_history,
-    save_assistant_message,
-    save_tool_messages,
-    save_user_message,
     update_session_title,
 )
 from ..tool_executor import (
@@ -74,6 +94,8 @@ class CompletionRequest(BaseModel):
     stream: bool = True
     session_id: str | None = None
     skill_ids: list[str] | None = None
+    skills: list[str] | None = None  # Frontend sends this (maps to skill_ids)
+    connections: list[dict] | None = None  # Connected apps from frontend
     target_device_id: str | None = None
 
 
@@ -177,6 +199,36 @@ SANDBOX_DEPENDENT_TOOLS = {
 def filter_sandbox_tools(tools: list[dict]) -> list[dict]:
     """Remove tools that require a sandbox when sandbox is unavailable."""
     return [t for t in tools if t["name"] not in SANDBOX_DEPENDENT_TOOLS]
+
+
+# Skill → tool name mapping (frontend skill IDs → agent tool names)
+SKILL_TOOL_MAP: dict[str, set[str]] = {
+    "web-search": {"web_search", "info_search_web", "search_web"},
+    "code-interpreter": {"code_execute", "shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process"},
+    "image-generation": {"generate_image"},
+    "document-analysis": {"file_read", "file_find_in_content", "file_find_by_name"},
+    "data-analysis": {"code_execute", "file_read", "file_write"},
+    "browser": {
+        "browser_navigate", "browser_view", "browser_click", "browser_input",
+        "browser_scroll_up", "browser_scroll_down", "browser_move_mouse",
+        "browser_press_key", "browser_select_option", "browser_console_exec",
+        "browser_console_view", "browser_screenshot", "browser_restart",
+    },
+}
+
+# Tools that are always included regardless of skill selection
+ALWAYS_INCLUDED_TOOLS = {
+    "show_plan", "message_notify_user", "message_ask_user",
+    "schedule_recurring_task", "check_outcomes",
+}
+
+
+def filter_tools_by_skills(tools: list[dict], skills: list[str]) -> list[dict]:
+    """Keep only tools matching the requested skills, plus always-included tools."""
+    allowed: set[str] = set(ALWAYS_INCLUDED_TOOLS)
+    for skill in skills:
+        allowed |= SKILL_TOOL_MAP.get(skill, set())
+    return [t for t in tools if t["name"] in allowed]
 
 
 def should_plan(prompt: str) -> bool:
@@ -394,64 +446,7 @@ If the user asks for actions requiring sandbox tools, explain that the sandbox i
 
 
 # ============================================================
-# Sandbox Management
-# ============================================================
-
-
-async def get_or_create_sandbox(session_id: str, user_id: str) -> str | None:
-    """
-    Get an existing running sandbox for this user, or create a new one.
-    Uses the sandbox service REST API at /users/:userId/sandboxes and /sandboxes.
-    """
-    # Sandbox service uses x-user-id header for auth (dev mode) and owner verification
-    headers = {"x-user-id": user_id}
-
-    try:
-        async with httpx.AsyncClient() as client:
-            # Check for existing running sandboxes for this user
-            resp = await client.get(
-                f"{settings.sandbox_service_url}/users/{user_id}/sandboxes",
-                headers=headers,
-                timeout=10.0,
-            )
-            if resp.status_code == 200:
-                resp_json = resp.json()
-                # Sandbox service wraps responses: {data: {...}, meta: {...}}
-                inner = resp_json.get("data", resp_json) if isinstance(resp_json, dict) else resp_json
-                sandbox_list = inner.get("sandboxes", []) if isinstance(inner, dict) else []
-                for sb in sandbox_list:
-                    if sb.get("status") in ("running", "active"):
-                        logger.debug("reusing_existing_sandbox", sandbox_id=sb["id"])
-                        return sb["id"]
-
-            # No running sandbox found — create a new one
-            create_resp = await client.post(
-                f"{settings.sandbox_service_url}/sandboxes",
-                headers=headers,
-                json={
-                    "userId": user_id,
-                    "projectId": session_id,
-                    "config": {"timeout": 3600000},
-                },
-                timeout=30.0,
-            )
-            if create_resp.status_code < 400:
-                resp_json = create_resp.json()
-                # Sandbox service wraps responses: {data: {id, ...}, meta: {...}}
-                inner = resp_json.get("data", resp_json) if isinstance(resp_json, dict) else resp_json
-                sandbox_id = inner.get("id") if isinstance(inner, dict) else None
-                logger.info("sandbox_created", sandbox_id=sandbox_id, user_id=user_id)
-                return sandbox_id
-
-            logger.warning("sandbox_create_failed", status=create_resp.status_code, body=create_resp.text)
-            return None
-    except Exception as e:
-        logger.warning("sandbox_unavailable", error=str(e))
-        return None
-
-
-# ============================================================
-# Session Context Setup
+# Session Context Setup — Direct E2B SDK
 # ============================================================
 
 
@@ -463,6 +458,9 @@ async def setup_session_context(
     Get or create a cached session context.
     Tools, sandbox, and connected apps are loaded ONCE and cached for the session.
     This is critical for KV-cache performance — changing tools invalidates all caches.
+
+    Uses get_or_create_sandbox() from e2b_manager (direct E2B SDK) — NOT the
+    sandbox microservice. This is the single authoritative sandbox acquisition path.
     """
     # Check cache first
     cached = get_cached_session(session_id)
@@ -477,7 +475,7 @@ async def setup_session_context(
     sandbox_task = asyncio.create_task(get_or_create_sandbox(session_id, user_id))
     session_task = asyncio.create_task(get_or_create_session(session_id, user_id))
 
-    connected_apps, sandbox_id, _ = await asyncio.gather(
+    connected_apps, sandbox_obj, _ = await asyncio.gather(
         connected_apps_task, sandbox_task, session_task,
         return_exceptions=True,
     )
@@ -486,15 +484,29 @@ async def setup_session_context(
     if isinstance(connected_apps, Exception):
         logger.warning("connected_apps_error", error=str(connected_apps))
         connected_apps = []
-    if isinstance(sandbox_id, Exception):
-        logger.warning("sandbox_error", error=str(sandbox_id))
-        sandbox_id = None
+    if isinstance(sandbox_obj, Exception):
+        logger.warning("sandbox_error", error=str(sandbox_obj))
+        sandbox_obj = None
+
+    # Extract sandbox metadata from the e2b_manager's entry
+    sandbox_id = None
+    neko_url = None
+    stream_url = None
+    runtime = None
+
+    if sandbox_obj is not None:
+        entry = get_sandbox_entry(session_id)
+        if entry:
+            sandbox_id = entry.sandbox_id
+            neko_url = get_neko_url(entry)
+            stream_url = get_stream_url(entry)
+            runtime = DirectSdkRuntime(sandbox_obj, entry.sandbox_id, entry.is_desktop)
 
     # Assemble tools ONCE for this session
     tools = await assemble_all_tools(user_id, CORE_TOOLS)
 
     # If sandbox is unavailable, filter out sandbox-dependent tools
-    if not sandbox_id:
+    if not runtime:
         logger.info("sandbox_unavailable_filtering_tools", session_id=session_id)
         tools = filter_sandbox_tools(tools)
 
@@ -502,6 +514,9 @@ async def setup_session_context(
         session_id=session_id,
         user_id=user_id,
         sandbox_id=sandbox_id,
+        runtime=runtime,
+        neko_url=neko_url,
+        stream_url=stream_url,
         tools=tools,
         connected_apps=connected_apps,
     )
@@ -563,12 +578,19 @@ async def complete(
     # Step 1: Setup session context (cached per session)
     session_ctx = await setup_session_context(session_id, x_user_id)
 
+    # Step 1b: Filter tools by requested skills (if specified)
+    # Use a LOCAL copy — never mutate the cached session_ctx.tools
+    active_skills = request.skills or request.skill_ids
+    active_tools = session_ctx.tools
+    if active_skills:
+        active_tools = filter_tools_by_skills(session_ctx.tools, active_skills)
+        logger.info("tools_filtered_by_skills", skills=active_skills, tool_count=len(active_tools))
+
     # Step 2: Load conversation history from DB
     history = await load_conversation_history(session_id)
     if history:
         # Prepend history before the new user message, then merge any
         # consecutive user messages (e.g., tool_results + new prompt)
-        from src.session import _merge_consecutive_tool_results
         messages = _merge_consecutive_tool_results(history + messages)
 
     # NOTE: User message persistence is handled by the Next.js route.ts (agent-proxy.ts)
@@ -593,14 +615,16 @@ async def complete(
     system_prompt = request.system_prompt or build_system_prompt(
         user_name=x_user_name or "",
         connected_apps=", ".join(session_ctx.connected_apps) if session_ctx.connected_apps else "",
-        sandbox_available=session_ctx.sandbox_id is not None,
+        sandbox_available=session_ctx.runtime is not None,
     )
 
-    # Step 6: Create execution context
+    # Step 6: Create execution context with SandboxRuntime
     exec_ctx = ExecutionContext(
         user_id=x_user_id,
         session_id=session_id,
+        runtime=session_ctx.runtime,
         sandbox_id=session_ctx.sandbox_id,
+        neko_url=session_ctx.neko_url,
     )
 
     # Step 7: Stream or non-stream response
@@ -609,13 +633,15 @@ async def complete(
             _stream_agent_response(
                 messages=messages,
                 system_prompt=system_prompt,
-                tools=session_ctx.tools,
+                tools=active_tools,
                 model=model,
                 max_tokens=request.max_tokens,
                 ctx=exec_ctx,
                 user_id=x_user_id,
                 session_id=session_id,
                 user_prompt=user_prompt,
+                neko_url=session_ctx.neko_url,
+                stream_url=session_ctx.stream_url,
             ),
             media_type="text/event-stream",
             headers={
@@ -631,7 +657,7 @@ async def complete(
         client=client,
         messages=messages,
         system_prompt=system_prompt,
-        tools=session_ctx.tools,
+        tools=active_tools,
         model=model,
         max_tokens=request.max_tokens,
         execute_tool_fn=lambda name, inp: execute_tool(name, inp, exec_ctx),
@@ -746,6 +772,8 @@ async def _stream_agent_response(
     user_id: str,
     session_id: str,
     user_prompt: str = "",
+    neko_url: str | None = None,
+    stream_url: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream the agent loop response as SSE events with cache optimization.
@@ -754,11 +782,21 @@ async def _stream_agent_response(
     1. Last tool definition — caches all tool schemas
     2. System prompt — caches instructions + rules
     3. Last message — caches conversation history
-    """
-    client = get_anthropic_client()
 
-    def sse(event_type: str, data: dict) -> str:
-        return f"data: {json.dumps({'type': event_type, **data})}\n\n"
+    Emits typed SSE events from events.py for:
+    - sandbox_info: sandbox ID + Neko/stream URLs
+    - session_created: when a new sandbox is created
+    - tool_call_started/completed/failed: tool lifecycle
+    - browser_frame: screenshot after browser actions
+    - file_created/updated/read: file operation events
+    """
+    try:
+        client = get_anthropic_client()
+    except Exception as e:
+        logger.error("stream_init_error", error=str(e))
+        yield sse_event("error", error=f"Failed to initialize: {e}")
+        yield sse_done()
+        return
 
     # Prepare tools with cache breakpoint on last tool (done once)
     cached_tools = prepare_tools_with_cache(tools)
@@ -770,9 +808,13 @@ async def _stream_agent_response(
     total_cache_create = 0
     collected_text = []
 
-    # Emit sandbox info so the client can make direct browser control requests
+    # Emit sandbox info so the client can connect to live view + make browser control requests
     if ctx.sandbox_id:
-        yield sse("sandbox_info", {"sandboxId": ctx.sandbox_id})
+        yield sandbox_info_event(
+            sandbox_id=ctx.sandbox_id,
+            neko_url=neko_url,
+            stream_url=stream_url,
+        )
 
     for iteration in range(50):  # MAX_ITERATIONS
         iter_text = []
@@ -811,7 +853,7 @@ async def _stream_agent_response(
                         if hasattr(event.delta, "text"):
                             text = event.delta.text
                             iter_text.append(text)
-                            yield sse("content", {"content": text})
+                            yield sse_event("content", content=text)
                         elif hasattr(event.delta, "partial_json"):
                             current_tool_json += event.delta.partial_json
 
@@ -833,8 +875,8 @@ async def _stream_agent_response(
 
         except Exception as e:
             logger.error("stream_agent_error", error=str(e), iteration=iteration)
-            yield sse("error", {"error": str(e)})
-            yield "data: [DONE]\n\n"
+            yield sse_event("error", error=str(e))
+            yield sse_done()
             return
 
         if iter_text:
@@ -853,12 +895,8 @@ async def _stream_agent_response(
                 "cache_read_tokens": total_cache_read,
                 "cache_create_tokens": total_cache_create,
             }
-            yield sse("usage", {
-                "usage": usage,
-                "iterations": iteration + 1,
-                "tool_calls_count": len(all_tool_calls),
-            })
-            yield "data: [DONE]\n\n"
+            yield sse_event("usage", usage=usage, iterations=iteration + 1, tool_calls_count=len(all_tool_calls))
+            yield sse_done()
 
             # Post-completion tasks (async, non-blocking)
             asyncio.create_task(_post_completion(
@@ -882,11 +920,12 @@ async def _stream_agent_response(
         # Execute tools
         tool_results = []
         for block in tool_use_blocks:
-            yield sse("tool_start", {
-                "toolCallId": block["id"],
-                "tool": block["name"],
-                "input": _safe_truncate(block["input"]),
-            })
+            # Emit typed tool_call_started event
+            yield tool_started_event(
+                tool_call_id=block["id"],
+                tool_name=block["name"],
+                tool_input=_safe_truncate(block["input"]),
+            )
 
             try:
                 result = await execute_tool(block["name"], block["input"], ctx)
@@ -913,33 +952,54 @@ async def _stream_agent_response(
                 "is_error": is_error,
             })
 
-            yield sse("tool_result", {
-                "toolCallId": block["id"],
-                "tool": block["name"],
-                "success": not is_error,
-                "result": result,
-                "summary": _safe_truncate(result, max_len=200),
-            })
+            # Emit typed tool_call_completed or tool_call_failed event
+            if is_error:
+                yield tool_failed_event(
+                    tool_call_id=block["id"],
+                    tool_name=block["name"],
+                    error=str(result),
+                )
+            else:
+                yield tool_completed_event(
+                    tool_call_id=block["id"],
+                    tool_name=block["name"],
+                    result=_safe_truncate(result, max_len=200),
+                    success=True,
+                )
 
-            # Emit a dedicated browser_frame event for live canvas updates
-            # when a browser tool result contains a screenshot
+            # Emit browser_frame for live canvas updates when browser tool returns screenshot
             if (
                 not is_error
                 and isinstance(result, dict)
                 and result.get("screenshot")
                 and block["name"].startswith("browser_")
             ):
-                yield sse("browser_frame", {
-                    "screenshot": result["screenshot"],
-                    "url": result.get("url", ""),
-                    "title": result.get("title", ""),
-                })
+                yield browser_frame_event(
+                    screenshot=result["screenshot"],
+                    url=result.get("url", ""),
+                    title=result.get("title", ""),
+                )
+
+            # Emit file events for canvas file view updates
+            if not is_error and isinstance(result, dict):
+                tool_name = block["name"]
+                file_path = result.get("path", "")
+                if tool_name == "file_write" and file_path:
+                    yield file_event(FILE_CREATED, file_path)
+                elif tool_name == "file_str_replace" and file_path:
+                    yield file_event(FILE_UPDATED, file_path)
+                elif tool_name == "file_read" and file_path:
+                    yield file_event(
+                        FILE_READ,
+                        file_path,
+                        content=result.get("content", ""),
+                    )
 
         messages.append({"role": "user", "content": tool_results})
 
     # Max iterations
-    yield sse("warning", {"message": "Task reached maximum iterations (50)."})
-    yield "data: [DONE]\n\n"
+    yield sse_event("warning", message="Task reached maximum iterations (50).")
+    yield sse_done()
 
 
 def _safe_truncate(data: Any, max_len: int = 500) -> Any:

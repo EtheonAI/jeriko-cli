@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     # E2B Sandboxing
     e2b_api_key: str | None = None
+    e2b_template: str = "rubic-desktop"
+    e2b_warm_idle_ttl: int = 600  # 10 minutes — sandbox stays warm
+    e2b_hibernate_reuse_ttl: int = 172800  # 48 hours — can reconnect
+    e2b_hard_max_lifetime: int = 259200  # 72 hours — absolute max
+    e2b_cpu_count: int = 4
+    e2b_memory_mb: int = 4096
 
     # Service URLs
     task_service_url: str = "http://localhost:3002"

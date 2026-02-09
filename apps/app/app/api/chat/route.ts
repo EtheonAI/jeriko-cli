@@ -1,11 +1,12 @@
 import { log } from "@repo/observability/log";
 import type { UIMessage } from "@repo/ai/lib/types/ui-message";
+import { createRubicAI } from "@repo/ai/lib/rubic-provider";
 import { auth } from "@repo/auth";
 import { headers } from "next/headers";
-import { db, agentSessions, eq } from "@repo/database";
+import { db, agentSessions, apiKeys, eq, and } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 
-import { AGENT_SERVICE_URL, createAgentProxySseStream, createAgentProxyResponse, SSE_HEADERS } from "@/lib/chat/agent-proxy";
+import { createAgentProxySseStream, createAgentProxyResponse, SSE_HEADERS } from "@/lib/chat/agent-proxy";
 import { streamWithProviderFallback } from "@/lib/chat/provider-fallback";
 import { saveMessageToDB } from "@/lib/chat/persistence";
 import {
@@ -14,7 +15,13 @@ import {
   clearActiveStreamId,
 } from "@/lib/chat/resumable-stream";
 
-export const maxDuration = 120;
+const MAX_DURATION_SECONDS = Number(process.env.CHAT_MAX_DURATION_SECONDS ?? 600);
+const AGENT_STREAM_TIMEOUT_MS = Number(process.env.AGENT_STREAM_TIMEOUT_MS ?? 600_000);
+
+export const maxDuration = MAX_DURATION_SECONDS;
+
+/** RubicAI client — singleton for the agent service */
+const rubic = createRubicAI({ timeout: AGENT_STREAM_TIMEOUT_MS });
 
 // ============================================================
 // POST — Send a new message (start or continue a chat)
@@ -43,12 +50,16 @@ export const POST = async (req: Request) => {
       chatId,
       metadata,
       model: bodyModel,
+      skills,
+      connections,
     } = body as {
       messages: UIMessage[];
       id?: string;
       chatId?: string;
       metadata?: { sessionId?: string; model?: string };
       model?: string;
+      skills?: string[];
+      connections?: Array<{ id: string; name: string; type: string }>;
     };
 
     // DefaultChatTransport sends the chat ID as `id`;
@@ -92,33 +103,40 @@ export const POST = async (req: Request) => {
         ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("") ?? "";
+    const lastUserParts = (lastUserMsg?.parts as Record<string, unknown>[] | undefined) ?? null;
 
-    // Fallback-only system prompt — used when agent service is unavailable
+    // Fallback system prompt — used when agent service is unavailable
     const fallbackSystemPrompt = "You are Rubic, a helpful AI assistant. Be concise, helpful, and friendly.";
 
-    // Try agent service first, fall back to direct AI SDK streaming
-    // NOTE: Don't send system_prompt to agent service — it builds its own
-    // comprehensive prompt with planning rules, tool rules, browser rules, etc.
+    // Look up the user's first active API key for agent service auth
+    let userApiKey: string | undefined;
+    try {
+      const [keyRow] = await db
+        .select({ key: apiKeys.key })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.isActive, true)))
+        .limit(1);
+      userApiKey = keyRow?.key;
+    } catch {
+      // Non-fatal — agent service works without API key in dev
+    }
+
+    // Call the Rubic agent service via RubicAI client
+    // NOTE: Don't send system_prompt — agent builds its own comprehensive prompt
     let agentResponse: Response | null = null;
     try {
-      agentResponse = await fetch(`${AGENT_SERVICE_URL}/v1/complete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": userId,
-          "x-session-id": sessionId || "default",
-          "x-user-name": userName,
-        },
-        body: JSON.stringify({
-          prompt: lastUserText,
-          model: model || undefined,
-          stream: true,
-          session_id: sessionId || undefined,
-        }),
-        signal: AbortSignal.timeout(110000),
+      agentResponse = await rubic.stream({
+        prompt: lastUserText,
+        model: model || undefined,
+        sessionId: sessionId || undefined,
+        userId,
+        userName,
+        skills,
+        connections,
+        apiKey: userApiKey,
       });
     } catch (fetchError) {
-      log.info("Agent service unavailable, falling back to direct AI SDK streaming", {
+      log.info("Agent service unavailable, falling back", {
         error: (fetchError as Error).message,
       });
     }
@@ -135,7 +153,7 @@ export const POST = async (req: Request) => {
 
     // Agent service proxy path — push-based streaming
     if (agentResponse?.body) {
-      const proxyOpts = { model, sessionId, lastUserText, fallbackSystemPrompt };
+      const proxyOpts = { model, sessionId, lastUserText, lastUserParts, fallbackSystemPrompt };
 
       // Try resumable stream wrapping (Redis-backed)
       const streamContext = await getStreamContext();
@@ -162,7 +180,6 @@ export const POST = async (req: Request) => {
           log.warn("Resumable stream creation failed, falling back to direct stream", {
             error: (resumeErr as Error).message,
           });
-          // Clear any set stream ID on failure
           if (sessionId) {
             clearActiveStreamId(sessionId).catch(() => {});
           }
@@ -173,15 +190,12 @@ export const POST = async (req: Request) => {
       return createAgentProxyResponse(agentResponse.body, proxyOpts);
     }
 
-    // Fallback: Direct AI SDK streaming (no agent service needed)
-    // NOTE: No tools in fallback — sandbox-dependent tools (shell, browser, file)
-    // cannot execute without E2B, and schema-only tools cause the model to attempt
-    // tool calls that never resolve. Text-only fallback is the safe default.
-    log.info("Using direct AI SDK streaming fallback", { model: model ?? "default" });
+    // Fallback: Agent service is down — retry or return error SSE
+    log.info("Agent service unavailable, using fallback path");
 
     // Save user message to DB (non-blocking) for fallback path
-    if (sessionId && lastUserText) {
-      saveMessageToDB(sessionId, "user", lastUserText).catch(() => {});
+    if (sessionId && (lastUserText || (lastUserParts?.length ?? 0) > 0)) {
+      saveMessageToDB(sessionId, "user", lastUserText, undefined, lastUserParts).catch(() => {});
     }
 
     return await streamWithProviderFallback(lastUserText, model, fallbackSystemPrompt, sessionId);
