@@ -6,6 +6,7 @@ HTTP clients, and session contexts to isolate unit tests from
 external dependencies.
 """
 
+import os
 import time
 from dataclasses import dataclass, field
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -237,3 +238,41 @@ def execution_context_no_sandbox():
         runtime=None,
         sandbox_id=None,
     )
+
+
+# ============================================================
+# Environment isolation fixtures
+# ============================================================
+
+
+@pytest.fixture
+def clean_env(monkeypatch, tmp_path):
+    """
+    Isolate test environment from .env file.
+
+    Clears all API keys and optional env vars so Settings() returns defaults.
+    Use this fixture for tests that verify default values.
+
+    Creates a temp empty .env file to prevent pydantic from loading the real one.
+    """
+    env_vars_to_clear = [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "GOOGLE_API_KEY",
+        "E2B_API_KEY",
+        "E2B_TEMPLATE",
+        "SERPER_API_KEY",
+        "REDIS_PASSWORD",
+    ]
+
+    # Use monkeypatch to clear environment variables
+    for key in env_vars_to_clear:
+        monkeypatch.delenv(key, raising=False)
+
+    # Create empty .env file in temp location and change working directory
+    # This prevents pydantic from loading the real .env
+    empty_env = tmp_path / ".env"
+    empty_env.write_text("")
+    monkeypatch.chdir(tmp_path)
+
+    yield

@@ -59,12 +59,12 @@ class TestSettingsDefaults:
         s = Settings()
         assert "postgresql" in s.database_url
 
-    def test_default_e2b_template(self):
-        """E2B template defaults to rubic-desktop."""
+    def test_default_e2b_template(self, clean_env):
+        """E2B template defaults to desktop."""
         from src.config import Settings
 
         s = Settings()
-        assert s.e2b_template == "rubic-desktop"
+        assert s.e2b_template == "desktop"
 
     def test_default_e2b_warm_idle_ttl(self):
         """E2B warm idle TTL defaults to 600 seconds (10 minutes)."""
@@ -120,7 +120,7 @@ class TestSettingsDefaults:
 class TestSettingsOptionalFields:
     """Verify optional fields default to None."""
 
-    def test_api_keys_optional(self):
+    def test_api_keys_optional(self, clean_env):
         """LLM provider API keys are optional (None by default)."""
         from src.config import Settings
 
@@ -129,7 +129,7 @@ class TestSettingsOptionalFields:
         assert s.openai_api_key is None
         assert s.google_api_key is None
 
-    def test_e2b_api_key_optional(self):
+    def test_e2b_api_key_optional(self, clean_env):
         """E2B API key is optional (None by default)."""
         from src.config import Settings
 

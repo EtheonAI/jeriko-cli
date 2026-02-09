@@ -19,11 +19,11 @@ console.log("Building Rubic Desktop template...");
 console.log("This may take 10-15 minutes for the first build.");
 console.log("Includes: XFCE Desktop + Neko WebRTC + Playwright + GStreamer");
 
-await Template.build(desktopTemplate, "rubic-desktop", {
+await Template.build(desktopTemplate, "desktop", {
   cpuCount: 4,
   memoryMB: 4096,
   onBuildLogs: defaultBuildLogger(),
 });
 
-console.log("Template 'rubic-desktop' built successfully!");
-console.log("Use: DesktopSandbox({ template: 'rubic-desktop' })");
+console.log("Template 'desktop' built successfully!");
+console.log("Use: DesktopSandbox.create({ template: 'desktop' })");

@@ -72,6 +72,41 @@ def _get_lock(session_id: str) -> asyncio.Lock:
 
 
 # ============================================================
+# Template Selection
+# ============================================================
+
+
+def select_template(tools: list[str]) -> str:
+    """
+    Select the appropriate E2B template based on tools in the request.
+
+    Priority:
+    1. browser_* → desktop (Playwright + GUI + code interpreter)
+    2. code_execute → code-interpreter-v1 (Python REPL)
+    3. Other tools → base (lightweight)
+
+    Desktop template has BOTH browser AND code interpreter, so browser
+    tools take priority.
+
+    Args:
+        tools: List of tool names that will be used in this request
+
+    Returns:
+        Template ID from settings (desktop, code-interpreter-v1, or base)
+    """
+    # Browser tools require desktop template (GUI + Playwright)
+    if any(tool.startswith("browser_") for tool in tools):
+        return settings.e2b_template_desktop
+
+    # Code execution requires code interpreter
+    if "code_execute" in tools:
+        return settings.e2b_template_code
+
+    # Everything else uses lightweight base
+    return settings.e2b_template_base
+
+
+# ============================================================
 # Public API
 # ============================================================
 

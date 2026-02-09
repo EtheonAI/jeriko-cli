@@ -6,7 +6,7 @@
  * Playwright Chromium is pre-installed for agent browser automation.
  *
  * Build: npx tsx build.ts
- * Usage: E2BSandbox.create({ template: 'rubic-desktop' })
+ * Usage: DesktopSandbox.create({ template: 'desktop' })
  *
  * Ports:
  *   8080 — Neko HTTP + WebSocket (signaling + web client)
@@ -43,9 +43,7 @@ export const template = Template()
     "chmod +x /usr/local/bin/neko",
   ])
   // Set default terminal
-  .runCmd(
-    "ln -sf /usr/bin/xfce4-terminal.wrapper /etc/alternatives/x-terminal-emulator"
-  )
+  .runCmd("ln -sf /usr/bin/xfce4-terminal.wrapper /etc/alternatives/x-terminal-emulator")
   // Pre-install Playwright for agent browser automation
   .runCmd([
     "pip install playwright e2b-desktop",

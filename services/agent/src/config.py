@@ -24,7 +24,10 @@ class Settings(BaseSettings):
 
     # E2B Sandboxing
     e2b_api_key: str | None = None
-    e2b_template: str = "rubic-desktop"
+    e2b_template: str = "desktop"  # Default template (backward compat)
+    e2b_template_desktop: str = "desktop"  # Browser + GUI (Playwright)
+    e2b_template_code: str = "code-interpreter-v1"  # Python interpreter
+    e2b_template_base: str = "base"  # Lightweight
     e2b_warm_idle_ttl: int = 600  # 10 minutes — sandbox stays warm
     e2b_hibernate_reuse_ttl: int = 172800  # 48 hours — can reconnect
     e2b_hard_max_lifetime: int = 259200  # 72 hours — absolute max

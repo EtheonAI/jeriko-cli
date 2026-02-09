@@ -118,6 +118,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -251,6 +252,9 @@ class Messages(SyncAPIResource):
 
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
@@ -416,6 +420,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -553,6 +558,9 @@ class Messages(SyncAPIResource):
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
 
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
+
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
               Our models will normally stop when they have naturally completed their turn,
@@ -713,6 +721,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -849,6 +858,9 @@ class Messages(SyncAPIResource):
 
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
@@ -1009,6 +1021,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Literal[True] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -1070,6 +1083,7 @@ class Messages(SyncAPIResource):
                     "output_config": merged_output_config,
                     "output_format": omit,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "stream": stream,
                     "system": system,
@@ -1106,6 +1120,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Literal[True] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -1201,6 +1216,7 @@ class Messages(SyncAPIResource):
                     "output_config": merged_output_config,
                     "output_format": omit,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "stream": stream,
                     "system": system,
@@ -1242,6 +1258,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -1278,6 +1295,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -1313,6 +1331,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -1346,6 +1365,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: bool | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -1416,6 +1436,7 @@ class Messages(SyncAPIResource):
                 "output_config": output_config,
                 "output_format": output_format,
                 "service_tier": service_tier,
+                "speed": speed,
                 "stop_sequences": stop_sequences,
                 "system": system,
                 "temperature": temperature,
@@ -1469,6 +1490,7 @@ class Messages(SyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: None | BetaJSONOutputFormatParam | type[ResponseFormatT] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -1548,6 +1570,7 @@ class Messages(SyncAPIResource):
                     "inference_geo": inference_geo,
                     "mcp_servers": mcp_servers,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "system": system,
                     "temperature": temperature,
@@ -1581,6 +1604,7 @@ class Messages(SyncAPIResource):
         mcp_servers: Iterable[BetaRequestMCPServerURLDefinitionParam] | Omit = omit,
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         thinking: BetaThinkingConfigParam | Omit = omit,
         tool_choice: BetaToolChoiceParam | Omit = omit,
@@ -1687,6 +1711,9 @@ class Messages(SyncAPIResource):
 
               A schema to specify Claude's output format in responses. This parameter will be
               removed in a future release.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           system: System prompt.
 
@@ -1819,6 +1846,7 @@ class Messages(SyncAPIResource):
                     "mcp_servers": mcp_servers,
                     "output_config": merged_output_config,
                     "output_format": omit,
+                    "speed": speed,
                     "system": system,
                     "thinking": thinking,
                     "tool_choice": tool_choice,
@@ -1872,6 +1900,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -2005,6 +2034,9 @@ class AsyncMessages(AsyncAPIResource):
 
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
@@ -2170,6 +2202,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -2307,6 +2340,9 @@ class AsyncMessages(AsyncAPIResource):
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
 
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
+
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
               Our models will normally stop when they have naturally completed their turn,
@@ -2467,6 +2503,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -2603,6 +2640,9 @@ class AsyncMessages(AsyncAPIResource):
 
               Anthropic offers different levels of service for your API requests. See
               [service-tiers](https://docs.claude.com/en/api/service-tiers) for details.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           stop_sequences: Custom text sequences that will cause the model to stop generating.
 
@@ -2763,6 +2803,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Literal[True] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -2824,6 +2865,7 @@ class AsyncMessages(AsyncAPIResource):
                     "output_config": merged_output_config,
                     "output_format": omit,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "stream": stream,
                     "system": system,
@@ -2860,6 +2902,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Literal[True] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -2954,6 +2997,7 @@ class AsyncMessages(AsyncAPIResource):
                     "metadata": metadata,
                     "output_format": omit,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "stream": stream,
                     "system": system,
@@ -2995,6 +3039,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[False] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -3031,6 +3076,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -3066,6 +3112,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -3099,6 +3146,7 @@ class AsyncMessages(AsyncAPIResource):
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[type[ResponseFormatT]] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         stream: Literal[True] | Literal[False] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
@@ -3162,6 +3210,7 @@ class AsyncMessages(AsyncAPIResource):
                 "output_config": output_config,
                 "output_format": output_format,
                 "service_tier": service_tier,
+                "speed": speed,
                 "stop_sequences": stop_sequences,
                 "system": system,
                 "temperature": temperature,
@@ -3215,6 +3264,7 @@ class AsyncMessages(AsyncAPIResource):
         inference_geo: Optional[str] | Omit = omit,
         mcp_servers: Iterable[BetaRequestMCPServerURLDefinitionParam] | Omit = omit,
         service_tier: Literal["auto", "standard_only"] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         stop_sequences: SequenceNotStr[str] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         temperature: float | Omit = omit,
@@ -3292,6 +3342,7 @@ class AsyncMessages(AsyncAPIResource):
                     "inference_geo": inference_geo,
                     "mcp_servers": mcp_servers,
                     "service_tier": service_tier,
+                    "speed": speed,
                     "stop_sequences": stop_sequences,
                     "system": system,
                     "temperature": temperature,
@@ -3325,6 +3376,7 @@ class AsyncMessages(AsyncAPIResource):
         mcp_servers: Iterable[BetaRequestMCPServerURLDefinitionParam] | Omit = omit,
         output_config: BetaOutputConfigParam | Omit = omit,
         output_format: Optional[BetaJSONOutputFormatParam] | Omit = omit,
+        speed: Optional[Literal["standard", "fast"]] | Omit = omit,
         system: Union[str, Iterable[BetaTextBlockParam]] | Omit = omit,
         thinking: BetaThinkingConfigParam | Omit = omit,
         tool_choice: BetaToolChoiceParam | Omit = omit,
@@ -3431,6 +3483,9 @@ class AsyncMessages(AsyncAPIResource):
 
               A schema to specify Claude's output format in responses. This parameter will be
               removed in a future release.
+
+          speed: The inference speed mode for this request. `"fast"` enables high
+              output-tokens-per-second inference.
 
           system: System prompt.
 
@@ -3561,8 +3616,10 @@ class AsyncMessages(AsyncAPIResource):
                     "model": model,
                     "context_management": context_management,
                     "mcp_servers": mcp_servers,
+                    "mcp_servers": mcp_servers,
                     "output_config": merged_output_config,
                     "output_format": omit,
+                    "speed": speed,
                     "system": system,
                     "thinking": thinking,
                     "tool_choice": tool_choice,
