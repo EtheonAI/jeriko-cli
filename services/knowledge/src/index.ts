@@ -62,6 +62,7 @@ async function main() {
 
   const { app, logger, start } = await createService({
     name: "knowledge",
+    port: parseInt(process.env.PORT || "8001", 10),
   });
 
   // List knowledge groups
