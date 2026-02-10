@@ -8,6 +8,7 @@
     "analyze": "next experimental-analyze",
     "analyze:output": "next experimental-analyze --output",
     "test": "NODE_ENV=test vitest run",
+    "test:contract": "NODE_ENV=test vitest run __tests__/contracts/",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

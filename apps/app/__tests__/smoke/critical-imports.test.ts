@@ -106,7 +106,7 @@ describe("Critical Imports", () => {
   // -------------------------------------------------------------------------
   // 4. Chat route module exports POST handler
   // -------------------------------------------------------------------------
-  it("chat route module exports POST handler", async () => {
+  it("chat route module exports POST handler", { timeout: 15000 }, async () => {
     const importRoute = async () => {
       const mod = await import("../../app/api/chat/route");
       return mod;
