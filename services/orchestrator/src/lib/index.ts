@@ -8,3 +8,4 @@ export { SessionContextLoader } from "./session-context.js";
 export { TimelineWriter } from "./timeline-writer.js";
 export { FeatureFlagManager } from "./feature-flags.js";
 export { ShadowMetricsCollector } from "./shadow-metrics.js";
+export { RollbackDetector } from "./rollback-detector.js";
