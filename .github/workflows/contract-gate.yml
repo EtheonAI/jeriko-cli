@@ -1,0 +1,49 @@
+name: Contract Schema Gate
+
+on:
+  pull_request:
+    paths:
+      - "packages/contracts/**"
+      - "services/agent/**"
+      - "services/gateway/**"
+
+jobs:
+  schema-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Need history for baseline
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        run: pnpm --filter @repo/contracts build
+
+      - name: Check contract changes
+        run: pnpm tsx scripts/schema-diff.ts
+
+      - name: Comment on PR (if changes detected)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## ❌ Breaking Contract Changes Detected\n\nYour PR contains breaking changes to the contract schemas. This is not allowed during the refactor freeze.\n\nPlease:\n1. Review the CI logs above\n2. Revert the breaking changes\n3. Get approval from @refactor-2026-team if changes are necessary'
+            })
