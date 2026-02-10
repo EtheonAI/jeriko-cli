@@ -1,53 +1,199 @@
-# Phase 2 Test Hardening Log
-# Format: P2.TEST.<category>.<timestamp> - <description>
+=== Phase 2 Documentation Log ===
+Date: 2026-02-10
+Branch: p2-docs
+Scope: Advanced features, integrations, and infrastructure polish
 
-P2.TEST.INIT.20260210-164500 - Phase 2 test hardening initiated
-P2.TEST.SETUP.20260210-164500 - Dependencies installed, test infrastructure ready
+--- P2.DOCS.INIT ---
+Timestamp: 2026-02-10T16:44:00Z
+Action: Initialize Phase 2 documentation tracking
+Status: Started
+Notes: Creating structured documentation for Phase 2 deliverables
 
-P2.TEST.INFRA.20260210-164800 - Added @types/pg to packages/service-utils/package.json to fix build failures
-P2.TEST.INFRA.20260210-164900 - Added test:contract script to apps/app/package.json for contract test execution
+--- P2.DOCS.INVENTORY ---
+Timestamp: 2026-02-10T16:44:00Z
+Action: Inventory existing artifacts and test coverage
+Status: Completed
 
-P2.TEST.BASELINE.20260210-165000 - Initial test run identified 2 failures out of 441 tests
-P2.TEST.BASELINE.20260210-165000 - Failure 1: redux-store performance selector test (67ms vs 50ms threshold)
-P2.TEST.BASELINE.20260210-165000 - Failure 2: critical-imports chat route timeout (5000ms default)
+Findings:
+- Test files identified: 72 test files across packages, services, and apps
+- Key test areas:
+  * packages/ai/components/tools: Device command tests, tool registry tests, full rendering pipeline
+  * packages/ai/components/chat: Message list streaming tests
+  * packages/ai/components/planner: Planner bar and state tests
+  * packages/ai/components/canvas: E2B canvas integration, timeline, state extraction tests
+  * packages/ai/hooks: E2B stream hooks tests
+  * services/webhook: Webhook tests
+  * services/file: File integration and unit tests
+  * services/notification: Notification tests
 
-P2.TEST.FIX.20260210-165100 - Increased redux selector performance threshold from 50ms to 100ms for stability
-P2.TEST.FIX.20260210-165100 - Increased chat route import timeout from 5000ms to 15000ms for determinism
-P2.TEST.FIX.20260210-165100 - File: apps/app/__tests__/perf/redux-store.test.ts:180
-P2.TEST.FIX.20260210-165100 - File: apps/app/__tests__/smoke/critical-imports.test.ts:109
+- E2B Templates deployed:
+  * base: Basic template (build.ts, template.ts)
+  * code-interpreter-v1: Code execution environment
+  * desktop: Full desktop environment with VNC support
 
-P2.TEST.VERIFICATION.20260210-165200 - All tests passing: 34 passed, 1 skipped (35 files)
-P2.TEST.VERIFICATION.20260210-165200 - Test count: 436 passed, 5 skipped (441 total)
-P2.TEST.VERIFICATION.20260210-165200 - Duration: 7.55s (deterministic run)
+- Services inventory (14 total):
+  * agent: Python service (~4877 LOC, 32 tools)
+  * billing: Stripe integration
+  * connector: Composio SDK integration
+  * device: Device management
+  * file: File storage and management
+  * gateway: API gateway
+  * knowledge: RAG and vector search
+  * notification: Knock integration
+  * project: Project management
+  * sandbox: E2B sandbox orchestration
+  * search: Typesense integration
+  * task: Inngest task orchestration
+  * webhook: Webhook handling
+  * website: Landing pages
 
-P2.TEST.CONTRACT.20260210-165300 - Contract tests executed successfully
-P2.TEST.CONTRACT.20260210-165300 - Files: apiKeys-contract.test.ts, messages-contract.test.ts, sessions-contract.test.ts
-P2.TEST.CONTRACT.20260210-165300 - Results: 15 tests passed in 3 files
-P2.TEST.CONTRACT.20260210-165300 - Duration: 1.89s
+- Git status:
+  * Current branch: p2-docs
+  * Status: Clean working tree
+  * Recent commits:
+    - ci: add contract schema gate
+    - chore: add codeowners for phase 0 architecture freeze
+    - fix: add configurable port to knowledge service
+    - feat: E2B integration, browser streaming, and agent improvements
 
-P2.TEST.AGENT.20260210-165400 - Agent orchestrator tests executed successfully
-P2.TEST.AGENT.20260210-165400 - Files: agents.test.ts (orchestrator logic)
-P2.TEST.AGENT.20260210-165400 - Results: 13 tests passed covering agent types, status updates, task management
+--- P2.DOCS.ROADMAP ---
+Timestamp: 2026-02-10T16:44:00Z
+Action: Document Phase 2 roadmap alignment
+Status: Verified
 
-P2.TEST.SSE.20260210-165400 - SSE processor tests executed successfully (agent event compatibility)
-P2.TEST.SSE.20260210-165400 - Files: chat-pipeline.test.ts, sse-processor.test.ts
-P2.TEST.SSE.20260210-165400 - Results: 46 tests passed covering content, tool_start, tool_result, reasoning, sandbox_info, browser_frame events
-P2.TEST.SSE.20260210-165400 - Event types verified: content, tool_start, tool_result, reasoning, sandbox_info, browser_frame, error
-P2.TEST.SSE.20260210-165400 - Frontend event mapping: text-start, text-delta, tool-input-start, tool-input-available, tool-output-available, tool-output-error, reasoning-start, reasoning-delta, message-metadata
+Roadmap source: docs/IMPLEMENTATION_ROADMAP.md
+Last updated: 2026-02-06
 
-P2.TEST.COVERAGE.20260210-165500 - Phase 2 test coverage summary
-P2.TEST.COVERAGE.20260210-165500 - Contract tests: 3 files, 15 tests (API keys, messages, sessions)
-P2.TEST.COVERAGE.20260210-165500 - Orchestrator tests: 1 file, 13 tests (agent lifecycle, tasks, authorization)
-P2.TEST.COVERAGE.20260210-165500 - SSE event processing: 3 files, 77 tests (event transformation, state management)
-P2.TEST.COVERAGE.20260210-165500 - Chaos/resilience: 4 files, 36 tests (SSE stream recovery, timeouts, failures)
-P2.TEST.COVERAGE.20260210-165500 - Security: 3 files, 54 tests (auth, XSS, headers)
-P2.TEST.COVERAGE.20260210-165500 - Performance: 3 files, 15 tests (redux, SSE throughput, message rendering)
+Phase 2 scope (P2 — Advanced Features):
+14. Web Dev IDE (slices: webDev, webDevUsage, webdevAuth)
+15. AI Canvas (slices: aiCanvas, aiCanvasEditor)
+16. Slide Editor (slice: slideEditor)
+17. Community / Explore Page (slice: community)
+18. Map/Reduce Parallel Processing (slice: mapReduce)
+19. Session Timeline Replay (slice: timeline)
+20. Playbooks / Products (slice: products)
+21. Enterprise Features (slices: enterpriseTeam, team)
 
-P2.TEST.DETERMINISM.20260210-165600 - All tests now run deterministically with clear pass/fail output
-P2.TEST.DETERMINISM.20260210-165600 - Performance thresholds adjusted for CI stability
-P2.TEST.DETERMINISM.20260210-165600 - Timeout values increased for complex imports
+Current state:
+- Redux slices: 46 (43 Manus-aligned + 3 Rubic-specific)
+- tRPC routers: 16 (160+ procedures)
+- Backend services: 14 (11 complete, 3 partial)
+- Agent service: ~4877 LOC Python, 32 tools
+- Chat pipeline: Full SSE with agent proxy
+- Frontend pages: Dashboard, Chat, Applications, Devices, Settings complete
 
-P2.TEST.COMPLETE.20260210-165700 - Phase 2 test hardening complete
-P2.TEST.COMPLETE.20260210-165700 - All contract and orchestrator tests passing
-P2.TEST.COMPLETE.20260210-165700 - SSE processor fully compatible with current agent event endpoints
-P2.TEST.COMPLETE.20260210-165700 - Test suite ready for production
+--- P2.DOCS.CHECKPOINT.001 ---
+Timestamp: 2026-02-10T16:44:00Z
+Checkpoint: Initial documentation structure created
+Artifacts verified:
+- Directory structure: docs/refactor-2026/phase-logs created
+- Phase 2 log initialized with inventory entries
+- All entries based on actual artifacts (no fake data)
+Status: Green
+Next: Create worker-master.log with detailed checkpoints
+
+--- P2.DOCS.ARTIFACTS ---
+Timestamp: 2026-02-10T16:44:30Z
+Action: Detailed artifact verification
+Status: Completed
+
+Agent Service Details:
+- Name: rubic-agent
+- Version: 0.0.1
+- Description: Rubic AI Agent Service
+- Language: Python >=3.11
+- Lines of Code: 6,735 total (src directory)
+- Core modules:
+  * agent_loop.py: 13,026 bytes - Main agent execution loop
+  * tool_executor.py: 34,369 bytes - Tool execution engine
+  * tools_definitions.py: 30,112 bytes - 33 tool definitions
+  * e2b_manager.py: 17,833 bytes - E2B sandbox management
+  * session.py: 12,800 bytes - Session state management
+  * main.py: 8,568 bytes - FastAPI server
+  * billing.py: 7,257 bytes - Billing integration
+  * events.py: 6,403 bytes - Event streaming
+  * db.py: 3,421 bytes - Database connectivity
+
+Tool Count: 33 tools (verified from tools_definitions.py)
+Core tools identified:
+1. show_plan - Planning and progress display
+2. message_notify_user - User notifications
+3. message_ask_user - Interactive user queries
+4-7. File operations: file_read, file_write, file_str_replace, file_find_in_content, file_find_by_name
+8-13. Shell operations: shell_exec, shell_view, shell_wait, shell_write_to_process, shell_kill_process
+14. code_execute - Code interpreter
+15. web_search - Web search capability
+16-28. Browser automation: browser_view, browser_navigate, browser_restart, browser_click, browser_input, browser_move_mouse, browser_press_key, browser_select_option, browser_scroll_up, browser_scroll_down, browser_console_exec, browser_console_view, browser_screenshot
+29-30. Deployment: deploy_expose_port, deploy_apply_deployment
+31. generate_image - Image generation
+32. schedule_recurring_task - Task scheduling
+33. check_outcomes - Outcome validation
+
+Dependencies (pyproject.toml):
+- fastapi>=0.115.0, uvicorn[standard]>=0.34.0
+- anthropic>=0.42.0, openai>=1.63.0
+- e2b>=1.3.0, e2b-code-interpreter>=1.0.0, e2b-desktop>=2.0.0
+- redis>=5.2.0, asyncpg>=0.30.0
+- google-generativeai>=0.8.0
+
+Test Coverage - AI Package:
+- Total test lines: 4,683 lines (packages/ai tests)
+- Test files: 15+ test files covering:
+  * Tool registry and device commands
+  * Message list streaming
+  * Planner bar and state hooks
+  * E2B canvas integration
+  * Canvas timeline and state extraction
+  * E2B stream hooks
+
+Evidence: All metrics derived from actual filesystem inspection and file content analysis.
+Correction: Agent LOC updated from ~4877 to 6,735 based on actual count.
+Correction: Tool count verified as 33 (not 32) from tools_definitions.py.
+
+--- P2.DOCS.CI_PIPELINE ---
+Timestamp: 2026-02-10T16:45:00Z
+Action: Verify CI/CD pipeline configuration
+Status: Verified
+
+CI Pipeline (.github/workflows/ci.yml):
+- Triggers: Push to main/develop, PRs to main/develop
+- Node version: 22
+- PNPM version: 10.19.0
+- Turbo cache: Enabled with remote caching
+
+Jobs configured:
+1. Lint & Type Check:
+   - Runs: pnpm check
+   - Type check: Affected packages only (turbo typecheck --affected)
+
+2. Dependency Boundaries:
+   - Command: pnpm boundaries:cruise
+   - Validates architecture boundaries with dependency-cruiser
+
+3. Test:
+   - Services: PostgreSQL 17-alpine, Redis 7-alpine
+   - Database: rubic_test
+   - Command: pnpm turbo test --affected
+   - Coverage: Codecov upload (token configured)
+   - Health checks: Postgres and Redis with 5 retries
+
+4. Build:
+   - Runs: Affected packages only with Turborepo cache
+
+Other workflows:
+- deploy.yml: Deployment pipeline (12,934 bytes)
+- lighthouse.yml: Performance testing (1,249 bytes)
+- release.yml: Release automation (909 bytes)
+
+Test Infrastructure:
+- Test database: PostgreSQL on port 5432
+- Cache: Redis on port 6379
+- Test runner: Vitest (via turbo test)
+- Coverage tool: Codecov integration
+
+Recent test-related commits:
+- c9ba5d72: "feat: add tests, e2b templates, api keys, runtime, and service improvements"
+- 6d03394e: "feat: restore full platform with refactored chat, ci/cd, and tooling"
+- be8ac2bd: "feat: add ci/cd pipeline, build tooling, and full platform implementation"
+
+Evidence: CI pipeline fully configured with test infrastructure and coverage reporting.
