@@ -8,16 +8,7 @@ import {
   ServiceUnavailableError,
 } from "@repo/service-utils/errors";
 import { z } from "zod";
-import {
-  initDb,
-  db,
-  sandboxes,
-  sandboxExecutions,
-  sandboxFiles,
-  eq,
-  and,
-  desc,
-} from "./lib/db.js";
+import { initDb, db, sandboxes, sandboxExecutions, sandboxFiles, eq, and, desc } from "./lib/db.js";
 
 // ---------------------------------------------------------------------------
 // In-memory map of active E2B sandbox instances keyed by our DB sandbox ID
@@ -25,6 +16,44 @@ import {
 const sandboxMap = new Map<string, E2BSandbox>();
 
 const E2B_API_KEY = getEnv("E2B_API_KEY", "");
+
+// Execution boundaries and resource limits
+const MAX_EXECUTION_TIME_MS = parseInt(getEnv("MAX_EXECUTION_TIME_MS", "300000"), 10); // 5 min default
+const MAX_CODE_SIZE_BYTES = parseInt(getEnv("MAX_CODE_SIZE_BYTES", "1048576"), 10); // 1 MB default
+const MAX_FILE_SIZE_BYTES = parseInt(getEnv("MAX_FILE_SIZE_BYTES", "10485760"), 10); // 10 MB default
+const MAX_CONCURRENT_EXECUTIONS_PER_SANDBOX = parseInt(
+  getEnv("MAX_CONCURRENT_EXECUTIONS_PER_SANDBOX", "3"),
+  10
+);
+
+// Track concurrent executions per sandbox
+const sandboxExecutionCounts = new Map<string, number>();
+
+/**
+ * Check and increment execution count for a sandbox
+ * Throws error if limit exceeded
+ */
+function checkExecutionLimit(sandboxId: string): void {
+  const currentCount = sandboxExecutionCounts.get(sandboxId) || 0;
+  if (currentCount >= MAX_CONCURRENT_EXECUTIONS_PER_SANDBOX) {
+    throw new AppError(
+      `Sandbox has ${currentCount} concurrent executions (limit: ${MAX_CONCURRENT_EXECUTIONS_PER_SANDBOX})`,
+      429,
+      "TOO_MANY_EXECUTIONS"
+    );
+  }
+  sandboxExecutionCounts.set(sandboxId, currentCount + 1);
+}
+
+/**
+ * Decrement execution count for a sandbox
+ */
+function releaseExecutionSlot(sandboxId: string): void {
+  const currentCount = sandboxExecutionCounts.get(sandboxId) || 0;
+  if (currentCount > 0) {
+    sandboxExecutionCounts.set(sandboxId, currentCount - 1);
+  }
+}
 
 /**
  * Get or reconnect to an E2B sandbox instance.
@@ -52,11 +81,7 @@ async function getE2BSandbox(dbSandboxId: string): Promise<E2BSandbox> {
   }
 
   if (record.status === "stopped" || record.status === "terminated") {
-    throw new AppError(
-      `Sandbox ${dbSandboxId} is ${record.status}`,
-      410,
-      "SANDBOX_GONE",
-    );
+    throw new AppError(`Sandbox ${dbSandboxId} is ${record.status}`, 410, "SANDBOX_GONE");
   }
 
   // Reconnect to the E2B sandbox
@@ -119,6 +144,11 @@ const BrowserActionBody = z.object({
   params: z.record(z.string(), z.unknown()).optional(),
 });
 
+const UpdateResourcesBody = z.object({
+  cpuUsage: z.number().min(0).max(100).optional(),
+  memoryUsage: z.number().min(0).optional(),
+});
+
 const WriteFileBody = z.object({
   path: z.string().min(1),
   content: z.string(),
@@ -136,10 +166,23 @@ const ListFilesQuery = z.object({
 // Browser action allowlist
 // ---------------------------------------------------------------------------
 const ALLOWED_BROWSER_ACTIONS = new Set([
-  "navigate", "view", "click", "input", "scroll", "scroll_up", "scroll_down",
-  "key_press", "press_key", "move_mouse", "select_option",
-  "console_exec", "console_view", "screenshot", "take_screenshot",
-  "restart", "health",
+  "navigate",
+  "view",
+  "click",
+  "input",
+  "scroll",
+  "scroll_up",
+  "scroll_down",
+  "key_press",
+  "press_key",
+  "move_mouse",
+  "select_option",
+  "console_exec",
+  "console_view",
+  "screenshot",
+  "take_screenshot",
+  "restart",
+  "health",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -159,19 +202,14 @@ async function main() {
     onShutdown: [
       async () => {
         logger.info({ activeSandboxes: sandboxMap.size }, "Killing active E2B sandboxes");
-        const killPromises = Array.from(sandboxMap.entries()).map(
-          async ([dbId, e2bSandbox]) => {
-            try {
-              await e2bSandbox.kill();
-              logger.info({ sandboxId: dbId }, "Killed E2B sandbox on shutdown");
-            } catch (err) {
-              logger.warn(
-                { sandboxId: dbId, error: err },
-                "Failed to kill E2B sandbox on shutdown",
-              );
-            }
-          },
-        );
+        const killPromises = Array.from(sandboxMap.entries()).map(async ([dbId, e2bSandbox]) => {
+          try {
+            await e2bSandbox.kill();
+            logger.info({ sandboxId: dbId }, "Killed E2B sandbox on shutdown");
+          } catch (err) {
+            logger.warn({ sandboxId: dbId, error: err }, "Failed to kill E2B sandbox on shutdown");
+          }
+        });
         await Promise.allSettled(killPromises);
         sandboxMap.clear();
       },
@@ -218,8 +256,7 @@ async function main() {
         }
       } catch (error) {
         logger.error(error, "Failed to create E2B sandbox");
-        const message =
-          error instanceof Error ? error.message : "Failed to create sandbox";
+        const message = error instanceof Error ? error.message : "Failed to create sandbox";
         throw new BadGatewayError(message);
       }
 
@@ -254,7 +291,7 @@ async function main() {
 
       logger.info(
         { sandboxId: dbId, e2bSandboxId: e2bSandbox.sandboxId, userId, templateId },
-        "Sandbox created",
+        "Sandbox created"
       );
 
       return reply.success({
@@ -265,7 +302,7 @@ async function main() {
         template: templateId,
         vncUrl,
       });
-    }),
+    })
   );
 
   // Get sandbox
@@ -275,18 +312,99 @@ async function main() {
       const { id } = request.params;
       await verifySandboxOwner(id, request.userId);
 
-      const [sandbox] = await db
-        .select()
-        .from(sandboxes)
-        .where(eq(sandboxes.id, id))
-        .limit(1);
+      const [sandbox] = await db.select().from(sandboxes).where(eq(sandboxes.id, id)).limit(1);
 
       if (!sandbox) {
         throw new NotFoundError("Sandbox");
       }
 
       return reply.success(sandbox);
-    }),
+    })
+  );
+
+  // Resume/reconnect to existing sandbox
+  app.post(
+    "/sandboxes/:id/resume",
+    typedRoute({ params: IdParams }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+
+      const [sandbox] = await db.select().from(sandboxes).where(eq(sandboxes.id, id)).limit(1);
+
+      if (!sandbox) {
+        throw new NotFoundError("Sandbox");
+      }
+
+      // Check if sandbox is in a resumable state
+      if (sandbox.status === "terminated") {
+        throw new AppError("Cannot resume terminated sandbox", 410, "SANDBOX_TERMINATED");
+      }
+
+      // Check if already cached
+      const cached = sandboxMap.get(id);
+      if (cached) {
+        // Update last activity and return
+        await db
+          .update(sandboxes)
+          .set({
+            status: "running",
+            lastActivityAt: new Date(),
+          })
+          .where(eq(sandboxes.id, id));
+
+        logger.info({ sandboxId: id }, "Sandbox already active");
+        return reply.success({
+          id,
+          status: "running",
+          resumed: false,
+          alreadyActive: true,
+        });
+      }
+
+      // Try to reconnect to E2B sandbox
+      if (!sandbox.e2bSandboxId) {
+        throw new AppError("Sandbox has no E2B sandbox ID", 410, "SANDBOX_GONE");
+      }
+
+      try {
+        const e2bSandbox = await E2BSandbox.connect(sandbox.e2bSandboxId, {
+          apiKey: E2B_API_KEY,
+        });
+
+        sandboxMap.set(id, e2bSandbox);
+
+        // Update status and activity
+        await db
+          .update(sandboxes)
+          .set({
+            status: "running",
+            lastActivityAt: new Date(),
+          })
+          .where(eq(sandboxes.id, id));
+
+        logger.info(
+          { sandboxId: id, e2bSandboxId: sandbox.e2bSandboxId },
+          "Sandbox resumed successfully"
+        );
+
+        return reply.success({
+          id,
+          status: "running",
+          resumed: true,
+          e2bSandboxId: sandbox.e2bSandboxId,
+          hostname: sandbox.hostname,
+        });
+      } catch (error) {
+        // E2B sandbox no longer exists
+        const errorMsg = error instanceof Error ? error.message : "Failed to reconnect";
+
+        await db.update(sandboxes).set({ status: "terminated" }).where(eq(sandboxes.id, id));
+
+        logger.error({ sandboxId: id, error }, "Failed to resume sandbox - marking as terminated");
+
+        throw new AppError(`Sandbox no longer available: ${errorMsg}`, 410, "SANDBOX_GONE");
+      }
+    })
   );
 
   // List user sandboxes
@@ -305,7 +423,7 @@ async function main() {
         .orderBy(desc(sandboxes.createdAt));
 
       return reply.success({ sandboxes: results });
-    }),
+    })
   );
 
   // Execute code in sandbox (synchronous — waits for result)
@@ -316,8 +434,28 @@ async function main() {
       await verifySandboxOwner(id, request.userId);
       const { code, language, timeout } = request.body;
 
+      // Enforce execution boundaries
+      const codeSize = Buffer.byteLength(code, "utf-8");
+      if (codeSize > MAX_CODE_SIZE_BYTES) {
+        throw new AppError(
+          `Code size ${codeSize} bytes exceeds limit of ${MAX_CODE_SIZE_BYTES} bytes`,
+          413,
+          "CODE_TOO_LARGE"
+        );
+      }
+
+      const timeoutMs = Math.min(timeout || 30_000, MAX_EXECUTION_TIME_MS);
+      if (timeout && timeout > MAX_EXECUTION_TIME_MS) {
+        logger.warn(
+          { requestedTimeout: timeout, enforcedTimeout: timeoutMs },
+          "Timeout clamped to maximum"
+        );
+      }
+
+      // Check concurrent execution limit
+      checkExecutionLimit(id);
+
       const execId = createId();
-      const timeoutMs = timeout || 30_000;
       const startedAt = new Date();
 
       // Insert execution record
@@ -337,6 +475,7 @@ async function main() {
       try {
         e2bSandbox = await getE2BSandbox(id);
       } catch (err) {
+        releaseExecutionSlot(id);
         const errorMsg = err instanceof Error ? err.message : "Sandbox unavailable";
         await db
           .update(sandboxExecutions)
@@ -368,24 +507,22 @@ async function main() {
             stderr,
             exitCode: hasError ? 1 : 0,
             result: execution.toJSON(),
-            error: execution.error
-              ? `${execution.error.name}: ${execution.error.value}`
-              : null,
+            error: execution.error ? `${execution.error.name}: ${execution.error.value}` : null,
             completedAt,
             executionTimeMs,
           })
           .where(eq(sandboxExecutions.id, execId));
 
         // Update sandbox last activity
-        await db
-          .update(sandboxes)
-          .set({ lastActivityAt: completedAt })
-          .where(eq(sandboxes.id, id));
+        await db.update(sandboxes).set({ lastActivityAt: completedAt }).where(eq(sandboxes.id, id));
 
         logger.info(
           { sandboxId: id, executionId: execId, language, status, executionTimeMs },
-          "Execution completed",
+          "Execution completed"
         );
+
+        // Release execution slot
+        releaseExecutionSlot(id);
 
         return reply.success({
           id: execId,
@@ -405,15 +542,15 @@ async function main() {
           executionTimeMs,
         });
       } catch (error) {
+        // Release execution slot on error
+        releaseExecutionSlot(id);
+
         const completedAt = new Date();
         const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-        const errorMsg =
-          error instanceof Error ? error.message : "Execution failed";
+        const errorMsg = error instanceof Error ? error.message : "Execution failed";
 
         // Check if it's a timeout
-        const isTimeout =
-          error instanceof Error &&
-          error.message.toLowerCase().includes("timeout");
+        const isTimeout = error instanceof Error && error.message.toLowerCase().includes("timeout");
 
         await db
           .update(sandboxExecutions)
@@ -437,7 +574,7 @@ async function main() {
 
         throw new BadGatewayError(errorMsg);
       }
-    }),
+    })
   );
 
   // Get execution result
@@ -476,7 +613,7 @@ async function main() {
         result: execution.result || null,
         executionTimeMs: execution.executionTimeMs || null,
       });
-    }),
+    })
   );
 
   // Run shell command in sandbox (synchronous)
@@ -487,8 +624,22 @@ async function main() {
       await verifySandboxOwner(id, request.userId);
       const { command, timeout } = request.body;
 
+      // Enforce execution boundaries
+      const commandSize = Buffer.byteLength(command, "utf-8");
+      if (commandSize > MAX_CODE_SIZE_BYTES) {
+        throw new AppError(
+          `Command size ${commandSize} bytes exceeds limit of ${MAX_CODE_SIZE_BYTES} bytes`,
+          413,
+          "COMMAND_TOO_LARGE"
+        );
+      }
+
+      const timeoutMs = Math.min(timeout || 30_000, MAX_EXECUTION_TIME_MS);
+
+      // Check concurrent execution limit
+      checkExecutionLimit(id);
+
       const execId = createId();
-      const timeoutMs = timeout || 30_000;
       const startedAt = new Date();
 
       await db.insert(sandboxExecutions).values({
@@ -506,6 +657,7 @@ async function main() {
       try {
         e2bSandbox = await getE2BSandbox(id);
       } catch (err) {
+        releaseExecutionSlot(id);
         const errorMsg = err instanceof Error ? err.message : "Sandbox unavailable";
         await db
           .update(sandboxExecutions)
@@ -534,15 +686,15 @@ async function main() {
           })
           .where(eq(sandboxExecutions.id, execId));
 
-        await db
-          .update(sandboxes)
-          .set({ lastActivityAt: completedAt })
-          .where(eq(sandboxes.id, id));
+        await db.update(sandboxes).set({ lastActivityAt: completedAt }).where(eq(sandboxes.id, id));
 
         logger.info(
           { sandboxId: id, executionId: execId, exitCode: result.exitCode },
-          "Shell command completed",
+          "Shell command completed"
         );
+
+        // Release execution slot
+        releaseExecutionSlot(id);
 
         return reply.success({
           id: execId,
@@ -552,10 +704,12 @@ async function main() {
           executionTimeMs,
         });
       } catch (error) {
+        // Release execution slot on error
+        releaseExecutionSlot(id);
+
         const completedAt = new Date();
         const executionTimeMs = completedAt.getTime() - startedAt.getTime();
-        const errorMsg =
-          error instanceof Error ? error.message : "Command failed";
+        const errorMsg = error instanceof Error ? error.message : "Command failed";
 
         await db
           .update(sandboxExecutions)
@@ -570,7 +724,7 @@ async function main() {
         logger.error(error, "Failed to run shell command");
         throw new BadGatewayError(errorMsg);
       }
-    }),
+    })
   );
 
   // Browser control — proxy actions to the Playwright controller (port 9821) inside the sandbox
@@ -610,7 +764,7 @@ async function main() {
       }
 
       throw new BadGatewayError("No response from browser controller");
-    }),
+    })
   );
 
   // Write file to sandbox
@@ -620,6 +774,21 @@ async function main() {
       const { id } = request.params;
       await verifySandboxOwner(id, request.userId);
       const { path, content } = request.body;
+
+      // Validate file size
+      const fileSize = Buffer.byteLength(content, "utf-8");
+      if (fileSize > MAX_FILE_SIZE_BYTES) {
+        throw new AppError(
+          `File size ${fileSize} bytes exceeds limit of ${MAX_FILE_SIZE_BYTES} bytes`,
+          413,
+          "FILE_TOO_LARGE"
+        );
+      }
+
+      // Validate path (prevent path traversal attempts)
+      if (path.includes("..") || path.includes("~")) {
+        throw new AppError("Invalid file path: path traversal not allowed", 400, "INVALID_PATH");
+      }
 
       // Get E2B sandbox instance (throws AppError 410 if unavailable)
       const e2bSandbox = await getE2BSandbox(id);
@@ -643,7 +812,7 @@ async function main() {
 
       logger.info({ sandboxId: id, path }, "File written");
       return reply.success({ path, written: true });
-    }),
+    })
   );
 
   // Read file from sandbox
@@ -672,7 +841,7 @@ async function main() {
         }
         return reply.success({ path: file.path, content: file.content || "" });
       }
-    }),
+    })
   );
 
   // List files in sandbox
@@ -714,7 +883,34 @@ async function main() {
 
         return reply.success({ files: filesList });
       }
-    }),
+    })
+  );
+
+  // Update sandbox resource usage (for monitoring)
+  app.patch(
+    "/sandboxes/:id/resources",
+    typedRoute({ params: IdParams, body: UpdateResourcesBody }, async (request, reply) => {
+      const { id } = request.params;
+      await verifySandboxOwner(id, request.userId);
+      const { cpuUsage, memoryUsage } = request.body;
+
+      const updates: Partial<typeof sandboxes.$inferInsert> = {};
+      if (cpuUsage !== undefined) updates.cpuUsage = cpuUsage;
+      if (memoryUsage !== undefined) updates.memoryUsage = memoryUsage;
+
+      const [updated] = await db
+        .update(sandboxes)
+        .set({ ...updates, lastActivityAt: new Date() })
+        .where(eq(sandboxes.id, id))
+        .returning();
+
+      if (!updated) {
+        throw new NotFoundError("Sandbox");
+      }
+
+      logger.debug({ sandboxId: id, cpuUsage, memoryUsage }, "Resource usage updated");
+      return reply.success({ updated: true, cpuUsage, memoryUsage });
+    })
   );
 
   // Stop sandbox
@@ -732,7 +928,7 @@ async function main() {
         } catch (err) {
           logger.warn(
             { sandboxId: id, error: err },
-            "Failed to kill E2B sandbox (may already be stopped)",
+            "Failed to kill E2B sandbox (may already be stopped)"
           );
         }
         sandboxMap.delete(id);
@@ -751,10 +947,7 @@ async function main() {
             });
             await e2b.kill();
           } catch (err) {
-            logger.warn(
-              { sandboxId: id, error: err },
-              "Failed to kill E2B sandbox on stop",
-            );
+            logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on stop");
           }
         }
       }
@@ -771,7 +964,7 @@ async function main() {
 
       logger.info({ sandboxId: id }, "Sandbox stopped");
       return reply.success({ id, status: "stopped" });
-    }),
+    })
   );
 
   // Delete sandbox
@@ -787,10 +980,7 @@ async function main() {
         try {
           await cached.kill();
         } catch (err) {
-          logger.warn(
-            { sandboxId: id, error: err },
-            "Failed to kill E2B sandbox on delete",
-          );
+          logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on delete");
         }
         sandboxMap.delete(id);
       } else {
@@ -807,25 +997,19 @@ async function main() {
             });
             await e2b.kill();
           } catch (err) {
-            logger.warn(
-              { sandboxId: id, error: err },
-              "Failed to kill E2B sandbox on delete",
-            );
+            logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on delete");
           }
         }
       }
 
-      const [deleted] = await db
-        .delete(sandboxes)
-        .where(eq(sandboxes.id, id))
-        .returning();
+      const [deleted] = await db.delete(sandboxes).where(eq(sandboxes.id, id)).returning();
 
       if (!deleted) {
         throw new NotFoundError("Sandbox");
       }
 
       return reply.success({ deleted: true });
-    }),
+    })
   );
 
   // -------------------------------------------------------------------------
@@ -848,7 +1032,7 @@ async function main() {
 
       logger.info({ sandboxId: id }, "Browser stream URL requested");
       return reply.success({ streamUrl, sandboxId: id });
-    }),
+    })
   );
 
   // Get PTY WebSocket URL for live terminal streaming
@@ -864,7 +1048,7 @@ async function main() {
 
       logger.info({ sandboxId: id }, "Terminal stream URL requested");
       return reply.success({ streamUrl, sandboxId: id });
-    }),
+    })
   );
 
   // -------------------------------------------------------------------------
