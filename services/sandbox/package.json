@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@e2b/code-interpreter": "^1.0.6",
+    "@repo/contracts": "workspace:*",
     "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
     "drizzle-orm": "^0.45.1",
