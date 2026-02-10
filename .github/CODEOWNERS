@@ -1,37 +1,17 @@
-# Default owners for everything in the repo
-* @etheon/core-team
+# Architecture freeze during Rubic refactor (Phase 0-8)
+# All changes to architecture require approval from refactor team
 
-# Infrastructure
-/.github/ @etheon/devops
-/docker-compose*.yml @etheon/devops
-/**/Dockerfile @etheon/devops
+# Services - no new services, no architectural changes
+/services/ @refactor-2026-team
 
-# Services
-/services/gateway/ @etheon/backend
-/services/task/ @etheon/backend
-/services/billing/ @etheon/backend @etheon/billing-team
-/services/notification/ @etheon/backend
-/services/webhook/ @etheon/backend
-/services/connector/ @etheon/integrations
-/services/project/ @etheon/backend
-/services/knowledge/ @etheon/ai-team
-/services/sandbox/ @etheon/backend
-/services/search/ @etheon/backend
-/services/file/ @etheon/backend
-/services/website/ @etheon/backend
+# Packages - no new packages, no breaking changes
+/packages/ @refactor-2026-team
 
-# Packages
-/packages/database/ @etheon/backend
-/packages/service-utils/ @etheon/backend
-/packages/design-system/ @etheon/frontend
+# Redux slices - no new slices during refactor
+/apps/app/lib/store/slices/ @refactor-2026-team
 
-# Apps
-/apps/app/ @etheon/frontend
-/apps/web/ @etheon/frontend
-/apps/api/ @etheon/backend
-/apps/docs/ @etheon/docs
+# API routes - no new endpoints during freeze
+/apps/app/app/api/ @refactor-2026-team
 
-# Security-sensitive files
-/.github/SECURITY.md @etheon/security
-/packages/service-utils/src/auth/ @etheon/security
-/packages/service-utils/src/security/ @etheon/security
+# Database schema - no migrations during freeze
+/packages/database/src/schema/ @refactor-2026-team
