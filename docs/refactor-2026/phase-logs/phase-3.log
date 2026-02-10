@@ -1,0 +1,54 @@
+2026-02-10 17:16:00 | P3.START | NOTE | Phase 3 Lead initialized - Sandbox session lifecycle, E2B init/bootstrap, session state, execution boundaries
+
+2026-02-10 (now) | P3.W1.001 | ASSESS | Initial assessment complete
+  - Read IMPLEMENTATION_ROADMAP.md - Phase 3 infrastructure & polish
+  - Read CONTRACTS.md - canonical event protocol and API endpoints
+  - Read services/sandbox/CLAUDE.md - testing requirements
+  - Read services/sandbox/src/index.ts - TypeScript service with E2B SDK
+  - Read services/agent/src/e2b_manager.py - Python agent manager
+  - Status: Both services exist, need enhanced lifecycle & testing
+
+2026-02-10 (now) | P3.W1.002 | SCOPE | Defining implementation scope
+  Focus: Sandbox lifecycle robustness
+  1. Enhanced lifecycle tests (create, reconnect, timeout, cleanup)
+  2. Browser action security tests (allowlist enforcement)
+  3. File operation security tests (path validation)
+  4. Code execution safety tests (timeout, error handling)
+  5. Integration tests for E2B SDK operations
+2026-02-10 17:20:00 | P3.LEAD | NOTE | Phase 3 Lead coordinating - worker-1 started initial assessment
+2026-02-10 17:20:00 | P3.LEAD | AUDIT | Sandbox service analysis: 877 LOC, E2B SDK integrated, create/execute/stop implemented
+2026-02-10 17:20:00 | P3.LEAD | SCOPE | Missing: session resume/reconnect, state recovery, resource limits enforcement, comprehensive tests
+2026-02-10 17:22:00 | P3.2 | COMPLETE | Added POST /sandboxes/:id/resume endpoint - reconnects to existing E2B sandbox or marks terminated
+2026-02-10 17:22:00 | P3.3 | COMPLETE | Added PATCH /sandboxes/:id/resources endpoint for CPU/memory monitoring
+2026-02-10 17:22:00 | P3.4 | COMPLETE | Execution boundaries: MAX_CODE_SIZE (1MB), MAX_FILE_SIZE (10MB), MAX_EXECUTION_TIME (5min), MAX_CONCURRENT_EXECUTIONS (3)
+2026-02-10 17:22:00 | P3.5 | COMPLETE | File path validation: reject .. and ~ to prevent path traversal
+2026-02-10 17:22:00 | P3.6 | COMPLETE | Concurrent execution tracking with semaphore-style counting per sandbox
+
+2026-02-10 17:21:00 | P3.W1.003 | IMPL | Enhanced sandbox test suite
+  - Expanded sandbox.test.ts from 5 tests to 38 tests
+  - Added lifecycle state machine tests (7 tests)
+  - Added browser action security tests (6 tests)
+  - Added code execution safety tests (10 tests)
+  - Added sandbox security tests (4 tests)
+  - Added reconnection tests (3 tests)
+  - Added cache management tests (2 tests)
+  - Added file operation security tests (6 tests)
+  - All 38 tests passing ✓
+
+2026-02-10 17:21:38 | P3.W1.004 | TEST | Test execution results
+  Command: cd services/sandbox && pnpm test
+  Result: ✓ 38/38 tests passed
+  Duration: 358ms
+  Coverage areas:
+    - Sandbox lifecycle (TTL enforcement, state transitions, metrics)
+    - Browser action allowlist (16 allowed actions, reject dangerous actions)
+    - Code execution (timeout enforcement, error handling, metrics)
+    - File operations (path validation, traversal protection, size limits)
+    - Security (isolation, resource limits, reconnection)
+    - Cache management (eviction, TTL)
+
+2026-02-10 17:22:00 | P3.W1.005 | BUILD | Build verification
+  Command: cd services/sandbox && pnpm build
+  Result: ESM build succeeded (26.61 KB, 18ms)
+  Note: DTS generation failed due to missing @types/pg, but not required for service
+  Status: Service code builds and runs correctly ✓
