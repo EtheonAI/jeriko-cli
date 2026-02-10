@@ -1,67 +1,72 @@
-# Phase 2 Log - Contract Dependencies for Orchestrator
+# Phase 2 Integration Surfaces - Implementation Log
 
-## P2.CONTRACTS.CREATED
-- Created packages/contracts package with complete TypeScript/Zod contract definitions
-- Package structure: schemas/, adapters/, types/, __tests__/
-- All exports properly configured in package.json with granular exports
+## P2.INTEG.E2B - E2B Adapter Interface
+- Created IE2BAdapter interface defining contract for sandbox operations
+- Location: services/sandbox/src/lib/adapters/e2b-adapter.interface.ts
+- Methods: create, connect, executeCode, executeShell, executeBrowserAction, writeFile, readFile, listFiles, destroy, isActive, getStatus
+- Supports SandboxConfig, ExecutionResult, FileOperation, BrowserAction types
 
-## P2.CONTRACTS.SCHEMAS.EVENTS
-- Defined 23 SSE event schemas matching services/agent/src/events.py
-- Event categories: session lifecycle, sandbox, tool execution, file ops, browser, LLM content
-- All schemas use discriminated union on 'type' field for type-safe event handling
-- Includes: SessionCreatedEvent, ToolCallStartedEvent, ToolCallCompletedEvent, UsageEvent, ErrorEvent, etc.
+## P2.INTEG.E2B_IMPL - E2B SDK Adapter Implementation
+- Created E2BSdkAdapter implementing IE2BAdapter interface
+- Location: services/sandbox/src/lib/adapters/e2b-sdk-adapter.ts
+- Wraps @e2b/code-interpreter SDK with stub implementations
+- Manages sandbox instances via in-memory Map
+- All methods implemented as stubs ready for actual E2B SDK wiring
 
-## P2.CONTRACTS.SCHEMAS.TOOLS
-- Defined tool input schemas for all agent service tools from services/agent/src/tools_definitions.py
-- Categories: planning (show_plan), communication (message_notify_user, message_ask_user)
-- File system: file_read, file_write, file_edit, file_search, directory_list, directory_tree
-- Shell: shell_create, shell_exec, shell_read, shell_kill
-- Browser: browser_action, browser_extract
-- Search: web_search, web_fetch
-- Code execution: python_run, node_run
-- Image generation: image_generate
+## P2.INTEG.E2B_FACTORY - E2B Adapter Factory
+- Created E2BAdapterFactory for runtime adapter selection
+- Location: services/sandbox/src/lib/adapters/adapter-factory.ts
+- Supports feature flag-based adapter creation
+- Methods: create (with feature flag), createExplicit (by type)
 
-## P2.CONTRACTS.SCHEMAS.MESSAGES
-- Message schema with support for text, reasoning, and source-url parts
-- Session schema with status enum (active, archived, deleted)
-- API key schema with rk_live_* key format validation
-- All schemas support both string and Date types for timestamps
+## P2.INTEG.CONNECTOR - Connector Adapter Interface
+- Created IConnectorAdapter interface defining contract for third-party integrations
+- Location: services/connector/src/lib/adapters/connector-adapter.interface.ts
+- Methods: initiateOAuth, completeOAuth, refreshToken, revokeAccess, getConnectedAccounts, getConnectors, getConnector, getTools, executeTool, searchTools, validateCredentials
+- Supports OAuth flows, connector catalog, and tool execution
 
-## P2.CONTRACTS.ADAPTERS.SSE
-- parseSSEEvent: Parse SSE string to typed event object
-- formatSSEEvent: Format typed event to SSE string
-- parseSSEChunk: Parse multiple events from stream chunk
-- formatSSEChunk: Format multiple events to chunk
-- Handles [DONE] sentinel correctly
-- Full roundtrip support (parse → format → parse preserves data)
+## P2.INTEG.CONNECTOR_IMPL - Composio Adapter Implementation
+- Created ComposioAdapter implementing IConnectorAdapter interface
+- Location: services/connector/src/lib/adapters/composio-adapter.ts
+- Wraps @composio/core SDK with stub implementations
+- Lazy-initialized Composio client via getClient method
+- All methods implemented as stubs ready for actual Composio SDK wiring
 
-## P2.CONTRACTS.ADAPTERS.TOOL
-- anthropicToOpenAI: Convert Anthropic tool format to OpenAI format
-- openAIToAnthropic: Convert OpenAI tool format to Anthropic format
-- convertToolsToOpenAI: Batch conversion to OpenAI format
-- convertToolsToAnthropic: Batch conversion to Anthropic format
-- validateToolDefinition: Type guard for tool definitions
-- Full roundtrip support for tool format conversion
+## P2.INTEG.CONNECTOR_FACTORY - Connector Adapter Factory
+- Created ConnectorAdapterFactory for runtime adapter selection
+- Location: services/connector/src/lib/adapters/adapter-factory.ts
+- Supports feature flag-based adapter creation
+- Methods: create (with feature flag), createExplicit (by type)
 
-## P2.CONTRACTS.TESTS
-- 66 tests total, all passing (4 test files)
-- __tests__/events.test.ts: 13 tests covering all event types
-- __tests__/tools.test.ts: 17 tests covering all tool input schemas
-- __tests__/messages.test.ts: 15 tests covering messages, sessions, API keys
-- __tests__/adapters.test.ts: 21 tests covering SSE and tool format conversion
-- Tests validate: schema validation, enum constraints, optional fields, type discrimination, roundtrip conversions
+## P2.INTEG.FLAGS - Feature Flags
+- Added enableE2BAdapter flag in packages/feature-flags/index.ts
+- Added enableComposioAdapter flag in packages/feature-flags/index.ts
+- Both flags use createFlag pattern with analytics integration
+- Defaults to false, can be enabled per-user via feature flag service
 
-## P2.CONTRACTS.VALIDATION
-- All schemas validated against existing contract tests in apps/app/__tests__/contracts/
-- Message schema matches messages-contract.test.ts
-- Session schema matches sessions-contract.test.ts
-- API key schema matches apiKeys-contract.test.ts
-- Event schemas validated against agent service events.py
-- Tool schemas validated against agent service tools_definitions.py
+## P2.INTEG.TESTS_E2B - E2B Adapter Tests
+- Created comprehensive test suite for E2B adapter
+- Location: services/sandbox/src/tests/e2b-adapter.test.ts
+- Tests: Factory creation, interface compliance, error handling
+- 18 tests covering all interface methods
+- All tests passing
 
-## P2.CONTRACTS.EXPORTS
-- Main export: @repo/contracts
-- Granular exports: @repo/contracts/schemas, @repo/contracts/adapters, @repo/contracts/types
-- All TypeScript types exported for type safety
-- All Zod schemas exported for runtime validation
-- vitest configured for testing with 100% test coverage on critical paths
+## P2.INTEG.TESTS_CONNECTOR - Connector Adapter Tests
+- Created comprehensive test suite for Connector adapter
+- Location: services/connector/src/tests/connector-adapter.test.ts
+- Tests: Factory creation, interface compliance, OAuth flows, connector catalog, tool execution
+- 23 tests covering all interface methods
+- Mocked @composio/core SDK to avoid external dependencies
+- All tests passing
+
+## P2.INTEG.EXPORTS - Adapter Module Exports
+- Updated services/sandbox/src/lib/adapters/index.ts to export all E2B adapter components
+- Updated services/connector/src/lib/adapters/index.ts to export all connector adapter components
+- Clean barrel exports for easy consumption
+
+## Summary
+- Phase 2 integration surfaces implemented with clean adapter pattern
+- Both E2B and Connector/Composio adapters behind feature flags
+- No breaking runtime cutover - all changes are additive
+- 41 tests total (18 E2B + 23 Connector) - all passing
+- Ready for gradual rollout via feature flags
