@@ -202,6 +202,7 @@ vi.mock("../lib/db.js", () => {
     creditBalances: mockTable("creditBalances"),
     creditTransactions: mockTable("creditTransactions"),
     usageRecords: mockTable("usageRecords"),
+    usageLedger: mockTable("usageLedger"),
     paymentMethods: mockTable("paymentMethods"),
     invoices: mockTable("invoices"),
     initDb: vi.fn().mockResolvedValue(undefined),

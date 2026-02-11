@@ -11,6 +11,7 @@ import {
   creditBalances,
   creditTransactions,
   usageRecords,
+  usageLedger,
   paymentMethods,
   invoices,
   eq,
@@ -21,6 +22,7 @@ import {
   lte,
   initDb,
 } from "./lib/db.js";
+import { checkCredits, meterStepFinish, meterToolCall } from "./lib/metering.js";
 
 // ─── Stripe Client ───────────────────────────────────────────────────────────
 
@@ -66,6 +68,28 @@ const UsageHistoryQuery = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
   type: z.string().optional(),
+});
+
+const CheckCreditsBody = z.object({
+  userId: z.string().min(1),
+  required: z.number().positive(),
+});
+
+const MeterStepBody = z.object({
+  userId: z.string().min(1),
+  sessionId: z.string().min(1),
+  stepId: z.string().min(1),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  model: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const MeterToolBody = z.object({
+  userId: z.string().min(1),
+  sessionId: z.string().min(1),
+  toolName: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 // ─── Custom Errors ───────────────────────────────────────────────────────────
@@ -676,6 +700,49 @@ async function main() {
       .limit(100);
 
     return reply.success({ usage: records, total: records.length });
+  }));
+
+  // ─── Check Credits ───────────────────────────────────────────────────
+
+  app.post("/credits/check", typedRoute({ body: CheckCreditsBody }, async (request, reply) => {
+    const { userId, required } = request.body;
+
+    const result = await checkCredits(userId, required);
+
+    return reply.success(result);
+  }));
+
+  // ─── Meter Step Finish ───────────────────────────────────────────────
+
+  app.post("/metering/step", typedRoute({ body: MeterStepBody }, async (request, reply) => {
+    const { userId, sessionId, stepId, inputTokens, outputTokens, model, metadata } = request.body;
+
+    await meterStepFinish({
+      userId,
+      sessionId,
+      stepId,
+      inputTokens,
+      outputTokens,
+      model,
+      metadata,
+    });
+
+    return reply.success({ metered: true });
+  }));
+
+  // ─── Meter Tool Call ─────────────────────────────────────────────────
+
+  app.post("/metering/tool", typedRoute({ body: MeterToolBody }, async (request, reply) => {
+    const { userId, sessionId, toolName, metadata } = request.body;
+
+    await meterToolCall({
+      userId,
+      sessionId,
+      toolName,
+      metadata,
+    });
+
+    return reply.success({ metered: true });
   }));
 
   // ─── Stripe Webhook Handler ──────────────────────────────────────────────

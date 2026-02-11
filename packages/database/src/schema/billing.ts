@@ -383,6 +383,43 @@ export const invoicesRelations = relations(invoices, ({ one }) => ({
   }),
 }));
 
+// Usage Ledger (immutable append-only metering log for audit trail)
+export const usageLedger = pgTable("usage_ledger", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Event details
+  eventType: text("event_type", {
+    enum: ["step_start", "step_finish", "tool_call", "credits_grant", "credits_deduct"],
+  }).notNull(),
+  sessionId: text("session_id"),
+  stepId: text("step_id"),
+  toolName: text("tool_name"),
+  // Metering
+  creditsCharged: integer("credits_charged").default(0).notNull(),
+  // Token tracking
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  model: text("model"),
+  // Balance snapshot (for audit trail)
+  balanceBefore: integer("balance_before"),
+  balanceAfter: integer("balance_after"),
+  // Metadata
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  // Immutable timestamp
+  recordedAt: timestamp("recorded_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const usageLedgerRelations = relations(usageLedger, ({ one }) => ({
+  user: one(users, {
+    fields: [usageLedger.userId],
+    references: [users.id],
+  }),
+}));
+
 // Export types
 export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
 export type NewSubscriptionPlan = typeof subscriptionPlans.$inferInsert;
@@ -400,3 +437,5 @@ export type PaymentMethod = typeof paymentMethods.$inferSelect;
 export type NewPaymentMethod = typeof paymentMethods.$inferInsert;
 export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
+export type UsageLedger = typeof usageLedger.$inferSelect;
+export type NewUsageLedger = typeof usageLedger.$inferInsert;
