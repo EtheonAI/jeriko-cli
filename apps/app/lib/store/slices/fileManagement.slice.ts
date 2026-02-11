@@ -69,15 +69,24 @@ export interface FileManagementState {
   tempActiveDeployId: string | null;
   tempSpaceId: string | null;
 
-  // Upload
+  // Upload (P6.8: Enhanced progress tracking)
   uploadQueue: Array<{
     id: string;
     file: string;
+    fileName: string;
+    fileSize: number;
     progress: number;
+    bytesUploaded: number;
     status: "pending" | "uploading" | "completed" | "failed";
     error?: string;
+    startedAt?: string;
+    completedAt?: string;
+    uploadSpeed?: number; // bytes per second
+    estimatedTimeRemaining?: number; // seconds
   }>;
   isUploading: boolean;
+  totalUploadProgress: number; // Overall progress percentage
+  activeUploadsCount: number;
 
   // Error
   error: string | null;
@@ -100,6 +109,8 @@ const initialState: FileManagementState = {
   tempSpaceId: null,
   uploadQueue: [],
   isUploading: false,
+  totalUploadProgress: 0,
+  activeUploadsCount: 0,
   error: null,
 };
 
@@ -117,10 +128,7 @@ const fileManagementSlice = createSlice({
       state.spaces.push(action.payload);
     },
 
-    updateSpace: (
-      state,
-      action: PayloadAction<{ id: string; updates: Partial<FileSpace> }>
-    ) => {
+    updateSpace: (state, action: PayloadAction<{ id: string; updates: Partial<FileSpace> }>) => {
       const space = state.spaces.find((s) => s.id === action.payload.id);
       if (space) {
         Object.assign(space, action.payload.updates);
@@ -185,12 +193,8 @@ const fileManagementSlice = createSlice({
     },
 
     removeSessionFile: (state, action: PayloadAction<string>) => {
-      state.sessionFileList = state.sessionFileList.filter(
-        (f) => f.id !== action.payload
-      );
-      state.selectedFiles = state.selectedFiles.filter(
-        (id) => id !== action.payload
-      );
+      state.sessionFileList = state.sessionFileList.filter((f) => f.id !== action.payload);
+      state.selectedFiles = state.selectedFiles.filter((id) => id !== action.payload);
     },
 
     setInitSessionFileListLoading: (state, action: PayloadAction<boolean>) => {
@@ -209,10 +213,7 @@ const fileManagementSlice = createSlice({
       state.googleDrivePickerOptions = action.payload;
     },
 
-    openGoogleDrivePicker: (
-      state,
-      action: PayloadAction<GoogleDrivePickerOptions>
-    ) => {
+    openGoogleDrivePicker: (state, action: PayloadAction<GoogleDrivePickerOptions>) => {
       state.showGoogleDrivePicker = true;
       state.googleDrivePickerOptions = action.payload;
     },
@@ -240,26 +241,61 @@ const fileManagementSlice = createSlice({
       state.tempSpaceId = action.payload;
     },
 
-    // Upload queue
+    // Upload queue (P6.8: Enhanced with metadata and progress tracking)
     addToUploadQueue: (
       state,
-      action: PayloadAction<{ id: string; file: string }>
+      action: PayloadAction<{
+        id: string;
+        file: string;
+        fileName: string;
+        fileSize: number;
+      }>
     ) => {
       state.uploadQueue.push({
         ...action.payload,
         progress: 0,
+        bytesUploaded: 0,
         status: "pending",
       });
     },
 
     updateUploadProgress: (
       state,
-      action: PayloadAction<{ id: string; progress: number }>
+      action: PayloadAction<{
+        id: string;
+        progress: number;
+        bytesUploaded?: number;
+        uploadSpeed?: number;
+        estimatedTimeRemaining?: number;
+      }>
     ) => {
       const item = state.uploadQueue.find((u) => u.id === action.payload.id);
       if (item) {
+        if (item.status === "pending") {
+          item.startedAt = new Date().toISOString();
+        }
         item.progress = action.payload.progress;
         item.status = "uploading";
+        if (action.payload.bytesUploaded !== undefined) {
+          item.bytesUploaded = action.payload.bytesUploaded;
+        }
+        if (action.payload.uploadSpeed !== undefined) {
+          item.uploadSpeed = action.payload.uploadSpeed;
+        }
+        if (action.payload.estimatedTimeRemaining !== undefined) {
+          item.estimatedTimeRemaining = action.payload.estimatedTimeRemaining;
+        }
+      }
+
+      // Recalculate overall progress
+      const activeUploads = state.uploadQueue.filter(
+        (u) => u.status === "uploading" || u.status === "pending"
+      );
+      state.activeUploadsCount = activeUploads.length;
+
+      if (state.uploadQueue.length > 0) {
+        const totalProgress = state.uploadQueue.reduce((sum, u) => sum + u.progress, 0);
+        state.totalUploadProgress = Math.round(totalProgress / state.uploadQueue.length);
       }
     },
 
@@ -267,14 +303,30 @@ const fileManagementSlice = createSlice({
       const item = state.uploadQueue.find((u) => u.id === action.payload);
       if (item) {
         item.progress = 100;
+        item.bytesUploaded = item.fileSize;
         item.status = "completed";
+        item.completedAt = new Date().toISOString();
+        item.estimatedTimeRemaining = 0;
+      }
+
+      // Recalculate overall progress
+      const activeUploads = state.uploadQueue.filter(
+        (u) => u.status === "uploading" || u.status === "pending"
+      );
+      state.activeUploadsCount = activeUploads.length;
+
+      if (state.uploadQueue.length > 0) {
+        const totalProgress = state.uploadQueue.reduce((sum, u) => sum + u.progress, 0);
+        state.totalUploadProgress = Math.round(totalProgress / state.uploadQueue.length);
+      }
+
+      // Auto-set isUploading false if no active uploads
+      if (state.activeUploadsCount === 0) {
+        state.isUploading = false;
       }
     },
 
-    failUpload: (
-      state,
-      action: PayloadAction<{ id: string; error: string }>
-    ) => {
+    failUpload: (state, action: PayloadAction<{ id: string; error: string }>) => {
       const item = state.uploadQueue.find((u) => u.id === action.payload.id);
       if (item) {
         item.status = "failed";
@@ -283,13 +335,14 @@ const fileManagementSlice = createSlice({
     },
 
     removeFromUploadQueue: (state, action: PayloadAction<string>) => {
-      state.uploadQueue = state.uploadQueue.filter(
-        (u) => u.id !== action.payload
-      );
+      state.uploadQueue = state.uploadQueue.filter((u) => u.id !== action.payload);
     },
 
     clearUploadQueue: (state) => {
       state.uploadQueue = [];
+      state.totalUploadProgress = 0;
+      state.activeUploadsCount = 0;
+      state.isUploading = false;
     },
 
     setIsUploading: (state, action: PayloadAction<boolean>) => {

@@ -241,6 +241,25 @@ const chatSlice = createSlice({
         }
       }
     },
+    normalizeMessageParts: (
+      state,
+      action: PayloadAction<{
+        sessionId: string;
+        messageId: string;
+      }>
+    ) => {
+      const { sessionId, messageId } = action.payload;
+      const messages = state.messages[sessionId];
+      if (messages) {
+        const message = messages.find((m) => m.id === messageId);
+        if (message && message.parts && Array.isArray(message.parts)) {
+          // Filter out null/undefined parts and ensure valid structure
+          message.parts = message.parts.filter(
+            (part) => part !== null && part !== undefined && typeof part === "object"
+          );
+        }
+      }
+    },
     clearSessionMessages: (state, action: PayloadAction<string>) => {
       delete state.messages[action.payload];
     },
@@ -404,16 +423,10 @@ const chatSlice = createSlice({
     },
 
     // UIMessage management
-    setUIMessages: (
-      state,
-      action: PayloadAction<{ sessionId: string; messages: UIMessage[] }>
-    ) => {
+    setUIMessages: (state, action: PayloadAction<{ sessionId: string; messages: UIMessage[] }>) => {
       state.uiMessages[action.payload.sessionId] = action.payload.messages;
     },
-    addUIMessage: (
-      state,
-      action: PayloadAction<{ sessionId: string; message: UIMessage }>
-    ) => {
+    addUIMessage: (state, action: PayloadAction<{ sessionId: string; message: UIMessage }>) => {
       const { sessionId, message } = action.payload;
       if (!state.uiMessages[sessionId]) {
         state.uiMessages[sessionId] = [];
@@ -442,17 +455,11 @@ const chatSlice = createSlice({
     },
 
     // Streaming state
-    startMessageStream: (
-      state,
-      action: PayloadAction<{ messageId: string }>
-    ) => {
+    startMessageStream: (state, action: PayloadAction<{ messageId: string }>) => {
       state.streamingState.messageId = action.payload.messageId;
       state.streamingState.partialText = "";
     },
-    processStreamChunk: (
-      state,
-      action: PayloadAction<{ partId: string; text: string }>
-    ) => {
+    processStreamChunk: (state, action: PayloadAction<{ partId: string; text: string }>) => {
       state.streamingState.activePartId = action.payload.partId;
       state.streamingState.partialText += action.payload.text;
     },
@@ -467,14 +474,10 @@ const chatSlice = createSlice({
       state.pendingApprovals.push(action.payload);
     },
     removeToolApproval: (state, action: PayloadAction<string>) => {
-      state.pendingApprovals = state.pendingApprovals.filter(
-        (a) => a.id !== action.payload
-      );
+      state.pendingApprovals = state.pendingApprovals.filter((a) => a.id !== action.payload);
     },
     clearToolApprovals: (state, action: PayloadAction<string>) => {
-      state.pendingApprovals = state.pendingApprovals.filter(
-        (a) => a.sessionId !== action.payload
-      );
+      state.pendingApprovals = state.pendingApprovals.filter((a) => a.sessionId !== action.payload);
     },
 
     // Sources
@@ -537,6 +540,7 @@ export const {
   addMessage,
   updateMessage,
   appendToMessage,
+  normalizeMessageParts,
   clearSessionMessages,
   setStreaming,
   setCurrentStreamingSession,

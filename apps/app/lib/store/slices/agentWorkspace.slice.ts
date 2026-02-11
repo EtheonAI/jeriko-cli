@@ -10,12 +10,7 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
  * - Chat reply search
  */
 
-export type WorkspaceSidebarType =
-  | "agents"
-  | "sources"
-  | "files"
-  | "computer"
-  | null;
+export type WorkspaceSidebarType = "agents" | "sources" | "files" | "computer" | null;
 
 export interface ComputerPosition {
   top: number;
@@ -57,6 +52,20 @@ export interface AgentWorkspaceState {
   // Chat reply search
   chatReplySearchResults: Record<string, unknown>;
   chatReplySearchMetadata: ChatReplySearchMetadata | null;
+
+  // P6.10: Aggregate state for deterministic workspace layout
+  workspaceLayout: {
+    // Aggregated visibility state
+    isAnyPanelOpen: boolean;
+    isComputerVisible: boolean;
+    isPlannerVisible: boolean;
+    isSidebarVisible: boolean;
+    isFileHistoryVisible: boolean;
+    // Computed layout mode
+    layoutMode: "compact" | "expanded" | "fullscreen" | "split";
+    // Panel stack for navigation
+    panelStack: Array<"computer" | "planner" | "sidebar" | "fileHistory">;
+  };
 }
 
 const initialState: AgentWorkspaceState = {
@@ -85,7 +94,58 @@ const initialState: AgentWorkspaceState = {
 
   chatReplySearchResults: {},
   chatReplySearchMetadata: null,
+
+  workspaceLayout: {
+    isAnyPanelOpen: false,
+    isComputerVisible: false,
+    isPlannerVisible: false,
+    isSidebarVisible: false,
+    isFileHistoryVisible: false,
+    layoutMode: "compact",
+    panelStack: [],
+  },
 };
+
+// P6.10: Helper to recompute aggregate workspace layout state
+function recomputeWorkspaceLayout(state: AgentWorkspaceState) {
+  const isComputerVisible = state.chatComputerDialogVisible || state.vncDialogVisible;
+  const isPlannerVisible = state.isPlannerExpanded;
+  const isSidebarVisible = state.sidebarType !== null;
+  const isFileHistoryVisible = state.fileHistoryVisible;
+
+  state.workspaceLayout.isComputerVisible = isComputerVisible;
+  state.workspaceLayout.isPlannerVisible = isPlannerVisible;
+  state.workspaceLayout.isSidebarVisible = isSidebarVisible;
+  state.workspaceLayout.isFileHistoryVisible = isFileHistoryVisible;
+
+  const openPanelCount = [
+    isComputerVisible,
+    isPlannerVisible,
+    isSidebarVisible,
+    isFileHistoryVisible,
+  ].filter(Boolean).length;
+
+  state.workspaceLayout.isAnyPanelOpen = openPanelCount > 0;
+
+  // Determine layout mode
+  if (state.isSidebarPreviewFullscreen) {
+    state.workspaceLayout.layoutMode = "fullscreen";
+  } else if (openPanelCount === 0) {
+    state.workspaceLayout.layoutMode = "compact";
+  } else if (openPanelCount >= 2) {
+    state.workspaceLayout.layoutMode = "split";
+  } else {
+    state.workspaceLayout.layoutMode = "expanded";
+  }
+
+  // Update panel stack (for navigation/history)
+  const newStack: Array<"computer" | "planner" | "sidebar" | "fileHistory"> = [];
+  if (isComputerVisible) newStack.push("computer");
+  if (isPlannerVisible) newStack.push("planner");
+  if (isSidebarVisible) newStack.push("sidebar");
+  if (isFileHistoryVisible) newStack.push("fileHistory");
+  state.workspaceLayout.panelStack = newStack;
+}
 
 const agentWorkspaceSlice = createSlice({
   name: "agentWorkspace",
@@ -94,16 +154,15 @@ const agentWorkspaceSlice = createSlice({
     // Computer view
     setChatComputerDialogVisible: (state, action: PayloadAction<boolean>) => {
       state.chatComputerDialogVisible = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
     setVncDialogVisible: (state, action: PayloadAction<boolean>) => {
       state.vncDialogVisible = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
-    setInitialComputerPosition: (
-      state,
-      action: PayloadAction<Partial<ComputerPosition>>
-    ) => {
+    setInitialComputerPosition: (state, action: PayloadAction<Partial<ComputerPosition>>) => {
       state.initialComputerPosition = {
         ...state.initialComputerPosition,
         ...action.payload,
@@ -113,10 +172,12 @@ const agentWorkspaceSlice = createSlice({
     // Planner
     setIsPlannerExpanded: (state, action: PayloadAction<boolean>) => {
       state.isPlannerExpanded = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
     togglePlannerExpanded: (state) => {
       state.isPlannerExpanded = !state.isPlannerExpanded;
+      recomputeWorkspaceLayout(state);
     },
 
     setIsTimelinePlaying: (state, action: PayloadAction<boolean>) => {
@@ -127,6 +188,7 @@ const agentWorkspaceSlice = createSlice({
     setWorkspaceSidebarType: (state, action: PayloadAction<WorkspaceSidebarType>) => {
       state.prevAutoOpenedSidebarType = state.sidebarType;
       state.sidebarType = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
     setIsSidebarVisibleInMobile: (state, action: PayloadAction<boolean>) => {
@@ -135,6 +197,7 @@ const agentWorkspaceSlice = createSlice({
 
     setIsSidebarPreviewFullscreen: (state, action: PayloadAction<boolean>) => {
       state.isSidebarPreviewFullscreen = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
     toggleWorkspaceSidebar: (state, action: PayloadAction<WorkspaceSidebarType>) => {
@@ -145,15 +208,18 @@ const agentWorkspaceSlice = createSlice({
         state.prevAutoOpenedSidebarType = state.sidebarType;
         state.sidebarType = action.payload;
       }
+      recomputeWorkspaceLayout(state);
     },
 
     // File history
     setFileHistoryVisible: (state, action: PayloadAction<boolean>) => {
       state.fileHistoryVisible = action.payload;
+      recomputeWorkspaceLayout(state);
     },
 
     toggleFileHistory: (state) => {
       state.fileHistoryVisible = !state.fileHistoryVisible;
+      recomputeWorkspaceLayout(state);
     },
 
     // Animation
@@ -174,10 +240,7 @@ const agentWorkspaceSlice = createSlice({
       state.chatReplySearchResults = action.payload;
     },
 
-    setChatReplySearchMetadata: (
-      state,
-      action: PayloadAction<ChatReplySearchMetadata | null>
-    ) => {
+    setChatReplySearchMetadata: (state, action: PayloadAction<ChatReplySearchMetadata | null>) => {
       state.chatReplySearchMetadata = action.payload;
     },
 
@@ -190,6 +253,53 @@ const agentWorkspaceSlice = createSlice({
     resetAgentWorkspace: (state) => {
       Object.assign(state, initialState);
     },
+  },
+  // P6.7: Plan-related event mappings from websocket
+  extraReducers: (builder) => {
+    builder
+      .addCase("websocket/plan:expanded", (state) => {
+        state.isPlannerExpanded = true;
+        recomputeWorkspaceLayout(state);
+      })
+      .addCase("websocket/plan:collapsed", (state) => {
+        state.isPlannerExpanded = false;
+        recomputeWorkspaceLayout(state);
+      })
+      .addCase("websocket/plan:toggle", (state) => {
+        state.isPlannerExpanded = !state.isPlannerExpanded;
+        recomputeWorkspaceLayout(state);
+      })
+      .addCase("websocket/timeline:play", (state) => {
+        state.isTimelinePlaying = true;
+      })
+      .addCase("websocket/timeline:pause", (state) => {
+        state.isTimelinePlaying = false;
+      })
+      .addCase("websocket/timeline:toggle", (state) => {
+        state.isTimelinePlaying = !state.isTimelinePlaying;
+      })
+      .addCase(
+        "websocket/workspace:sidebar:open",
+        (state, action: { payload?: { type?: WorkspaceSidebarType } }) => {
+          const sidebarType = action.payload?.type || null;
+          state.prevAutoOpenedSidebarType = state.sidebarType;
+          state.sidebarType = sidebarType;
+          recomputeWorkspaceLayout(state);
+        }
+      )
+      .addCase("websocket/workspace:sidebar:close", (state) => {
+        state.prevAutoOpenedSidebarType = state.sidebarType;
+        state.sidebarType = null;
+        recomputeWorkspaceLayout(state);
+      })
+      .addCase("websocket/workspace:fileHistory:open", (state) => {
+        state.fileHistoryVisible = true;
+        recomputeWorkspaceLayout(state);
+      })
+      .addCase("websocket/workspace:fileHistory:close", (state) => {
+        state.fileHistoryVisible = false;
+        recomputeWorkspaceLayout(state);
+      });
   },
 });
 

@@ -21,10 +21,27 @@ export type NotificationType =
 
 export type NotificationPriority = "low" | "normal" | "high" | "urgent";
 
+// P6.14: Enhanced notification action routing
 export interface NotificationAction {
   label: string;
-  action: string;
+  action: string; // Action type to dispatch
+  actionType: "navigation" | "dispatch" | "external" | "callback";
+  // Navigation action (route to URL)
+  route?: string;
+  // Dispatch action (trigger Redux action)
+  dispatchAction?: {
+    type: string;
+    payload?: Record<string, unknown>;
+  };
+  // External link
+  externalUrl?: string;
+  // Callback identifier
+  callbackId?: string;
+  // Additional metadata
   data?: Record<string, unknown>;
+  // Visual properties
+  variant?: "primary" | "secondary" | "danger" | "success";
+  icon?: string;
 }
 
 export interface Notification {
@@ -100,6 +117,21 @@ export interface NotificationsState {
   // Real-time updates
   hasNewNotifications: boolean;
   lastFetchedAt: string | null;
+  // P6.14: Action routing state
+  pendingActions: Array<{
+    notificationId: string;
+    action: NotificationAction;
+    triggeredAt: string;
+  }>;
+  actionHistory: Array<{
+    notificationId: string;
+    action: NotificationAction;
+    triggeredAt: string;
+    completedAt: string;
+    success: boolean;
+    error?: string;
+  }>;
+  maxActionHistory: number;
   // Manus compatibility fields
   connectStatus: "default" | "connecting" | "connected" | "error";
   connectError: string | null;
@@ -164,6 +196,9 @@ const initialState: NotificationsState = {
   },
   hasNewNotifications: false,
   lastFetchedAt: null,
+  pendingActions: [],
+  actionHistory: [],
+  maxActionHistory: 100,
   connectStatus: "default",
   connectError: null,
   categoryNotifications: { "0": [], "1": [], "2": [] },
@@ -358,21 +393,117 @@ const notificationsSlice = createSlice({
       state.hasMore = false;
       state.cursor = null;
     },
+
+    // P6.14: Action routing
+    triggerNotificationAction: (
+      state,
+      action: PayloadAction<{
+        notificationId: string;
+        action: NotificationAction;
+      }>
+    ) => {
+      const { notificationId, action: notificationAction } = action.payload;
+
+      // Add to pending actions
+      state.pendingActions.push({
+        notificationId,
+        action: notificationAction,
+        triggeredAt: new Date().toISOString(),
+      });
+
+      // Auto-mark notification as read when action is triggered
+      const notification = state.notifications.find((n) => n.id === notificationId);
+      if (notification && !notification.isRead) {
+        notification.isRead = true;
+        notification.readAt = new Date().toISOString();
+        state.unreadCount = Math.max(0, state.unreadCount - 1);
+        state.unreadByType[notification.type] = Math.max(
+          0,
+          state.unreadByType[notification.type] - 1
+        );
+      }
+    },
+
+    completeNotificationAction: (
+      state,
+      action: PayloadAction<{
+        notificationId: string;
+        actionLabel: string;
+        success: boolean;
+        error?: string;
+      }>
+    ) => {
+      const { notificationId, actionLabel, success, error } = action.payload;
+
+      // Find and remove from pending
+      const pendingIndex = state.pendingActions.findIndex(
+        (pa) => pa.notificationId === notificationId && pa.action.label === actionLabel
+      );
+
+      if (pendingIndex !== -1) {
+        const pending = state.pendingActions[pendingIndex];
+
+        // Add to history
+        state.actionHistory.unshift({
+          notificationId: pending.notificationId,
+          action: pending.action,
+          triggeredAt: pending.triggeredAt,
+          completedAt: new Date().toISOString(),
+          success,
+          error,
+        });
+
+        // Trim history to max size
+        if (state.actionHistory.length > state.maxActionHistory) {
+          state.actionHistory = state.actionHistory.slice(0, state.maxActionHistory);
+        }
+
+        // Remove from pending
+        state.pendingActions.splice(pendingIndex, 1);
+      }
+    },
+
+    clearPendingActions: (state) => {
+      state.pendingActions = [];
+    },
+
+    clearActionHistory: (state) => {
+      state.actionHistory = [];
+    },
+
+    setMaxActionHistory: (state, action: PayloadAction<number>) => {
+      state.maxActionHistory = action.payload;
+      if (state.actionHistory.length > action.payload) {
+        state.actionHistory = state.actionHistory.slice(0, action.payload);
+      }
+    },
   },
   extraReducers: (builder) => {
     // Manus compatibility (notification slice name)
-    builder.addCase("notification/setConnectStatus", (state, action) => {
-      state.connectStatus = (action as any).payload;
-    });
-    builder.addCase("notification/setFetchNotificationListLoading", (state, action) => {
-      state.fetchNotificationLoading = (action as any).payload;
-    });
-    builder.addCase("notification/setHasMoreNotification", (state, action) => {
-      state.categoryHasMore = (action as any).payload ?? state.categoryHasMore;
-    });
-    builder.addCase("notification/setCategoryNotificationList", (state, action) => {
-      state.categoryNotifications = (action as any).payload ?? state.categoryNotifications;
-    });
+    builder.addCase(
+      "notification/setConnectStatus",
+      (state, action: { payload: "default" | "connecting" | "connected" | "error" }) => {
+        state.connectStatus = action.payload;
+      }
+    );
+    builder.addCase(
+      "notification/setFetchNotificationListLoading",
+      (state, action: { payload: boolean }) => {
+        state.fetchNotificationLoading = action.payload;
+      }
+    );
+    builder.addCase(
+      "notification/setHasMoreNotification",
+      (state, action: { payload?: Record<string, boolean> }) => {
+        state.categoryHasMore = action.payload ?? state.categoryHasMore;
+      }
+    );
+    builder.addCase(
+      "notification/setCategoryNotificationList",
+      (state, action: { payload?: Record<string, Notification[]> }) => {
+        state.categoryNotifications = action.payload ?? state.categoryNotifications;
+      }
+    );
   },
 });
 
@@ -394,6 +525,12 @@ export const {
   setHasNewNotifications,
   setNotificationsError,
   clearNotifications,
+  // P6.14: Action routing
+  triggerNotificationAction,
+  completeNotificationAction,
+  clearPendingActions,
+  clearActionHistory,
+  setMaxActionHistory,
 } = notificationsSlice.actions;
 
 export default notificationsSlice.reducer;

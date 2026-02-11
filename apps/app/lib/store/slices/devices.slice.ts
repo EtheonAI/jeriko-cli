@@ -12,9 +12,20 @@ export interface DeviceItem {
   updatedAt: string;
 }
 
+export interface DeviceApprovalRequest {
+  id: string;
+  deviceId: string;
+  userId: string;
+  deviceName: string;
+  deviceType: DeviceItem["type"];
+  requestedAt: string;
+  status: "pending" | "approved" | "rejected";
+}
+
 export interface DevicesState {
   devices: DeviceItem[];
   selectedDeviceId: string | null;
+  approvalRequests: DeviceApprovalRequest[];
   isLoading: boolean;
   error: string | null;
 }
@@ -22,6 +33,7 @@ export interface DevicesState {
 const initialState: DevicesState = {
   devices: [],
   selectedDeviceId: null,
+  approvalRequests: [],
   isLoading: false,
   error: null,
 };
@@ -69,6 +81,28 @@ const devicesSlice = createSlice({
       state.error = action.payload;
       state.isLoading = false;
     },
+    // Device approval flow
+    addApprovalRequest: (state, action: PayloadAction<DeviceApprovalRequest>) => {
+      state.approvalRequests.push(action.payload);
+    },
+    approveDevice: (state, action: PayloadAction<string>) => {
+      const request = state.approvalRequests.find((r) => r.id === action.payload);
+      if (request) {
+        request.status = "approved";
+      }
+    },
+    rejectDevice: (state, action: PayloadAction<string>) => {
+      const request = state.approvalRequests.find((r) => r.id === action.payload);
+      if (request) {
+        request.status = "rejected";
+      }
+    },
+    removeApprovalRequest: (state, action: PayloadAction<string>) => {
+      state.approvalRequests = state.approvalRequests.filter((r) => r.id !== action.payload);
+    },
+    clearApprovalRequests: (state) => {
+      state.approvalRequests = [];
+    },
   },
 });
 
@@ -80,6 +114,11 @@ export const {
   setSelectedDevice,
   setDevicesLoading,
   setDevicesError,
+  addApprovalRequest,
+  approveDevice,
+  rejectDevice,
+  removeApprovalRequest,
+  clearApprovalRequests,
 } = devicesSlice.actions;
 
 export default devicesSlice.reducer;

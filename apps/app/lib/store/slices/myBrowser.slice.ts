@@ -35,6 +35,31 @@ export interface BrowserSettings {
   darkMode: "auto" | "light" | "dark";
 }
 
+// P6.9: Frame metadata for browser extension iframe/window management
+export interface BrowserFrameMetadata {
+  frameId: string;
+  tabId: string;
+  url: string;
+  title: string;
+  frameType: "main_frame" | "sub_frame" | "popup" | "devtools";
+  isActive: boolean;
+  lastActiveAt: string;
+  // Viewport information
+  viewport?: {
+    width: number;
+    height: number;
+    devicePixelRatio: number;
+  };
+  // Performance metrics
+  performance?: {
+    loadTime?: number; // milliseconds
+    domContentLoadedTime?: number;
+    firstContentfulPaint?: number;
+  };
+  // Custom metadata
+  metadata?: Record<string, unknown>;
+}
+
 export interface MyBrowserState {
   // Browser settings
   browserSettings: BrowserSettings | null;
@@ -63,6 +88,11 @@ export interface MyBrowserState {
     capturedAt: string;
   }>;
 
+  // P6.9: Frame metadata tracking
+  frames: Record<string, BrowserFrameMetadata>; // frameId -> metadata
+  activeFrameId: string | null;
+  frameCount: number;
+
   // Loading
   isLoading: boolean;
   isSaving: boolean;
@@ -83,6 +113,9 @@ const initialState: MyBrowserState = {
   lastCaptureUrl: null,
   lastCaptureTimestamp: null,
   recentCaptures: [],
+  frames: {},
+  activeFrameId: null,
+  frameCount: 0,
   isLoading: false,
   isSaving: false,
   error: null,
@@ -114,18 +147,12 @@ export const myBrowserSlice = createSlice({
   initialState,
   reducers: {
     // Browser settings
-    setBrowserSettings: (
-      state,
-      action: PayloadAction<BrowserSettings | null>
-    ) => {
+    setBrowserSettings: (state, action: PayloadAction<BrowserSettings | null>) => {
       state.browserSettings = action.payload;
       state.isLoading = false;
     },
 
-    updateBrowserSettings: (
-      state,
-      action: PayloadAction<Partial<BrowserSettings>>
-    ) => {
+    updateBrowserSettings: (state, action: PayloadAction<Partial<BrowserSettings>>) => {
       if (state.browserSettings) {
         state.browserSettings = { ...state.browserSettings, ...action.payload };
       } else {
@@ -205,9 +232,7 @@ export const myBrowserSlice = createSlice({
     },
 
     removeRecentCapture: (state, action: PayloadAction<string>) => {
-      state.recentCaptures = state.recentCaptures.filter(
-        (c) => c.id !== action.payload
-      );
+      state.recentCaptures = state.recentCaptures.filter((c) => c.id !== action.payload);
     },
 
     // Shortcuts
@@ -235,10 +260,9 @@ export const myBrowserSlice = createSlice({
 
     removeExcludedDomain: (state, action: PayloadAction<string>) => {
       if (state.browserSettings) {
-        state.browserSettings.excludedDomains =
-          state.browserSettings.excludedDomains.filter(
-            (d) => d !== action.payload
-          );
+        state.browserSettings.excludedDomains = state.browserSettings.excludedDomains.filter(
+          (d) => d !== action.payload
+        );
       }
     },
 
@@ -249,6 +273,84 @@ export const myBrowserSlice = createSlice({
 
     setIsSaving: (state, action: PayloadAction<boolean>) => {
       state.isSaving = action.payload;
+    },
+
+    // P6.9: Frame metadata management
+    setFrameMetadata: (state, action: PayloadAction<BrowserFrameMetadata>) => {
+      const { frameId } = action.payload;
+      state.frames[frameId] = action.payload;
+      state.frameCount = Object.keys(state.frames).length;
+
+      // Update active frame if this frame is active
+      if (action.payload.isActive) {
+        state.activeFrameId = frameId;
+        // Mark other frames as inactive
+        Object.keys(state.frames).forEach((fid) => {
+          if (fid !== frameId && state.frames[fid]) {
+            state.frames[fid].isActive = false;
+          }
+        });
+      }
+    },
+
+    updateFrameMetadata: (
+      state,
+      action: PayloadAction<{
+        frameId: string;
+        updates: Partial<BrowserFrameMetadata>;
+      }>
+    ) => {
+      const { frameId, updates } = action.payload;
+      const frame = state.frames[frameId];
+      if (frame) {
+        state.frames[frameId] = { ...frame, ...updates };
+
+        // Update active frame if changed
+        if (updates.isActive && !frame.isActive) {
+          state.activeFrameId = frameId;
+          // Mark other frames as inactive
+          Object.keys(state.frames).forEach((fid) => {
+            if (fid !== frameId && state.frames[fid]) {
+              state.frames[fid].isActive = false;
+            }
+          });
+        }
+      }
+    },
+
+    removeFrame: (state, action: PayloadAction<string>) => {
+      const frameId = action.payload;
+      if (state.frames[frameId]) {
+        delete state.frames[frameId];
+        state.frameCount = Object.keys(state.frames).length;
+
+        // Clear active frame if it was removed
+        if (state.activeFrameId === frameId) {
+          state.activeFrameId = null;
+        }
+      }
+    },
+
+    setActiveFrame: (state, action: PayloadAction<string>) => {
+      const frameId = action.payload;
+      if (state.frames[frameId]) {
+        state.activeFrameId = frameId;
+        // Update all frame active states
+        Object.keys(state.frames).forEach((fid) => {
+          if (state.frames[fid]) {
+            state.frames[fid].isActive = fid === frameId;
+            if (fid === frameId) {
+              state.frames[fid].lastActiveAt = new Date().toISOString();
+            }
+          }
+        });
+      }
+    },
+
+    clearAllFrames: (state) => {
+      state.frames = {};
+      state.activeFrameId = null;
+      state.frameCount = 0;
     },
 
     // Error
@@ -282,6 +384,12 @@ export const {
   updateShortcut,
   addExcludedDomain,
   removeExcludedDomain,
+  // P6.9: Frame metadata actions
+  setFrameMetadata,
+  updateFrameMetadata,
+  removeFrame,
+  setActiveFrame,
+  clearAllFrames,
   setIsLoading,
   setIsSaving,
   setError,

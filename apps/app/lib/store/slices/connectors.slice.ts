@@ -68,6 +68,13 @@ export interface InstalledConnector extends Connector {
   errorMessage?: string;
 }
 
+export interface ComposioEventMapping {
+  composioEvent: string;
+  internalEvent: string;
+  enabled: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ConnectorsState {
   // Available connectors from the marketplace
   availableConnectors: Connector[];
@@ -91,6 +98,8 @@ export interface ConnectorsState {
     step: "select" | "configure" | "authorize" | "complete";
     error: string | null;
   };
+  // Composio event mappings (for Composio-based connectors)
+  composioEventMappings: ComposioEventMapping[];
   // Manus-aligned keys
   temporaryEnabledOverrides: Record<string, boolean>;
   temporaryGithubRepositories: Record<string, unknown>;
@@ -118,6 +127,7 @@ const initialState: ConnectorsState = {
     step: "select",
     error: null,
   },
+  composioEventMappings: [],
   // Manus-aligned defaults
   temporaryEnabledOverrides: {},
   temporaryGithubRepositories: {},
@@ -302,11 +312,47 @@ const connectorsSlice = createSlice({
         }
       }
     },
+
+    // Composio event mappings
+    setComposioEventMappings: (state, action: PayloadAction<ComposioEventMapping[]>) => {
+      state.composioEventMappings = action.payload;
+    },
+    addComposioEventMapping: (state, action: PayloadAction<ComposioEventMapping>) => {
+      state.composioEventMappings.push(action.payload);
+    },
+    updateComposioEventMapping: (
+      state,
+      action: PayloadAction<{
+        composioEvent: string;
+        updates: Partial<ComposioEventMapping>;
+      }>
+    ) => {
+      const index = state.composioEventMappings.findIndex(
+        (m) => m.composioEvent === action.payload.composioEvent
+      );
+      if (index !== -1) {
+        state.composioEventMappings[index] = {
+          ...state.composioEventMappings[index],
+          ...action.payload.updates,
+        };
+      }
+    },
+    removeComposioEventMapping: (state, action: PayloadAction<string>) => {
+      state.composioEventMappings = state.composioEventMappings.filter(
+        (m) => m.composioEvent !== action.payload
+      );
+    },
+    toggleComposioEventMapping: (state, action: PayloadAction<string>) => {
+      const mapping = state.composioEventMappings.find((m) => m.composioEvent === action.payload);
+      if (mapping) {
+        mapping.enabled = !mapping.enabled;
+      }
+    },
   },
   extraReducers: (builder) => {
     // Manus compatibility
     builder.addCase("connectors/setConnectors", (state, action) => {
-      state.availableConnectors = (action as any).payload ?? [];
+      state.availableConnectors = (action as { payload?: Connector[] }).payload ?? [];
       state.isLoadingAvailable = false;
     });
   },
@@ -331,6 +377,11 @@ export const {
   setInstalling,
   setConnectorsError,
   setConnectorSyncStatus,
+  setComposioEventMappings,
+  addComposioEventMapping,
+  updateComposioEventMapping,
+  removeComposioEventMapping,
+  toggleComposioEventMapping,
   setTemporaryEnabledOverrides,
   setTemporaryGithubRepositories,
   setMultipleEmailConfirmedInfo,
