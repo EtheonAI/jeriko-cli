@@ -3,10 +3,11 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { createLogger, getEnv } from "@repo/service-utils";
 import { healthRoutes } from "./routes/health.js";
+import { sessionRoutes } from "./routes/sessions.js";
 
 const logger = createLogger({ service: "orchestrator" });
 
-async function main() {
+export async function buildApp() {
   const port = parseInt(getEnv("PORT", "4014"), 10);
   const host = getEnv("HOST", "0.0.0.0");
 
@@ -35,6 +36,13 @@ async function main() {
   });
 
   await app.register(healthRoutes);
+  await app.register(sessionRoutes);
+
+  return { app, port, host };
+}
+
+async function main() {
+  const { app, port, host } = await buildApp();
 
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
     logger.error({ err: error, requestId: request.id }, "Request error");
@@ -96,4 +104,6 @@ async function main() {
   }
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void main();
+}

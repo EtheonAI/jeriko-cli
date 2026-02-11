@@ -46,35 +46,26 @@ export class ToolRegistry {
 
   static createWithEntranceTools(): ToolRegistry {
     const registry = new ToolRegistry();
-
-    const entranceTools: ToolDefinition[] = [
-      {
-        name: "plan",
-        description: "Create a structured plan for completing a task",
-        inputSchema: {
-          type: "object",
-          properties: {
-            task: { type: "string" },
-            steps: { type: "array", items: { type: "string" } },
-          },
-          required: ["task", "steps"],
-        },
-      },
-      {
-        name: "schedule",
-        description: "Schedule a task for execution at a specific time",
-        inputSchema: {
-          type: "object",
-          properties: {
-            task: { type: "string" },
-            scheduledTime: { type: "string", format: "date-time" },
-          },
-          required: ["task", "scheduledTime"],
-        },
-      },
-    ];
-
-    registry.registerMany(entranceTools);
+    registry.registerMany(getBaseTools());
     return registry;
   }
+}
+
+const ENTRANCE_TOOLS: ToolDefinition[] = [
+  { name: "file", description: "Read/write/edit files", inputSchema: { type: "object" } },
+  { name: "match", description: "Search files/content", inputSchema: { type: "object" } },
+  { name: "shell", description: "Execute shell commands", inputSchema: { type: "object" } },
+  { name: "browser", description: "Start browser mode", inputSchema: { type: "object" } },
+  { name: "search", description: "Search the web", inputSchema: { type: "object" } },
+  { name: "message", description: "Emit user-facing messages", inputSchema: { type: "object" } },
+  { name: "plan", description: "Create/update/advance plan", inputSchema: { type: "object" } },
+  { name: "schedule", description: "Create/list/cancel schedules", inputSchema: { type: "object" } },
+  { name: "map", description: "Run parallel subtasks", inputSchema: { type: "object" } },
+  { name: "expose", description: "Expose sandbox service port", inputSchema: { type: "object" } },
+  { name: "generate", description: "Enter generation mode", inputSchema: { type: "object" } },
+  { name: "slides", description: "Enter slides mode", inputSchema: { type: "object" } },
+];
+
+export function getBaseTools(): ToolDefinition[] {
+  return [...ENTRANCE_TOOLS];
 }

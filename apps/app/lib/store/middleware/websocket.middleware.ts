@@ -27,7 +27,9 @@ import {
   type Notification,
 } from "../slices/notifications.slice";
 import { updateDeviceStatus } from "../slices/devices.slice";
-import { addMessage, updateMessage, type Message } from "../slices/chat.slice";
+import { addMessage, appendToMessage, updateMessage } from "../slices/chat.slice";
+import { startToolCall, completeToolCall, failToolCall } from "../slices/toolCalls.slice";
+import { addUsageRecord } from "../slices/billing.slice";
 import type { Agent, AgentTask } from "../slices/agents.slice";
 import type { ScheduledTask, ScheduledTaskExecution } from "../slices/scheduledTasks.slice";
 
@@ -88,6 +90,17 @@ export type WebSocketEvent =
       type: "scheduledTask:execution:update";
       data?: { taskId?: string; executionId?: string; updates?: Partial<ScheduledTaskExecution> };
     }
+  // Canonical orchestrator event names
+  | { type: "session.created"; data?: { sessionId?: string; sandboxId?: string | null } }
+  | { type: "message.start"; data?: { messageId?: string; role?: string; sessionId?: string; content?: string } }
+  | { type: "message.chunk"; data?: { messageId?: string; delta?: string; sessionId?: string } }
+  | { type: "message.complete"; data?: { messageId?: string; content?: string; sessionId?: string } }
+  | { type: "tool_call.start"; data?: { toolCallId?: string; toolName?: string; args?: Record<string, unknown>; sessionId?: string; messageId?: string } }
+  | { type: "tool_call.result"; data?: { toolCallId?: string; result?: Record<string, unknown> } }
+  | { type: "tool_call.error"; data?: { toolCallId?: string; error?: string } }
+  | { type: "plan.update"; data?: { planId?: string; phases?: unknown[]; currentPhase?: number } }
+  | { type: "plan.advance"; data?: { planId?: string; nextPhase?: number } }
+  | { type: "credits.update"; data?: { remaining?: number; used?: number } }
   | { type: "pong"; data?: { ts?: number } };
 
 // WebSocket middleware actions
@@ -420,6 +433,24 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
       break;
 
     // Session events
+    case "session.created":
+      if (event.data?.sessionId) {
+        const now = new Date().toISOString();
+        dispatch(
+          addSession({
+            id: event.data.sessionId,
+            userId: "unknown",
+            title: "New Session",
+            status: "active",
+            mode: "agent",
+            isShared: false,
+            createdAt: now,
+            updatedAt: now,
+          })
+        );
+      }
+      break;
+
     case "session:update":
       if (event.data?.sessionId && event.data?.updates) {
         dispatch(
@@ -457,6 +488,44 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
       break;
 
     // Message events
+    case "message.start":
+      if (event.data?.messageId && event.data?.sessionId) {
+        dispatch(
+          addMessage({
+            id: event.data.messageId,
+            sessionId: event.data.sessionId,
+            role: (event.data.role as "user" | "assistant" | "system" | "tool") ?? "assistant",
+            content: event.data.content ?? "",
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+      break;
+
+    case "message.chunk":
+      if (event.data?.sessionId && event.data?.messageId) {
+        dispatch(
+          appendToMessage({
+            sessionId: event.data.sessionId,
+            messageId: event.data.messageId,
+            content: event.data.delta ?? "",
+          })
+        );
+      }
+      break;
+
+    case "message.complete":
+      if (event.data?.sessionId && event.data?.messageId) {
+        dispatch(
+          updateMessage({
+            sessionId: event.data.sessionId,
+            messageId: event.data.messageId,
+            updates: { content: event.data.content ?? "" },
+          })
+        );
+      }
+      break;
+
     case "message:new":
       if (event.data?.message?.id && event.data.message.sessionId) {
         dispatch(addMessage(event.data.message));
@@ -472,6 +541,64 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             sessionId: event.data.sessionId,
             messageId: event.data.messageId,
             updates: event.data.updates ?? {},
+          })
+        );
+      }
+      break;
+
+    // Canonical tool call events
+    case "tool_call.start":
+      if (event.data?.toolCallId && event.data?.toolName && event.data?.sessionId) {
+        dispatch(
+          startToolCall({
+            correlationId: event.data.toolCallId,
+            toolName: event.data.toolName,
+            sessionId: event.data.sessionId,
+            messageId: event.data.messageId,
+            input: event.data.args ?? {},
+          })
+        );
+      }
+      break;
+
+    case "tool_call.result":
+      if (event.data?.toolCallId) {
+        dispatch(
+          completeToolCall({
+            correlationId: event.data.toolCallId,
+            output: event.data.result ?? {},
+          })
+        );
+      }
+      break;
+
+    case "tool_call.error":
+      if (event.data?.toolCallId) {
+        dispatch(
+          failToolCall({
+            correlationId: event.data.toolCallId,
+            error: event.data.error ?? "Tool execution failed",
+          })
+        );
+      }
+      break;
+
+    case "plan.update":
+      dispatch(setLastError(null));
+      break;
+
+    case "plan.advance":
+      dispatch(setLastError(null));
+      break;
+
+    case "credits.update":
+      if (typeof event.data?.used === "number") {
+        dispatch(
+          addUsageRecord({
+            date: new Date().toISOString(),
+            credits: event.data.used,
+            type: "chat",
+            description: "Agent execution usage",
           })
         );
       }

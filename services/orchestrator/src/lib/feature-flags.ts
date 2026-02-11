@@ -1,5 +1,15 @@
 import type { FeatureFlags } from "../types/index.js";
 
+export function getOrchestratorVersion(env: NodeJS.ProcessEnv = process.env): "python" | "node" | "shadow" {
+  const value = (env.ORCHESTRATOR_VERSION ?? "node").toLowerCase();
+  if (value === "python" || value === "shadow") return value;
+  return "node";
+}
+
+export function isShadowMode(env: NodeJS.ProcessEnv = process.env): boolean {
+  return getOrchestratorVersion(env) === "shadow";
+}
+
 export class FeatureFlagManager {
   private flags: FeatureFlags = {
     pythonExecutor: false,

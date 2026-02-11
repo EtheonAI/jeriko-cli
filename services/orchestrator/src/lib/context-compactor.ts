@@ -1,4 +1,4 @@
-interface Message {
+export interface CompactMessage {
   role: string;
   content: string;
   timestamp?: string;
@@ -14,7 +14,7 @@ export class ContextCompactor {
   private readonly defaultMaxTokens = 100000;
   private readonly avgCharsPerToken = 4;
 
-  compact(messages: Message[], options: CompactionOptions = {}): Message[] {
+  compact(messages: CompactMessage[], options: CompactionOptions = {}): CompactMessage[] {
     const { maxTokens = this.defaultMaxTokens, keepRecent = 10, preserveSystem = true } = options;
 
     if (messages.length === 0) {
@@ -34,7 +34,7 @@ export class ContextCompactor {
     }
 
     const maxChars = maxTokens * this.avgCharsPerToken;
-    const compacted: Message[] = [...systemMessages];
+    const compacted: CompactMessage[] = [...systemMessages];
     let totalChars = systemMessages.reduce((sum, m) => sum + m.content.length, 0);
 
     for (let i = recentMessages.length - 1; i >= 0; i--) {
@@ -50,12 +50,12 @@ export class ContextCompactor {
     return compacted;
   }
 
-  estimateTokens(messages: Message[]): number {
+  estimateTokens(messages: CompactMessage[]): number {
     const totalChars = messages.reduce((sum, m) => sum + m.content.length, 0);
     return Math.ceil(totalChars / this.avgCharsPerToken);
   }
 
-  summarize(messages: Message[]): string {
+  summarize(messages: CompactMessage[]): string {
     const summary = messages
       .map((m, i) => {
         const preview = m.content.slice(0, 100);
@@ -65,4 +65,28 @@ export class ContextCompactor {
 
     return `Context summary (${messages.length} messages):\n${summary}`;
   }
+}
+
+/**
+ * Backward-compatible helper used by the orchestrator loop tests.
+ *
+ * `maxMessages` is a message-count threshold (not token threshold):
+ * - If history size is <= threshold, keep all and return null compactedHistory.
+ * - If above threshold, keep newest `maxMessages` and summarize older entries.
+ */
+export function compactHistory(messages: CompactMessage[], maxMessages = 20): {
+  kept: CompactMessage[];
+  compactedHistory: string | null;
+} {
+  if (messages.length <= maxMessages) {
+    return { kept: messages, compactedHistory: null };
+  }
+
+  const kept = messages.slice(-maxMessages);
+  const older = messages.slice(0, messages.length - maxMessages);
+  const compactor = new ContextCompactor();
+
+  const compactedHistory = `<compacted_history>\n${compactor.summarize(older)}\n</compacted_history>`;
+
+  return { kept, compactedHistory };
 }

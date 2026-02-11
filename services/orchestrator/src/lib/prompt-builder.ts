@@ -54,3 +54,26 @@ export class PromptBuilder {
     return new PromptBuilder().addSystemPrompt("You are a helpful AI assistant.").build();
   }
 }
+
+export function buildSystemPrompt(input: {
+  skills?: string[];
+  relatedKnowledge?: string[];
+}): string {
+  const skills = input.skills ?? [];
+  const knowledge = input.relatedKnowledge ?? [];
+
+  const skillSection = skills.length
+    ? `Skills:\n${skills.map((s) => `- ${s}`).join("\n")}`
+    : "Skills:\n- none";
+
+  const knowledgeSection = knowledge.length
+    ? `Related Knowledge:\n${knowledge.map((k) => `- ${k}`).join("\n")}`
+    : "Related Knowledge:\n- none";
+
+  return [
+    "You are the orchestrator agent.",
+    "Follow plan -> act -> observe loop.",
+    skillSection,
+    knowledgeSection,
+  ].join("\n\n");
+}
