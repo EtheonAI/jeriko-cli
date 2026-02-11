@@ -1468,6 +1468,9 @@ importers:
       "@types/node":
         specifier: ^22.13.4
         version: 22.15.21
+      "@types/pg":
+        specifier: ^8.11.10
+        version: 8.15.6
       "@vitest/coverage-v8":
         specifier: ^4.0.3
         version: 4.0.18(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.15.21)(jiti@2.6.1)(jsdom@27.4.0(bufferutil@4.0.9))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.15.21)(typescript@5.9.3))(terser@5.39.0)(tsx@4.21.0)(yaml@2.7.0))
@@ -1878,6 +1881,58 @@ importers:
         specifier: ^4.0.3
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.15.21)(jiti@2.6.1)(jsdom@27.4.0(bufferutil@4.0.9))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.15.21)(typescript@5.9.3))(terser@5.39.0)(tsx@4.21.0)(yaml@2.7.0)
 
+  services/orchestrator:
+    dependencies:
+      "@ai-sdk/anthropic":
+        specifier: ^2.0.12
+        version: 2.0.59(zod@4.3.6)
+      "@fastify/cors":
+        specifier: ^10.0.2
+        version: 10.1.0
+      "@fastify/helmet":
+        specifier: ^13.0.1
+        version: 13.0.2
+      "@repo/service-utils":
+        specifier: workspace:*
+        version: link:../../packages/service-utils
+      ai:
+        specifier: ^6.0.77
+        version: 6.0.77(zod@4.3.6)
+      fastify:
+        specifier: ^5.2.2
+        version: 5.7.4
+      fastify-plugin:
+        specifier: ^5.0.1
+        version: 5.1.0
+      nanoid:
+        specifier: ^5.1.2
+        version: 5.1.6
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      "@repo/typescript-config":
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      "@types/node":
+        specifier: ^22.13.4
+        version: 22.15.21
+      "@types/pg":
+        specifier: ^8.11.10
+        version: 8.15.6
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@swc/core@1.15.1)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.7.0)
+      tsx:
+        specifier: ^4.19.3
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.15.21)(jiti@2.6.1)(jsdom@27.4.0(bufferutil@4.0.9))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.15.21)(typescript@5.9.3))(terser@5.39.0)(tsx@4.21.0)(yaml@2.7.0)
+
   services/project:
     dependencies:
       "@repo/database":
@@ -2087,6 +2142,37 @@ importers:
         specifier: ^4.0.3
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.15.21)(jiti@2.6.1)(jsdom@27.4.0(bufferutil@4.0.9))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.15.21)(typescript@5.9.3))(terser@5.39.0)(tsx@4.21.0)(yaml@2.7.0)
 
+  services/webrtc-media:
+    dependencies:
+      "@repo/service-utils":
+        specifier: workspace:*
+        version: link:../../packages/service-utils
+      fastify:
+        specifier: ^5.2.2
+        version: 5.7.4
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      "@repo/typescript-config":
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      "@types/node":
+        specifier: ^22.13.4
+        version: 22.15.21
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@swc/core@1.15.1)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.7.0)
+      tsx:
+        specifier: ^4.19.3
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.15.21)(jiti@2.6.1)(jsdom@27.4.0(bufferutil@4.0.9))(lightningcss@1.30.2)(msw@2.12.9(@types/node@22.15.21)(typescript@5.9.3))(terser@5.39.0)(tsx@4.21.0)(yaml@2.7.0)
+
   services/website:
     dependencies:
       "@fastify/cors":
@@ -2143,6 +2229,15 @@ packages:
         integrity: sha512-baYZExFpsdkBNuvGKTKWCwKH57HRZLVtycZS05WTQNVOiXVSeAki3nU35zlRbToeMW8aHlJfyS+1C4BOv27q0A==,
       }
 
+  "@ai-sdk/anthropic@2.0.59":
+    resolution:
+      {
+        integrity: sha512-s7T5etVW7k4y3p1TDpTGa7xBddvSPWTvRa+EHAI0MPCrVh2dVFmAk+Dm6I8zlr1vz45SBpHvKR3SP29aGXdrUQ==,
+      }
+    engines: { node: ">=18" }
+    peerDependencies:
+      zod: 4.3.6
+
   "@ai-sdk/gateway@3.0.11":
     resolution:
       {
@@ -2170,6 +2265,15 @@ packages:
     peerDependencies:
       zod: 4.3.6
 
+  "@ai-sdk/provider-utils@3.0.20":
+    resolution:
+      {
+        integrity: sha512-iXHVe0apM2zUEzauqJwqmpC37A5rihrStAih5Ks+JE32iTe4LZ58y17UGBjpQQTCRw9YxMeo2UFLxLpBluyvLQ==,
+      }
+    engines: { node: ">=18" }
+    peerDependencies:
+      zod: 4.3.6
+
   "@ai-sdk/provider-utils@4.0.14":
     resolution:
       {
@@ -2192,6 +2296,13 @@ packages:
     resolution:
       {
         integrity: sha512-qZMxYJ0qqX/RfnuIaab+zp8UAeJn/ygXXAffR5I4N0n1IrvA6qBsjc8hXLmBiMV2zoXlifkacF7sEFnYnjBcqg==,
+      }
+    engines: { node: ">=18" }
+
+  "@ai-sdk/provider@2.0.1":
+    resolution:
+      {
+        integrity: sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==,
       }
     engines: { node: ">=18" }
 
@@ -25535,6 +25646,12 @@ snapshots:
 
   "@adobe/css-tools@4.4.2": {}
 
+  "@ai-sdk/anthropic@2.0.59(zod@4.3.6)":
+    dependencies:
+      "@ai-sdk/provider": 2.0.1
+      "@ai-sdk/provider-utils": 3.0.20(zod@4.3.6)
+      zod: 4.3.6
+
   "@ai-sdk/gateway@3.0.11(zod@4.3.6)":
     dependencies:
       "@ai-sdk/provider": 3.0.2
@@ -25556,6 +25673,13 @@ snapshots:
       secure-json-parse: 2.7.0
       zod: 4.3.6
 
+  "@ai-sdk/provider-utils@3.0.20(zod@4.3.6)":
+    dependencies:
+      "@ai-sdk/provider": 2.0.1
+      "@standard-schema/spec": 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 4.3.6
+
   "@ai-sdk/provider-utils@4.0.14(zod@4.3.6)":
     dependencies:
       "@ai-sdk/provider": 3.0.8
@@ -25571,6 +25695,10 @@ snapshots:
       zod: 4.3.6
 
   "@ai-sdk/provider@1.1.3":
+    dependencies:
+      json-schema: 0.4.0
+
+  "@ai-sdk/provider@2.0.1":
     dependencies:
       json-schema: 0.4.0
 

@@ -14,9 +14,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.12",
     "@fastify/cors": "^10.0.2",
     "@fastify/helmet": "^13.0.1",
     "@repo/service-utils": "workspace:*",
+    "ai": "^6.0.77",
     "fastify": "^5.2.2",
     "fastify-plugin": "^5.0.1",
     "nanoid": "^5.1.2",

@@ -1,6 +1,0 @@
-#!/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/services/agent/.venv/bin/python3.12
-import sys
-from coverage.cmdline import main_deprecated
-if __name__ == '__main__':
-    sys.argv[0] = sys.argv[0].removesuffix('.exe')
-    sys.exit(main_deprecated())

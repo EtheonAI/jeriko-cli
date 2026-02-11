@@ -2,13 +2,13 @@ import { auth } from "@repo/auth";
 import { headers } from "next/headers";
 import { log } from "@repo/observability/log";
 
-const AGENT_SERVICE_URL = process.env.AGENT_SERVICE_URL || "http://localhost:8000";
+const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
 
 /**
  * POST /api/sandbox/browser
  *
- * Proxies browser actions to the agent service for user "Take Control" mode.
- * Body: { sandboxId: string, action: "click" | "move" | "key" | "type", x?: number, y?: number, key?: string, text?: string, button?: string }
+ * Proxies browser actions to sandbox service browser endpoint.
+ * Body: { sandboxId: string, action: string, ...params }
  */
 export const POST = async (req: Request) => {
   try {
@@ -35,15 +35,14 @@ export const POST = async (req: Request) => {
     };
 
     if (!sandboxId || !action) {
-      return new Response(
-        JSON.stringify({ error: "sandboxId and action are required" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "sandboxId and action are required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    // Map action to agent service endpoint
-    const endpoint = `${AGENT_SERVICE_URL}/browser/${action}`;
-    const requestBody = { sandbox_id: sandboxId, ...params };
+    const endpoint = `${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/browser`;
+    const requestBody = { action, params };
 
     const resp = await fetch(endpoint, {
       method: "POST",
@@ -57,7 +56,7 @@ export const POST = async (req: Request) => {
 
     if (!resp.ok) {
       const errorText = await resp.text();
-      log.error("Agent service browser control error:", errorText);
+      log.error({ errorText }, "Sandbox service browser control error");
       return new Response(errorText, {
         status: resp.status,
         headers: { "Content-Type": "application/json" },
@@ -70,7 +69,7 @@ export const POST = async (req: Request) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    log.error("Browser proxy error:", error as Error);
+    log.error({ error }, "Browser proxy error");
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Failed" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
