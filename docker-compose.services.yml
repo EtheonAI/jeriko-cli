@@ -69,7 +69,7 @@ services:
       DATABASE_URL: postgresql://rubic:rubic_dev_password@postgres:5432/rubic
       JWT_SECRET: dev-jwt-secret-change-in-production
       TASK_SERVICE_URL: http://task:3002
-      AGENT_SERVICE_URL: http://agent:8000
+      ORCHESTRATOR_SERVICE_URL: http://orchestrator:4014
       DEVICE_SERVICE_URL: http://device:4001
       FILE_SERVICE_URL: http://file:3003
       WEBSITE_SERVICE_URL: http://website:3004
@@ -101,7 +101,7 @@ services:
       INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-local-dev-event-key}
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-signkey-test-12345678}
       INNGEST_BASE_URL: http://inngest:8288
-      AGENT_SERVICE_URL: http://agent:8000
+      ORCHESTRATOR_SERVICE_URL: http://orchestrator:4014
       DEVICE_SERVICE_URL: http://device:4001
       GATEWAY_SECRET: ${GATEWAY_SECRET:-}
     ports:
@@ -297,18 +297,18 @@ services:
         condition: service_healthy
 
   # ===========================================
-  # Python Services
+  # Orchestrator Services
   # ===========================================
 
-  agent:
+  orchestrator:
     build:
       context: .
-      dockerfile: services/agent/Dockerfile
-    container_name: rubic-agent
+      dockerfile: services/orchestrator/Dockerfile
+    container_name: rubic-orchestrator
     restart: unless-stopped
     environment:
-      ENVIRONMENT: development
-      PORT: 8000
+      NODE_ENV: development
+      PORT: 4014
       REDIS_HOST: redis
       REDIS_PORT: 6379
       DATABASE_URL: postgresql://rubic:rubic_dev_password@postgres:5432/rubic
@@ -316,13 +316,36 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       E2B_API_KEY: ${E2B_API_KEY:-}
       CONNECTOR_SERVICE_URL: http://connector:4009
+      WEBRTC_MEDIA_SERVICE_URL: http://webrtc-media:4016
+      SANDBOX_SERVICE_URL: http://sandbox:4012
     ports:
-      - "8000:8000"
+      - "4014:4014"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  webrtc-media:
+    build:
+      context: .
+      dockerfile: services/webrtc-media/Dockerfile
+    container_name: rubic-webrtc-media
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 4016
+      NEKO_PUBLIC_HOST: localhost
+      NEKO_PUBLIC_PORT: 8080
+      NEKO_PUBLIC_SCHEME: https
+      NOVNC_PUBLIC_HOST: localhost
+      NOVNC_PUBLIC_PORT: 6080
+    ports:
+      - "4016:4016"
+
+  # ===========================================
+  # Python Services
+  # ===========================================
 
   knowledge:
     build:
