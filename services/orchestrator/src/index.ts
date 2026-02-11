@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { createLogger, getEnv } from "@repo/service-utils";
 import { healthRoutes } from "./routes/health.js";
+import { mediaRoutes } from "./routes/media.js";
 import { sessionRoutes } from "./routes/sessions.js";
 
 const logger = createLogger({ service: "orchestrator" });
@@ -37,6 +38,7 @@ export async function buildApp() {
 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
+  await app.register(mediaRoutes);
 
   return { app, port, host };
 }
