@@ -265,8 +265,7 @@ export const useMyBrowser = () => useAppSelector((state) => state.myBrowser);
 export const useAgentWorkspace = () => useAppSelector((state) => state.agentWorkspace);
 export const useWebdevAuth = () => useAppSelector((state) => state.webdevAuth);
 export const useAiCanvasEditor = () => useAppSelector((state) => state.aiCanvasEditor);
-export const useBiz = () => useAppSelector((state) => state.biz);
-export const useMeeting = () => useAppSelector((state) => state.meeting);
+export const useToolCalls = () => useAppSelector((state) => state.toolCalls);
 
 // ================== INTEGRATION HOOKS ==================
 // Re-export integration hooks that combine better-auth, WebSocket, and RTK Query

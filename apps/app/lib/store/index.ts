@@ -47,10 +47,9 @@ import myBrowserReducer from "./slices/myBrowser.slice";
 import agentWorkspaceReducer from "./slices/agentWorkspace.slice";
 import webdevAuthReducer from "./slices/webdevAuth.slice";
 import aiCanvasEditorReducer from "./slices/aiCanvasEditor.slice";
-import bizReducer from "./slices/biz.slice";
 import searchReducer from "./slices/search.slice";
 import devicesReducer from "./slices/devices.slice";
-import meetingReducer from "./slices/meeting.slice";
+import toolCallsReducer from "./slices/toolCalls.slice";
 // Rubic-specific slices
 import skillsReducer from "./slices/skills.slice";
 import enterpriseTeamReducer from "./slices/enterpriseTeam.slice";
@@ -108,10 +107,9 @@ export const makeStore = () => {
       agentWorkspace: agentWorkspaceReducer,
       webdevAuth: webdevAuthReducer,
       aiCanvasEditor: aiCanvasEditorReducer,
-      biz: bizReducer,
       search: searchReducer,
       devices: devicesReducer,
-      meeting: meetingReducer,
+      toolCalls: toolCallsReducer,
       // Rubic-specific slices
       skills: skillsReducer,
       enterpriseTeam: enterpriseTeamReducer,
@@ -193,11 +191,10 @@ export * from "./slices/myBrowser.slice";
 export * from "./slices/agentWorkspace.slice";
 export * from "./slices/webdevAuth.slice";
 export * from "./slices/aiCanvasEditor.slice";
-export * from "./slices/biz.slice";
 // chatPage.slice merged into chat.slice
 export * from "./slices/search.slice";
 export * from "./slices/devices.slice";
-export * from "./slices/meeting.slice";
+export * from "./slices/toolCalls.slice";
 // Rubic-specific slices
 export * from "./slices/skills.slice";
 export * from "./slices/enterpriseTeam.slice";

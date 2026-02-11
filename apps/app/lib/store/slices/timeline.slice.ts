@@ -57,6 +57,14 @@ export interface TimelineState {
   segmentEventsMap: Record<string, TimelineEvent[]>;
   segmentEventsLoadingMap: Record<string, boolean>;
 
+  // Segment pagination
+  segmentPagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasMore: boolean;
+  };
+
   // Current session
   sessionId: string | null;
 
@@ -77,6 +85,13 @@ const initialState: TimelineState = {
 
   segmentEventsMap: {},
   segmentEventsLoadingMap: {},
+
+  segmentPagination: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false,
+  },
 
   sessionId: null,
   selectedEventId: null,
@@ -143,6 +158,50 @@ const timelineSlice = createSlice({
       state.segmentEventsLoadingMap[action.payload.segmentId] = action.payload.loading;
     },
 
+    // Segment pagination
+    setSegmentPage: (state, action: PayloadAction<number>) => {
+      state.segmentPagination.page = action.payload;
+    },
+
+    setSegmentPageSize: (state, action: PayloadAction<number>) => {
+      state.segmentPagination.pageSize = action.payload;
+    },
+
+    setSegmentPagination: (
+      state,
+      action: PayloadAction<{
+        page?: number;
+        pageSize?: number;
+        total?: number;
+        hasMore?: boolean;
+      }>
+    ) => {
+      if (action.payload.page !== undefined) {
+        state.segmentPagination.page = action.payload.page;
+      }
+      if (action.payload.pageSize !== undefined) {
+        state.segmentPagination.pageSize = action.payload.pageSize;
+      }
+      if (action.payload.total !== undefined) {
+        state.segmentPagination.total = action.payload.total;
+      }
+      if (action.payload.hasMore !== undefined) {
+        state.segmentPagination.hasMore = action.payload.hasMore;
+      }
+    },
+
+    nextSegmentPage: (state) => {
+      if (state.segmentPagination.hasMore) {
+        state.segmentPagination.page += 1;
+      }
+    },
+
+    prevSegmentPage: (state) => {
+      if (state.segmentPagination.page > 1) {
+        state.segmentPagination.page -= 1;
+      }
+    },
+
     // Session
     setTimelineSessionId: (state, action: PayloadAction<string | null>) => {
       state.sessionId = action.payload;
@@ -181,6 +240,11 @@ export const {
   setSegmentEvents,
   addSegmentEvent,
   setSegmentEventsLoading,
+  setSegmentPage,
+  setSegmentPageSize,
+  setSegmentPagination,
+  nextSegmentPage,
+  prevSegmentPage,
   setTimelineSessionId,
   setSelectedEventId,
   setTimelineLoading,

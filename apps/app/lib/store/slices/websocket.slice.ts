@@ -11,6 +11,16 @@ export interface WebSocketEntity {
   updatedAt: string;
 }
 
+export type ReconnectPolicy = "exponential" | "linear" | "fixed" | "disabled";
+
+export interface ReconnectConfig {
+  policy: ReconnectPolicy;
+  maxAttempts: number;
+  baseDelay: number; // milliseconds
+  maxDelay: number; // milliseconds
+  backoffMultiplier: number;
+}
+
 export interface WebSocketState {
   // Manus-style normalized entities
   ids: string[];
@@ -38,6 +48,11 @@ export interface WebSocketState {
   reconnectAttempts: number;
   lastConnectedAt: string | null;
   lastPongTime: number | null;
+
+  // P6.5: Reconnect policy
+  reconnectConfig: ReconnectConfig;
+  nextReconnectDelay: number | null; // milliseconds
+  isReconnecting: boolean;
 }
 
 const initialState: WebSocketState = {
@@ -54,6 +69,16 @@ const initialState: WebSocketState = {
   reconnectAttempts: 0,
   lastConnectedAt: null,
   lastPongTime: null,
+  // P6.5: Default reconnect policy
+  reconnectConfig: {
+    policy: "exponential",
+    maxAttempts: 10,
+    baseDelay: 1000,
+    maxDelay: 30000,
+    backoffMultiplier: 2,
+  },
+  nextReconnectDelay: null,
+  isReconnecting: false,
 };
 
 const websocketSlice = createSlice({
@@ -142,6 +167,65 @@ const websocketSlice = createSlice({
     setDisableTimelineAutoUpdate: (state, action: PayloadAction<boolean | null>) => {
       state.disableTimelineAutoUpdate = action.payload;
     },
+
+    // P6.5: Reconnect policy management
+    setReconnectConfig: (state, action: PayloadAction<Partial<ReconnectConfig>>) => {
+      state.reconnectConfig = { ...state.reconnectConfig, ...action.payload };
+    },
+
+    startReconnecting: (state) => {
+      state.isReconnecting = true;
+      state.status = "connecting";
+
+      // Calculate next delay based on policy
+      const { policy, baseDelay, maxDelay, backoffMultiplier } = state.reconnectConfig;
+      const attempts = state.reconnectAttempts;
+
+      switch (policy) {
+        case "exponential":
+          state.nextReconnectDelay = Math.min(
+            baseDelay * Math.pow(backoffMultiplier, attempts),
+            maxDelay
+          );
+          break;
+        case "linear":
+          state.nextReconnectDelay = Math.min(baseDelay * (attempts + 1), maxDelay);
+          break;
+        case "fixed":
+          state.nextReconnectDelay = baseDelay;
+          break;
+        case "disabled":
+          state.nextReconnectDelay = null;
+          state.isReconnecting = false;
+          break;
+      }
+    },
+
+    stopReconnecting: (state) => {
+      state.isReconnecting = false;
+      state.nextReconnectDelay = null;
+    },
+
+    reconnectSuccess: (state) => {
+      state.isReconnecting = false;
+      state.nextReconnectDelay = null;
+      state.reconnectAttempts = 0;
+      state.status = "connected";
+      state.lastConnectedAt = new Date().toISOString();
+      state.error = null;
+    },
+
+    reconnectFailed: (state, action: PayloadAction<string>) => {
+      state.reconnectAttempts += 1;
+      state.error = action.payload;
+
+      // Check if max attempts reached
+      if (state.reconnectAttempts >= state.reconnectConfig.maxAttempts) {
+        state.isReconnecting = false;
+        state.nextReconnectDelay = null;
+        state.status = "error";
+      }
+    },
   },
   extraReducers: (builder) => {
     // Manus compatibility
@@ -172,6 +256,12 @@ export const {
   setTaskFinished,
   setIsVNCConnected,
   setDisableTimelineAutoUpdate,
+  // P6.5: Reconnect policy actions
+  setReconnectConfig,
+  startReconnecting,
+  stopReconnecting,
+  reconnectSuccess,
+  reconnectFailed,
 } = websocketSlice.actions;
 
 export default websocketSlice.reducer;
