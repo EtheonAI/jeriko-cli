@@ -24,11 +24,14 @@ export const files = pgTable("files", {
     enum: ["local", "s3", "r2", "vercel_blob"],
   }).default("local"),
   isPublic: boolean("is_public").default(false),
+  checksum: text("checksum"), // SHA-256 hash of file contents
+  checksumAlgorithm: text("checksum_algorithm").default("sha256"),
   metadata: jsonb("metadata").$type<{
     width?: number;
     height?: number;
     duration?: number;
     encoding?: string;
+    toolCallId?: string; // provenance: which tool call created this file
     [key: string]: unknown;
   }>(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -62,6 +65,8 @@ export const fileVersions = pgTable("file_versions", {
   version: integer("version").notNull(),
   storageKey: text("storage_key").notNull(),
   size: integer("size"),
+  checksum: text("checksum"), // SHA-256 hash of version contents
+  checksumAlgorithm: text("checksum_algorithm").default("sha256"),
   changeDescription: text("change_description"),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
 });

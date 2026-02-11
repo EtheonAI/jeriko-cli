@@ -41,6 +41,8 @@ async function main() {
     deleteFiles,
     getStorageKey,
     getVersionStorageKey,
+    calculateChecksum,
+    verifyChecksum,
   } = storageModule;
 
   const { app, logger, start } = await createService({
@@ -83,12 +85,22 @@ async function main() {
     }
 
     const sessionId = request.headers["x-session-id"] as string | undefined;
+    const expectedChecksum = request.headers["x-checksum"] as string | undefined;
+    const toolCallId = request.headers["x-tool-call-id"] as string | undefined;
 
     const chunks: Buffer[] = [];
     for await (const chunk of data.file) {
       chunks.push(chunk);
     }
     const buffer = Buffer.concat(chunks);
+
+    // Calculate checksum
+    const checksum = calculateChecksum(buffer);
+
+    // Verify checksum if provided
+    if (expectedChecksum && !verifyChecksum(buffer, expectedChecksum)) {
+      throw new ValidationError(`Checksum mismatch: expected ${expectedChecksum}, got ${checksum}`);
+    }
 
     const fileId = createId();
     const storageKey = getStorageKey(userId, fileId, data.filename);
@@ -109,6 +121,9 @@ async function main() {
           size: buffer.length,
           storageKey,
           storageProvider: "s3",
+          checksum,
+          checksumAlgorithm: "sha256",
+          metadata: toolCallId ? { toolCallId } : null,
         })
         .returning();
 
@@ -119,6 +134,8 @@ async function main() {
         version: 1,
         storageKey,
         size: buffer.length,
+        checksum,
+        checksumAlgorithm: "sha256",
         changeDescription: "Initial upload",
       });
 
@@ -148,6 +165,7 @@ async function main() {
   app.post("/upload/bulk", typedRoute({}, async (request, reply) => {
     const userId = requireUserId(request);
     const sessionId = request.headers["x-session-id"] as string | undefined;
+    const toolCallId = request.headers["x-tool-call-id"] as string | undefined;
 
     const results: Array<{
       id: string;
@@ -165,6 +183,9 @@ async function main() {
           chunks.push(chunk);
         }
         const buffer = Buffer.concat(chunks);
+
+        // Calculate checksum for each file
+        const checksum = calculateChecksum(buffer);
 
         const fileId = createId();
         const storageKey = getStorageKey(userId, fileId, data.filename);
@@ -185,6 +206,9 @@ async function main() {
               size: buffer.length,
               storageKey,
               storageProvider: "s3",
+              checksum,
+              checksumAlgorithm: "sha256",
+              metadata: toolCallId ? { toolCallId } : null,
             })
             .returning();
 
@@ -194,6 +218,8 @@ async function main() {
             version: 1,
             storageKey,
             size: buffer.length,
+            checksum,
+            checksumAlgorithm: "sha256",
             changeDescription: "Initial upload",
           });
 
@@ -278,9 +304,9 @@ async function main() {
     }
 
     const expiresIn = 3600;
-    const url = await getPresignedUrl(key, expiresIn);
+    const url = await getPresignedUrl(key, expiresIn, file.isPublic || false);
 
-    return reply.success({ id: file.id, url, expiresIn });
+    return reply.success({ id: file.id, url, expiresIn, cdnUrl: file.isPublic ? url : null });
   }));
 
   // ── PUT /files/:id — Upload new version ────────────────────────────────
@@ -318,6 +344,9 @@ async function main() {
     }
     const buffer = Buffer.concat(chunks);
 
+    // Calculate checksum for new version
+    const checksum = calculateChecksum(buffer);
+
     const storageKey = getVersionStorageKey(userId, id, nextVersion, data.filename);
 
     await uploadFile(storageKey, buffer, data.mimetype);
@@ -330,6 +359,8 @@ async function main() {
         version: nextVersion,
         storageKey,
         size: buffer.length,
+        checksum,
+        checksumAlgorithm: "sha256",
         changeDescription: (request.headers["x-change-description"] as string) || null,
       });
 
@@ -341,6 +372,8 @@ async function main() {
           size: buffer.length,
           mimeType: data.mimetype,
           name: data.filename,
+          checksum,
+          checksumAlgorithm: "sha256",
         })
         .where(eq(files.id, id))
         .returning();

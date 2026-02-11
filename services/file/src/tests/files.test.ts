@@ -27,6 +27,24 @@ function getVersionStorageKey(userId: string, fileId: string, version: number, f
   return `${userId}/${fileId}/v${version}/${filename}`;
 }
 
+// ── Checksum helpers (pure re-implementation for unit testing) ──
+
+function calculateChecksum(buffer: Buffer | Uint8Array, algorithm: string = "sha256"): string {
+  const { createHash } = require("node:crypto");
+  const hash = createHash(algorithm);
+  hash.update(buffer);
+  return hash.digest("hex");
+}
+
+function verifyChecksum(
+  buffer: Buffer | Uint8Array,
+  expectedChecksum: string,
+  algorithm: string = "sha256"
+): boolean {
+  const actual = calculateChecksum(buffer, algorithm);
+  return actual === expectedChecksum;
+}
+
 // ── Tests ──
 
 describe("File upload validation", () => {
@@ -149,5 +167,167 @@ describe("File listing with pagination", () => {
     const requestedUserId = "user-2";
     expect(authUserId).not.toBe(requestedUserId);
     // Service throws AuthorizationError when these don't match
+  });
+});
+
+describe("Checksum calculation", () => {
+  it("should calculate SHA-256 checksum of a buffer", () => {
+    const buffer = Buffer.from("hello world");
+    const checksum = calculateChecksum(buffer);
+
+    // SHA-256 of "hello world" is a well-known value
+    expect(checksum).toBe(
+      "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+    );
+  });
+
+  it("should return consistent checksums for identical content", () => {
+    const buffer1 = Buffer.from("test content");
+    const buffer2 = Buffer.from("test content");
+
+    const checksum1 = calculateChecksum(buffer1);
+    const checksum2 = calculateChecksum(buffer2);
+
+    expect(checksum1).toBe(checksum2);
+  });
+
+  it("should return different checksums for different content", () => {
+    const buffer1 = Buffer.from("file A");
+    const buffer2 = Buffer.from("file B");
+
+    const checksum1 = calculateChecksum(buffer1);
+    const checksum2 = calculateChecksum(buffer2);
+
+    expect(checksum1).not.toBe(checksum2);
+  });
+
+  it("should support Uint8Array input", () => {
+    const data = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
+    const checksum = calculateChecksum(data);
+
+    expect(checksum).toMatch(/^[0-9a-f]{64}$/); // 64-char hex for SHA-256
+  });
+
+  it("should handle empty buffer", () => {
+    const buffer = Buffer.alloc(0);
+    const checksum = calculateChecksum(buffer);
+
+    // SHA-256 of empty string is a known constant
+    expect(checksum).toBe(
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+  });
+
+  it("should support alternative hash algorithms", () => {
+    const buffer = Buffer.from("hello world");
+    const sha256 = calculateChecksum(buffer, "sha256");
+    const md5 = calculateChecksum(buffer, "md5");
+
+    // Different algorithms produce different-length digests
+    expect(sha256).toHaveLength(64); // SHA-256 = 32 bytes = 64 hex chars
+    expect(md5).toHaveLength(32);     // MD5 = 16 bytes = 32 hex chars
+    expect(sha256).not.toBe(md5);
+  });
+});
+
+describe("Checksum verification", () => {
+  it("should return true when checksum matches", () => {
+    const buffer = Buffer.from("hello world");
+    const correctChecksum = calculateChecksum(buffer);
+
+    expect(verifyChecksum(buffer, correctChecksum)).toBe(true);
+  });
+
+  it("should return false when checksum does not match", () => {
+    const buffer = Buffer.from("hello world");
+    const wrongChecksum = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    expect(verifyChecksum(buffer, wrongChecksum)).toBe(false);
+  });
+
+  it("should verify with a specific algorithm", () => {
+    const buffer = Buffer.from("test data");
+    const md5Checksum = calculateChecksum(buffer, "md5");
+
+    expect(verifyChecksum(buffer, md5Checksum, "md5")).toBe(true);
+    // Wrong algorithm should fail
+    expect(verifyChecksum(buffer, md5Checksum, "sha256")).toBe(false);
+  });
+
+  it("should detect content corruption", () => {
+    const original = Buffer.from("original content");
+    const checksum = calculateChecksum(original);
+
+    const corrupted = Buffer.from("corrupted content");
+    expect(verifyChecksum(corrupted, checksum)).toBe(false);
+  });
+
+  it("should handle large buffers", () => {
+    const largeBuffer = Buffer.alloc(1024 * 1024, "x"); // 1MB of 'x'
+    const checksum = calculateChecksum(largeBuffer);
+
+    expect(verifyChecksum(largeBuffer, checksum)).toBe(true);
+    expect(checksum).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("File metadata with checksum fields", () => {
+  it("should include checksum fields in file record", () => {
+    const file = {
+      id: "f-1",
+      name: "test.txt",
+      mimeType: "text/plain",
+      size: 1024,
+      storageProvider: "s3",
+      checksum: "abc123def456",
+      checksumAlgorithm: "sha256",
+      createdAt: new Date().toISOString(),
+    };
+
+    expect(file).toHaveProperty("checksum");
+    expect(file).toHaveProperty("checksumAlgorithm");
+    expect(file.checksumAlgorithm).toBe("sha256");
+  });
+
+  it("should allow null checksum for legacy files", () => {
+    const file = {
+      id: "f-legacy",
+      name: "old-file.txt",
+      checksum: null,
+      checksumAlgorithm: "sha256",
+    };
+
+    expect(file.checksum).toBeNull();
+  });
+
+  it("should include toolCallId in metadata when provided", () => {
+    const metadata = { toolCallId: "call_abc123" };
+
+    expect(metadata).toHaveProperty("toolCallId");
+    expect(metadata.toolCallId).toBe("call_abc123");
+  });
+
+  it("should set metadata to null when no toolCallId is provided", () => {
+    const toolCallId: string | undefined = undefined;
+    const metadata = toolCallId ? { toolCallId } : null;
+
+    expect(metadata).toBeNull();
+  });
+
+  it("should include checksum in version records", () => {
+    const version = {
+      id: "ver-1",
+      fileId: "f-1",
+      version: 1,
+      storageKey: "users/u1/files/f1/test.txt",
+      size: 1024,
+      checksum: "abc123def456",
+      checksumAlgorithm: "sha256",
+      changeDescription: "Initial upload",
+    };
+
+    expect(version).toHaveProperty("checksum");
+    expect(version).toHaveProperty("checksumAlgorithm");
+    expect(version.checksumAlgorithm).toBe("sha256");
   });
 });

@@ -7,6 +7,7 @@ const storageConfigSchema = z.object({
   secretAccessKey: z.string().optional(),
   endpoint: z.string().optional(),
   forcePathStyle: z.boolean().default(false),
+  cdnUrl: z.string().optional(),
 });
 
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
@@ -19,5 +20,6 @@ export function getStorageConfig(): StorageConfig {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     endpoint: process.env.S3_ENDPOINT,
     forcePathStyle: !!process.env.S3_ENDPOINT,
+    cdnUrl: process.env.CDN_URL,
   });
 }

@@ -7,6 +7,7 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createHash } from "node:crypto";
 import { getStorageConfig, type StorageConfig } from "./keys";
 
 export { getStorageConfig, type StorageConfig } from "./keys";
@@ -56,6 +57,23 @@ export function getVersionStorageKey(
   return `users/${userId}/files/${fileId}/v${version}/${filename}`;
 }
 
+/** Calculate SHA-256 checksum of file buffer */
+export function calculateChecksum(buffer: Buffer | Uint8Array, algorithm: string = "sha256"): string {
+  const hash = createHash(algorithm);
+  hash.update(buffer);
+  return hash.digest("hex");
+}
+
+/** Verify file checksum matches expected value */
+export function verifyChecksum(
+  buffer: Buffer | Uint8Array,
+  expectedChecksum: string,
+  algorithm: string = "sha256"
+): boolean {
+  const actualChecksum = calculateChecksum(buffer, algorithm);
+  return actualChecksum === expectedChecksum;
+}
+
 /** Upload a file to S3 */
 export async function uploadFile(
   key: string,
@@ -75,8 +93,28 @@ export async function uploadFile(
   );
 }
 
-/** Generate a presigned download URL */
-export async function getPresignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
+/** Get CDN URL if configured, otherwise return null */
+export function getCdnUrl(key: string): string | null {
+  if (!_config) {
+    _config = getStorageConfig();
+  }
+  if (_config.cdnUrl) {
+    return `${_config.cdnUrl}/${key}`;
+  }
+  return null;
+}
+
+/** Generate a presigned download URL or CDN URL for public files */
+export async function getPresignedUrl(key: string, expiresIn: number = 3600, isPublic: boolean = false): Promise<string> {
+  // For public files, prefer CDN URL if available
+  if (isPublic) {
+    const cdnUrl = getCdnUrl(key);
+    if (cdnUrl) {
+      return cdnUrl;
+    }
+  }
+
+  // Fall back to presigned S3 URL
   const client = getClient();
   return getSignedUrl(
     client,
