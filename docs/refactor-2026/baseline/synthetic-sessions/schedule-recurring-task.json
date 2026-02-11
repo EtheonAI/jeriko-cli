@@ -1,0 +1,42 @@
+{
+  "sessionId": "test-bXpE6-FyRF8v",
+  "name": "schedule-recurring-task",
+  "description": "Schedule a recurring task",
+  "tags": [
+    "schedule",
+    "cron"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Run backups every day at midnight"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll schedule that task.",
+      "toolCalls": [
+        {
+          "name": "schedule_recurring_task",
+          "input": {
+            "cron": "0 0 * * *",
+            "command": "backup.sh"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Task scheduled",
+      "toolResults": [
+        {
+          "toolCallId": "tc_20",
+          "result": "{\"taskId\": \"task_123\"}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Backup scheduled for midnight daily."
+    }
+  ]
+}

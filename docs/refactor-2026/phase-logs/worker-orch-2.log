@@ -1,0 +1,18 @@
+WORKER-ORCH-2 EXECUTION LOG
+============================
+Started: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+Task: Update chat route to use orchestrator session flow
+
+ASSIGNMENT FROM LEAD:
+- Modify apps/app/app/api/chat/route.ts
+- Modify apps/app/lib/chat/agent-proxy.ts (SSE event mapping)
+- Update POST handler to create session via orchestrator
+- Update message sending to use /v1/sessions/:id/messages
+- Map orchestrator events to AI SDK v6 UIMessage format
+- Ensure persistence still works (save to DB after stream)
+- Test with browser/terminal streaming
+
+PHASE 1: DISCOVERY
+------------------
+Waiting for worker-orch-1 to complete RubicAI provider updates...
+

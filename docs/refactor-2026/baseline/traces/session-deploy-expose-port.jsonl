@@ -1,0 +1,52 @@
+{
+  "sessionId": "test-Lo9ZlzBDLfAp",
+  "name": "deploy-expose-port",
+  "description": "Deploy and expose a port",
+  "tags": [
+    "deploy",
+    "port"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.581Z",
+  "messageCount": 4,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Start a web server on port 3000 and expose it",
+      "createdAt": "2026-02-10T15:00:19.581Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll expose port 3000.",
+      "toolCalls": [
+        {
+          "name": "deploy_expose_port",
+          "input": {
+            "port": 3000
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.581Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Port exposed",
+      "toolResults": [
+        {
+          "toolCallId": "tc_18",
+          "result": "{\"url\": \"https://app-123.e2b.dev\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.581Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Server exposed at https://app-123.e2b.dev",
+      "createdAt": "2026-02-10T15:00:22.581Z"
+    }
+  ]
+}

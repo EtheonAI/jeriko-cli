@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-02-09T19:18:46.750697+00:00",
+  "tool_names": [
+    "gmail_read_threads",
+    "gmail_search_messages",
+    "gmail_send_messages"
+  ],
+  "servers": [
+    {
+      "name": "gmail",
+      "description": "Gmail tools.",
+      "tools": [
+        {
+          "name": "gmail_search_messages",
+          "description": "Search and list Gmail messages with optional query and label filters.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "q": {
+                "type": "string",
+                "description": "Search query using Gmail search operators and keywords (e.g., from:someuser@example.com, subject:\"meeting\", after:2024/01/01)."
+              },
+              "max_results": {
+                "type": "integer",
+                "description": "(Optional) Maximum number of results to return. Default is 50, max is 500",
+                "default": 50,
+                "maximum": 500
+              },
+              "page_token": {
+                "type": "string",
+                "description": "Page token to retrieve a specific page of results in the list."
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "gmail_read_threads",
+          "description": "Read one or more Gmail threads by ID.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "thread_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of thread IDs to retrieve. Use this for reading one or multiple threads efficiently. Max is 100."
+              },
+              "include_full_messages": {
+                "type": "boolean",
+                "description": "Include the full message body when conducting the thread search.",
+                "default": true
+              }
+            },
+            "required": [
+              "thread_ids"
+            ]
+          }
+        },
+        {
+          "name": "gmail_send_messages",
+          "description": "Send multiple Gmail messages or save them as drafts. Calling this tool triggers an interactive user confirmation in the UI to choose \"Save to drafts\" or \"Send\" before any message is sent.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "messages": {
+                "type": "array",
+                "description": "Array of email messages to send",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "subject": {
+                      "type": "string",
+                      "description": "Subject of the email message"
+                    },
+                    "to": {
+                      "type": "array",
+                      "description": "List of recipient email addresses",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "description": "Email address of a recipient"
+                      }
+                    },
+                    "cc": {
+                      "type": "array",
+                      "description": "(Optional) List of CC recipient email addresses",
+                      "items": {
+                        "type": "string",
+                        "description": "Email address of a CC recipient"
+                      }
+                    },
+                    "bcc": {
+                      "type": "array",
+                      "description": "(Optional) List of BCC recipient email addresses",
+                      "items": {
+                        "type": "string",
+                        "description": "Email address of a BCC recipient"
+                      }
+                    },
+                    "content": {
+                      "type": "string",
+                      "description": "Plain text content of the email message (not markdown or HTML)"
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "description": "(Optional) List of file paths to attach to the email. Regular files: use absolute paths. Markdown files: first run `manus-md-to-pdf`, then attach PDF. Slides projects: use `manus-slides://` prefix with directory path.",
+                      "items": {
+                        "type": "string",
+                        "description": "File path or slides project (use `manus-slides://` prefix for slides)"
+                      }
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "to",
+                    "content"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "messages"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

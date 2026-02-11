@@ -1,0 +1,41 @@
+{
+  "sessionId": "test-wyXM273vApqn",
+  "name": "message-ask-user",
+  "description": "Ask user for clarification",
+  "tags": [
+    "communication",
+    "ask"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Deploy the application"
+    },
+    {
+      "role": "assistant",
+      "content": "I need more information.",
+      "toolCalls": [
+        {
+          "name": "message_ask_user",
+          "input": {
+            "question": "Which environment would you like to deploy to? (staging/production)"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "User responded",
+      "toolResults": [
+        {
+          "toolCallId": "tc_32",
+          "result": "{\"answer\": \"staging\"}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Deploying to staging environment."
+    }
+  ]
+}

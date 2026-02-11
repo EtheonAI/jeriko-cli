@@ -1,0 +1,53 @@
+{
+  "sessionId": "test-bXpE6-FyRF8v",
+  "name": "schedule-recurring-task",
+  "description": "Schedule a recurring task",
+  "tags": [
+    "schedule",
+    "cron"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.585Z",
+  "messageCount": 4,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Run backups every day at midnight",
+      "createdAt": "2026-02-10T15:00:19.585Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll schedule that task.",
+      "toolCalls": [
+        {
+          "name": "schedule_recurring_task",
+          "input": {
+            "cron": "0 0 * * *",
+            "command": "backup.sh"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.585Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Task scheduled",
+      "toolResults": [
+        {
+          "toolCallId": "tc_20",
+          "result": "{\"taskId\": \"task_123\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.585Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Backup scheduled for midnight daily.",
+      "createdAt": "2026-02-10T15:00:22.585Z"
+    }
+  ]
+}

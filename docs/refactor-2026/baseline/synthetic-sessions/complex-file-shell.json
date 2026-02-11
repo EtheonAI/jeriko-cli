@@ -1,0 +1,89 @@
+{
+  "sessionId": "test-Z0hPra3HNDP9",
+  "name": "complex-file-shell",
+  "description": "Complex workflow with multiple tool types",
+  "tags": [
+    "multi-tool",
+    "files",
+    "shell"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a new React component and add it to the app"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll create the component file first.",
+      "toolCalls": [
+        {
+          "name": "file_write",
+          "input": {
+            "path": "src/components/NewComponent.tsx",
+            "content": "export function NewComponent() { return <div>New Component</div>; }"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "File created",
+      "toolResults": [
+        {
+          "toolCallId": "tc_15",
+          "result": "{\"success\": true}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Component created. Now importing it.",
+      "toolCalls": [
+        {
+          "name": "file_str_replace",
+          "input": {
+            "path": "src/App.tsx",
+            "old_str": "import React from \"react\";",
+            "new_str": "import React from \"react\";\nimport { NewComponent } from \"./components/NewComponent\";"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Import added",
+      "toolResults": [
+        {
+          "toolCallId": "tc_16",
+          "result": "{\"success\": true}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Running tests to verify.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "pnpm test NewComponent"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Tests passed",
+      "toolResults": [
+        {
+          "toolCallId": "tc_17",
+          "result": "{\"exitCode\": 0}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Component created and integrated successfully!"
+    }
+  ]
+}

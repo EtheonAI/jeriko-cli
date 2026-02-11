@@ -1,0 +1,64 @@
+{
+  "sessionId": "test-9V96BYcZtLCW",
+  "name": "file-read-multiple",
+  "description": "Read multiple files",
+  "tags": [
+    "files",
+    "read",
+    "multiple"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Read package.json and tsconfig.json"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll read package.json first.",
+      "toolCalls": [
+        {
+          "name": "file_read",
+          "input": {
+            "path": "package.json"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "File content",
+      "toolResults": [
+        {
+          "toolCallId": "tc_29",
+          "result": "{\"content\": \"{\\\"name\\\": \\\"app\\\"}\"}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Now reading tsconfig.json.",
+      "toolCalls": [
+        {
+          "name": "file_read",
+          "input": {
+            "path": "tsconfig.json"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "File content",
+      "toolResults": [
+        {
+          "toolCallId": "tc_30",
+          "result": "{\"content\": \"{\\\"compilerOptions\\\": {}}\"}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Read both configuration files successfully."
+    }
+  ]
+}

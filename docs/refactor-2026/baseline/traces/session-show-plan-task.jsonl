@@ -1,0 +1,85 @@
+{
+  "sessionId": "test-WHL40H8LBhwP",
+  "name": "show-plan-task",
+  "description": "Show a plan before executing",
+  "tags": [
+    "planning",
+    "show_plan"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.588Z",
+  "messageCount": 6,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Refactor the authentication module to use OAuth2",
+      "createdAt": "2026-02-10T15:00:19.588Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll create a plan for this refactor.",
+      "toolCalls": [
+        {
+          "name": "show_plan",
+          "input": {
+            "steps": [
+              {
+                "id": "1",
+                "title": "Research OAuth2 libraries",
+                "status": "pending"
+              },
+              {
+                "id": "2",
+                "title": "Install dependencies",
+                "status": "pending"
+              },
+              {
+                "id": "3",
+                "title": "Update authentication flow",
+                "status": "pending"
+              },
+              {
+                "id": "4",
+                "title": "Write tests",
+                "status": "pending"
+              }
+            ]
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.588Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Plan displayed",
+      "toolResults": [
+        {
+          "toolCallId": "tc_12",
+          "result": "{\"success\": true}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.588Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "I've created a plan. Shall I proceed?",
+      "createdAt": "2026-02-10T15:00:22.588Z"
+    },
+    {
+      "messageId": "msg_5",
+      "role": "user",
+      "content": "Yes, proceed",
+      "createdAt": "2026-02-10T15:00:23.588Z"
+    },
+    {
+      "messageId": "msg_6",
+      "role": "assistant",
+      "content": "Starting step 1: Research OAuth2 libraries.",
+      "createdAt": "2026-02-10T15:00:24.588Z"
+    }
+  ]
+}

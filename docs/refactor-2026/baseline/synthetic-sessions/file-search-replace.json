@@ -1,0 +1,67 @@
+{
+  "sessionId": "test-3aKUaMNb1cKd",
+  "name": "file-search-replace",
+  "description": "Find and replace text in files",
+  "tags": [
+    "files",
+    "search",
+    "replace"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Find all files containing \"TODO\" and replace with \"DONE\""
+    },
+    {
+      "role": "assistant",
+      "content": "I'll search for files with TODO.",
+      "toolCalls": [
+        {
+          "name": "file_find_in_content",
+          "input": {
+            "pattern": "TODO",
+            "path": "."
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Found 3 matches",
+      "toolResults": [
+        {
+          "toolCallId": "tc_2",
+          "result": "{\"matches\": [\"file1.ts\", \"file2.ts\", \"file3.ts\"]}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Found TODO in 3 files. Replacing now.",
+      "toolCalls": [
+        {
+          "name": "file_str_replace",
+          "input": {
+            "path": "file1.ts",
+            "old_str": "TODO",
+            "new_str": "DONE"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Replacement complete",
+      "toolResults": [
+        {
+          "toolCallId": "tc_3",
+          "result": "{\"success\": true, \"replacements\": 1}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Replaced TODO with DONE in all files."
+    }
+  ]
+}

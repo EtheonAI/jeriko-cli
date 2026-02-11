@@ -1,0 +1,78 @@
+{
+  "sessionId": "test-SCnarHLSotlQ",
+  "name": "message-notify-user",
+  "description": "Send notification to user",
+  "tags": [
+    "communication",
+    "notification"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.585Z",
+  "messageCount": 6,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Let me know when the build completes",
+      "createdAt": "2026-02-10T15:00:19.585Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll start the build and notify you.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "pnpm build"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.585Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Build complete",
+      "toolResults": [
+        {
+          "toolCallId": "tc_13",
+          "result": "{\"exitCode\": 0, \"output\": \"Build successful\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.585Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Sending notification.",
+      "toolCalls": [
+        {
+          "name": "message_notify_user",
+          "input": {
+            "message": "Build completed successfully!"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:22.585Z"
+    },
+    {
+      "messageId": "msg_5",
+      "role": "tool",
+      "content": "Notification sent",
+      "toolResults": [
+        {
+          "toolCallId": "tc_14",
+          "result": "{\"success\": true}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:23.585Z"
+    },
+    {
+      "messageId": "msg_6",
+      "role": "assistant",
+      "content": "Build completed successfully! You've been notified.",
+      "createdAt": "2026-02-10T15:00:24.585Z"
+    }
+  ]
+}

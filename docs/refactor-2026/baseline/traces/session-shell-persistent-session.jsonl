@@ -1,0 +1,105 @@
+{
+  "sessionId": "test-oXbNDXPZPest",
+  "name": "shell-persistent-session",
+  "description": "Use persistent shell session",
+  "tags": [
+    "shell",
+    "persistent"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.587Z",
+  "messageCount": 8,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Start a Python REPL and calculate 2+2",
+      "createdAt": "2026-02-10T15:00:19.587Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll start Python REPL.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "python3"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.587Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Python started",
+      "toolResults": [
+        {
+          "toolCallId": "tc_26",
+          "result": "{\"sessionId\": \"shell_1\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.587Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Sending calculation.",
+      "toolCalls": [
+        {
+          "name": "shell_write_to_process",
+          "input": {
+            "sessionId": "shell_1",
+            "input": "2+2\n"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:22.587Z"
+    },
+    {
+      "messageId": "msg_5",
+      "role": "tool",
+      "content": "Input sent",
+      "toolResults": [
+        {
+          "toolCallId": "tc_27",
+          "result": "{\"success\": true}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:23.587Z"
+    },
+    {
+      "messageId": "msg_6",
+      "role": "assistant",
+      "content": "Viewing output.",
+      "toolCalls": [
+        {
+          "name": "shell_view",
+          "input": {
+            "sessionId": "shell_1"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:24.587Z"
+    },
+    {
+      "messageId": "msg_7",
+      "role": "tool",
+      "content": "Output",
+      "toolResults": [
+        {
+          "toolCallId": "tc_28",
+          "result": "{\"output\": \"4\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:25.587Z"
+    },
+    {
+      "messageId": "msg_8",
+      "role": "assistant",
+      "content": "Result is 4.",
+      "createdAt": "2026-02-10T15:00:26.587Z"
+    }
+  ]
+}

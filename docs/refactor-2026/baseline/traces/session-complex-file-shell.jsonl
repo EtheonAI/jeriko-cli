@@ -1,0 +1,108 @@
+{
+  "sessionId": "test-Z0hPra3HNDP9",
+  "name": "complex-file-shell",
+  "description": "Complex workflow with multiple tool types",
+  "tags": [
+    "multi-tool",
+    "files",
+    "shell"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.581Z",
+  "messageCount": 8,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Create a new React component and add it to the app",
+      "createdAt": "2026-02-10T15:00:19.581Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll create the component file first.",
+      "toolCalls": [
+        {
+          "name": "file_write",
+          "input": {
+            "path": "src/components/NewComponent.tsx",
+            "content": "export function NewComponent() { return <div>New Component</div>; }"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.581Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "File created",
+      "toolResults": [
+        {
+          "toolCallId": "tc_15",
+          "result": "{\"success\": true}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.581Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Component created. Now importing it.",
+      "toolCalls": [
+        {
+          "name": "file_str_replace",
+          "input": {
+            "path": "src/App.tsx",
+            "old_str": "import React from \"react\";",
+            "new_str": "import React from \"react\";\nimport { NewComponent } from \"./components/NewComponent\";"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:22.581Z"
+    },
+    {
+      "messageId": "msg_5",
+      "role": "tool",
+      "content": "Import added",
+      "toolResults": [
+        {
+          "toolCallId": "tc_16",
+          "result": "{\"success\": true}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:23.581Z"
+    },
+    {
+      "messageId": "msg_6",
+      "role": "assistant",
+      "content": "Running tests to verify.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "pnpm test NewComponent"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:24.581Z"
+    },
+    {
+      "messageId": "msg_7",
+      "role": "tool",
+      "content": "Tests passed",
+      "toolResults": [
+        {
+          "toolCallId": "tc_17",
+          "result": "{\"exitCode\": 0}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:25.581Z"
+    },
+    {
+      "messageId": "msg_8",
+      "role": "assistant",
+      "content": "Component created and integrated successfully!",
+      "createdAt": "2026-02-10T15:00:26.581Z"
+    }
+  ]
+}

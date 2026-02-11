@@ -1,0 +1,52 @@
+{
+  "sessionId": "test-qS05KqjKSW29",
+  "name": "browser-navigate",
+  "description": "Navigate to a website",
+  "tags": [
+    "browser",
+    "navigation"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.579Z",
+  "messageCount": 4,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "Go to example.com",
+      "createdAt": "2026-02-10T15:00:19.579Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll navigate to example.com.",
+      "toolCalls": [
+        {
+          "name": "browser_navigate",
+          "input": {
+            "url": "https://example.com"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.579Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Navigation complete",
+      "toolResults": [
+        {
+          "toolCallId": "tc_7",
+          "result": "{\"url\": \"https://example.com\", \"title\": \"Example Domain\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.579Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Navigated to Example Domain.",
+      "createdAt": "2026-02-10T15:00:22.579Z"
+    }
+  ]
+}

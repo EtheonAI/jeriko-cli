@@ -1,0 +1,41 @@
+{
+  "sessionId": "test-DyUSB8zD6Z1W",
+  "name": "web-search-basic",
+  "description": "Search the web",
+  "tags": [
+    "search",
+    "web"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Search for \"TypeScript best practices\""
+    },
+    {
+      "role": "assistant",
+      "content": "I'll search for that.",
+      "toolCalls": [
+        {
+          "name": "web_search",
+          "input": {
+            "query": "TypeScript best practices"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Search results",
+      "toolResults": [
+        {
+          "toolCallId": "tc_11",
+          "result": "{\"results\": [\"Result 1\", \"Result 2\", \"Result 3\"]}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Here are the top results for TypeScript best practices: ..."
+    }
+  ]
+}

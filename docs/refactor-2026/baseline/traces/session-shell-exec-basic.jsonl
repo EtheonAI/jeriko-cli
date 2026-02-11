@@ -1,0 +1,52 @@
+{
+  "sessionId": "test-J8rDzSZ7-mO6",
+  "name": "shell-exec-basic",
+  "description": "Execute basic shell commands",
+  "tags": [
+    "shell",
+    "basic"
+  ],
+  "userId": "test-user-1",
+  "createdAt": "2026-02-10T15:00:19.586Z",
+  "messageCount": 4,
+  "messages": [
+    {
+      "messageId": "msg_1",
+      "role": "user",
+      "content": "List all files in the current directory",
+      "createdAt": "2026-02-10T15:00:19.586Z"
+    },
+    {
+      "messageId": "msg_2",
+      "role": "assistant",
+      "content": "I'll list the files for you.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "ls -la"
+          }
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:20.586Z"
+    },
+    {
+      "messageId": "msg_3",
+      "role": "tool",
+      "content": "Command output",
+      "toolResults": [
+        {
+          "toolCallId": "tc_4",
+          "result": "{\"output\": \"total 48\\ndrwxr-xr-x 10 user staff 320 Feb 10 10:00 .\\n...\"}"
+        }
+      ],
+      "createdAt": "2026-02-10T15:00:21.586Z"
+    },
+    {
+      "messageId": "msg_4",
+      "role": "assistant",
+      "content": "Here are the files in the current directory: ...",
+      "createdAt": "2026-02-10T15:00:22.586Z"
+    }
+  ]
+}

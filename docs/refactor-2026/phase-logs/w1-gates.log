@@ -1,0 +1,1035 @@
+=== Worker w1-gates Execution Log ===
+Goal: Fix typecheck and test errors
+Started: $(date)
+
+• turbo 2.8.3
+• Packages in scope: @repo/agentmail, @repo/ai, @repo/analytics, @repo/auth, @repo/cms, @repo/collaboration, @repo/contracts, @repo/database, @repo/design-system, @repo/email, @repo/feature-flags, @repo/internationalization, @repo/next-config, @repo/notifications, @repo/observability, @repo/payments, @repo/rate-limit, @repo/search, @repo/security, @repo/seo, @repo/service-utils, @repo/storage, @repo/testing, @repo/typescript-config, @repo/webhooks, @rubic/billing, @rubic/connector, @rubic/device, @rubic/file, @rubic/gateway, @rubic/knowledge, @rubic/notification, @rubic/orchestrator, @rubic/project, @rubic/sandbox, @rubic/search, @rubic/task, @rubic/webhook, @rubic/website, api, app, docs, email, storybook, studio, web
+• Running typecheck in 46 packages
+• Remote caching disabled
+@repo/testing:typecheck: cache miss, executing 8e600aac92638139
+@repo/typescript-config:typecheck: cache miss, executing e708487c1f044fd8
+@repo/contracts:typecheck: cache miss, executing 090eead0d0fa0d79
+@repo/analytics:typecheck: cache hit, replaying logs dc4b491dc37e3098
+@repo/analytics:typecheck: 
+@repo/analytics:typecheck: > @repo/analytics@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/analytics
+@repo/analytics:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/analytics:typecheck: 
+@repo/collaboration:typecheck: cache hit, replaying logs db4d7af442ba2175
+@repo/collaboration:typecheck: 
+@repo/collaboration:typecheck: > @repo/collaboration@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/collaboration
+@repo/collaboration:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/collaboration:typecheck: 
+@repo/security:typecheck: cache hit, replaying logs f33cca7f67add9d8
+@repo/security:typecheck: 
+@repo/security:typecheck: > @repo/security@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/security
+@repo/security:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/security:typecheck: 
+@repo/search:typecheck: cache hit, replaying logs 1639ebdfa4c6db6e
+@repo/search:typecheck: 
+@repo/search:typecheck: > @repo/search@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/search
+@repo/search:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/search:typecheck: 
+@repo/next-config:typecheck: cache hit, replaying logs 089019f3c2eacd86
+@repo/next-config:typecheck: 
+@repo/next-config:typecheck: > @repo/next-config@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/next-config
+@repo/next-config:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/next-config:typecheck: 
+@repo/rate-limit:typecheck: cache miss, executing 1894255e5cb1964e
+@repo/cms:typecheck: cache hit, replaying logs 3b26355d8ee88671
+@repo/cms:typecheck: 
+@repo/cms:typecheck: > @repo/cms@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms
+@repo/cms:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/cms:typecheck: 
+@repo/seo:typecheck: cache hit, replaying logs 9e4de0b64851c26d
+@repo/seo:typecheck: 
+@repo/seo:typecheck: > @repo/seo@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/seo
+@repo/seo:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/seo:typecheck: 
+@repo/observability:typecheck: cache hit, replaying logs 2d4990cb157f9deb
+@repo/observability:typecheck: 
+@repo/observability:typecheck: > @repo/observability@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/observability
+@repo/observability:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/observability:typecheck: 
+@repo/agentmail:typecheck: cache hit, replaying logs 87cc2dd397620084
+@repo/agentmail:typecheck: 
+@repo/agentmail:typecheck: > @repo/agentmail@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/agentmail
+@repo/agentmail:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/agentmail:typecheck: 
+@repo/notifications:typecheck: cache hit, replaying logs 0af2e4c96c2fb6a0
+@repo/notifications:typecheck: 
+@repo/notifications:typecheck: > @repo/notifications@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/notifications
+@repo/notifications:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/notifications:typecheck: 
+@repo/storage:typecheck: cache hit, replaying logs faea67272eb8b33d
+@repo/storage:typecheck: 
+@repo/storage:typecheck: > @repo/storage@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/storage
+@repo/storage:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/storage:typecheck: 
+@repo/database:build: cache hit, replaying logs bdc16d68981ecde1
+@repo/database:build: 
+@repo/database:build: > @repo/database@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/database
+@repo/database:build: > echo 'No build step needed for Drizzle'
+@repo/database:build: 
+@repo/database:build: No build step needed for Drizzle
+@repo/internationalization:typecheck: cache hit, replaying logs f178c41380f06435
+@repo/internationalization:typecheck: 
+@repo/internationalization:typecheck: > @repo/internationalization@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/internationalization
+@repo/internationalization:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/internationalization:typecheck: 
+@repo/database:typecheck: cache miss, executing caf5c9abdb6eaebd
+@repo/cms:build: cache hit, replaying logs d1609acecb575035
+@repo/payments:typecheck: cache hit, replaying logs bf842ae1d51e6e89
+@repo/email:typecheck: cache hit, replaying logs a254ec49e2e64357
+@repo/cms:build: 
+@repo/cms:build: > @repo/cms@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms
+@repo/cms:build: > basehub build
+@repo/cms:build: 
+@repo/cms:build: 🪄 Generating...
+@repo/cms:build: ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+@repo/cms:build: │ 🎫 SDK Version: 9.5.2 (API v4)                                                                │
+@repo/cms:build: │ 🔗 Endpoint: https://api.basehub.com/graphql                                                  │
+@repo/cms:build: │ 🔵 Draft: disabled                                                                            │
+@repo/cms:build: │ 📦 Output: /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts │
+@repo/cms:build: │ 🔀 Ref: main (basehub branch)                                                                 │
+@repo/cms:build: └───────────────────────────────────────────────────────────────────────────────────────────────┘
+@repo/cms:build: ❯ generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
+@repo/cms:build: ❯ fetching schema from BaseHub's API
+@repo/cms:build: ✔ fetching schema from BaseHub's API
+@repo/cms:build: ❯ writing files
+@repo/cms:build: ❯ processing schema
+@repo/cms:build: ❯ writing /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts
+@repo/cms:build: ✔ writing /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts
+@repo/cms:build: ✔ processing schema
+@repo/cms:build: ✔ writing files
+@repo/cms:build: ✔ generating the client in `/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/cms/basehub-types.d.ts`
+@repo/cms:build: 🪄 Generated basehub types in 1846ms
+@repo/payments:typecheck: 
+@repo/payments:typecheck: > @repo/payments@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/payments
+@repo/payments:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/payments:typecheck: 
+@repo/email:typecheck: 
+@repo/email:typecheck: > @repo/email@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/email
+@repo/email:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/email:typecheck: 
+email:typecheck: cache miss, executing 140dce9d6fc33411
+studio:typecheck: cache miss, executing e69ce72d69d713d8
+@repo/search:build: cache hit, replaying logs 3ad2098becc01faf
+@repo/search:build: 
+@repo/search:build: > @repo/search@0.0.0 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/search
+@repo/search:build: > echo 'No build step needed'
+@repo/search:build: 
+@repo/search:build: No build step needed
+@repo/auth:typecheck: cache hit, replaying logs 90b498213f0b9fdd
+@repo/auth:typecheck: 
+@repo/auth:typecheck: > @repo/auth@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/auth
+@repo/auth:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/auth:typecheck: 
+@repo/webhooks:typecheck: cache hit, replaying logs 64a55775299bf2d1
+@repo/webhooks:typecheck: 
+@repo/webhooks:typecheck: > @repo/webhooks@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/webhooks
+@repo/webhooks:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/webhooks:typecheck: 
+storybook:typecheck: cache miss, executing f1543c68fafbdec8
+@repo/design-system:typecheck: cache hit, replaying logs 753f0c70d4f49a8b
+@repo/design-system:typecheck: 
+@repo/design-system:typecheck: > @repo/design-system@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/design-system
+@repo/design-system:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/design-system:typecheck: 
+@repo/feature-flags:typecheck: cache miss, executing a6eb29b21b2aea53
+@repo/service-utils:build: cache hit, replaying logs 333aca21aaa497d2
+@repo/service-utils:build: 
+@repo/service-utils:build: > @repo/service-utils@0.0.1 build /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/service-utils
+@repo/service-utils:build: > tsup
+@repo/service-utils:build: 
+@repo/service-utils:build: CLI Building entry: src/index.ts, src/auth/index.ts, src/circuit-breaker/index.ts, src/compression/index.ts, src/cors/index.ts, src/database/index.ts, src/errors/index.ts, src/events/index.ts, src/factory/index.ts, src/health/index.ts, src/logger/index.ts, src/metrics/index.ts, src/rate-limit/index.ts, src/redis/index.ts, src/schemas/common.ts, src/security/index.ts, src/swagger/index.ts, src/testing/index.ts, src/types/index.ts, src/validation/index.ts, src/webhooks/index.ts
+@repo/service-utils:build: CLI Using tsconfig: tsconfig.json
+@repo/service-utils:build: CLI tsup v8.5.0
+@repo/service-utils:build: CLI Using tsup config: /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/service-utils/tsup.config.ts
+@repo/service-utils:build: CLI Target: es2023
+@repo/service-utils:build: CLI Cleaning output folder
+@repo/service-utils:build: ESM Build start
+@repo/service-utils:build: ESM dist/index.js                     46.06 KB
+@repo/service-utils:build: ESM dist/cors/index.js                3.97 KB
+@repo/service-utils:build: ESM dist/events/index.js              5.45 KB
+@repo/service-utils:build: ESM dist/health/index.js              6.82 KB
+@repo/service-utils:build: ESM dist/factory/index.js             35.81 KB
+@repo/service-utils:build: ESM dist/database/index.js            419.00 B
+@repo/service-utils:build: ESM dist/errors/index.js              4.22 KB
+@repo/service-utils:build: ESM dist/circuit-breaker/index.js     3.62 KB
+@repo/service-utils:build: ESM dist/compression/index.js         2.55 KB
+@repo/service-utils:build: ESM dist/auth/index.js                4.96 KB
+@repo/service-utils:build: ESM dist/rate-limit/index.js          3.20 KB
+@repo/service-utils:build: ESM dist/security/index.js            5.73 KB
+@repo/service-utils:build: ESM dist/types/index.js               1.12 KB
+@repo/service-utils:build: ESM dist/swagger/index.js             4.94 KB
+@repo/service-utils:build: ESM dist/testing/index.js             4.78 KB
+@repo/service-utils:build: ESM dist/webhooks/index.js            3.09 KB
+@repo/service-utils:build: ESM dist/metrics/index.js             5.26 KB
+@repo/service-utils:build: ESM dist/schemas/common.js            834.00 B
+@repo/service-utils:build: ESM dist/logger/index.js              2.12 KB
+@repo/service-utils:build: ESM dist/validation/index.js          2.50 KB
+@repo/service-utils:build: ESM dist/redis/index.js               3.39 KB
+@repo/service-utils:build: ESM dist/database/index.js.map        899.00 B
+@repo/service-utils:build: ESM dist/circuit-breaker/index.js.map 12.61 KB
+@repo/service-utils:build: ESM dist/health/index.js.map          13.20 KB
+@repo/service-utils:build: ESM dist/compression/index.js.map     5.82 KB
+@repo/service-utils:build: ESM dist/errors/index.js.map          8.40 KB
+@repo/service-utils:build: ESM dist/rate-limit/index.js.map      7.74 KB
+@repo/service-utils:build: ESM dist/factory/index.js.map         88.00 KB
+@repo/service-utils:build: ESM dist/security/index.js.map        12.60 KB
+@repo/service-utils:build: ESM dist/swagger/index.js.map         10.02 KB
+@repo/service-utils:build: ESM dist/types/index.js.map           4.80 KB
+@repo/service-utils:build: ESM dist/auth/index.js.map            13.29 KB
+@repo/service-utils:build: ESM dist/testing/index.js.map         10.61 KB
+@repo/service-utils:build: ESM dist/webhooks/index.js.map        6.44 KB
+@repo/service-utils:build: ESM dist/cors/index.js.map            8.46 KB
+@repo/service-utils:build: ESM dist/validation/index.js.map      6.12 KB
+@repo/service-utils:build: ESM dist/logger/index.js.map          4.28 KB
+@repo/service-utils:build: ESM dist/schemas/common.js.map        1.78 KB
+@repo/service-utils:build: ESM dist/events/index.js.map          17.02 KB
+@repo/service-utils:build: ESM dist/index.js.map                 118.13 KB
+@repo/service-utils:build: ESM dist/metrics/index.js.map         11.70 KB
+@repo/service-utils:build: ESM dist/redis/index.js.map           7.12 KB
+@repo/service-utils:build: ESM ⚡️ Build success in 88ms
+@repo/service-utils:build: DTS Build start
+@repo/service-utils:build: DTS ⚡️ Build success in 31775ms
+@repo/service-utils:build: DTS dist/index.d.ts                 2.54 KB
+@repo/service-utils:build: DTS dist/auth/index.d.ts            3.44 KB
+@repo/service-utils:build: DTS dist/circuit-breaker/index.d.ts 2.06 KB
+@repo/service-utils:build: DTS dist/compression/index.d.ts     1.50 KB
+@repo/service-utils:build: DTS dist/cors/index.d.ts            2.08 KB
+@repo/service-utils:build: DTS dist/database/index.d.ts        396.00 B
+@repo/service-utils:build: DTS dist/errors/index.d.ts          2.78 KB
+@repo/service-utils:build: DTS dist/events/index.d.ts          3.98 KB
+@repo/service-utils:build: DTS dist/factory/index.d.ts         8.20 KB
+@repo/service-utils:build: DTS dist/health/index.d.ts          2.69 KB
+@repo/service-utils:build: DTS dist/logger/index.d.ts          580.00 B
+@repo/service-utils:build: DTS dist/metrics/index.d.ts         1.83 KB
+@repo/service-utils:build: DTS dist/rate-limit/index.d.ts      2.71 KB
+@repo/service-utils:build: DTS dist/redis/index.d.ts           1.13 KB
+@repo/service-utils:build: DTS dist/schemas/common.d.ts        862.00 B
+@repo/service-utils:build: DTS dist/security/index.d.ts        2.31 KB
+@repo/service-utils:build: DTS dist/swagger/index.d.ts         3.67 KB
+@repo/service-utils:build: DTS dist/testing/index.d.ts         3.60 KB
+@repo/service-utils:build: DTS dist/types/index.d.ts           4.60 KB
+@repo/service-utils:build: DTS dist/validation/index.d.ts      2.04 KB
+@repo/service-utils:build: DTS dist/webhooks/index.d.ts        407.00 B
+@repo/ai:typecheck: cache miss, executing 3349900d826677fc
+@repo/contracts:typecheck: 
+@repo/contracts:typecheck: > @repo/contracts@1.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/contracts
+@repo/contracts:typecheck: > tsc --noEmit
+@repo/contracts:typecheck: 
+@repo/typescript-config:typecheck: 
+@repo/typescript-config:typecheck: > @repo/typescript-config@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/typescript-config
+@repo/typescript-config:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/typescript-config:typecheck: 
+@repo/testing:typecheck: 
+@repo/testing:typecheck: > @repo/testing@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/testing
+@repo/testing:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/testing:typecheck: 
+@repo/rate-limit:typecheck: 
+@repo/rate-limit:typecheck: > @repo/rate-limit@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/rate-limit
+@repo/rate-limit:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/rate-limit:typecheck: 
+@repo/database:typecheck: 
+@repo/database:typecheck: > @repo/database@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/database
+@repo/database:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/database:typecheck: 
+email:typecheck: 
+email:typecheck: > email@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/email
+email:typecheck: > tsc --noEmit --emitDeclarationOnly false
+email:typecheck: 
+studio:typecheck: 
+studio:typecheck: > studio@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/studio
+studio:typecheck: > tsc --noEmit --emitDeclarationOnly false
+studio:typecheck: 
+storybook:typecheck: 
+storybook:typecheck: > storybook@0.1.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/storybook
+storybook:typecheck: > tsc --noEmit --emitDeclarationOnly false
+storybook:typecheck: 
+@repo/feature-flags:typecheck: 
+@repo/feature-flags:typecheck: > @repo/feature-flags@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/feature-flags
+@repo/feature-flags:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/feature-flags:typecheck: 
+@repo/ai:typecheck: 
+@repo/ai:typecheck: > @repo/ai@0.0.0 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/ai
+@repo/ai:typecheck: > tsc --noEmit --emitDeclarationOnly false
+@repo/ai:typecheck: 
+email:typecheck: error TS18003: No inputs were found in config file '/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/email/tsconfig.json'. Specified 'include' paths were '["**/*.ts","**/*.tsx"]' and 'exclude' paths were '["node_modules"]'.
+studio:typecheck: error TS18003: No inputs were found in config file '/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/studio/tsconfig.json'. Specified 'include' paths were '["**/*.ts","**/*.tsx"]' and 'exclude' paths were '["node_modules"]'.
+@repo/testing:typecheck: error TS18003: No inputs were found in config file '/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/testing/tsconfig.json'. Specified 'include' paths were '["./src/*.tsx"]' and 'exclude' paths were '["node_modules"]'.
+studio:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+email:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/testing:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+email:typecheck: command finished with error, but continuing...
+studio:typecheck: command finished with error, but continuing...
+api:typecheck: cache miss, executing 9e351f3094bd8d72
+@repo/testing:typecheck: command finished with error, but continuing...
+@rubic/orchestrator:typecheck: cache hit, replaying logs e8d934dc5439c466
+@rubic/orchestrator:typecheck: 
+@rubic/orchestrator:typecheck: > @rubic/orchestrator@0.0.1 typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/services/orchestrator
+@rubic/orchestrator:typecheck: > tsc --noEmit
+@rubic/orchestrator:typecheck: 
+web:typecheck: cache miss, executing 8e552a285bad545d
+app:typecheck: cache miss, executing ac79a6b5c277ebe6
+api:typecheck: 
+api:typecheck: > api@ typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api
+api:typecheck: > tsc --noEmit --emitDeclarationOnly false
+api:typecheck: 
+web:typecheck: 
+web:typecheck: > web@ typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/web
+web:typecheck: > tsc --noEmit --emitDeclarationOnly false
+web:typecheck: 
+app:typecheck: 
+app:typecheck: > app@ typecheck /Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/app
+app:typecheck: > tsc --noEmit --emitDeclarationOnly false
+app:typecheck: 
+@repo/contracts:typecheck: src/adapters/sse-adapter.ts(7,42): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../schemas/events.js'?
+@repo/contracts:typecheck: src/adapters/sse-adapter.ts(23,22): error TS2532: Object is possibly 'undefined'.
+@repo/contracts:typecheck: src/adapters/tool-adapter.ts(7,32): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../schemas/tools.js'?
+@repo/contracts:typecheck: src/sandbox/schemas.ts(74,13): error TS2554: Expected 2-3 arguments, but got 1.
+@repo/contracts:typecheck: src/sandbox/schemas.ts(210,5): error TS2554: Expected 2-3 arguments, but got 1.
+@repo/contracts:typecheck: src/schemas/index.ts(8,15): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './events.js'?
+@repo/contracts:typecheck: src/schemas/index.ts(11,15): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './tools.js'?
+@repo/contracts:typecheck: src/schemas/index.ts(14,15): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './messages.js'?
+@repo/contracts:typecheck: src/schemas/tools.ts(14,44): error TS2554: Expected 2-3 arguments, but got 1.
+@repo/contracts:typecheck: src/schemas/tools.ts(19,14): error TS2554: Expected 2-3 arguments, but got 1.
+@repo/contracts:typecheck: src/schemas/tools.ts(21,19): error TS2554: Expected 2-3 arguments, but got 1.
+@repo/contracts:typecheck: src/types/index.ts(33,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../schemas/events.js'?
+@repo/contracts:typecheck: src/types/index.ts(59,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../schemas/tools.js'?
+@repo/contracts:typecheck: src/types/index.ts(70,8): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../schemas/messages.js'?
+@repo/contracts:typecheck: src/types/index.ts(73,68): error TS2835: Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean '../adapters/tool-adapter.js'?
+@repo/contracts:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/contracts:typecheck: command finished with error, but continuing...
+@repo/database:typecheck: src/service-client.ts(16,36): error TS2532: Object is possibly 'undefined'.
+@repo/database:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/database:typecheck: command finished with error, but continuing...
+@repo/feature-flags:typecheck: index.ts(11,47): error TS2558: Expected 0 type arguments, but got 1.
+@repo/feature-flags:typecheck: index.ts(12,61): error TS2558: Expected 0 type arguments, but got 1.
+@repo/feature-flags:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/feature-flags:typecheck: command finished with error, but continuing...
+api:typecheck: app/cron/keep-alive/route.ts(1,10): error TS2724: '"@repo/database"' has no exported member named 'database'. Did you mean 'Database'?
+api:typecheck: app/webhooks/auth/route.ts(3,3): error TS2305: Module '"@repo/auth/server"' has no exported member 'DeletedObjectJSON'.
+api:typecheck: app/webhooks/auth/route.ts(4,3): error TS2305: Module '"@repo/auth/server"' has no exported member 'OrganizationJSON'.
+api:typecheck: app/webhooks/auth/route.ts(5,3): error TS2305: Module '"@repo/auth/server"' has no exported member 'OrganizationMembershipJSON'.
+api:typecheck: app/webhooks/auth/route.ts(6,3): error TS2305: Module '"@repo/auth/server"' has no exported member 'UserJSON'.
+api:typecheck: app/webhooks/auth/route.ts(7,3): error TS2305: Module '"@repo/auth/server"' has no exported member 'WebhookEvent'.
+api:typecheck: app/webhooks/auth/route.ts(148,12): error TS2339: Property 'CLERK_WEBHOOK_SECRET' does not exist on type 'Readonly<{ BETTERSTACK_API_KEY?: string | undefined; BETTERSTACK_URL?: string | undefined; SENTRY_ORG?: string | undefined; SENTRY_PROJECT?: string | undefined; NEXT_PUBLIC_SENTRY_DSN?: string | undefined; ... 24 more ...; STRIPE_WEBHOOK_SECRET?: string | undefined; }>'.
+api:typecheck: app/webhooks/auth/route.ts(170,35): error TS2339: Property 'CLERK_WEBHOOK_SECRET' does not exist on type 'Readonly<{ BETTERSTACK_API_KEY?: string | undefined; BETTERSTACK_URL?: string | undefined; SENTRY_ORG?: string | undefined; SENTRY_PROJECT?: string | undefined; NEXT_PUBLIC_SENTRY_DSN?: string | undefined; ... 24 more ...; STRIPE_WEBHOOK_SECRET?: string | undefined; }>'.
+api:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+api:typecheck: command finished with error, but continuing...
+storybook:typecheck: stories/drawer.stories.tsx(57,14): error TS2322: Type '{}' is not assignable to type 'StoryAnnotations<ReactRenderer, never, never>'.
+storybook:typecheck:   Property 'args' is missing in type '{}' but required in type '{ args: never; }'.
+storybook:typecheck: stories/sidebar.stories.tsx(233,26): error TS18048: 'activeTeam' is possibly 'undefined'.
+storybook:typecheck: stories/sidebar.stories.tsx(237,28): error TS18048: 'activeTeam' is possibly 'undefined'.
+storybook:typecheck: stories/sidebar.stories.tsx(240,28): error TS18048: 'activeTeam' is possibly 'undefined'.
+storybook:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+storybook:typecheck: command finished with error, but continuing...
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(60,12): error TS2352: Conversion of type 'Record<string, unknown>[]' to type 'UIMessagePart<Record<string, unknown>>[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+@repo/ai:typecheck:   Type 'Record<string, unknown>' is not comparable to type 'UIMessagePart<Record<string, unknown>>'.
+@repo/ai:typecheck:     Type 'Record<string, unknown>' is missing the following properties from type 'StaticToolUIPart<unknown, unknown>': type, toolCallId, state, input
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(248,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(303,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(308,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(346,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(369,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(399,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(427,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(441,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(472,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(498,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(528,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(555,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(622,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(627,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(632,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(694,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(699,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(704,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(709,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(785,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(822,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(828,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(834,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(840,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(891,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(899,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(904,9): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(939,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(953,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(968,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(982,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1010,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1051,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1056,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1078,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1091,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1099,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1108,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1114,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1120,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1130,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/canvas/__tests__/e2b-canvas-integration.test.ts(1142,11): error TS2322: Type 'StaticToolUIPart<unknown, unknown>' is not assignable to type 'Record<string, unknown>'.
+@repo/ai:typecheck:   Index signature for type 'string' is missing in type 'StaticToolUIPart<unknown, unknown>'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(6,32): error TS2307: Cannot find module '../../lib/types/ui-message' or its corresponding type declarations.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(192,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(214,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(232,14): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(247,14): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(262,14): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(275,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(287,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(321,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(439,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/planner/__tests__/use-planner-state.test.ts(452,12): error TS2532: Object is possibly 'undefined'.
+@repo/ai:typecheck: components/tools/__tests__/tool-registry.test.tsx(174,56): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+@repo/ai:typecheck:   Type 'undefined' is not assignable to type 'string'.
+@repo/ai:typecheck: components/tools/__tests__/tool-registry.test.tsx(190,56): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+@repo/ai:typecheck:   Type 'undefined' is not assignable to type 'string'.
+@repo/ai:typecheck: components/tools/__tests__/tool-registry.test.tsx(204,56): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+@repo/ai:typecheck:   Type 'undefined' is not assignable to type 'string'.
+@repo/ai:typecheck: lib/server/stream-writer.ts(320,44): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+@repo/ai:typecheck:   Type 'undefined' is not assignable to type 'string'.
+@repo/ai:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/ai:typecheck: command finished with error, but continuing...
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(367,38): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(367,39): error TS1128: Declaration or statement expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,2): error TS1109: Expression expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,9): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,17): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,21): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,9): error TS1435: Unknown keyword or identifier. Did you mean 'await'?
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,33): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,9): error TS1435: Unknown keyword or identifier. Did you mean 'accessor'?
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,16): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,29): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,9): error TS1435: Unknown keyword or identifier. Did you mean 'accessor'?
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,16): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,29): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,9): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,33): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,37): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,42): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,7): error TS1127: Invalid character.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,9): error TS1435: Unknown keyword or identifier. Did you mean 'return'?
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,16): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,25): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(375,2): error TS1109: Expression expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(375,11): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(376,2): error TS1109: Expression expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(376,11): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(377,12): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(377,28): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(378,21): error TS1005: ')' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(378,26): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,15): error TS1005: ')' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,20): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,30): error TS1005: ')' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(380,16): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(381,11): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(381,24): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(382,11): error TS1005: ')' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(383,12): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(384,11): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(386,2): error TS1109: Expression expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(386,9): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,2): error TS1109: Expression expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,10): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,13): error TS1005: '{' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,13): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,25): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,30): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(389,15): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(390,10): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(390,17): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,10): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,15): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,28): error TS1005: '(' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,35): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,10): error TS1005: ';' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,15): error TS1005: ')' expected.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,23): error TS1434: Unexpected keyword or identifier.
+@repo/rate-limit:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(393,3): error TS1161: Unterminated regular expression literal.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(367,38): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(367,39): error TS1128: Declaration or statement expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,2): error TS1109: Expression expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,9): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,17): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(368,21): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,9): error TS1435: Unknown keyword or identifier. Did you mean 'await'?
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(369,33): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,9): error TS1435: Unknown keyword or identifier. Did you mean 'accessor'?
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,16): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(370,29): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,9): error TS1435: Unknown keyword or identifier. Did you mean 'accessor'?
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,16): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(371,29): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,9): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,33): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,37): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(372,42): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,7): error TS1127: Invalid character.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,9): error TS1435: Unknown keyword or identifier. Did you mean 'return'?
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,16): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(373,25): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(375,2): error TS1109: Expression expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(375,11): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(376,2): error TS1109: Expression expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(376,11): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(377,12): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(377,28): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(378,21): error TS1005: ')' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(378,26): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,15): error TS1005: ')' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,20): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(379,30): error TS1005: ')' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(380,16): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(381,11): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(381,24): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(382,11): error TS1005: ')' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(383,12): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(384,11): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(386,2): error TS1109: Expression expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(386,9): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,2): error TS1109: Expression expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,10): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(387,13): error TS1005: '{' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,13): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,25): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(388,30): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(389,15): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(390,10): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(390,17): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,10): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,15): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,28): error TS1005: '(' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(391,35): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,10): error TS1005: ';' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,15): error TS1005: ')' expected.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(392,23): error TS1434: Unexpected keyword or identifier.
+@repo/typescript-config:typecheck: ../../skills/nextjs/templates/route-handler-api.ts(393,3): error TS1161: Unterminated regular expression literal.
+@repo/rate-limit:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/typescript-config:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+@repo/typescript-config:typecheck: command finished with error, but continuing...
+@repo/rate-limit:typecheck: command finished with error, but continuing...
+web:typecheck: app/[locale]/(home)/components/cta.tsx(2,15): error TS2305: Module '"@repo/internationalization"' has no exported member 'Dictionary'.
+web:typecheck: app/[locale]/(home)/components/faq.tsx(8,15): error TS2305: Module '"@repo/internationalization"' has no exported member 'Dictionary'.
+web:typecheck: app/[locale]/(home)/components/faq.tsx(41,47): error TS7006: Parameter 'item' implicitly has an 'any' type.
+web:typecheck: app/[locale]/(home)/components/faq.tsx(41,53): error TS7006: Parameter 'index' implicitly has an 'any' type.
+web:typecheck: app/[locale]/(home)/components/testimonials.tsx(14,15): error TS2305: Module '"@repo/internationalization"' has no exported member 'Dictionary'.
+web:typecheck: app/[locale]/(home)/components/testimonials.tsx(51,60): error TS7006: Parameter 'item' implicitly has an 'any' type.
+web:typecheck: app/[locale]/(home)/components/testimonials.tsx(51,66): error TS7006: Parameter 'index' implicitly has an 'any' type.
+web:typecheck: app/[locale]/blog/page.tsx(5,10): error TS2305: Module '"@repo/internationalization"' has no exported member 'getDictionary'.
+web:typecheck: app/[locale]/contact/components/contact-form.tsx(13,15): error TS2724: '"@repo/internationalization"' has no exported member named 'getTranslations'. Did you mean 'useTranslations'?
+web:typecheck: app/[locale]/contact/page.tsx(16,25): error TS2345: Argument of type '{ title: string; }' is not assignable to parameter of type 'MetadataGenerator'.
+web:typecheck:   Property 'description' is missing in type '{ title: string; }' but required in type '{ title: string; description: string; image?: string | undefined; }'.
+web:typecheck: next.config.ts(37,29): error TS2345: Argument of type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfig' is not assignable to parameter of type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfig'.
+web:typecheck:   Types of property 'webpack' are incompatible.
+web:typecheck:     Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null | undefined' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null | undefined'.
+web:typecheck:       Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig'.
+web:typecheck:         Types of parameters 'context' and 'context' are incompatible.
+web:typecheck:           Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").WebpackConfigContext' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").WebpackConfigContext'.
+web:typecheck:             Types of property 'config' are incompatible.
+web:typecheck:               Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfigComplete' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfigComplete'.
+web:typecheck:                 Type 'NextConfigComplete' is not assignable to type 'Required<Omit<NextConfig, "configFile">>'.
+web:typecheck:                   Types of property 'webpack' are incompatible.
+web:typecheck:                     Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null'.
+web:typecheck:                       Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig'.
+web:typecheck:                         Types of parameters 'context' and 'context' are incompatible.
+web:typecheck:                           Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").WebpackConfigContext' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").WebpackConfigContext'.
+web:typecheck:                             Types of property 'config' are incompatible.
+web:typecheck:                               Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfigComplete' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfigComplete'.
+web:typecheck:                                 Type 'NextConfigComplete' is not assignable to type '{ images: Required<ImageConfigComplete>; typescript: TypeScriptConfig; configFile: string | undefined; configFileName: string; htmlLimitedBots: string | undefined; experimental: ExperimentalConfig; distDirRoot: string; }'.
+web:typecheck:                                   Types of property 'images' are incompatible.
+web:typecheck:                                     Property 'maximumResponseBody' is missing in type 'Partial<ImageConfigComplete> & Required<ImageConfigComplete>' but required in type 'Required<ImageConfigComplete>'.
+web:typecheck: next.config.ts(37,37): error TS2345: Argument of type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfig' is not assignable to parameter of type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfig'.
+web:typecheck:   Types of property 'webpack' are incompatible.
+web:typecheck:     Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null | undefined' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null | undefined'.
+web:typecheck:       Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig'.
+web:typecheck:         Types of parameters 'context' and 'context' are incompatible.
+web:typecheck:           Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").WebpackConfigContext' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").WebpackConfigContext'.
+web:typecheck:             Types of property 'config' are incompatible.
+web:typecheck:               Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfigComplete' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfigComplete'.
+web:typecheck:                 Type 'NextConfigComplete' is not assignable to type 'Required<Omit<NextConfig, "configFile">>'.
+web:typecheck:                   Types of property 'webpack' are incompatible.
+web:typecheck:                     Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null'.
+web:typecheck:                       Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig'.
+web:typecheck:                         Types of parameters 'context' and 'context' are incompatible.
+web:typecheck:                           Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").WebpackConfigContext' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").WebpackConfigContext'.
+web:typecheck:                             Types of property 'config' are incompatible.
+web:typecheck:                               Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfigComplete' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfigComplete'.
+web:typecheck:                                 Type 'NextConfigComplete' is not assignable to type 'Required<Omit<NextConfig, "configFile">>'.
+web:typecheck:                                   Types of property 'webpack' are incompatible.
+web:typecheck:                                     Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig | null'.
+web:typecheck:                                       Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextJsWebpackConfig' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextJsWebpackConfig'.
+web:typecheck:                                         Types of parameters 'context' and 'context' are incompatible.
+web:typecheck:                                           Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").WebpackConfigContext' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").WebpackConfigContext'.
+web:typecheck:                                             Types of property 'config' are incompatible.
+web:typecheck:                                               Type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.0.0_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_f03b962d1fe33263315de2f7925a8fdf/node_modules/next/dist/server/config-shared").NextConfigComplete' is not assignable to type 'import("/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/node_modules/.pnpm/next@16.1.5_@babel+core@7.29.0_@opentelemetry+api@1.9.0_@playwright+test@1.58.1_babel-p_714351e93a018089b1d27ede3710c620/node_modules/next/dist/server/config-shared").NextConfigComplete'.
+web:typecheck:                                                 Type 'NextConfigComplete' is not assignable to type '{ images: Required<ImageConfigComplete>; typescript: TypeScriptConfig; configFile: string | undefined; configFileName: string; htmlLimitedBots: string | undefined; experimental: ExperimentalConfig; distDirRoot: string; }'.
+web:typecheck:                                                   Types of property 'images' are incompatible.
+web:typecheck:                                                     Property 'maximumResponseBody' is missing in type 'Partial<ImageConfigComplete> & Required<ImageConfigComplete>' but required in type 'Required<ImageConfigComplete>'.
+web:typecheck: proxy.ts(52,16): error TS2349: This expression is not callable.
+web:typecheck:   Type 'Auth<{ appName: string; baseURL: string; database: (options: BetterAuthOptions) => DBAdapter<BetterAuthOptions>; emailAndPassword: { ...; }; ... 7 more ...; databaseHooks: { ...; }; }>' has no call signatures.
+web:typecheck: proxy.ts(52,28): error TS7006: Parameter 'req' implicitly has an 'any' type.
+web:typecheck: proxy.ts(60,36): error TS2554: Expected 2 arguments, but got 1.
+web:typecheck: tsconfig.json(4,5): error TS6053: File '@repo/cms/typescript-config.json' not found.
+web:typecheck: ../../packages/feature-flags/index.ts(11,47): error TS2558: Expected 0 type arguments, but got 1.
+web:typecheck: ../../packages/feature-flags/index.ts(12,61): error TS2558: Expected 0 type arguments, but got 1.
+web:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+web:typecheck: command finished with error, but continuing...
+app:typecheck: __tests__/components/sidebar.test.tsx(32,7): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/components/sidebar.test.tsx(51,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/components/sidebar.test.tsx(52,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/components/sidebar.test.tsx(105,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/components/sidebar.test.tsx(106,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/components/sidebar.test.tsx(120,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/functional/planner-extraction.test.ts(111,13): error TS2352: Conversion of type '{ type: string; } & Record<string, unknown>' to type '{ toolName: string; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+app:typecheck:   Property 'toolName' is missing in type '{ type: string; } & Record<string, unknown>' but required in type '{ toolName: string; }'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(54,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(62,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(70,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(71,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(79,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(80,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(97,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(98,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(99,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(100,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/hooks/normalize-parts.test.ts(108,12): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(73,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(78,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(84,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(89,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(94,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(123,21): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(146,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(160,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(194,21): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(214,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(229,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(239,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(278,21): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(309,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(317,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(324,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(353,21): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(363,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(370,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(378,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(389,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(396,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(430,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(438,11): error TS2322: Type '{ label: string; action: string; actionType: "navigation"; route: string; variant: "primary"; } | undefined' is not assignable to type 'NotificationAction'.
+app:typecheck:   Type 'undefined' is not assignable to type 'NotificationAction'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(442,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(458,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(493,19): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(500,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(514,15): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(525,14): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(536,14): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(547,14): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(551,14): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(567,14): error TS2571: Object is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(571,14): error TS18046: 'finalState' is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(572,14): error TS18046: 'finalState' is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(573,14): error TS18046: 'finalState' is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(574,14): error TS18046: 'finalState' is of type 'unknown'.
+app:typecheck: __tests__/integration/phase6-websocket-slice-flow.test.ts(575,14): error TS18046: 'finalState' is of type 'unknown'.
+app:typecheck: __tests__/perf/redux-store.test.ts(36,22): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(36,29): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(90,21): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(154,23): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(154,30): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(209,24): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(209,31): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(212,22): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(212,29): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(215,22): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(215,29): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(218,23): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(218,30): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(221,26): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(221,33): error TS7006: Parameter 'action' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(223,14): error TS7006: Parameter 't' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(229,25): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/perf/redux-store.test.ts(308,21): error TS7006: Parameter 'state' implicitly has an 'any' type.
+app:typecheck: __tests__/security/header-security.test.ts(168,36): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+app:typecheck:   Type 'undefined' is not assignable to type 'string'.
+app:typecheck: __tests__/trpc/agents.test.ts(66,15): error TS2873: This kind of expression is always falsy.
+app:typecheck: __tests__/trpc/agents.test.ts(142,24): error TS2873: This kind of expression is always falsy.
+app:typecheck: __tests__/trpc/agents.test.ts(197,14): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/trpc/messages.test.ts(43,16): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/trpc/messages.test.ts(44,11): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/trpc/messages.test.ts(111,16): error TS2871: This expression is always nullish.
+app:typecheck: __tests__/trpc/sessions.test.ts(66,14): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/trpc/sessions.test.ts(77,14): error TS2532: Object is possibly 'undefined'.
+app:typecheck: __tests__/trpc/sessions.test.ts(118,16): error TS2873: This kind of expression is always falsy.
+app:typecheck: app/(authenticated)/chat/[id]/fixtures/seed-test-chat.ts(16,25): error TS2307: Cannot find module 'drizzle-orm/neon-serverless' or its corresponding type declarations.
+app:typecheck: app/(authenticated)/chat/[id]/fixtures/seed-test-chat.ts(17,22): error TS2307: Cannot find module '@neondatabase/serverless' or its corresponding type declarations.
+app:typecheck: app/(authenticated)/chat/[id]/fixtures/test-messages.ts(40,5): error TS2353: Object literal may only specify known properties, and 'createdAt' does not exist in type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app:typecheck: app/(authenticated)/chat/[id]/fixtures/test-messages.ts(311,5): error TS2353: Object literal may only specify known properties, and 'createdAt' does not exist in type 'UIMessage<unknown, UIDataTypes, UITools>'.
+app:typecheck: app/(authenticated)/chat/[id]/hooks/use-chat-session.ts(294,9): error TS2345: Argument of type '{ text: string; files: { type: "file"; url: string; mediaType: string; filename: string; }[] | File[]; } | { text: string; }' is not assignable to parameter of type '(Omit<UIMessage<unknown, UIDataTypes, UITools>, "id" | "role"> & { id?: string | undefined; role?: "user" | "assistant" | "system" | undefined; } & { ...; }) | { ...; } | { ...; } | undefined'.
+app:typecheck:   Type '{ text: string; files: { type: "file"; url: string; mediaType: string; filename: string; }[] | File[]; }' is not assignable to type '(Omit<UIMessage<unknown, UIDataTypes, UITools>, "id" | "role"> & { id?: string | undefined; role?: "user" | "assistant" | "system" | undefined; } & { ...; }) | { ...; } | { ...; } | undefined'.
+app:typecheck:     Types of property 'files' are incompatible.
+app:typecheck:       Type '{ type: "file"; url: string; mediaType: string; filename: string; }[] | File[]' is not assignable to type 'FileList | FileUIPart[] | undefined'.
+app:typecheck:         Type 'File[]' is not assignable to type 'FileList | FileUIPart[] | undefined'.
+app:typecheck:           Type 'File[]' is not assignable to type 'FileUIPart[]'.
+app:typecheck:             Type 'File' is missing the following properties from type 'FileUIPart': mediaType, url
+app:typecheck: app/(authenticated)/files/files-page-client.tsx(187,35): error TS2345: Argument of type '{ id: string; file: string; }' is not assignable to parameter of type '{ id: string; file: string; fileName: string; fileSize: number; }'.
+app:typecheck:   Type '{ id: string; file: string; }' is missing the following properties from type '{ id: string; file: string; fileName: string; fileSize: number; }': fileName, fileSize
+app:typecheck: app/api/sandbox/browser/route.ts(60,57): error TS2345: Argument of type 'string' is not assignable to parameter of type '{ [key: string]: any; }'.
+app:typecheck: e2e/accessibility/a11y-dashboard.spec.ts(63,25): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+app:typecheck:   Type 'undefined' is not assignable to type 'string'.
+app:typecheck: e2e/accessibility/a11y-dashboard.spec.ts(72,11): error TS18048: 'current' is possibly 'undefined'.
+app:typecheck: e2e/accessibility/a11y-dashboard.spec.ts(72,21): error TS18048: 'previous' is possibly 'undefined'.
+app:typecheck: e2e/accessibility/a11y-dashboard.spec.ts(73,16): error TS18048: 'current' is possibly 'undefined'.
+app:typecheck: e2e/accessibility/a11y-dashboard.spec.ts(73,26): error TS18048: 'previous' is possibly 'undefined'.
+app:typecheck: e2e/page-objects/chat-page.ts(1,40): error TS2614: Module '"@playwright/test"' has no exported member 'FilePayload'. Did you mean to use 'import FilePayload from "@playwright/test"' instead?
+app:typecheck: lib/store/index.ts(167,1): error TS2308: Module "./slices/projects.slice" has already exported a member named 'updateProject'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(168,1): error TS2308: Module "./slices/webDev.slice" has already exported a member named 'setActiveTab'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(171,1): error TS2308: Module "./slices/slideEditor.slice" has already exported a member named 'setSaving'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(176,1): error TS2308: Module "./slices/connectors.slice" has already exported a member named 'setSelectedCategory'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(176,1): error TS2308: Module "./slices/knowledge.slice" has already exported a member named 'setSelectedTags'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(176,1): error TS2308: Module "./slices/projects.slice" has already exported a member named 'setViewMode'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(179,1): error TS2308: Module "./slices/chat.slice" has already exported a member named 'PlaybookInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(179,1): error TS2308: Module "./slices/chat.slice" has already exported a member named 'setInputValue'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(179,1): error TS2308: Module "./slices/chat.slice" has already exported a member named 'setPlaybookInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(179,1): error TS2308: Module "./slices/slideEditor.slice" has already exported a member named 'setTemplates'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(181,1): error TS2308: Module "./slices/filePreviewer.slice" has already exported a member named 'toggleFullscreen'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(182,1): error TS2308: Module "./slices/configs.slice" has already exported a member named 'AgentEmailInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(182,1): error TS2308: Module "./slices/configs.slice" has already exported a member named 'setAgentEmailInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(182,1): error TS2308: Module "./slices/configs.slice" has already exported a member named 'setEmailWhiteList'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(182,1): error TS2308: Module "./slices/configs.slice" has already exported a member named 'updateAgentEmailInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(183,1): error TS2308: Module "./slices/auth.slice" has already exported a member named 'setUsageInfo'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(183,1): error TS2308: Module "./slices/mailAgent.slice" has already exported a member named 'setIsLoading'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(184,1): error TS2308: Module "./slices/products.slice" has already exported a member named 'addFile'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(184,1): error TS2308: Module "./slices/products.slice" has already exported a member named 'removeFile'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(184,1): error TS2308: Module "./slices/products.slice" has already exported a member named 'setFiles'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(187,1): error TS2308: Module "./slices/connectors.slice" has already exported a member named 'setSelectedCategory'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(187,1): error TS2308: Module "./slices/projects.slice" has already exported a member named 'setViewMode'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(189,1): error TS2308: Module "./slices/mailAgent.slice" has already exported a member named 'setIsLoading'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(189,1): error TS2308: Module "./slices/mailAgent.slice" has already exported a member named 'setIsSaving'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'ChatReplySearchMetadata'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'ComputerPosition'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'clearChatReplySearch'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setAnimationLock'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setChatComputerDialogVisible'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setChatReplySearchMetadata'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setChatReplySearchResults'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setDisableChatWorkspaceInitAnimation'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setDisableSidebarInitAnimation'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setFileHistoryVisible'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setInitialComputerPosition'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setIsPlannerExpanded'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'setVncDialogVisible'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(191,1): error TS2308: Module "./slices/workspace.slice" has already exported a member named 'togglePlannerExpanded'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(192,1): error TS2308: Module "./slices/mailAgent.slice" has already exported a member named 'setIsLoading'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'CanvasShape'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'Guide'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'Point'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'ShapeType'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'addShape'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'resetZoom'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'setAltDragCloneIds'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'setHoveredShapeId'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'setSelectedShapeIds'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'setShapes'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'toggleShapeSelection'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'updateShape'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'zoomIn'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/aiCanvas.slice" has already exported a member named 'zoomOut'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/mailAgent.slice" has already exported a member named 'setIsLoading'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(193,1): error TS2308: Module "./slices/slideEditor.slice" has already exported a member named 'setZoom'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(195,1): error TS2308: Module "./slices/example.slice" has already exported a member named 'clearFilters'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(195,1): error TS2308: Module "./slices/mapReduce.slice" has already exported a member named 'clearResults'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(195,1): error TS2308: Module "./slices/mapReduce.slice" has already exported a member named 'setResults'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/index.ts(200,1): error TS2308: Module "./slices/webdevAuth.slice" has already exported a member named 'removeApiKey'. Consider explicitly re-exporting to resolve the ambiguity.
+app:typecheck: lib/store/middleware/websocket.middleware.ts(76,47): error TS2304: Cannot find name 'Message'.
+app:typecheck: lib/store/middleware/websocket.middleware.ts(76,67): error TS2304: Cannot find name 'Message'.
+app:typecheck: lib/store/middleware/websocket.middleware.ts(79,74): error TS2304: Cannot find name 'Message'.
+app:typecheck: lib/store/middleware/websocket.middleware.ts(533,54): error TS2304: Cannot find name 'Message'.
+app:typecheck: lib/store/slices/agents.slice.ts(96,11): error TS2322: Type '{ id?: string | undefined; sessionId?: string | undefined; type?: AgentType | undefined; name?: string | null | undefined; status?: AgentStatus | undefined; currentTask?: string | ... 1 more ... | undefined; progress?: number | undefined; lastActivity?: string | ... 1 more ... | undefined; metadata?: { model?: strin...' is not assignable to type 'WritableNonArrayDraft<Agent>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/agents.slice.ts(131,11): error TS2322: Type '{ id?: string | undefined; agentId?: string | undefined; parentTaskId?: string | null | undefined; title?: string | undefined; description?: string | null | undefined; status?: "in_progress" | ... 4 more ... | undefined; ... 4 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<AgentTask>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/agentWorkspace.slice.ts(281,8): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<AgentWorkspaceState, Action<string>>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "websocket/workspace:sidebar:open", reducer: CaseReducer<AgentWorkspaceState, Action<"websocket/workspace:sidebar:open">>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<AgentWorkspaceState>, action: { payload?: { type?: WorkspaceSidebarType | undefined; } | undefined; }) => void' is not assignable to parameter of type 'CaseReducer<AgentWorkspaceState, Action<"websocket/workspace:sidebar:open">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Type 'Action<"websocket/workspace:sidebar:open">' has no properties in common with type '{ payload?: { type?: WorkspaceSidebarType | undefined; } | undefined; }'.
+app:typecheck: lib/store/slices/aiCanvas.slice.ts(258,9): error TS2322: Type '{ id?: string | undefined; type?: "text" | "image" | "draw" | "shape" | undefined; shapeType?: ShapeType; x?: number | undefined; y?: number | undefined; width?: number | undefined; height?: number | undefined; ... 7 more ...; zIndex?: number | undefined; }' is not assignable to type 'WritableNonArrayDraft<CanvasShape>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/aiCanvasEditor.slice.ts(168,9): error TS2322: Type '{ updatedAt: string; id?: string | undefined; type?: ShapeType | undefined; x?: number | undefined; y?: number | undefined; width?: number | undefined; height?: number | undefined; ... 12 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<CanvasShape>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/chat.slice.ts(223,11): error TS2322: Type '{ id?: string | undefined; sessionId?: string | undefined; role?: MessageRole | undefined; content?: string | undefined; parts?: Record<string, unknown>[]; attachments?: MessageAttachment[]; metadata?: { toolName?: string; toolCallId?: string; model?: string; tokens?: { input: number; output: number; }; agentType?: ...' is not assignable to type 'WritableNonArrayDraft<Message>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/chat.slice.ts(305,9): error TS2322: Type '{ id?: string | undefined; name?: string | undefined; mimeType?: string | undefined; size?: number | undefined; url?: string; thumbnailUrl?: string; uploadProgress?: number; status?: "error" | "completed" | "pending" | "uploading" | undefined; error?: string; }' is not assignable to type 'WritableNonArrayDraft<ChatFile>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/chat.slice.ts(449,11): error TS2322: Type '{ id?: string | undefined; role?: MessageRole | undefined; parts?: UIMessagePart<Record<string, unknown>>[] | undefined; metadata?: MessageMetadata | undefined; createdAt?: Date; updatedAt?: Date; }' is not assignable to type 'WritableNonArrayDraft<UIMessage<MessageMetadata, Record<string, unknown>>>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/codeViewer.slice.ts(121,33): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(163,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(180,9): error TS2322: Type '{ connectionId?: string | undefined; userId?: string | undefined; credentials?: Record<string, unknown>; lastSyncedAt?: string; syncStatus?: "idle" | "syncing" | "error"; errorMessage?: string; ... 18 more ...; updatedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<InstalledConnector>'.
+app:typecheck:   Types of property 'connectionId' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/connectors.slice.ts(197,11): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(206,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(206,55): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(308,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(309,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(311,11): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/connectors.slice.ts(334,9): error TS2322: Type '{ composioEvent?: string | undefined; internalEvent?: string | undefined; enabled?: boolean | undefined; metadata?: Record<string, unknown>; }' is not assignable to type 'WritableNonArrayDraft<ComposioEventMapping>'.
+app:typecheck:   Types of property 'composioEvent' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/experiment.slice.ts(142,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/experiment.slice.ts(142,55): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/experiment.slice.ts(163,9): error TS2322: Type '{ updatedAt: string; id?: string | undefined; key?: string | undefined; name?: string | undefined; description?: string; status?: "completed" | "paused" | "running" | "draft" | undefined; ... 6 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<Experiment>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/experiment.slice.ts(204,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<ExperimentState, Action<string>>): ActionReducerMapBuilder<ExperimentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "experiment/setVariants", reducer: CaseReducer<ExperimentState, Action<"experiment/setVariants">>): ActionReducerMapBuilder<ExperimentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<ExperimentState>, action: { payload: { frontendVariants?: Record<string, ExperimentVariant> | undefined; backendVariants?: Record<...> | undefined; variants?: Record<...> | undefined; }; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<ExperimentState, Action<"experiment/setVariants">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"experiment/setVariants">' but required in type '{ payload: { frontendVariants?: Record<string, ExperimentVariant> | undefined; backendVariants?: Record<string, ExperimentVariant> | undefined; variants?: Record<...> | undefined; }; type: string; }'.
+app:typecheck: lib/store/slices/experiment.slice.ts(224,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<ExperimentState, Action<string>>): ActionReducerMapBuilder<ExperimentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "experiment/setBackendVariants", reducer: CaseReducer<ExperimentState, Action<"experiment/setBackendVariants">>): ActionReducerMapBuilder<ExperimentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<ExperimentState>, action: { payload: Record<string, ExperimentVariant>; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<ExperimentState, Action<"experiment/setBackendVariants">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"experiment/setBackendVariants">' but required in type '{ payload: Record<string, ExperimentVariant>; type: string; }'.
+app:typecheck: lib/store/slices/knowledge.slice.ts(140,9): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/library.slice.ts(203,9): error TS2322: Type '{ id?: string | undefined; userId?: string | undefined; groupId?: string; name?: string | undefined; description?: string; mimeType?: string | undefined; size?: number | undefined; docType?: string | undefined; ... 7 more ...; updatedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<LibraryAttachment>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/library.slice.ts(250,9): error TS2322: Type '{ id?: string | undefined; userId?: string | undefined; name?: string | undefined; description?: string; icon?: string; color?: string; attachmentCount?: number | undefined; isDefault?: boolean | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<LibraryAttachmentGroup>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/library.slice.ts(310,9): error TS2322: Type '{ id?: string | undefined; sessionId?: string | null | undefined; userId?: string | undefined; name?: string | undefined; path?: string | undefined; mimeType?: string | null | undefined; ... 6 more ...; updatedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<FileItem>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/mailAgent.slice.ts(251,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<MailAgentState, Action<string>>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "mailManus/setAgentEmailInfo", reducer: CaseReducer<MailAgentState, Action<"mailManus/setAgentEmailInfo">>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<MailAgentState>, action: { payload: AgentEmailInfo | null; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<MailAgentState, Action<"mailManus/setAgentEmailInfo">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"mailManus/setAgentEmailInfo">' but required in type '{ payload: AgentEmailInfo | null; type: string; }'.
+app:typecheck: lib/store/slices/mailAgent.slice.ts(262,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<MailAgentState, Action<string>>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "mailManus/setEmailWhiteList", reducer: CaseReducer<MailAgentState, Action<"mailManus/setEmailWhiteList">>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<MailAgentState>, action: { payload: AgentEmailWhiteListInfo[]; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<MailAgentState, Action<"mailManus/setEmailWhiteList">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"mailManus/setEmailWhiteList">' but required in type '{ payload: AgentEmailWhiteListInfo[]; type: string; }'.
+app:typecheck: lib/store/slices/mailAgent.slice.ts(268,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<MailAgentState, Action<string>>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "mailManus/setCanEditAgentEmail", reducer: CaseReducer<MailAgentState, Action<"mailManus/setCanEditAgentEmail">>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<MailAgentState>, action: { payload: boolean; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<MailAgentState, Action<"mailManus/setCanEditAgentEmail">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"mailManus/setCanEditAgentEmail">' but required in type '{ payload: boolean; type: string; }'.
+app:typecheck: lib/store/slices/mailAgent.slice.ts(271,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<MailAgentState, Action<string>>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "mailManus/setCanEditTime", reducer: CaseReducer<MailAgentState, Action<"mailManus/setCanEditTime">>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<MailAgentState>, action: { payload: string | null; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<MailAgentState, Action<"mailManus/setCanEditTime">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"mailManus/setCanEditTime">' but required in type '{ payload: string | null; type: string; }'.
+app:typecheck: lib/store/slices/mailAgent.slice.ts(274,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<MailAgentState, Action<string>>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "mailManus/setAgentSubEmails", reducer: CaseReducer<MailAgentState, Action<"mailManus/setAgentSubEmails">>): ActionReducerMapBuilder<MailAgentState>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<MailAgentState>, action: { payload: AgentSubEmail[]; type: string; }) => void' is not assignable to parameter of type 'CaseReducer<MailAgentState, Action<"mailManus/setAgentSubEmails">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"mailManus/setAgentSubEmails">' but required in type '{ payload: AgentSubEmail[]; type: string; }'.
+app:typecheck: lib/store/slices/notifications.slice.ts(448,27): error TS18048: 'pending' is possibly 'undefined'.
+app:typecheck: lib/store/slices/notifications.slice.ts(449,19): error TS18048: 'pending' is possibly 'undefined'.
+app:typecheck: lib/store/slices/notifications.slice.ts(450,24): error TS18048: 'pending' is possibly 'undefined'.
+app:typecheck: lib/store/slices/notifications.slice.ts(483,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<NotificationsState, Action<string>>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "notification/setConnectStatus", reducer: CaseReducer<NotificationsState, Action<"notification/setConnectStatus">>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<NotificationsState>, action: { payload: "error" | "default" | "connected" | "connecting"; }) => void' is not assignable to parameter of type 'CaseReducer<NotificationsState, Action<"notification/setConnectStatus">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"notification/setConnectStatus">' but required in type '{ payload: "error" | "default" | "connected" | "connecting"; }'.
+app:typecheck: lib/store/slices/notifications.slice.ts(489,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<NotificationsState, Action<string>>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "notification/setFetchNotificationListLoading", reducer: CaseReducer<NotificationsState, Action<"notification/setFetchNotificationListLoading">>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<NotificationsState>, action: { payload: boolean; }) => void' is not assignable to parameter of type 'CaseReducer<NotificationsState, Action<"notification/setFetchNotificationListLoading">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Property 'payload' is missing in type 'Action<"notification/setFetchNotificationListLoading">' but required in type '{ payload: boolean; }'.
+app:typecheck: lib/store/slices/notifications.slice.ts(495,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<NotificationsState, Action<string>>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "notification/setHasMoreNotification", reducer: CaseReducer<NotificationsState, Action<"notification/setHasMoreNotification">>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<NotificationsState>, action: { payload?: Record<string, boolean> | undefined; }) => void' is not assignable to parameter of type 'CaseReducer<NotificationsState, Action<"notification/setHasMoreNotification">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Type 'Action<"notification/setHasMoreNotification">' has no properties in common with type '{ payload?: Record<string, boolean> | undefined; }'.
+app:typecheck: lib/store/slices/notifications.slice.ts(501,13): error TS2769: No overload matches this call.
+app:typecheck:   Overload 1 of 2, '(actionCreator: TypedActionCreator<string>, reducer: CaseReducer<NotificationsState, Action<string>>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type 'string' is not assignable to parameter of type 'TypedActionCreator<string>'.
+app:typecheck:   Overload 2 of 2, '(type: "notification/setCategoryNotificationList", reducer: CaseReducer<NotificationsState, Action<"notification/setCategoryNotificationList">>): ActionReducerMapBuilder<...>', gave the following error.
+app:typecheck:     Argument of type '(state: WritableNonArrayDraft<NotificationsState>, action: { payload?: Record<string, Notification[]> | undefined; }) => void' is not assignable to parameter of type 'CaseReducer<NotificationsState, Action<"notification/setCategoryNotificationList">>'.
+app:typecheck:       Types of parameters 'action' and 'action' are incompatible.
+app:typecheck:         Type 'Action<"notification/setCategoryNotificationList">' has no properties in common with type '{ payload?: Record<string, Notification[]> | undefined; }'.
+app:typecheck: lib/store/slices/onboarding.slice.ts(99,9): error TS2322: Type 'OnboardingStep | undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck:   Type 'undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck: lib/store/slices/onboarding.slice.ts(115,9): error TS2322: Type 'OnboardingStep | undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck:   Type 'undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck: lib/store/slices/onboarding.slice.ts(132,9): error TS2322: Type 'OnboardingStep | undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck:   Type 'undefined' is not assignable to type 'OnboardingStep | null'.
+app:typecheck: lib/store/slices/projects.slice.ts(126,9): error TS2322: Type '{ updatedAt: string; id?: string | undefined; userId?: string | undefined; teamId?: string; name?: string | undefined; description?: string; icon?: string; color?: string; type?: ProjectType | undefined; ... 8 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<Project>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/projects.slice.ts(132,11): error TS2322: Type 'WritableNonArrayDraft<Project> | undefined' is not assignable to type 'WritableNonArrayDraft<Project> | null'.
+app:typecheck:   Type 'undefined' is not assignable to type 'WritableNonArrayDraft<Project> | null'.
+app:typecheck: lib/store/slices/projects.slice.ts(226,11): error TS2322: Type '{ userId?: string | undefined; email?: string | undefined; name?: string | null | undefined; avatar?: string | null | undefined; role?: "viewer" | "editor" | "owner" | undefined; addedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<ProjectMember>'.
+app:typecheck:   Types of property 'userId' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/scheduledTasks.slice.ts(103,9): error TS2322: Type '{ updatedAt: string; id?: string | undefined; userId?: string | undefined; organizationId?: string | null; name?: string | undefined; description?: string | null; taskType?: "custom" | ... 4 more ... | undefined; ... 23 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<ScheduledTask>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/scheduledTasks.slice.ts(173,11): error TS2322: Type '{ id?: string | undefined; scheduledTaskId?: string | undefined; status?: "success" | "cancelled" | "failed" | "pending" | "running" | undefined; startedAt?: string | null | undefined; ... 7 more ...; createdAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<ScheduledTaskExecution>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/sessions.slice.ts(213,9): error TS2322: Type '{ updatedAt: string; id?: string | undefined; userId?: string | undefined; projectId?: string | null; teamId?: string | null; title?: string | null | undefined; description?: string | null; ... 13 more ...; completedAt?: string | null; }' is not assignable to type 'WritableNonArrayDraft<AgentSession>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/sessions.slice.ts(303,9): error TS2322: Type '{ id?: string | undefined; name?: string | undefined; sessionIds?: string[] | undefined; color?: string; icon?: string; }' is not assignable to type 'WritableNonArrayDraft<SessionGroup>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/slideEditor.slice.ts(182,15): error TS2322: Type '{ id: string; elements: { id: string; type: "text" | "image" | "shape" | "video" | "chart" | "table"; x: number; y: number; width: number; height: number; rotation: number; content?: string | undefined; style?: WritableNonArrayDraft<...> | undefined; zIndex: number; }[]; ... 4 more ...; transition?: WritableNonArray...' is not assignable to type 'Slide'.
+app:typecheck:   Types of property 'index' are incompatible.
+app:typecheck:     Type 'number | undefined' is not assignable to type 'number'.
+app:typecheck:       Type 'undefined' is not assignable to type 'number'.
+app:typecheck: lib/store/slices/slideEditor.slice.ts(185,21): error TS18048: 'slide' is possibly 'undefined'.
+app:typecheck: lib/store/slices/team.slice.ts(169,9): error TS2322: Type '{ id?: string | undefined; name?: string | undefined; slug?: string | undefined; description?: string; avatarUrl?: string; ownerId?: string | undefined; plan?: "free" | "pro" | "enterprise" | undefined; ... 5 more ...; updatedAt?: string | undefined; }' is not assignable to type 'WritableNonArrayDraft<Team>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/team.slice.ts(171,11): error TS2322: Type 'WritableNonArrayDraft<Team> | undefined' is not assignable to type 'WritableNonArrayDraft<Team> | null'.
+app:typecheck:   Type 'undefined' is not assignable to type 'WritableNonArrayDraft<Team> | null'.
+app:typecheck: lib/store/slices/team.slice.ts(210,9): error TS2322: Type '{ id?: string | undefined; teamId?: string | undefined; userId?: string | undefined; email?: string | undefined; name?: string | null | undefined; avatar?: string | null | undefined; ... 5 more ...; lastActiveAt?: string; }' is not assignable to type 'WritableNonArrayDraft<TeamMember>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/team.slice.ts(253,9): error TS2322: Type '{ id?: string | undefined; teamId?: string | undefined; email?: string | undefined; role?: TeamRole | undefined; status?: InviteStatus | undefined; invitedBy?: string | undefined; invitedByName?: string | undefined; expiresAt?: string | undefined; createdAt?: string | undefined; acceptedAt?: string; }' is not assignable to type 'WritableNonArrayDraft<TeamInvitation>'.
+app:typecheck:   Types of property 'id' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: lib/store/slices/toolCalls.slice.ts(276,15): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/webdevAuth.slice.ts(118,7): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/webdevAuth.slice.ts(127,16): error TS2532: Object is possibly 'undefined'.
+app:typecheck: lib/store/slices/webDevUsage.slice.ts(163,9): error TS2322: Type '{ projectId?: string | undefined; projectName?: string | undefined; usageAmount?: number | undefined; usageLimit?: number | undefined; usagePercentage?: number | undefined; isOverLimit?: boolean | undefined; budgetWarning?: boolean | undefined; }' is not assignable to type 'WritableNonArrayDraft<ProjectUsageStatus>'.
+app:typecheck:   Types of property 'projectId' are incompatible.
+app:typecheck:     Type 'string | undefined' is not assignable to type 'string'.
+app:typecheck:       Type 'undefined' is not assignable to type 'string'.
+app:typecheck: ../../packages/feature-flags/index.ts(11,47): error TS2558: Expected 0 type arguments, but got 1.
+app:typecheck: ../../packages/feature-flags/index.ts(12,61): error TS2558: Expected 0 type arguments, but got 1.
+app:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+app:typecheck: command finished with error, but continuing...
+email#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/email) /usr/local/bin/pnpm run typecheck exited (2)
+studio#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/studio) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/testing#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/testing) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/contracts#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/contracts) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/database#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/database) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/feature-flags#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/feature-flags) /usr/local/bin/pnpm run typecheck exited (2)
+api#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/api) /usr/local/bin/pnpm run typecheck exited (2)
+storybook#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/storybook) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/ai#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/ai) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/typescript-config#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/typescript-config) /usr/local/bin/pnpm run typecheck exited (2)
+@repo/rate-limit#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/packages/rate-limit) /usr/local/bin/pnpm run typecheck exited (2)
+web#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/web) /usr/local/bin/pnpm run typecheck exited (2)
+app#typecheck: command (/Users/khaleelmusleh/Desktop/Projects/Etheon/rubic/apps/app) /usr/local/bin/pnpm run typecheck exited (2)
+
+ Tasks:    22 successful, 35 total
+Cached:    22 cached, 35 total
+  Time:    42.75s 
+Failed:    @repo/ai#typecheck, @repo/contracts#typecheck, @repo/database#typecheck, @repo/feature-flags#typecheck, @repo/rate-limit#typecheck, @repo/testing#typecheck, @repo/typescript-config#typecheck, api#typecheck, app#typecheck, email#typecheck, storybook#typecheck, studio#typecheck, web#typecheck
+
+ ERROR  run failed: command  exited (2)

@@ -1,0 +1,63 @@
+{
+  "sessionId": "test-aDguoK01Fxdd",
+  "name": "shell-multi-command",
+  "description": "Execute multiple chained shell commands",
+  "tags": [
+    "shell",
+    "multi-step"
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Install dependencies and run tests"
+    },
+    {
+      "role": "assistant",
+      "content": "I'll install dependencies first.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "pnpm install"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Installation complete",
+      "toolResults": [
+        {
+          "toolCallId": "tc_5",
+          "result": "{\"output\": \"Dependencies installed\", \"exitCode\": 0}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "Dependencies installed. Running tests now.",
+      "toolCalls": [
+        {
+          "name": "shell_exec",
+          "input": {
+            "command": "pnpm test"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": "Tests passed",
+      "toolResults": [
+        {
+          "toolCallId": "tc_6",
+          "result": "{\"output\": \"All tests passed\", \"exitCode\": 0}"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "All tests passed successfully!"
+    }
+  ]
+}
