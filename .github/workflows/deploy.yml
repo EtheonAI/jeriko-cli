@@ -74,7 +74,7 @@ jobs:
       - name: Determine changed services
         id: services
         run: |
-          ALL_SERVICES='["gateway","task","website","file","notification","webhook","billing","connector","project","knowledge","sandbox","search","device","agent"]'
+          ALL_SERVICES='["gateway","task","website","file","notification","webhook","billing","connector","project","knowledge","sandbox","search","device","orchestrator","webrtc-media"]'
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.services }}" != "all" ]]; then
             # Manual deploy: use specified services
@@ -95,7 +95,7 @@ jobs:
             fi
 
             # Check each service directory
-            for SVC in gateway task website file notification webhook billing connector project knowledge sandbox search device agent; do
+            for SVC in gateway task website file notification webhook billing connector project knowledge sandbox search device orchestrator webrtc-media; do
               if echo "$CHANGED_FILES" | grep -q "^services/$SVC/"; then
                 CHANGED_SERVICES+=("$SVC")
               fi
