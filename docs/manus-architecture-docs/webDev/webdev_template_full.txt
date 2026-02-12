@@ -1,0 +1,449 @@
+=== WEBDEV TEMPLATE STRUCTURE ===
+/opt/.manus/webdev/templates/web-dev-templates/.gitignore
+/opt/.manus/webdev/templates/web-dev-templates/README.md
+/opt/.manus/webdev/templates/web-dev-templates/alternative_readmes/app_README_template.md
+/opt/.manus/webdev/templates/web-dev-templates/alternative_readmes/app_backend_README_template.md
+/opt/.manus/webdev/templates/web-dev-templates/alternative_readmes/web-db-user_README_template.md
+/opt/.manus/webdev/templates/web-dev-templates/alternative_readmes/web-static_README_template.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/LICENSE.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/auth/apple-authentication/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/auth/crypto/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/auth/local-authentication/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/background/background-task/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/background/notifications/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/background/task-manager/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/communication/clipboard/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/communication/contacts/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/communication/mail-composer/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/communication/sharing/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/communication/sms/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/location/location/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/location/maps/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/asset/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/audio/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/camera/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/font/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/image/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/imagemanipulator/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/imagepicker/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/live-photo/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/media-library/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/video-thumbnails/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/media/video/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/navigation/linking/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/navigation/router-ui/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/navigation/webbrowser/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/network/cellular/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/network/network/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/accelerometer/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/barometer/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/battery/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/brightness/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/devicemotion/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/gyroscope/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/light-sensor/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/magnetometer/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/pedometer/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/sensors/sensors/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/storage/blob/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/storage/document-picker/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/storage/filesystem/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/storage/securestore/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/calendar/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/haptics/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/keep-awake/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/localization/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/navigation-bar/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/print/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/screen-capture/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/screen-orientation/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/speech/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/system/storereview/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/blur-view/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/glass-effect/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/linear-gradient/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/mesh-gradient/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/splash-screen/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/status-bar/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/docs-templates/app/docs/ui/system-ui/DOCS.md
+/opt/.manus/webdev/templates/web-dev-templates/patches/README.md
+/opt/.manus/webdev/templates/web-dev-templates/patches/basic__db.diff
+/opt/.manus/webdev/templates/web-dev-templates/patches/static__basic.diff
+/opt/.manus/webdev/templates/web-dev-templates/scripts/lib/readme-generator.mjs
+/opt/.manus/webdev/templates/web-dev-templates/scripts/sync-frontend-template.sh
+/opt/.manus/webdev/templates/web-dev-templates/scripts/update-template-readme.mjs
+/opt/.manus/webdev/templates/web-dev-templates/scripts/validate-templates.sh
+/opt/.manus/webdev/templates/web-dev-templates/setup-test-project.sh
+/opt/.manus/webdev/templates/web-dev-templates/shared/.gitkeep
+/opt/.manus/webdev/templates/web-dev-templates/templates.code-workspace
+/opt/.manus/webdev/templates/web-dev-templates/templates/.webdev-cache/template-readmes.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/.gitignore
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/.npmrc
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/.watchmanconfig
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app.config.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app/(tabs)/_layout.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app/(tabs)/index.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app/_layout.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app/dev/theme-lab.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/app/oauth/callback.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/android-icon-background.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/android-icon-foreground.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/android-icon-monochrome.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/favicon.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/icon.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/partial-react-logo.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/react-logo.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/react-logo@2x.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/react-logo@3x.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/assets/images/splash-icon.png
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/babel.config.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/external-link.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/haptic-tab.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/hello-wave.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/parallax-scroll-view.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/screen-container.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/themed-view.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/ui/collapsible.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/ui/icon-symbol.ios.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/components/ui/icon-symbol.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/constants/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/constants/oauth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/constants/theme.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle.config.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/0000_elite_eternals.sql
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/meta/0000_snapshot.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/meta/_journal.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/migrations/.gitkeep
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/relations.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/drizzle/schema.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/eslint.config.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/global.css
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/hooks/use-auth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/hooks/use-color-scheme.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/hooks/use-color-scheme.web.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/hooks/use-colors.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/_core/api.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/_core/auth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/_core/manus-runtime.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/_core/nativewind-pressable.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/_core/theme.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/theme-provider.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/trpc.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/lib/utils.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/metro.config.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/nativewind-env.d.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/package.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/pnpm-lock.yaml
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/scripts/generate_qr.mjs
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/scripts/load-env.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/scripts/reset-project.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/README.md
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/context.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/cookies.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/dataApi.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/env.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/imageGeneration.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/index.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/llm.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/notification.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/oauth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/sdk.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/systemRouter.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/trpc.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/types/cookie.d.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/types/manusTypes.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/_core/voiceTranscription.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/db.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/routers.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/server/storage.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/shared/_core/errors.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/shared/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/shared/types.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/tailwind.config.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/template.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/tests/auth.logout.test.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/theme.config.d.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/theme.config.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/app/tsconfig.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/.gitignore
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/.prettierignore
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/.prettierrc
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/index.html
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/public/.gitkeep
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/public/__manus__/debug-collector.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/App.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/_core/hooks/useAuth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/AIChatBox.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/DashboardLayout.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/DashboardLayoutSkeleton.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ErrorBoundary.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ManusDialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/Map.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/accordion.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/alert-dialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/alert.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/aspect-ratio.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/avatar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/badge.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/breadcrumb.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/button-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/button.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/calendar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/card.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/carousel.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/chart.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/checkbox.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/collapsible.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/command.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/context-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/dialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/drawer.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/dropdown-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/empty.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/field.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/form.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/hover-card.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/input-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/input-otp.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/input.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/item.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/kbd.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/label.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/menubar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/navigation-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/pagination.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/popover.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/progress.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/radio-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/resizable.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/scroll-area.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/select.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/separator.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/sheet.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/sidebar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/skeleton.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/slider.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/sonner.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/spinner.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/switch.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/table.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/tabs.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/textarea.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/toggle-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/toggle.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/components/ui/tooltip.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/contexts/ThemeContext.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/hooks/useComposition.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/hooks/useMobile.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/hooks/usePersistFn.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/index.css
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/lib/trpc.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/lib/utils.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/main.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/pages/ComponentShowcase.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/pages/Home.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/client/src/pages/NotFound.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/components.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/drizzle.config.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/drizzle/meta/_journal.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/drizzle/migrations/.gitkeep
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/drizzle/relations.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/drizzle/schema.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/package.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/patches/wouter@3.7.1.patch
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/pnpm-lock.yaml
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/context.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/cookies.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/dataApi.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/env.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/imageGeneration.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/index.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/llm.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/map.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/notification.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/oauth.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/sdk.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/systemRouter.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/trpc.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/types/cookie.d.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/types/manusTypes.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/vite.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/_core/voiceTranscription.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/auth.logout.test.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/db.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/routers.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/server/storage.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/shared/_core/errors.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/shared/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/shared/types.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/template.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/tsconfig.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/vite.config.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/vite.config.ts.bak
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-db-user/vitest.config.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/.gitignore
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/.prettierignore
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/.prettierrc
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/index.html
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/public/.gitkeep
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/public/__manus__/debug-collector.js
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/App.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ErrorBoundary.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ManusDialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/Map.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/accordion.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/alert-dialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/alert.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/aspect-ratio.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/avatar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/badge.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/breadcrumb.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/button-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/button.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/calendar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/card.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/carousel.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/chart.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/checkbox.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/collapsible.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/command.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/context-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/dialog.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/drawer.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/dropdown-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/empty.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/field.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/form.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/hover-card.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/input-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/input-otp.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/input.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/item.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/kbd.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/label.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/menubar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/navigation-menu.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/pagination.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/popover.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/progress.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/radio-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/resizable.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/scroll-area.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/select.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/separator.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/sheet.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/sidebar.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/skeleton.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/slider.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/sonner.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/spinner.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/switch.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/table.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/tabs.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/textarea.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/toggle-group.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/toggle.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/components/ui/tooltip.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/contexts/ThemeContext.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/hooks/useComposition.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/hooks/useMobile.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/hooks/usePersistFn.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/index.css
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/lib/utils.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/main.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/pages/Home.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/client/src/pages/NotFound.tsx
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/components.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/package.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/patches/wouter@3.7.1.patch
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/pnpm-lock.yaml
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/server/index.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/shared/const.ts
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/template.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/tsconfig.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/tsconfig.node.json
+/opt/.manus/webdev/templates/web-dev-templates/templates/web-static/vite.config.ts
+
+=== TEMPLATE TREE ===
+/opt/.manus/webdev/templates/web-dev-templates
+├── README.md
+├── alternative_readmes
+│   ├── app_README_template.md
+│   ├── app_backend_README_template.md
+│   ├── web-db-user_README_template.md
+│   └── web-static_README_template.md
+├── docs-templates
+│   └── app
+│       └── docs
+├── patches
+│   ├── README.md
+│   ├── basic__db.diff
+│   └── static__basic.diff
+├── scripts
+│   ├── lib
+│   │   └── readme-generator.mjs
+│   ├── sync-frontend-template.sh
+│   ├── update-template-readme.mjs
+│   └── validate-templates.sh
+├── setup-test-project.sh
+├── shared
+├── templates
+│   ├── app
+│   │   ├── app
+│   │   ├── app.config.ts
+│   │   ├── assets
+│   │   ├── babel.config.js
+│   │   ├── components
+│   │   ├── constants
+│   │   ├── drizzle
+│   │   ├── drizzle.config.ts
+│   │   ├── eslint.config.js
+│   │   ├── global.css
+│   │   ├── hooks
+│   │   ├── lib
+│   │   ├── metro.config.js
+│   │   ├── nativewind-env.d.ts
+│   │   ├── package.json
+│   │   ├── pnpm-lock.yaml
+│   │   ├── scripts
+│   │   ├── server
+│   │   ├── shared
+│   │   ├── tailwind.config.js
+│   │   ├── template.json
+│   │   ├── tests
+│   │   ├── theme.config.d.ts
+│   │   ├── theme.config.js
+│   │   └── tsconfig.json
+│   ├── web-db-user
+│   │   ├── client
+│   │   ├── components.json
+│   │   ├── drizzle
+│   │   ├── drizzle.config.ts
+│   │   ├── package.json
+│   │   ├── patches
+│   │   ├── pnpm-lock.yaml
+│   │   ├── server
+│   │   ├── shared
+│   │   ├── template.json
+│   │   ├── tsconfig.json
+│   │   ├── vite.config.ts
+│   │   ├── vite.config.ts.bak
+│   │   └── vitest.config.ts
+│   └── web-static
+│       ├── client
+│       ├── components.json
+│       ├── package.json
+│       ├── patches
+│       ├── pnpm-lock.yaml
+│       ├── server
+│       ├── shared
+│       ├── template.json
+│       ├── tsconfig.json
+│       ├── tsconfig.node.json
+│       └── vite.config.ts
+└── templates.code-workspace
+
+32 directories, 44 files

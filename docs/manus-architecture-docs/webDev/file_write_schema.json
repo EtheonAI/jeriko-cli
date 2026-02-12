@@ -1,0 +1,337 @@
+{
+  "properties": {
+    "command": {
+      "type": "string",
+      "enum": [
+        "view",
+        "create",
+        "write",
+        "str_replace",
+        "multi_edit",
+        "find_content",
+        "find_file",
+        "glob",
+        "grep"
+      ],
+      "title": "Command"
+    },
+    "path": {
+      "type": "string",
+      "title": "Path"
+    },
+    "sudo": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Sudo"
+    },
+    "file_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "File Text"
+    },
+    "view_range": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "View Range"
+    },
+    "view_type": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "text",
+            "image"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "View Type"
+    },
+    "page_index": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Page Index"
+    },
+    "page_range": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Page Range"
+    },
+    "previous_content_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Previous Content Hash"
+    },
+    "old_str": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Old Str"
+    },
+    "new_str": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "New Str"
+    },
+    "insert_line": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Insert Line"
+    },
+    "glob": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Glob"
+    },
+    "regex": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Regex"
+    },
+    "append": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Append"
+    },
+    "trailing_newline": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Trailing Newline"
+    },
+    "leading_newline": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Leading Newline"
+    },
+    "presigned_upload_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Presigned Upload Url"
+    },
+    "presigned_upload_urls": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Presigned Upload Urls"
+    },
+    "slide_ids": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Slide Ids"
+    },
+    "outline": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/components/schemas/InitSlideOutline"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Outline"
+    },
+    "dir_creation_time": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Dir Creation Time"
+    },
+    "replace_all": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Replace All"
+    },
+    "only_when_not_exists": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Only When Not Exists"
+    },
+    "edits": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/components/schemas/TextEditorEditOperation"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Edits"
+    },
+    "match_scope": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Match Scope"
+    },
+    "grep_leading": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Grep Leading"
+    },
+    "grep_trailing": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Grep Trailing"
+    }
+  },
+  "type": "object",
+  "required": [
+    "command",
+    "path"
+  ],
+  "title": "TextEditorAction"
+}

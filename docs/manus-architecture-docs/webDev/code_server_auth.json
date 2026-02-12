@@ -1,0 +1,53 @@
+{
+  "get": {
+    "summary": "Code Server Pre Auth",
+    "operationId": "code_server_pre_auth_code_server_pre_auth_get",
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      }
+    }
+  }
+}
+{
+  "post": {
+    "summary": "Code Server Auth",
+    "description": "前端直发，不鉴权",
+    "operationId": "code_server_auth_code_server_auth_post",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/CodeServerAuthBody"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    }
+  }
+}

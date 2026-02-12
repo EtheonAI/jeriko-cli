@@ -15,7 +15,159 @@ import { initDb, db, sandboxes, sandboxExecutions, sandboxFiles, eq, and, desc }
 // ---------------------------------------------------------------------------
 const sandboxMap = new Map<string, E2BSandbox>();
 
+// ---------------------------------------------------------------------------
+// Stateful terminal sessions — Manus pattern (in-sandbox terminal server)
+//
+// Architecture (matching Manus exactly):
+//   LLM → Orchestrator → Sandbox Service → Terminal Server (port 8330) → PTY → bash
+//
+// The terminal server runs INSIDE the E2B sandbox as a Node.js HTTP server.
+// It manages persistent bash sessions via the sentinel pattern.
+// We communicate with it via HTTP instead of using E2B SDK's commands.run(),
+// which has layered timeout issues (requestTimeoutMs + timeoutMs).
+// ---------------------------------------------------------------------------
+
+/** Maps sandbox ID → { url, terminalId } for session reuse */
+const terminalSessionMap = new Map<string, { url: string; terminalId: string }>();
+
+/**
+ * Get the terminal server base URL for a sandbox.
+ * Uses E2B's getHost() to get the proxied URL.
+ */
+function getTerminalServerUrl(e2bSandbox: E2BSandbox): string {
+  const host = e2bSandbox.getHost(8330);
+  return `https://${host}`;
+}
+
+/**
+ * Ensure a terminal session exists for a sandbox.
+ * Creates one on first call, reuses on subsequent calls.
+ * Retries if the terminal server isn't ready yet.
+ */
+async function ensureTerminal(
+  sandboxId: string,
+  e2bSandbox: E2BSandbox,
+  logger: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void },
+): Promise<{ url: string; terminalId: string }> {
+  const existing = terminalSessionMap.get(sandboxId);
+  if (existing) {
+    // Verify terminal is still alive
+    try {
+      const resp = await fetch(`${existing.url}/terminals/${existing.terminalId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (resp.ok) {
+        const info = await resp.json() as { alive?: boolean };
+        if (info.alive) return existing;
+      }
+    } catch {
+      // Terminal dead or unreachable — recreate below
+    }
+    terminalSessionMap.delete(sandboxId);
+  }
+
+  const url = getTerminalServerUrl(e2bSandbox);
+
+  // Wait for terminal server to be ready (retry up to 15 times, ~7.5s)
+  let serverReady = false;
+  for (let i = 0; i < 15; i++) {
+    try {
+      const resp = await fetch(`${url}/health`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (resp.ok) {
+        serverReady = true;
+        break;
+      }
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (!serverReady) {
+    throw new AppError(
+      "Terminal server not ready inside sandbox after 7.5s",
+      503,
+      "TERMINAL_SERVER_UNAVAILABLE",
+    );
+  }
+
+  // Create a new terminal session
+  const createResp = await fetch(`${url}/terminals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cwd: "/home/user" }),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!createResp.ok) {
+    const err = await createResp.text().catch(() => "Unknown error");
+    throw new AppError(
+      `Failed to create terminal: ${err}`,
+      502,
+      "TERMINAL_CREATE_FAILED",
+    );
+  }
+
+  const { id: terminalId } = (await createResp.json()) as { id: string };
+
+  const session = { url, terminalId };
+  terminalSessionMap.set(sandboxId, session);
+  logger.info({ sandboxId, terminalId }, "Terminal session created via terminal server");
+  return session;
+}
+
+/**
+ * Execute a command via the in-sandbox terminal server.
+ * Manus pattern: HTTP call to stateful PTY, not E2B SDK commands.
+ */
+async function execViaTerminalServer(
+  sandboxId: string,
+  e2bSandbox: E2BSandbox,
+  command: string,
+  timeoutMs: number,
+  logger: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void },
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const { url, terminalId } = await ensureTerminal(sandboxId, e2bSandbox, logger);
+
+  const resp = await fetch(`${url}/terminals/${terminalId}/exec`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, timeout: timeoutMs }),
+    // HTTP timeout slightly longer than command timeout to avoid double-timeout
+    signal: AbortSignal.timeout(timeoutMs + 10000),
+  });
+
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({ error: resp.statusText })) as { error?: string };
+    const errMsg = (body as { error?: string }).error || `Terminal server error: ${resp.status}`;
+
+    // If terminal died, clear cache so next call creates a new one
+    if (resp.status === 404 || resp.status === 410) {
+      terminalSessionMap.delete(sandboxId);
+    }
+
+    if (resp.status === 408) {
+      throw new Error(`Command timed out after ${timeoutMs}ms`);
+    }
+    throw new Error(errMsg);
+  }
+
+  const result = (await resp.json()) as { stdout?: string; stderr?: string; exitCode?: number };
+  return {
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    exitCode: result.exitCode ?? 0,
+  };
+}
+
 const E2B_API_KEY = getEnv("E2B_API_KEY", "");
+
+// TURN relay credentials — required for WebRTC through E2B proxy
+// Cloudflare TURN (recommended): https://developers.cloudflare.com/realtime/turn/
+const CLOUDFLARE_TURN_KEY_ID = getEnv("CLOUDFLARE_TURN_KEY_ID", "");
+const CLOUDFLARE_TURN_TOKEN = getEnv("CLOUDFLARE_TURN_TOKEN", "");
 
 // Execution boundaries and resource limits
 const MAX_EXECUTION_TIME_MS = parseInt(getEnv("MAX_EXECUTION_TIME_MS", "300000"), 10); // 5 min default
@@ -199,9 +351,12 @@ async function main() {
   const { app, logger, start } = await createService({
     name: "sandbox",
     port: parseInt(getEnv("PORT", "4012"), 10),
+    cors: true,
     onShutdown: [
       async () => {
         logger.info({ activeSandboxes: sandboxMap.size }, "Killing active E2B sandboxes");
+        // Clear terminal session cache
+        terminalSessionMap.clear();
         const killPromises = Array.from(sandboxMap.entries()).map(async ([dbId, e2bSandbox]) => {
           try {
             await e2bSandbox.kill();
@@ -234,8 +389,14 @@ async function main() {
       const timeoutMs = config?.timeout || 300_000; // 5 minutes default
 
       // Use Desktop template by default for full virtual computer experience
-      // (Ubuntu + XFCE + x11vnc + noVNC on port 6080 + Playwright)
-      const templateId = template || getEnv("E2B_TEMPLATE", "rubic-desktop");
+      // (Ubuntu + XFCE + Neko WebRTC on port 8080 + Playwright)
+      const templateId = template || getEnv("E2B_TEMPLATE", "desktop");
+
+      // Build env vars for the sandbox
+      // These are available to all commands.run() calls (NOT to start_command.sh at boot)
+      // The caller (orchestrator) passes OPENAI_API_KEY (proxy token) + OPENAI_BASE_URL
+      // via config.env — we just spread them in.
+      const sandboxEnvs: Record<string, string> = { ...(config?.env || {}) };
 
       // Create E2B sandbox with Desktop template
       let e2bSandbox: E2BSandbox;
@@ -245,13 +406,13 @@ async function main() {
           e2bSandbox = await E2BSandbox.create(templateId, {
             apiKey: E2B_API_KEY,
             timeoutMs,
-            envs: config?.env,
+            envs: sandboxEnvs,
           });
         } else {
           e2bSandbox = await E2BSandbox.create({
             apiKey: E2B_API_KEY,
             timeoutMs,
-            envs: config?.env,
+            envs: sandboxEnvs,
           });
         }
       } catch (error) {
@@ -262,10 +423,22 @@ async function main() {
 
       const dbId = createId();
 
-      // noVNC URL — Desktop template exposes noVNC web client on port 6080
-      // Format: https://6080-{e2b_sandbox_id}.e2b.app
-      const vncHost = e2bSandbox.getHost(6080);
-      const vncUrl = `https://${vncHost}`;
+      // Determine stream URLs based on template type
+      const isNekoTemplate = templateId === "desktop";
+
+      // Neko WebRTC URL — Desktop template exposes Neko signaling on port 8080.
+      // CDN mode (Manus pattern): client hosted on S3/CDN, ?server= points to sandbox.
+      // Fallback: serve client from sandbox itself if NEKO_CLIENT_URL not set.
+      const nekoHost = isNekoTemplate ? e2bSandbox.getHost(8080) : null;
+      const nekoClientBase = process.env.NEKO_CLIENT_URL; // e.g. https://cdn.rubic.ai/neko-client
+      const nekoUrl = nekoHost
+        ? nekoClientBase
+          ? `${nekoClientBase}/autoconnect.html?server=${encodeURIComponent(`https://${nekoHost}`)}&usr=Rubic&pwd=neko`
+          : `https://${nekoHost}/autoconnect.html?usr=Rubic&pwd=neko`
+        : null;
+
+      // Legacy noVNC URL — for non-Neko templates that use port 6080
+      const vncUrl = !isNekoTemplate ? `https://${e2bSandbox.getHost(6080)}` : null;
 
       // Store in DB
       const [sandbox] = await db
@@ -289,6 +462,90 @@ async function main() {
       // Cache the instance
       sandboxMap.set(dbId, e2bSandbox);
 
+      // ─── Post-creation TURN setup for Neko desktop template ─────────────
+      // E2B's `envs` parameter only injects vars for `exec` commands, NOT
+      // for the boot `start_command.sh`. The template's start_command.sh has
+      // a TURN watcher that polls for /tmp/turn_credentials.json — when it
+      // detects TURN servers in the file, it restarts Neko automatically.
+      // We just need to fetch the credentials and write them to that file.
+      if (isNekoTemplate && CLOUDFLARE_TURN_KEY_ID && CLOUDFLARE_TURN_TOKEN) {
+        // Fetch Cloudflare TURN credentials from our service (not from inside sandbox)
+        fetch(
+          `https://rtc.live.cloudflare.com/v1/turn/keys/${CLOUDFLARE_TURN_KEY_ID}/credentials/generate-ice-servers`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${CLOUDFLARE_TURN_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ttl: 86400 }),
+          }
+        )
+          .then((res) => res.json())
+          .then((turnData) => {
+            // Write TURN credentials to the sandbox filesystem
+            // The TURN watcher in start_command.sh will detect this and restart Neko
+            return e2bSandbox.files.write(
+              "/tmp/turn_credentials.json",
+              JSON.stringify(turnData)
+            );
+          })
+          .then(() => {
+            logger.info(
+              { sandboxId: dbId },
+              "TURN credentials written to sandbox — Neko will auto-restart with TURN"
+            );
+          })
+          .catch((err) => {
+            logger.warn({ sandboxId: dbId, error: err }, "Failed to fetch/write TURN credentials");
+          });
+      }
+
+      // ─── Post-creation env setup (Manus Layer 2 + Layer 3) ─────────────
+      // The template bakes ~/.env (Layer 1: static config) and .bashrc/.zshrc
+      // that source both ~/.env and ~/.user_env. We write session-specific
+      // secrets to ~/.user_env (Layer 2) and ~/.secrets/sandbox_api_token (Layer 3).
+      // The .user_env watcher in start_command.sh re-sources it for the session.
+      const proxyToken = sandboxEnvs.OPENAI_API_KEY;
+      const proxyUrl = sandboxEnvs.OPENAI_BASE_URL;
+      const uploadUrl = sandboxEnvs.RUBIC_UPLOAD_URL;
+      const codeServerPassword = sandboxEnvs.CODE_SERVER_PASSWORD;
+      const codeServerPort = sandboxEnvs.CODE_SERVER_PORT;
+      const codeServerDomain = sandboxEnvs.CODE_SERVER_DOMAIN;
+      const forgeApiKey = sandboxEnvs.BUILT_IN_FORGE_API_KEY;
+      const forgeApiUrl = sandboxEnvs.BUILT_IN_FORGE_API_URL;
+      const forgeFrontendKey = sandboxEnvs.VITE_FRONTEND_FORGE_API_KEY;
+      const forgeFrontendUrl = sandboxEnvs.VITE_FRONTEND_FORGE_API_URL;
+      if (isNekoTemplate && proxyToken) {
+        const userEnvLines = [
+          "# Rubic Session Environment — Layer 2 (injected at session start)",
+          `export OPENAI_API_KEY="${proxyToken}"`,
+          ...(proxyUrl ? [`export OPENAI_BASE_URL="${proxyUrl}"`, `export OPENAI_API_BASE="${proxyUrl}"`] : []),
+          ...(uploadUrl ? [`export RUBIC_UPLOAD_URL="${uploadUrl}"`] : []),
+          // Code-server (Manus pattern: password per session)
+          ...(codeServerPassword ? [`export CODE_SERVER_PASSWORD="${codeServerPassword}"`] : []),
+          ...(codeServerPort ? [`export CODE_SERVER_PORT="${codeServerPort}"`] : []),
+          ...(codeServerDomain ? [`export CODE_SERVER_DOMAIN="${codeServerDomain}"`] : []),
+          // Forge API for webdev projects
+          ...(forgeApiKey ? [`export BUILT_IN_FORGE_API_KEY="${forgeApiKey}"`] : []),
+          ...(forgeApiUrl ? [`export BUILT_IN_FORGE_API_URL="${forgeApiUrl}"`] : []),
+          ...(forgeFrontendKey ? [`export VITE_FRONTEND_FORGE_API_KEY="${forgeFrontendKey}"`] : []),
+          ...(forgeFrontendUrl ? [`export VITE_FRONTEND_FORGE_API_URL="${forgeFrontendUrl}"`] : []),
+        ];
+        Promise.all([
+          // Layer 2: Write session secrets to ~/.user_env (sourced by .bashrc/.zshrc)
+          e2bSandbox.files.write("/home/user/.user_env", userEnvLines.join("\n") + "\n"),
+          // Layer 3: Write sandbox_api_token to ~/.secrets/ (pre-created by template)
+          e2bSandbox.files.write("/home/user/.secrets/sandbox_api_token", proxyToken),
+        ])
+          .then(() => {
+            logger.info({ sandboxId: dbId }, "Sandbox env files written (.user_env + sandbox_api_token)");
+          })
+          .catch((err) => {
+            logger.warn({ sandboxId: dbId, error: err }, "Failed to write sandbox env files");
+          });
+      }
+
       logger.info(
         { sandboxId: dbId, e2bSandboxId: e2bSandbox.sandboxId, userId, templateId },
         "Sandbox created"
@@ -300,7 +557,8 @@ async function main() {
         e2bSandboxId: e2bSandbox.sandboxId,
         hostname: e2bSandbox.getHost(80),
         template: templateId,
-        vncUrl,
+        ...(nekoUrl ? { nekoUrl } : {}),
+        ...(vncUrl ? { vncUrl } : {}),
       });
     })
   );
@@ -667,8 +925,9 @@ async function main() {
       }
 
       try {
-        // Run shell command
-        const result = await e2bSandbox.commands.run(command, { timeoutMs });
+        // Manus pattern: HTTP call to in-sandbox terminal server (port 8330)
+        // This avoids the E2B SDK's layered timeout issue (requestTimeoutMs + timeoutMs)
+        const result = await execViaTerminalServer(id, e2bSandbox, command, timeoutMs, logger);
 
         const completedAt = new Date();
         const executionTimeMs = completedAt.getTime() - startedAt.getTime();
@@ -709,17 +968,32 @@ async function main() {
 
         const completedAt = new Date();
         const executionTimeMs = completedAt.getTime() - startedAt.getTime();
+
         const errorMsg = error instanceof Error ? error.message : "Command failed";
+
+        // E2B SDK throws TimeoutError when command exceeds timeoutMs
+        const isTimeout =
+          error instanceof Error &&
+          (error.name === "TimeoutError" || errorMsg.includes("deadline_exceeded") || errorMsg.includes("timed out"));
 
         await db
           .update(sandboxExecutions)
           .set({
-            status: "failed",
+            status: isTimeout ? "timeout" : "failed",
             error: errorMsg,
             completedAt,
             executionTimeMs,
           })
           .where(eq(sandboxExecutions.id, execId));
+
+        if (isTimeout) {
+          logger.warn({ sandboxId: id, executionId: execId, executionTimeMs }, "Shell command timed out");
+          throw new AppError(errorMsg, 408, "EXECUTION_TIMEOUT", true, {
+            id: execId,
+            status: "timeout",
+            executionTimeMs,
+          });
+        }
 
         logger.error(error, "Failed to run shell command");
         throw new BadGatewayError(errorMsg);
@@ -740,15 +1014,16 @@ async function main() {
         throw new AppError(`Invalid browser action: ${action}`, 400, "INVALID_ACTION");
       }
 
-      // Get E2B sandbox instance (throws AppError 410 if unavailable)
+      // Get E2B sandbox instance (for terminal server URL)
       const e2bSandbox = await getE2BSandbox(id);
 
-      // Write payload to temp file to avoid shell injection
+      // Build curl command — write payload to temp file to avoid shell injection
       const payloadFile = `/tmp/bp_${Date.now()}.json`;
-      await e2bSandbox.files.write(payloadFile, JSON.stringify(params || {}));
-      const curlCmd = `curl -s -X POST http://localhost:9821/${action} -H 'Content-Type: application/json' -d @${payloadFile}; rm -f ${payloadFile}`;
+      const payloadJson = JSON.stringify(params || {});
+      // Use terminal server for consistent execution (avoids E2B SDK timeout layering)
+      const curlCmd = `cat > ${payloadFile} << 'PAYLOAD_EOF'\n${payloadJson}\nPAYLOAD_EOF\ncurl -sf -X POST http://localhost:9821/${action} -H 'Content-Type: application/json' -d @${payloadFile}; rm -f ${payloadFile}`;
 
-      const result = await e2bSandbox.commands.run(curlCmd, { timeoutMs: 45_000 });
+      const result = await execViaTerminalServer(id, e2bSandbox, curlCmd, 45_000, logger);
 
       if (result.stdout.trim()) {
         try {
@@ -932,6 +1207,7 @@ async function main() {
           );
         }
         sandboxMap.delete(id);
+        terminalSessionMap.delete(id);
       } else {
         // Try to kill via stored e2bSandboxId
         const [record] = await db
@@ -950,6 +1226,7 @@ async function main() {
             logger.warn({ sandboxId: id, error: err }, "Failed to kill E2B sandbox on stop");
           }
         }
+        terminalSessionMap.delete(id);
       }
 
       const [updated] = await db
@@ -975,6 +1252,7 @@ async function main() {
       await verifySandboxOwner(id, request.userId);
 
       // Kill E2B sandbox if available
+      terminalSessionMap.delete(id);
       const cached = sandboxMap.get(id);
       if (cached) {
         try {
@@ -1016,22 +1294,36 @@ async function main() {
   // Stream URLs — Return WebSocket URLs for live browser (noVNC) and terminal (PTY)
   // -------------------------------------------------------------------------
 
-  // Get noVNC URL for live browser streaming (Desktop template)
+  // Get browser stream URL — Neko WebRTC for desktop template, noVNC for legacy
   app.get(
     "/sandboxes/:id/browser/stream",
     typedRoute({ params: IdParams }, async (request, reply) => {
       const { id } = request.params;
       await verifySandboxOwner(id, request.userId);
 
+      // Look up template to determine streaming provider
+      const [record] = await db
+        .select({ templateId: sandboxes.templateId })
+        .from(sandboxes)
+        .where(eq(sandboxes.id, id))
+        .limit(1);
+
       const e2bSandbox = await getE2BSandbox(id);
-      // E2B Desktop sandboxes expose noVNC web client on port 6080
-      // The HTTPS URL serves the noVNC HTML page which connects to VNC via WebSocket internally
-      // We return the full URL with autoconnect params so it can be embedded in an iframe
+      const isNeko = record?.templateId === "desktop";
+
+      if (isNeko) {
+        // Neko WebRTC — autoconnect.html calls REST API login then redirects to client
+        const nekoHost = e2bSandbox.getHost(8080);
+        const nekoUrl = `https://${nekoHost}/autoconnect.html?usr=Rubic&pwd=neko`;
+        logger.info({ sandboxId: id, provider: "neko" }, "Browser stream URL requested");
+        return reply.success({ streamUrl: nekoUrl, nekoUrl, provider: "neko", sandboxId: id });
+      }
+
+      // Legacy noVNC — web client on port 6080
       const host = e2bSandbox.getHost(6080);
       const streamUrl = `https://${host}/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000`;
-
-      logger.info({ sandboxId: id }, "Browser stream URL requested");
-      return reply.success({ streamUrl, sandboxId: id });
+      logger.info({ sandboxId: id, provider: "novnc" }, "Browser stream URL requested");
+      return reply.success({ streamUrl, provider: "novnc", sandboxId: id });
     })
   );
 

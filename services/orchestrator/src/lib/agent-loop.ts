@@ -1,166 +1,223 @@
-import { buildSystemPrompt } from "./prompt-builder.js";
-import { compactHistory, type CompactMessage } from "./context-compactor.js";
-import { getBaseTools } from "./tool-registry.js";
-import { z } from "zod";
+/**
+ * Streaming agent loop — uses AI SDK streamText with all tools.
+ * Returns a ReadableStream of SSE events following the UIMessage stream protocol.
+ */
 
-type AiGenerateText = typeof import("ai").generateText;
-type AiTool = typeof import("ai").tool;
-type AnthropicFactory = typeof import("@ai-sdk/anthropic").createAnthropic;
+import { streamText, stepCountIs, type ModelMessage, type LanguageModel } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAllTools, type ToolContext } from './tools/index.js';
+import { buildManusSystemPrompt, type SystemPromptContext } from './system-prompt.js';
+import { getOrCreateSandbox } from './e2b-manager.js';
 
 export interface AgentLoopInput {
-  messages: CompactMessage[];
-  skills: string[];
-  relatedKnowledge: string[];
+  sessionId: string;
+  userId: string;
+  userName?: string;
+  messages: ModelMessage[];
   maxSteps?: number;
+  abortSignal?: AbortSignal;
 }
 
-export interface AgentLoopEvent {
-  type: string;
-  timestamp: string;
-  [key: string]: unknown;
+export interface AgentLoopResult {
+  stream: ReadableStream<Uint8Array>;
+  sandboxId: string | null;
 }
 
-function nowIso() {
-  return new Date().toISOString();
+const encoder = new TextEncoder();
+
+function sseEvent(data: Record<string, unknown>): Uint8Array {
+  return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-export async function runAgentLoop(input: AgentLoopInput) {
-  const { kept, compactedHistory } = compactHistory(input.messages);
-  const prompt = buildSystemPrompt({
-    skills: input.skills,
-    relatedKnowledge: input.relatedKnowledge,
-  });
-  const timestamp = nowIso();
-
-  const lastUserMessage = [...kept].reverse().find((m) => m.role === "user")?.content ?? "";
-  let assistantText = `Processed request: ${lastUserMessage}`.trim();
-  const events: AgentLoopEvent[] = [];
-
-  events.push({ type: "start", timestamp, sessionId: "runtime", messageId: `msg_${Date.now()}` });
+/**
+ * Run the streaming agent loop.
+ * Returns a ReadableStream that emits SSE events compatible with UIMessage stream protocol.
+ */
+export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
+  const {
+    sessionId,
+    userId,
+    userName,
+    messages,
+    maxSteps = 25,
+    abortSignal,
+  } = input;
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const anthropicModel = process.env.ORCHESTRATOR_MODEL || 'claude-sonnet-4-5-20250929';
+  const openaiModel = process.env.OPENAI_MODEL || 'gpt-4o';
   const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-  const anthropicModel = process.env.ORCHESTRATOR_MODEL || "claude-sonnet-4-5-20250929";
 
-  if (anthropicApiKey) {
-    try {
-      const { generateText, tool } = (await import("ai")) as {
-        generateText: AiGenerateText;
-        tool: AiTool;
-      };
-      const { createAnthropic } = (await import("@ai-sdk/anthropic")) as {
-        createAnthropic: AnthropicFactory;
-      };
-
-      const anthropic = createAnthropic({
-        apiKey: anthropicApiKey,
-        ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
-      });
-
-      const result = await generateText({
-        model: anthropic(anthropicModel),
-        system: `${prompt}\n\nYou MUST call the plan tool before final answer when useful.`,
-        messages: [{ role: "user", content: lastUserMessage || "Continue the task." }],
-        maxSteps: input.maxSteps ?? 8,
-        tools: {
-          plan: tool({
-            description: "Create or update a short execution plan for the task.",
-            inputSchema: z.object({
-              action: z.enum(["create", "update"]).default("create"),
-              steps: z.array(z.string()).default([]),
-            }),
-            execute: async (args: { action: "create" | "update"; steps: string[] }) => {
-              const toolCallId = `tc_${Date.now()}_plan`;
-              events.push({
-                type: "tool_call.start",
-                timestamp: nowIso(),
-                toolCallId,
-                toolName: "plan",
-                args,
-              });
-              const output = {
-                ok: true,
-                plan: {
-                  action: args.action,
-                  steps: args.steps.length
-                    ? args.steps
-                    : ["Understand request", "Execute", "Return result"],
-                },
-              };
-              events.push({
-                type: "tool_call.result",
-                timestamp: nowIso(),
-                toolCallId,
-                result: output,
-              });
-              return output;
-            },
-          }),
-          message: tool({
-            description: "Emit a progress/info/result message.",
-            inputSchema: z.object({
-              type: z.enum(["info", "ask", "result"]).default("info"),
-              content: z.string(),
-            }),
-            execute: async (args: { type: "info" | "ask" | "result"; content: string }) => {
-              const toolCallId = `tc_${Date.now()}_message`;
-              events.push({
-                type: "tool_call.start",
-                timestamp: nowIso(),
-                toolCallId,
-                toolName: "message",
-                args,
-              });
-              const output = { ok: true };
-              events.push({
-                type: "tool_call.result",
-                timestamp: nowIso(),
-                toolCallId,
-                result: output,
-              });
-              events.push({
-                type: "message.tool",
-                timestamp: nowIso(),
-                messageType: args.type,
-                content: args.content,
-              });
-              return output;
-            },
-          }),
-        },
-      });
-
-      assistantText = (result.text || assistantText).trim();
-    } catch (error) {
-      events.push({
-        type: "orchestrator.warning",
-        timestamp: nowIso(),
-        message: "AI SDK loop failed, using fallback response",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  } else {
-    events.push({
-      type: "orchestrator.warning",
-      timestamp: nowIso(),
-      message: "ANTHROPIC_API_KEY not configured; using fallback loop",
-    });
+  // Create sandbox (lazy — won't block if sandbox service is down)
+  let sandboxId: string | null = null;
+  let nekoUrl: string | null = null;
+  try {
+    const sandbox = await getOrCreateSandbox(sessionId, userId);
+    sandboxId = sandbox.sandboxId;
+    nekoUrl = sandbox.nekoUrl;
+  } catch {
+    // Sandbox not available — tools requiring sandbox will fail gracefully
   }
 
-  events.push({ type: "text-start", timestamp: nowIso() });
-  events.push({ type: "text-delta", timestamp: nowIso(), delta: assistantText });
-  events.push({ type: "text-end", timestamp: nowIso() });
-  events.push({ type: "message.complete", timestamp: nowIso(), content: assistantText });
-  events.push({ type: "finish", timestamp: nowIso(), finishReason: "stop" });
+  // Build tool context
+  const toolCtx: ToolContext = {
+    sessionId,
+    userId,
+    userName,
+    db: createNoopDb(),
+    sandboxId: sandboxId || 'no-sandbox',
+    ws: createNoopWs(),
+    storage: createNoopStorage(),
+    processMap: new Map(),
+  };
 
+  // Build system prompt
+  const promptCtx: SystemPromptContext = {
+    userName,
+    sessionId,
+    sandboxId: sandboxId || undefined,
+    currentDate: new Date().toISOString().split('T')[0] ?? new Date().toISOString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+
+  // Create all tools
+  const tools = createAllTools(toolCtx);
+
+  // If no API key at all, return a fallback stream
+  if (!anthropicApiKey && !openaiApiKey) {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const id = `text-${Date.now()}`;
+        controller.enqueue(sseEvent({ type: 'start' }));
+        controller.enqueue(sseEvent({ type: 'text-start', id }));
+        controller.enqueue(
+          sseEvent({
+            type: 'text-delta',
+            id,
+            delta: 'No LLM API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in the orchestrator environment.',
+          }),
+        );
+        controller.enqueue(sseEvent({ type: 'text-end', id }));
+        controller.enqueue(sseEvent({ type: 'finish', finishReason: 'stop' }));
+        controller.close();
+      },
+    });
+    return { stream, sandboxId };
+  }
+
+  // Build model — controlled by LLM_PROVIDER env var, defaults to auto-detect
+  const provider = process.env.LLM_PROVIDER || 'auto';
+  let model: LanguageModel;
+
+  if (provider === 'openai' || (provider === 'auto' && !anthropicApiKey && openaiApiKey)) {
+    const openai = createOpenAI({ apiKey: openaiApiKey! });
+    model = openai(openaiModel);
+  } else {
+    const anthropic = createAnthropic({
+      apiKey: anthropicApiKey!,
+      ...(anthropicBaseUrl ? { baseURL: anthropicBaseUrl } : {}),
+    });
+    model = anthropic(anthropicModel);
+  }
+
+  let systemPrompt: string;
+  try {
+    systemPrompt = buildManusSystemPrompt(promptCtx);
+  } catch {
+    systemPrompt = 'You are Rubic, a helpful AI assistant with access to tools for file operations, shell commands, browser control, code execution, web search, and deployment.';
+  }
+
+  // Run streamText with all tools
+  const result = streamText({
+    model,
+    system: systemPrompt,
+    messages,
+    stopWhen: stepCountIs(maxSteps),
+    tools,
+    abortSignal,
+  });
+
+  // Get the UIMessage stream response and extract its body
+  const response = result.toUIMessageStreamResponse({
+    headers: {
+      'x-vercel-ai-ui-message-stream': 'v1',
+    },
+  });
+
+  const uiStream = response.body;
+  if (!uiStream) {
+    throw new Error('Failed to create UI message stream');
+  }
+
+  // Wrap stream to inject sandbox_info metadata at the start
+  if (sandboxId) {
+    const wrappedStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        // Send sandbox info as first metadata event
+        controller.enqueue(
+          sseEvent({
+            type: 'message-metadata',
+            sandboxId,
+            ...(nekoUrl ? { nekoUrl } : {}),
+          }),
+        );
+
+        const reader = uiStream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : 'Stream error';
+          controller.enqueue(sseEvent({ type: 'error', error: errMsg }));
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return { stream: wrappedStream, sandboxId };
+  }
+
+  return { stream: uiStream, sandboxId };
+}
+
+// ── Noop implementations for services not yet connected ──
+
+function createNoopDb(): ToolContext['db'] {
   return {
-    ok: true,
-    systemPrompt: prompt,
-    compactedHistory,
-    events,
-    assistantMessage: assistantText,
-    availableTools: getBaseTools().map((t) => t.name),
-    stepsBudget: input.maxSteps ?? 12,
-    messageCount: kept.length,
+    insertMessage: async () => ({
+      id: `msg_${Date.now()}`,
+      sessionId: '',
+      role: 'assistant',
+      content: '',
+      createdAt: new Date(),
+    }),
+    insertManusPage: async () => ({
+      id: `page_${Date.now()}`,
+      userId: '',
+      title: '',
+      content: '',
+      isPublic: false,
+      createdAt: new Date(),
+    }),
+    query: {},
+  };
+}
+
+function createNoopWs(): ToolContext['ws'] {
+  return {
+    emit: async () => {},
+  };
+}
+
+function createNoopStorage(): ToolContext['storage'] {
+  return {
+    uploadFromUrl: async (url: string) => url,
+    uploadFromSandbox: async (_sid: string, path: string) => path,
   };
 }

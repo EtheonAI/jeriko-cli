@@ -42,3 +42,12 @@ Chat page: message display, input, streaming, tool rendering, canvas, planner ba
 6. Canvas opens for browser/terminal/code tools
 7. Planner bar appears when show_plan is in messages
 8. Error states (network failure, auth expiry) handled gracefully
+
+## Test Stream Page (`test-stream/page.tsx`)
+- **URL**: `/chat/test-stream`
+- **Purpose**: E2E integration test for orchestrator + sandbox + SSE streaming
+- **4 tabs**: Tests (10 automated), Browser (noVNC iframe), Terminal (shell exec), Files (CRUD)
+- **Sandbox calls**: Via same-origin `/api/sandbox/*` proxy routes (NOT direct :4012)
+- **Orchestrator calls**: Direct to :4014 (requires `crossOriginResourcePolicy: cross-origin` in Helmet)
+- **sandboxIdRef**: Uses `useRef` to share sandboxId across async test closures (React state is stale in loops)
+- **Desktop env**: noVNC + x11vnc + Xvfb + Chromium, auto-starts after sandbox creation, polls for readiness

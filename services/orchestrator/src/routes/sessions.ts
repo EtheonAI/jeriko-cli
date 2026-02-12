@@ -1,9 +1,14 @@
 import { FastifyPluginAsync } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { runAgentLoop, type AgentLoopEvent } from "../lib/agent-loop.js";
 
 type Role = "user" | "assistant" | "system";
+
+interface AgentLoopEvent {
+  type: string;
+  timestamp: string;
+  [key: string]: unknown;
+}
 
 interface SessionMessage {
   id: string;
@@ -167,29 +172,26 @@ export const sessionRoutes: FastifyPluginAsync = async (fastify) => {
       { type: "tool_call.result", timestamp: now, toolCallId: `tc_${Date.now()}`, result: { ok: true } },
     );
 
-    const loop = await runAgentLoop({
-      messages: session.messages.map((m) => ({ role: m.role, content: m.content, timestamp: m.createdAt })),
-      skills: parsed.data.tools ?? [],
-      relatedKnowledge: [],
-    });
-
+    // For non-streaming session messages, return a redirect to /v1/completions
+    // The actual agent loop is handled via the SSE streaming completions endpoint
     const assistantMessage: SessionMessage = {
       id: `msg_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
       role: "assistant",
-      content: loop.assistantMessage,
+      content: `Use POST /v1/completions for streaming agent responses. Session ${params.id} message received.`,
       createdAt: new Date().toISOString(),
     };
 
     session.messages.push(assistantMessage);
     session.updatedAt = new Date().toISOString();
+
     session.events.push(
-      { type: "message.chunk", timestamp: session.updatedAt, messageId: assistantMessage.id, delta: loop.assistantMessage },
       { type: "message.complete", timestamp: session.updatedAt, messageId: assistantMessage.id, content: assistantMessage.content },
-      { type: "credits.update", timestamp: session.updatedAt, remaining: 1000, used: 1 },
-      ...loop.events,
     );
 
-    return reply.send(loop.events);
+    return reply.send({
+      message: assistantMessage,
+      hint: "Use POST /v1/completions for streaming SSE responses with tool execution",
+    });
   });
 
   fastify.get("/v1/sessions/:id/messages", async (request, reply) => {

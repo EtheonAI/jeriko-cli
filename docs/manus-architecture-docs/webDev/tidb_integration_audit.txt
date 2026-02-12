@@ -1,0 +1,257 @@
+=== WEBDEV DATABASE ENDPOINT SCHEMA ===
+{
+  "post": {
+    "summary": "Webdev Database Operation",
+    "description": "Perform database operations",
+    "operationId": "webdev_database_operation_webdev_database_post",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/DatabaseOperationRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+=== DatabaseOperationRequest SCHEMA ===
+{
+  "properties": {
+    "project_name": {
+      "type": "string",
+      "title": "Project Name"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "push",
+        "pull",
+        "query"
+      ],
+      "title": "Operation"
+    },
+    "project_config": {
+      "$ref": "#/components/schemas/ProjectConfig"
+    },
+    "query": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Query"
+    }
+  },
+  "type": "object",
+  "required": [
+    "project_name",
+    "operation",
+    "project_config"
+  ],
+  "title": "DatabaseOperationRequest"
+}
+
+=== ProjectDatabaseConfig SCHEMA ===
+{
+  "properties": {
+    "connection_string": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Connection String"
+    }
+  },
+  "type": "object",
+  "title": "ProjectDatabaseConfig"
+}
+
+=== ProjectConfig SCHEMA ===
+{
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "title": "Project Id"
+    },
+    "git_repo": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/ProjectGitRepoConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "database": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/ProjectDatabaseConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "s3_sync": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/ProjectS3Config"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "storage_repo": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/ProjectStorageRepoConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "secrets": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Secrets"
+    },
+    "screenshot_upload_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Screenshot Upload Url"
+    },
+    "user_git_repo": {
+      "anyOf": [
+        {
+          "$ref": "#/components/schemas/UserGitRepo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "required": [
+    "project_id"
+  ],
+  "title": "ProjectConfig"
+}
+
+=== WEBDEV INIT PROJECT SCHEMA ===
+{
+  "post": {
+    "summary": "Webdev Init Project",
+    "description": "Initialize a new web development project with automatic S3 sync",
+    "operationId": "webdev_init_project_webdev_init_project_post",
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/InitProjectRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "description": "Successful Response",
+        "content": {
+          "application/json": {
+            "schema": {}
+          }
+        }
+      },
+      "422": {
+        "description": "Validation Error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+=== CreateWebdevProjectCmd SCHEMA ===
+{
+  "properties": {
+    "app_name": {
+      "type": "string",
+      "title": "App Name"
+    },
+    "template_id": {
+      "type": "string",
+      "title": "Template Id"
+    },
+    "directory": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Directory"
+    }
+  },
+  "type": "object",
+  "required": [
+    "app_name",
+    "template_id"
+  ],
+  "title": "CreateWebdevProjectCmd"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "rubic-desktop-template",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "e2b": "^2.12.0"
+  }
+}

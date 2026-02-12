@@ -6,7 +6,7 @@ import ts from "typescript-eslint";
 export default [
 	...ts.configs.recommended,
 	{
-		ignores: ["**/.next"],
+		ignores: ["**/.next", "e2b-templates/**"],
 	},
 	{
 		files: ["**/*.ts", "**/*.tsx"],

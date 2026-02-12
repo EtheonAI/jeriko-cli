@@ -1,0 +1,16 @@
+=== OPENAI CONFIG ===
+OPENAI_API_KEY=sk-6P2GMFqVrihMcthyufExNS
+OPENAI_BASE_URL=https://api.manus.im/api/llm-proxy/v1
+OPENAI_API_BASE=https://api.manus.im/api/llm-proxy/v1
+
+=== CODE SERVER CONFIG ===
+CODE_SERVER_PORT=8329
+CODE_SERVER_PASSWORD=b6a7e8854204ff63
+CODE_SERVER_DOMAIN=us1.manus.computer
+
+=== CODE SERVER PROCESS ===
+root        1417  0.0  0.0   4784  3172 ?        S    Feb09   0:00 /bin/bash /opt/.manus/.packages/scripts/check-start-code-server.sh
+root        1425  0.0  0.0   6776  3596 ?        S    Feb09   0:00 su -l ubuntu -c code-server --config /home/ubuntu/.config/code-server/config.yaml --disable-workspace-trust
+ubuntu      1426  0.0  0.4 1115512 18520 ?       Ssl  Feb09   0:00 /usr/lib/code-server/lib/node /usr/lib/code-server --config /home/ubuntu/.config/code-server/config.yaml --disable-workspace-trust
+ubuntu      1481  0.0  0.7 1051644 29152 ?       Sl   Feb09   0:03 /usr/lib/code-server/lib/node /usr/lib/code-server/out/node/entry
+ubuntu     41852  0.0  0.0   4024  2076 pts/9    S+   06:26   0:00 grep --color=auto code-server

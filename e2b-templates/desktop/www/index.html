@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rubic Desktop</title><script>
+/* Neko v3 Auth Bridge — runs BEFORE the v2 Vue client.
+   Cookie auth is DISABLED so POST /api/login returns token in JSON body.
+   Supports CDN-hosted mode: ?server=https://sandbox.e2b.app
+   1. Read server origin from query/sessionStorage (CDN mode) or use same-origin
+   2. Read token from sessionStorage (set by autoconnect.html)
+   3. Fallback: call POST {server}/api/login sync to get token
+   4. Monkey-patch WebSocket to inject ?token= and rewrite host to server */
+(function(){
+  // Resolve server origin (CDN-hosted: from query param; self-hosted: empty = same origin)
+  var sp=new URLSearchParams(window.location.search);
+  var sv=sp.get('server')||sessionStorage.getItem('neko_server')||'';
+  if(sv)sessionStorage.setItem('neko_server',sv);
+  // Build ws:// base from server origin (https://x → wss://x, http://x → ws://x)
+  var wsBase=sv?sv.replace(/^http/,'ws'):'';
+
+  var tk=sessionStorage.getItem('neko_token');
+  if(!tk){
+    var usr=localStorage.getItem('displayname')||'Rubic';
+    var pwd=localStorage.getItem('password')||'neko';
+    var xhr=new XMLHttpRequest();
+    xhr.open('POST',sv+'/api/login',false);
+    xhr.setRequestHeader('Content-Type','application/json');
+    try{xhr.send(JSON.stringify({username:usr,password:pwd}))}catch(e){return}
+    if(xhr.status===200){
+      try{var d=JSON.parse(xhr.responseText);tk=d.token}catch(e){}
+    }
+    if(!tk)return;
+    sessionStorage.setItem('neko_token',tk);
+  }
+  console.log('[Rubic] Auth bridge: token acquired ('+tk.substring(0,8)+'...), server='+(sv||'same-origin'));
+  var O=window.WebSocket;
+  window.WebSocket=function(u,p){
+    if(typeof u==='string'&&u.indexOf('/ws')!==-1){
+      try{
+        // In CDN mode, rewrite host to sandbox server
+        if(wsBase){
+          var rel=u;
+          // Handle relative or same-origin ws URLs
+          if(u.startsWith('/')){rel=wsBase+u}
+          else{var o=new URL(u);o.protocol=wsBase.startsWith('wss')?'wss:':'ws:';var sv2=new URL(sv);o.host=sv2.host;rel=o.toString()}
+          u=rel;
+        }
+        var o2=new URL(u,window.location.href);o2.searchParams.set('token',tk);u=o2.toString();
+      }catch(e){}
+      console.log('[Rubic] WebSocket patched:',u.substring(0,80)+'...');
+    }
+    return p!==undefined?new O(u,p):new O(u);
+  };
+  window.WebSocket.prototype=O.prototype;
+  window.WebSocket.CONNECTING=O.CONNECTING;
+  window.WebSocket.OPEN=O.OPEN;
+  window.WebSocket.CLOSING=O.CLOSING;
+  window.WebSocket.CLOSED=O.CLOSED;
+})();
+</script><link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png"><link rel="manifest" href="site.webmanifest"><link rel="mask-icon" href="safari-pinned-tab.svg" color="#19bd9c"><meta name="msapplication-TileColor" content="#19bd9c"><meta name="theme-color" content="#19bd9c"><style>/* weird iOS bug, if this is not set right here, video just does not start */ .video-container { width: 100%; height: 100%; }</style><script defer="defer" type="module" src="js/chunk-vendors.025e045d.js"></script><script defer="defer" type="module" src="js/app.486d1480.js"></script><link href="css/app.e49c7826.css" rel="stylesheet"><script defer="defer" src="js/chunk-vendors-legacy.58879166.js" nomodule></script><script defer="defer" src="js/app-legacy.3d12edcc.js" nomodule></script></head><body><noscript><strong>We're sorry but n.eko doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="neko"></div><p>A self hosted virtual browser (<a href="https://github.com/m1k1o/neko">m1k1o/neko</a>) that runs in docker.</p></body></html>

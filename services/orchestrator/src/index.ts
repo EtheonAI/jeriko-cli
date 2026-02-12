@@ -3,8 +3,17 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { createLogger, getEnv } from "@repo/service-utils";
 import { healthRoutes } from "./routes/health.js";
-import { mediaRoutes } from "./routes/media.js";
 import { sessionRoutes } from "./routes/sessions.js";
+import { completionRoutes } from "./routes/completions.js";
+import { mediaRoutes } from "./routes/media.js";
+import { llmProxyRoutes } from "./routes/llm-proxy.js";
+import { uploadRoutes } from "./routes/upload.js";
+import { nekoClientRoutes } from "./routes/neko-client.js";
+import { webdevRoutes } from "./routes/webdev.js";
+import { codeServerRoutes } from "./routes/code-server.js";
+import { forgeRoutes } from "./routes/forge.js";
+import { deployRoutes } from "./routes/deploy.js";
+import { startCleanupLoop, stopCleanupLoop } from "./lib/e2b-manager.js";
 
 const logger = createLogger({ service: "orchestrator" });
 
@@ -29,16 +38,42 @@ export async function buildApp() {
     origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-request-id"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-api-key",
+      "x-request-id",
+      "x-user-id",
+      "x-user-name",
+      "x-session-id",
+    ],
   });
 
   await app.register(helmet, {
     contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   });
 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
+  await app.register(completionRoutes);
   await app.register(mediaRoutes);
+  await app.register(llmProxyRoutes);
+  await app.register(uploadRoutes);
+  await app.register(nekoClientRoutes);
+  await app.register(webdevRoutes);
+  await app.register(codeServerRoutes);
+  await app.register(forgeRoutes);
+  await app.register(deployRoutes);
+
+  // Remove X-Frame-Options for neko-client routes — must be embeddable in iframes.
+  // Helmet sets headers on raw response, so we must override at that level.
+  app.addHook("onSend", async (request, reply) => {
+    if (request.url.startsWith("/neko-client/")) {
+      reply.raw.removeHeader("X-Frame-Options");
+      reply.raw.removeHeader("Cross-Origin-Opener-Policy");
+    }
+  });
 
   return { app, port, host };
 }
@@ -90,6 +125,7 @@ async function main() {
 
   try {
     await app.listen({ port, host });
+    startCleanupLoop();
     logger.info({ port, host }, "Orchestrator service started");
   } catch (err) {
     logger.error(err, "Failed to start server");
@@ -100,6 +136,7 @@ async function main() {
   for (const signal of signals) {
     process.on(signal, async () => {
       logger.info({ signal }, "Received shutdown signal");
+      stopCleanupLoop();
       await app.close();
       process.exit(0);
     });

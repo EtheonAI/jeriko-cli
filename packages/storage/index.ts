@@ -126,6 +126,24 @@ export async function getPresignedUrl(key: string, expiresIn: number = 3600, isP
   );
 }
 
+/** Generate a presigned upload (PUT) URL for direct S3 uploads */
+export async function getPresignedUploadUrl(
+  key: string,
+  contentType?: string,
+  expiresIn: number = 3600,
+): Promise<string> {
+  const client = getClient();
+  return getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: getBucket(),
+      Key: key,
+      ...(contentType ? { ContentType: contentType } : {}),
+    }),
+    { expiresIn }
+  );
+}
+
 /** Delete a single file from S3 */
 export async function deleteFile(key: string): Promise<void> {
   const client = getClient();

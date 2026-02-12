@@ -21,6 +21,7 @@ export const POST = async (req: Request) => {
     }
 
     const userId = session.user.id;
+    const userName = session.user.name || undefined;
     const body = await req.json();
 
     const {
@@ -42,8 +43,9 @@ export const POST = async (req: Request) => {
       });
     }
 
-    let sessionId = chatId ?? bodyId ?? metadata?.sessionId;
+    const sessionId = chatId ?? bodyId ?? metadata?.sessionId;
 
+    // Extract last user message text from parts
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
     const lastUserText =
       lastUserMsg?.parts
@@ -57,59 +59,51 @@ export const POST = async (req: Request) => {
       });
     }
 
-    if (!sessionId) {
-      const createResp = await fetch(`${ORCHESTRATOR_SERVICE_URL}/v1/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, mode: "single" }),
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!createResp.ok) {
-        const detail = await createResp.text();
-        throw new Error(`Failed to create orchestrator session: ${detail}`);
-      }
-      const created = (await createResp.json()) as { sessionId?: string };
-      sessionId = created.sessionId;
-    }
+    // Convert UIMessages to CoreMessages for the orchestrator
+    const coreMessages = messages.map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content:
+        m.parts
+          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("") ?? "",
+    }));
 
-    if (!sessionId) {
-      throw new Error("Missing sessionId after orchestrator session creation");
-    }
-
-    const runResp = await fetch(`${ORCHESTRATOR_SERVICE_URL}/v1/sessions/${sessionId}/messages`, {
+    // Stream from orchestrator's /v1/completions endpoint
+    const orchestratorResp = await fetch(`${ORCHESTRATOR_SERVICE_URL}/v1/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: lastUserText }),
-      signal: AbortSignal.timeout(120_000),
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-id": userId,
+        "x-user-name": userName ?? "",
+        "x-session-id": sessionId ?? "",
+      },
+      body: JSON.stringify({
+        messages: coreMessages,
+        sessionId,
+        userId,
+        userName,
+        model: metadata?.model,
+      }),
+      signal: AbortSignal.timeout(MAX_DURATION_SECONDS * 1000),
     });
 
-    if (!runResp.ok) {
-      const detail = await runResp.text();
-      throw new Error(`Orchestrator message execution failed: ${detail}`);
+    if (!orchestratorResp.ok) {
+      const detail = await orchestratorResp.text();
+      log.error({ status: orchestratorResp.status, detail }, "Orchestrator error");
+      throw new Error(`Orchestrator error: ${orchestratorResp.status} ${detail}`);
     }
 
-    const events = (await runResp.json()) as Array<Record<string, unknown>>;
-    const assistantText = String(
-      events
-        .filter((event) => event?.type === "message.complete")
-        .map((event) => event?.content)
-        .find(Boolean) ?? "Completed."
-    );
+    if (!orchestratorResp.body) {
+      throw new Error("Orchestrator returned no body");
+    }
 
-    const partId = `text-${Date.now()}`;
-    const sseBody = [
-      `data: ${JSON.stringify({ type: "start" })}\n\n`,
-      `data: ${JSON.stringify({ type: "text-start", id: partId })}\n\n`,
-      `data: ${JSON.stringify({ type: "text-delta", id: partId, delta: assistantText })}\n\n`,
-      `data: ${JSON.stringify({ type: "text-end", id: partId })}\n\n`,
-      `data: ${JSON.stringify({ type: "finish", finishReason: "stop" })}\n\n`,
-    ].join("");
-
-    return new Response(sseBody, {
+    // Proxy the SSE stream directly to the client
+    return new Response(orchestratorResp.body, {
       headers: {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
+        "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
         "x-vercel-ai-ui-message-stream": "v1",
       },
@@ -121,7 +115,7 @@ export const POST = async (req: Request) => {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 };
