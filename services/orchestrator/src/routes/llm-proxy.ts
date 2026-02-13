@@ -42,6 +42,7 @@ const ALLOWED_MODELS = [
   "o1-mini",
   "o1-preview",
   "o3-mini",
+  "gemini-2.5-flash",
 ];
 
 function isModelBlocked(model: string): boolean {

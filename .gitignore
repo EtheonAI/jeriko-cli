@@ -37,7 +37,25 @@ packages/database/generated/
 # Python
 **/__pycache__/
 *.pyc
+*.pyo
 
 # IDE / Editor
 .cursor/
 .agents/
+
+# RSA Keys (NEVER commit private keys)
+e2b-templates/desktop/keys/private.pem
+
+# E2B
+e2b-templates/desktop/.e2b/
+
+# Go build artifacts
+e2b-templates/desktop/rubic-mcp-cli/rubic-mcp-cli
+e2b-templates/desktop/rubic-upload-file/rubic-upload-file
+
+# Nuitka build output
+sandbox_runtime.build/
+sandbox_runtime.dist/
+
+# Misc Folders/Files
+docs/.manus

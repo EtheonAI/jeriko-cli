@@ -165,6 +165,31 @@ async function sandboxWriteFile(
   }
 }
 
+/**
+ * Read a file from a sandbox via the sandbox service.
+ */
+async function sandboxReadFile(
+  sandboxId: string,
+  path: string,
+  userId: string
+): Promise<string> {
+  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/files?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    headers: {
+      "x-user-id": userId,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!resp.ok) {
+    const detail = await resp.text();
+    throw new Error(`Sandbox file read failed: ${resp.status} ${detail}`);
+  }
+
+  const data = (await resp.json()) as { data?: { content?: string } };
+  return data.data?.content || "";
+}
+
 // ─── Drizzle template files (from Manus tidb_template_files.txt) ────────
 
 const DRIZZLE_CONFIG_TS = `import { defineConfig } from "drizzle-kit";
@@ -953,5 +978,157 @@ export default defineConfig({
       const msg = err instanceof Error ? err.message : String(err);
       return reply.status(500).send({ error: msg });
     }
+  });
+
+  /**
+   * POST /api/webdev/git-push — Push to GitHub.
+   *
+   * Pushes the current branch to a remote (default: origin/main).
+   */
+  app.post("/api/webdev/git-push", async (request, reply) => {
+    const body = request.body as {
+      sandboxId: string;
+      userId: string;
+      projectPath?: string;
+      remote?: string;
+      branch?: string;
+    };
+    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const remote = body.remote || "origin";
+    const branch = body.branch || "main";
+    if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
+    try {
+      const result = await sandboxExec(sandboxId, `cd ${projectPath} && git push ${remote} ${branch} 2>&1`, userId, 30000);
+      return reply.send({ success: result.exitCode === 0, output: result.stdout.slice(-1000), errors: result.stderr.slice(-500) || undefined });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  /**
+   * POST /api/webdev/git-sync-check — Check git sync status.
+   *
+   * Returns branch, clean/dirty, ahead/behind counts, and remote info.
+   */
+  app.post("/api/webdev/git-sync-check", async (request, reply) => {
+    const body = request.body as { sandboxId: string; userId: string; projectPath?: string };
+    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
+    try {
+      const status = await sandboxExec(sandboxId, `cd ${projectPath} && git status --porcelain`, userId, 10000);
+      const branch = await sandboxExec(sandboxId, `cd ${projectPath} && git branch --show-current`, userId, 5000);
+      const remotes = await sandboxExec(sandboxId, `cd ${projectPath} && git remote -v`, userId, 5000);
+      const ahead = await sandboxExec(sandboxId, `cd ${projectPath} && git rev-list @{upstream}..HEAD --count 2>/dev/null || echo "0"`, userId, 5000);
+      const behind = await sandboxExec(sandboxId, `cd ${projectPath} && git rev-list HEAD..@{upstream} --count 2>/dev/null || echo "0"`, userId, 5000);
+      return reply.send({
+        clean: !status.stdout.trim(),
+        branch: branch.stdout.trim(),
+        hasRemote: !!remotes.stdout.trim(),
+        ahead: parseInt(ahead.stdout.trim()) || 0,
+        behind: parseInt(behind.stdout.trim()) || 0,
+        changes: status.stdout.trim().split("\n").filter(Boolean).length,
+      });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  /**
+   * POST /api/webdev/apply-edits — Apply webpage edits (Manus apply_webpage_edits).
+   *
+   * Applies search-and-replace edits to files in the project.
+   */
+  app.post("/api/webdev/apply-edits", async (request, reply) => {
+    const body = request.body as {
+      sandboxId: string;
+      userId: string;
+      projectPath?: string;
+      edits: Array<{ file: string; search: string; replace: string }>;
+    };
+    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    if (!sandboxId || !userId || !body.edits?.length) return reply.status(400).send({ error: "sandboxId, userId, and edits required" });
+    try {
+      const results: Array<{ file: string; success: boolean; error?: string }> = [];
+      for (const edit of body.edits) {
+        const fullPath = edit.file.startsWith("/") ? edit.file : `${projectPath}/${edit.file}`;
+        try {
+          const content = await sandboxReadFile(sandboxId, fullPath, userId);
+          if (!content.includes(edit.search)) {
+            results.push({ file: edit.file, success: false, error: "search string not found" });
+            continue;
+          }
+          const updated = content.replace(edit.search, edit.replace);
+          await sandboxWriteFile(sandboxId, fullPath, updated, userId);
+          results.push({ file: edit.file, success: true });
+        } catch (e) {
+          results.push({ file: edit.file, success: false, error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return reply.send({ success: results.every(r => r.success), results });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  /**
+   * POST /api/webdev/setup-imported-template — Setup imported template.
+   *
+   * Clones from git URL or downloads from template URL, installs deps, inits git.
+   */
+  app.post("/api/webdev/setup-imported-template", async (request, reply) => {
+    const body = request.body as {
+      sandboxId: string;
+      userId: string;
+      projectPath?: string;
+      templateUrl?: string;
+      gitUrl?: string;
+    };
+    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
+    try {
+      if (body.gitUrl) {
+        await sandboxExec(sandboxId, `git clone ${body.gitUrl} ${projectPath}`, userId, 60000);
+      } else if (body.templateUrl) {
+        await sandboxExec(sandboxId, `mkdir -p ${projectPath} && cd ${projectPath} && curl -L "${body.templateUrl}" -o template.zip && unzip template.zip && rm template.zip`, userId, 60000);
+      }
+      // Install deps
+      await sandboxExec(sandboxId, `cd ${projectPath} && pnpm install 2>/dev/null || npm install`, userId, 120000);
+      // Init git if not already
+      await sandboxExec(sandboxId, `cd ${projectPath} && git init 2>/dev/null && git add -A && git commit -m "Imported template" 2>/dev/null || true`, userId, 10000);
+      return reply.send({ success: true, projectPath });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  /**
+   * POST /api/webdev/refresh-github-token — Refresh GitHub OAuth token in sandbox.
+   *
+   * Sets up gh CLI auth and git credential helper with the provided token.
+   */
+  app.post("/api/webdev/refresh-github-token", async (request, reply) => {
+    const body = request.body as { sandboxId: string; userId: string; token: string };
+    if (!body.sandboxId || !body.userId || !body.token) return reply.status(400).send({ error: "sandboxId, userId, and token required" });
+    try {
+      // Write GitHub token to sandbox for git operations
+      await sandboxExec(body.sandboxId, `echo "${body.token}" | gh auth login --with-token 2>&1`, body.userId, 10000);
+      // Also set as credential helper
+      await sandboxExec(body.sandboxId, `git config --global credential.helper store && echo "https://oauth2:${body.token}@github.com" > /home/user/.git-credentials`, body.userId, 5000);
+      return reply.send({ success: true });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
+  });
+
+  /**
+   * POST /api/webdev/refresh-s3-token — Refresh S3 presigned URLs.
+   *
+   * Re-generates presigned URLs for existing S3 keys (24h expiry).
+   */
+  app.post("/api/webdev/refresh-s3-token", async (request, reply) => {
+    const body = request.body as { sandboxId: string; userId: string; s3Keys?: string[] };
+    if (!body.sandboxId || !body.userId) return reply.status(400).send({ error: "sandboxId and userId required" });
+    try {
+      // Re-generate presigned URLs for existing S3 keys
+      if (!body.s3Keys?.length) return reply.send({ success: true, urls: [] });
+      // Lazy-load storage
+      const mod = await import("@repo/storage");
+      const storage: any = (mod as any).default ?? mod;
+      const urls = await Promise.all(body.s3Keys.map(async (key: string) => ({
+        key,
+        url: await storage.getPresignedUrl(key, 86400, true),
+      })));
+      return reply.send({ success: true, urls });
+    } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
   });
 }

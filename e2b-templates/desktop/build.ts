@@ -1,29 +1,29 @@
 /**
  * Build the Rubic Desktop E2B template.
  *
- * Run: npx tsx build.ts
+ * Run: npx e2b template build
  *
- * This creates a custom E2B sandbox template with Ubuntu Desktop + Neko WebRTC.
- * The template ID "rubic-desktop" is used by the agent service when
- * creating new sandboxes via the E2B SDK.
+ * Uses e2b.toml + Dockerfile for template definition.
+ * The template ID is defined in e2b.toml.
  *
  * Requirements:
  *   - E2B_API_KEY environment variable
- *   - e2b package installed
+ *   - e2b CLI installed (npx e2b)
  */
 
-import { Template, defaultBuildLogger } from "e2b";
-import { template as desktopTemplate } from "./template";
+import { execSync } from "child_process";
 
 console.log("Building Rubic Desktop template...");
 console.log("This may take 10-15 minutes for the first build.");
-console.log("Includes: XFCE Desktop + Neko WebRTC + Playwright + GStreamer");
+console.log("Includes: XFCE Desktop + Neko WebRTC + Python Sandbox Runtime + Go binaries");
 
-await Template.build(desktopTemplate, "desktop", {
-  cpuCount: 4,
-  memoryMB: 4096,
-  onBuildLogs: defaultBuildLogger(),
-});
-
-console.log("Template 'desktop' built successfully!");
-console.log("Use: DesktopSandbox.create({ template: 'desktop' })");
+try {
+  execSync("npx e2b template build", {
+    cwd: import.meta.dirname,
+    stdio: "inherit",
+  });
+  console.log("Template built successfully!");
+} catch (error) {
+  console.error("Build failed:", error);
+  process.exit(1);
+}

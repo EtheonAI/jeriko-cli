@@ -12,15 +12,32 @@ import { createSearchTools } from './search-tools.js';
 import { createDeployTools } from './deploy-tools.js';
 import { createImageTools } from './image-tools.js';
 import { createPlanTools } from './plan-tools.js';
+import { createPageTools } from './page-tools.js';
+import { createExtraTools } from './extra-tools.js';
+import { createParallelTasksTool } from './parallel-tasks.js';
 
 export type { ToolContext } from './types.js';
 
 /**
+ * Agent mode determines which tools are available.
+ *
+ * Manus pattern:
+ *   - base: 29 core tools (always available)
+ *   - browser: base + 13 browser tools (when browser task detected)
+ *   - webdev: browser + 7 webdev tools (when webdev project detected)
+ */
+export type AgentMode = 'base' | 'browser' | 'webdev';
+
+/**
  * Create all tools for a session context.
  * Returns a flat Record<string, Tool> ready to pass to streamText/generateText.
+ *
+ * @param ctx - Tool context
+ * @param mode - Agent mode (defaults to 'browser' for full tool access)
  */
-export function createAllTools(ctx: ToolContext) {
-  return {
+export function createAllTools(ctx: ToolContext, mode: AgentMode = 'browser') {
+  // Base tools (always available)
+  const baseTools = {
     // Communication (2)
     message_notify_user: createMessageNotifyUserTool(ctx),
     message_ask_user: createMessageAskUserTool(ctx),
@@ -31,24 +48,45 @@ export function createAllTools(ctx: ToolContext) {
     // Shell operations (5)
     ...createShellTools(ctx),
 
-    // Browser operations (13)
-    ...createBrowserTools(ctx),
-
     // Code execution (1)
     ...createCodeTools(ctx),
 
     // Web search (1)
     ...createSearchTools(ctx),
 
-    // Deployment (2)
-    ...createDeployTools(ctx),
-
     // Image generation (1)
     ...createImageTools(ctx),
 
     // Plan, schedule, analytics (3)
     ...createPlanTools(ctx),
-  } as const;
+
+    // Page creation + idle (2)
+    ...createPageTools(ctx),
+
+    // Extra tools: text_editor, image utils, email, skills (9)
+    ...createExtraTools(ctx),
+
+    // Parallel tasks (1)
+    ...createParallelTasksTool(ctx),
+  };
+
+  if (mode === 'base') {
+    return baseTools as Record<string, unknown>;
+  }
+
+  // Browser mode: base + browser + deploy
+  const browserTools = {
+    ...baseTools,
+    ...createBrowserTools(ctx),
+    ...createDeployTools(ctx),
+  };
+
+  if (mode === 'browser') {
+    return browserTools as Record<string, unknown>;
+  }
+
+  // Webdev mode: browser + all (same for now, extensible)
+  return browserTools as Record<string, unknown>;
 }
 
 /**
@@ -98,5 +136,18 @@ export function getAllToolNames(): string[] {
     'show_plan',
     'schedule_task',
     'track_analytics',
+    // Page/Idle
+    'make_manus_page',
+    'idle',
+    // Extra: text editor, image utils, email, skills
+    'text_editor',
+    'image_rmbg',
+    'image_search_upload',
+    'gmail_send',
+    'gmail_download',
+    'outlook_send',
+    'outlook_download',
+    'skills_sync',
+    'skills_package',
   ];
 }

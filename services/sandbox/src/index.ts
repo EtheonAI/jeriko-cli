@@ -68,9 +68,10 @@ async function ensureTerminal(
 
   const url = getTerminalServerUrl(e2bSandbox);
 
-  // Wait for terminal server to be ready (retry up to 15 times, ~7.5s)
+  // Wait for terminal server to be ready (retry up to 30 times, ~15s)
+  // E2B sandboxes take ~10s to fully boot, so we need generous timeout
   let serverReady = false;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 30; i++) {
     try {
       const resp = await fetch(`${url}/health`, {
         signal: AbortSignal.timeout(3000),
@@ -87,7 +88,7 @@ async function ensureTerminal(
 
   if (!serverReady) {
     throw new AppError(
-      "Terminal server not ready inside sandbox after 7.5s",
+      "Terminal server not ready inside sandbox after 15s",
       503,
       "TERMINAL_SERVER_UNAVAILABLE",
     );
@@ -389,7 +390,7 @@ async function main() {
       const timeoutMs = config?.timeout || 300_000; // 5 minutes default
 
       // Use Desktop template by default for full virtual computer experience
-      // (Ubuntu + XFCE + Neko WebRTC on port 8080 + Playwright)
+      // (Ubuntu + XFCE + Neko WebRTC on port 8333 + Python sandbox runtime on 8330)
       const templateId = template || getEnv("E2B_TEMPLATE", "desktop");
 
       // Build env vars for the sandbox
@@ -426,10 +427,10 @@ async function main() {
       // Determine stream URLs based on template type
       const isNekoTemplate = templateId === "desktop";
 
-      // Neko WebRTC URL — Desktop template exposes Neko signaling on port 8080.
+      // Neko WebRTC URL — Desktop template exposes Neko signaling on port 8333.
       // CDN mode (Manus pattern): client hosted on S3/CDN, ?server= points to sandbox.
       // Fallback: serve client from sandbox itself if NEKO_CLIENT_URL not set.
-      const nekoHost = isNekoTemplate ? e2bSandbox.getHost(8080) : null;
+      const nekoHost = isNekoTemplate ? e2bSandbox.getHost(8333) : null;
       const nekoClientBase = process.env.NEKO_CLIENT_URL; // e.g. https://cdn.rubic.ai/neko-client
       const nekoUrl = nekoHost
         ? nekoClientBase
@@ -1313,7 +1314,7 @@ async function main() {
 
       if (isNeko) {
         // Neko WebRTC — autoconnect.html calls REST API login then redirects to client
-        const nekoHost = e2bSandbox.getHost(8080);
+        const nekoHost = e2bSandbox.getHost(8333);
         const nekoUrl = `https://${nekoHost}/autoconnect.html?usr=Rubic&pwd=neko`;
         logger.info({ sandboxId: id, provider: "neko" }, "Browser stream URL requested");
         return reply.success({ streamUrl: nekoUrl, nekoUrl, provider: "neko", sandboxId: id });

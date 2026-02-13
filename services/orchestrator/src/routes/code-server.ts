@@ -1,106 +1,32 @@
 /**
- * Code-Server Routes — Manages VS Code (code-server) inside E2B sandboxes.
+ * Code-Server Routes — Proxies to the terminal server inside E2B sandboxes.
  *
- * Manus 3-layer security pattern (from code_server_deep_dive.md):
- *   Layer 1: code-server runs on port 8329 inside sandbox (password auth)
- *   Layer 2: Orchestrator pre-auth endpoint generates short-lived token
- *   Layer 3: E2B port proxy exposes {port}-{sandbox-id}.e2b.dev publicly
+ * Manus 3-layer security architecture:
+ *   Layer 1: code-server runs with auth: password (random per-sandbox) on port 8329
+ *   Layer 2: Terminal server (port 8330) reverse-proxies at /cs/* with auto auth-cookie injection
+ *   Layer 3: E2B port proxy (unguessable URL: https://8330-{sandboxId}.e2b.dev)
  *
- * Authentication flow (from code_server_auth.json):
- *   1. Frontend calls GET /api/code-server/pre-auth → gets pre_auth_token
- *   2. Frontend opens iframe to E2B proxy URL
- *   3. Frontend calls POST /api/code-server/auth with pre_auth_token → validates + returns password
- *   4. Frontend POSTs to code-server /login with password → session cookie set
+ * Flow:
+ *   1. Frontend calls GET /api/code-server/pre-auth → proxy to terminal server /code-server/pre-auth
+ *   2. Frontend calls POST /api/code-server/auth → proxy to terminal server /code-server/auth
+ *   3. Frontend loads iframe at https://8330-{e2bId}.e2b.dev/cs/ → no login page (proxy handles auth)
+ *
+ * The terminal server handles all code-server logic: pre-auth token generation, password management,
+ * trigger file for code-server start, and the reverse proxy at /cs/ with automatic auth cookie injection.
  *
  * Routes:
- *   GET  /api/code-server/pre-auth — Generate pre-auth token (Manus: GET /code-server/pre-auth)
- *   POST /api/code-server/auth     — Validate token, return password (Manus: POST /code-server/auth)
- *   POST /api/code-server/start    — Ensure code-server is running
- *   POST /api/code-server/status   — Check if code-server is running
+ *   GET  /api/code-server/pre-auth — Proxy to terminal server pre-auth
+ *   POST /api/code-server/auth     — Proxy to terminal server auth
  */
 
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
-import { getSandboxDetails } from "../lib/e2b-manager.js";
+import { getSandboxInfo } from "../lib/e2b-manager.js";
 
 const logger = createLogger({ service: "code-server" });
 
 const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
 const CODE_SERVER_DOMAIN = process.env.CODE_SERVER_DOMAIN || "";
-
-// In-memory pre-auth token store (short-lived, single-use)
-const preAuthTokens = new Map<
-  string,
-  { sessionId: string; sandboxId: string; codeServerPassword: string; createdAt: number }
->();
-
-// Clean up expired tokens every 60s (tokens expire after 60s)
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, data] of preAuthTokens) {
-    if (now - data.createdAt > 60_000) {
-      preAuthTokens.delete(token);
-    }
-  }
-}, 60_000);
-
-/**
- * Execute a shell command in a sandbox via the sandbox service.
- */
-async function sandboxExec(
-  sandboxId: string,
-  command: string,
-  userId: string,
-  timeout = 10000
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/shell`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-user-id": userId,
-    },
-    body: JSON.stringify({ command, timeout }),
-    signal: AbortSignal.timeout(timeout + 5000),
-  });
-
-  if (!resp.ok) {
-    const detail = await resp.text();
-    throw new Error(`Sandbox exec failed: ${resp.status} ${detail}`);
-  }
-
-  const data = (await resp.json()) as {
-    data?: { stdout?: string; stderr?: string; exitCode?: number };
-  };
-  return {
-    stdout: data.data?.stdout || "",
-    stderr: data.data?.stderr || "",
-    exitCode: data.data?.exitCode ?? 1,
-  };
-}
-
-/**
- * Write a file to the sandbox filesystem.
- */
-async function sandboxWriteFile(
-  sandboxId: string,
-  path: string,
-  content: string,
-  userId: string
-): Promise<void> {
-  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-user-id": userId,
-    },
-    body: JSON.stringify({ path, content }),
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Sandbox file write failed: ${resp.status}`);
-  }
-}
 
 /**
  * Get the E2B port proxy URL for a sandbox.
@@ -130,13 +56,31 @@ async function getPortProxyUrl(
   return `https://${port}-${e2bId}.e2b.dev`;
 }
 
+/**
+ * Call a terminal server endpoint inside the sandbox.
+ */
+async function callTerminalServer(
+  sandboxId: string,
+  userId: string,
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  // Get terminal server port proxy URL (port 8330)
+  const baseUrl = await getPortProxyUrl(sandboxId, userId, 8330);
+  if (!baseUrl) {
+    throw new Error("Could not get terminal server URL");
+  }
+
+  const url = `${baseUrl}${endpoint}`;
+  return fetch(url, {
+    ...options,
+    signal: AbortSignal.timeout(15000),
+  });
+}
+
 export async function codeServerRoutes(app: FastifyInstance) {
   /**
-   * GET /api/code-server/pre-auth — Generate a pre-auth token.
-   *
-   * Manus equivalent: GET /code-server/pre-auth
-   * Returns a short-lived, single-use token for code-server authentication.
-   * Also starts code-server if not already running.
+   * GET /api/code-server/pre-auth — Proxy to terminal server pre-auth.
    *
    * Query params: sessionId, userId
    */
@@ -153,191 +97,109 @@ export async function codeServerRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "sessionId and userId query params required" });
     }
 
-    // Get sandbox details (includes code-server password)
-    const details = getSandboxDetails(sessionId);
-    if (!details) {
+    // Get sandbox info from session cache
+    const info = getSandboxInfo(sessionId);
+    if (!info) {
       return reply.status(404).send({ error: "No active sandbox for this session" });
     }
 
-    const { sandboxId, codeServerPassword } = details;
-    if (!codeServerPassword) {
-      return reply.status(500).send({ error: "Code-server password not configured" });
-    }
+    const { sandboxId } = info;
 
     try {
-      // Ensure code-server is running (write trigger file)
-      await sandboxWriteFile(sandboxId, "/tmp/start_code_server", "1", userId);
-
-      // Generate short-lived pre-auth token
-      const tokenBytes = new Uint8Array(24);
-      crypto.getRandomValues(tokenBytes);
-      const preAuthToken = Array.from(tokenBytes)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-
-      preAuthTokens.set(preAuthToken, {
-        sessionId,
-        sandboxId,
-        codeServerPassword,
-        createdAt: Date.now(),
+      // Proxy to terminal server /code-server/pre-auth
+      const resp = await callTerminalServer(sandboxId, userId, "/code-server/pre-auth", {
+        method: "GET",
       });
 
-      // Get code-server URL
-      const codeServerUrl = await getPortProxyUrl(sandboxId, userId, 8329);
-
-      // Wait for code-server to be ready (poll up to 15s)
-      let ready = false;
-      for (let i = 0; i < 15; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        try {
-          const check = await sandboxExec(
-            sandboxId,
-            `curl -s -o /dev/null -w "%{http_code}" http://localhost:8329/healthz 2>/dev/null || echo "0"`,
-            userId,
-            5000
-          );
-          if (check.stdout.trim() === "200") {
-            ready = true;
-            break;
-          }
-        } catch {
-          // Keep polling
-        }
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        throw new Error(`Terminal server pre-auth failed: ${resp.status} ${errorText}`);
       }
 
-      logger.info({ sandboxId, sessionId, ready }, "Code-server pre-auth token generated");
+      const data = (await resp.json()) as {
+        ok: boolean;
+        pre_auth_token: string;
+        proxy_path: string;
+        ready: boolean;
+      };
+
+      // Get the terminal server proxy URL (port 8330) — code-server is at /cs/ path
+      const proxyBaseUrl = await getPortProxyUrl(sandboxId, userId, 8330);
+      const codeServerUrl = proxyBaseUrl ? `${proxyBaseUrl}/cs/` : null;
+
+      logger.info({ sandboxId, sessionId, ready: data.ready }, "Code-server pre-auth success");
 
       return reply.send({
-        pre_auth_token: preAuthToken,
+        pre_auth_token: data.pre_auth_token,
         url: codeServerUrl,
-        ready,
+        ready: data.ready,
+        auth: "password",
+        proxy_path: data.proxy_path,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error({ sandboxId, error: msg }, "Failed to generate pre-auth token");
+      logger.error({ sandboxId, error: msg }, "Failed to get pre-auth token");
       return reply.status(500).send({ error: msg });
     }
   });
 
   /**
-   * POST /api/code-server/auth — Validate pre-auth token and return credentials.
+   * POST /api/code-server/auth — Proxy to terminal server auth.
    *
-   * Manus equivalent: POST /code-server/auth
-   * Validates the pre_auth_token and returns the code-server password.
-   * The frontend uses this to POST to code-server's /login endpoint.
-   *
-   * Body: { pre_auth_token }
+   * Body: { pre_auth_token, sessionId?, userId? }
    */
   app.post("/api/code-server/auth", async (request, reply) => {
     const body = request.body as {
       pre_auth_token?: string;
+      sessionId?: string;
+      userId?: string;
     };
 
     const token = body.pre_auth_token;
+    const sessionId = body.sessionId;
+    const userId = body.userId;
+
     if (!token) {
       return reply.status(400).send({ error: "Missing pre_auth_token in request" });
     }
 
-    const tokenData = preAuthTokens.get(token);
-    if (!tokenData) {
-      return reply.status(401).send({ error: "Invalid or expired pre-auth token" });
+    // sessionId and userId are optional here — the token is enough for terminal server
+    // But we use them to log the event if provided
+    if (sessionId && userId) {
+      const info = getSandboxInfo(sessionId);
+      if (!info) {
+        return reply.status(404).send({ error: "No active sandbox for this session" });
+      }
+
+      const { sandboxId } = info;
+
+      try {
+        // Proxy to terminal server /code-server/auth
+        const resp = await callTerminalServer(sandboxId, userId, "/code-server/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pre_auth_token: token }),
+        });
+
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          return reply.status(resp.status).send({ error: errorText });
+        }
+
+        const data = await resp.json();
+        logger.info({ sandboxId, sessionId }, "Code-server auth validated");
+
+        return reply.send(data);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error({ sandboxId, error: msg }, "Failed to validate auth");
+        return reply.status(500).send({ error: msg });
+      }
     }
 
-    // Check expiry (60 seconds)
-    if (Date.now() - tokenData.createdAt > 60_000) {
-      preAuthTokens.delete(token);
-      return reply.status(401).send({ error: "Pre-auth token expired" });
-    }
-
-    // Single-use: delete after validation
-    preAuthTokens.delete(token);
-
-    logger.info(
-      { sandboxId: tokenData.sandboxId, sessionId: tokenData.sessionId },
-      "Code-server pre-auth token validated"
-    );
-
-    return reply.send({
-      password: tokenData.codeServerPassword,
-      port: 8329,
-      folder: "/home/user",
+    // If no sessionId/userId provided, we can't proxy — this shouldn't happen in normal flow
+    return reply.status(400).send({
+      error: "sessionId and userId required to proxy auth request",
     });
-  });
-
-  /**
-   * POST /api/code-server/start — Start code-server in the sandbox.
-   *
-   * Writes the trigger file that the start_command.sh watcher picks up.
-   * Idempotent — safe to call multiple times.
-   */
-  app.post("/api/code-server/start", async (request, reply) => {
-    const body = request.body as {
-      sandboxId: string;
-      userId: string;
-    };
-
-    const { sandboxId, userId } = body;
-
-    if (!sandboxId || !userId) {
-      return reply.status(400).send({ error: "sandboxId and userId required" });
-    }
-
-    try {
-      // Write trigger file
-      await sandboxWriteFile(sandboxId, "/tmp/start_code_server", "1", userId);
-
-      // Check if already running
-      const check = await sandboxExec(
-        sandboxId,
-        `pgrep -f "code-server" > /dev/null 2>&1 && echo "running" || echo "starting"`,
-        userId,
-        5000
-      );
-
-      return reply.send({
-        success: true,
-        status: check.stdout.trim(),
-        port: 8329,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(500).send({ error: msg });
-    }
-  });
-
-  /**
-   * POST /api/code-server/status — Check code-server status.
-   */
-  app.post("/api/code-server/status", async (request, reply) => {
-    const body = request.body as {
-      sandboxId: string;
-      userId: string;
-    };
-
-    const { sandboxId, userId } = body;
-
-    if (!sandboxId || !userId) {
-      return reply.status(400).send({ error: "sandboxId and userId required" });
-    }
-
-    try {
-      const check = await sandboxExec(
-        sandboxId,
-        `curl -s -o /dev/null -w "%{http_code}" http://localhost:8329/healthz 2>/dev/null || echo "0"`,
-        userId,
-        5000
-      );
-
-      const running = check.stdout.trim() === "200";
-
-      return reply.send({
-        running,
-        port: 8329,
-        httpStatus: check.stdout.trim(),
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.status(500).send({ error: msg });
-    }
   });
 }

@@ -1,0 +1,153 @@
+[
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/32x32.png"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "image"
+  ],
+  "urlFilter": "||mediacreeper.com/image"
+ },
+ "id": 1221,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/32x32.png"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "image"
+  ],
+  "urlFilter": "||mediacreeper.se/image"
+ },
+ "id": 1222,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "tv2.no"
+  ],
+  "requestDomains": [
+   "k5a.io"
+  ],
+  "resourceTypes": [
+   "script"
+  ]
+ },
+ "id": 1223,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "script"
+  ],
+  "urlFilter": "||widget.playoncenter.com/newplayer/js/pb_"
+ },
+ "id": 1224,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/empty"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "xmlhttprequest"
+  ],
+  "urlFilter": "||kyrkanstidning.se/firstvisit"
+ },
+ "id": 1225,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/click2load.html"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "nordiskradio.se"
+  ],
+  "requestDomains": [
+   "peertube.se"
+  ],
+  "resourceTypes": [
+   "sub_frame"
+  ]
+ },
+ "id": 1226,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/click2load.html"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "breakit.se"
+  ],
+  "requestDomains": [
+   "player.vimeo.com"
+  ],
+  "resourceTypes": [
+   "sub_frame"
+  ]
+ },
+ "id": 1227,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/click2load.html"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "ordfrontmagasin.se"
+  ],
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "sub_frame"
+  ],
+  "urlFilter": "||youtube.com/embed"
+ },
+ "id": 1228,
+ "priority": 2
+}
+]

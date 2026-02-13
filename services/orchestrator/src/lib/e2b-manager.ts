@@ -31,6 +31,7 @@ const FORGE_FRONTEND_API_KEY = process.env.FORGE_FRONTEND_API_KEY || '';
 
 interface SandboxInfo {
   sandboxId: string;
+  e2bSandboxId: string | null;
   nekoUrl: string | null;
   proxyToken: string | null;
   codeServerPassword: string | null;
@@ -50,6 +51,7 @@ const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 export interface SandboxResult {
   sandboxId: string;
+  e2bSandboxId: string | null;
   nekoUrl: string | null;
 }
 
@@ -90,7 +92,11 @@ export async function getOrCreateSandbox(
   const cached = sandboxCache.get(sessionId);
   if (cached) {
     cached.lastUsedAt = Date.now();
-    return { sandboxId: cached.sandboxId, nekoUrl: cached.nekoUrl };
+    return {
+      sandboxId: cached.sandboxId,
+      e2bSandboxId: cached.e2bSandboxId,
+      nekoUrl: cached.nekoUrl
+    };
   }
 
   // Generate proxy token for this sandbox (Manus pattern: sk- prefix)
@@ -147,9 +153,10 @@ export async function getOrCreateSandbox(
   }
 
   const data = (await resp.json()) as {
-    data?: { sandboxId?: string; id?: string; nekoUrl?: string; vncUrl?: string };
+    data?: { sandboxId?: string; id?: string; e2bSandboxId?: string; nekoUrl?: string; vncUrl?: string };
   };
   const sandboxId = data.data?.sandboxId || data.data?.id;
+  const e2bSandboxId = data.data?.e2bSandboxId || null;
   const nekoUrl = data.data?.nekoUrl || null;
 
   if (!sandboxId) {
@@ -166,6 +173,7 @@ export async function getOrCreateSandbox(
 
   sandboxCache.set(sessionId, {
     sandboxId,
+    e2bSandboxId,
     nekoUrl,
     proxyToken,
     codeServerPassword,
@@ -174,7 +182,7 @@ export async function getOrCreateSandbox(
     lastUsedAt: Date.now(),
   });
 
-  return { sandboxId, nekoUrl };
+  return { sandboxId, e2bSandboxId, nekoUrl };
 }
 
 /**

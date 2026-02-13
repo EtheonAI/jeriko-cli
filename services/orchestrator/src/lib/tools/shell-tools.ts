@@ -1,5 +1,9 @@
 /**
- * Shell tools - Execute commands and manage processes in the sandbox environment
+ * Shell tools — Execute commands and manage processes in persistent terminal sessions.
+ *
+ * Terminal sessions are PTY-based (not one-shot) and persist across tool calls.
+ * Each session is identified by a string ID (e.g. "default", "terminal_1").
+ * The terminal server runs inside the E2B sandbox on port 8330.
  */
 
 import { tool } from 'ai';
@@ -9,54 +13,41 @@ import { executeSandboxTool } from './executor/sandbox-executor.js';
 
 export function createShellExecTool(ctx: ToolContext) {
   return tool({
-    description: `Execute a shell command in the sandbox environment. Returns stdout, stderr, and the exit code.
+    description: `Execute commands in a specified shell session. Use for running code, installing packages, or managing files.
+
+The command runs in a persistent PTY session identified by the 'id' parameter. Sessions persist across calls — environment variables, working directory, and shell state are maintained.
 
 Use this to:
 - Run build commands (npm install, npm run build, cargo build)
 - Execute scripts (python script.py, node index.js, bash setup.sh)
-- Inspect system state (ls, cat, which, env, ps)
 - Install dependencies (apt-get install, pip install, npm install)
 - Run tests (pytest, jest, go test)
 
-The command runs in a bash shell with the sandbox user's environment. Commands that produce continuous output (servers, watchers) will be killed after the timeout. For long-running processes, consider using a shorter initial command or adjusting the timeout.
-
 IMPORTANT:
-- Commands are non-interactive. Do not use commands that require TTY input (e.g., vim, less, sudo with password prompt).
-- For long-running background processes, append & to the command and use shell_view/shell_wait to monitor.
+- Use exec_dir to set the working directory (must be absolute path).
+- For long-running processes (servers, watchers), the command will run in background.
+- Use shell_view to check output, shell_wait to wait for completion.
 - Combine related commands with && to reduce round trips.
 `,
     inputSchema: z.object({
-      command: z.string().describe('The shell command to execute (e.g., "npm install && npm run build", "python3 main.py")'),
-      timeout: z
-        .number()
-        .int()
-        .min(1000)
-        .max(300000)
-        .optional()
-        .describe('Maximum execution time in milliseconds. Defaults to 60000 (60 seconds). Max 300000 (5 minutes).'),
+      id: z.string().describe('Unique identifier of the target shell session (e.g. "default", "terminal_1")'),
+      exec_dir: z.string().describe('Working directory for command execution (must use absolute path)'),
+      command: z.string().describe('Shell command to execute'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_exec', {
-        command: params.command,
-        timeout: params.timeout ?? 60000,
-      });
+      return executeSandboxTool(ctx, 'shell_exec', params);
     },
   });
 }
 
 export function createShellViewTool(ctx: ToolContext) {
   return tool({
-    description: `View the latest output of a running or recently completed process.
+    description: `View the content of a specified shell session. Use for checking command execution results or monitoring output.
 
-Use this to:
-- Check the output of a background process started with shell_exec
-- Monitor a running development server or build process
-- Read stdout/stderr of a process that is still running
-
-The pid must be from a process started in the current sandbox session.
+Returns the current terminal buffer content including recent command output.
 `,
     inputSchema: z.object({
-      pid: z.number().int().describe('Process ID of the running process to view output from'),
+      id: z.string().describe('Unique identifier of the target shell session'),
     }),
     execute: async (params) => {
       return executeSandboxTool(ctx, 'shell_view', params);
@@ -66,49 +57,32 @@ The pid must be from a process started in the current sandbox session.
 
 export function createShellWaitTool(ctx: ToolContext) {
   return tool({
-    description: `Wait for a running process to complete and return its final output.
+    description: `Wait for the running process in a specified shell session to return. Use after running commands that require longer runtime.
 
-Use this to:
-- Wait for a background build or test run to finish
-- Collect the final exit code and output of a long-running command
-- Block until a process completes before proceeding with dependent tasks
-
-If the process does not complete within the timeout, the call returns with whatever output is available so far. The process itself continues running.
+If the process does not complete within the wait duration, the call returns with whatever output is available so far.
 `,
     inputSchema: z.object({
-      pid: z.number().int().describe('Process ID of the process to wait for'),
-      timeout: z
+      id: z.string().describe('Unique identifier of the target shell session'),
+      seconds: z
         .number()
         .int()
-        .min(1000)
-        .max(300000)
         .optional()
-        .describe('Maximum time to wait in milliseconds. Defaults to 30000 (30 seconds). Max 300000 (5 minutes).'),
+        .describe('Wait duration in seconds'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_wait', {
-        pid: params.pid,
-        timeout: params.timeout ?? 30000,
-      });
+      return executeSandboxTool(ctx, 'shell_wait', params);
     },
   });
 }
 
 export function createShellWriteToProcessTool(ctx: ToolContext) {
   return tool({
-    description: `Write input to a running process's stdin. Use this to interact with processes that read from standard input.
-
-Use this to:
-- Provide input to an interactive CLI program
-- Send data to a process reading from stdin (e.g., a REPL)
-- Answer prompts from scripts or installers
-- Pipe data into a running process
-
-The input is sent as-is. Include a newline character (\\n) at the end if the process expects line-terminated input.
+    description: `Write input to a running process in a specified shell session. Use for responding to interactive command prompts.
 `,
     inputSchema: z.object({
-      pid: z.number().int().describe('Process ID of the running process to write to'),
-      input: z.string().describe('Text to write to the process stdin. Include \\n for newline-terminated input.'),
+      id: z.string().describe('Unique identifier of the target shell session'),
+      input: z.string().describe('Input content to write to the process'),
+      press_enter: z.boolean().describe('Whether to press Enter key after input'),
     }),
     execute: async (params) => {
       return executeSandboxTool(ctx, 'shell_write_to_process', params);
@@ -118,38 +92,17 @@ The input is sent as-is. Include a newline character (\\n) at the end if the pro
 
 export function createShellKillProcessTool(ctx: ToolContext) {
   return tool({
-    description: `Kill a running process in the sandbox. Sends a signal to terminate the process.
-
-Use this to:
-- Stop a running development server
-- Kill a hung or runaway process
-- Clean up background processes before starting new ones
-- Force-terminate a process that did not respond to SIGTERM
-
-Default signal is 15 (SIGTERM) for graceful shutdown. Use signal 9 (SIGKILL) to force-kill a process that does not respond to SIGTERM.
+    description: `Terminate a running process in a specified shell session. Use for stopping long-running processes or handling frozen commands.
 `,
     inputSchema: z.object({
-      pid: z.number().int().describe('Process ID of the process to kill'),
-      signal: z
-        .number()
-        .int()
-        .min(1)
-        .max(31)
-        .optional()
-        .describe('Signal number to send. Defaults to 15 (SIGTERM). Use 9 (SIGKILL) for force kill.'),
+      id: z.string().describe('Unique identifier of the target shell session'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_kill_process', {
-        pid: params.pid,
-        signal: params.signal ?? 15,
-      });
+      return executeSandboxTool(ctx, 'shell_kill_process', params);
     },
   });
 }
 
-/**
- * Create all shell tools keyed by their tool name
- */
 export function createShellTools(ctx: ToolContext) {
   return {
     shell_exec: createShellExecTool(ctx),

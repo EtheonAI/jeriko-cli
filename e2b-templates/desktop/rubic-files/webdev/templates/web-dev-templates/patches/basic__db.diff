@@ -1,0 +1,2303 @@
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/.env.example web-db/.env.example
+--- web-basic/.env.example	2025-10-02 16:42:21
++++ web-db/.env.example	2025-10-02 12:08:31
+@@ -1,5 +1,11 @@
+ VITE_APP_ID=proj_abc123def456
+-VITE_APP_TITLE="My Web App"
+-VITE_APP_LOGO="https://placehold.co/40x40/3b82f6/ffffff?text=W"
++VITE_OAUTH_PORTAL_URL=https://vida.butterfly-effect.dev
++VITE_APP_TITLE="Todo App"
++VITE_APP_LOGO="https://placehold.co/40x40/3b82f6/ffffff?text=T"
++VITE_ANALYTICS_ENDPOINT=https://umami.dev.ops.butterfly-effect.dev
++VITE_ANALYTICS_WEBSITE_ID=analytics_proj_abc123def456
++OAUTH_SERVER_URL=https://vidabiz.butterfly-effect.dev
++DATABASE_URL=mysql://example-user:example-password@localhost:3306/main
++JWT_SECRET=your-jwt-secret-change-in-production
+ # Infrastructure (server-only)
+-PORT=3000
++PORT=3000
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/README.md web-db/README.md
+--- web-basic/README.md	2025-10-02 16:43:54
++++ web-db/README.md	2025-10-02 12:08:31
+@@ -1,6 +1,6 @@
+-# Web App Template (Server)
++# Web App Template (Database + User Auth)
+ 
+-This template provides a type-safe full-stack foundation with React frontend and Express backend. **This README is your workflow guide—follow it step by step when implementing features.**
++This template provides a type-safe full-stack foundation with Manus authentication, MySQL database, and shared API contracts. **This README is your workflow guide—follow it step by step when implementing features.**
+ 
+ ---
+ 
+@@ -18,7 +18,7 @@
+ 
+ **Example:**
+ ```tsx
+-// client/src/pages/TodoList.tsx
++// client/src/pages/TodoList.tsx (you can replace your app's home page with this)
+ function TodoList() {
+   // Mock data for prototyping
+   const [todos, setTodos] = useState([
+@@ -37,53 +37,104 @@
+ ```
+ 
+ **Why frontend first?**
+-- Validate UX early
++- Validate UX with the user early
+ - Discover what data shapes you actually need
+ - Avoid building unused backend features
+ 
+ ---
+ 
+-### Step 2: Define the API Contract
++### Step 2: Define the Database Schema
+ 
+-Once your UI is working with mock data, define the API endpoints.
++Once you know what data you need, define the table schema.
+ 
+-**File:** `shared/endpoints.ts`
++**File:** `drizzle/schema.ts`
+ 
+ ```typescript
++import { mysqlTable, int, varchar, text, boolean } from "drizzle-orm/mysql-core";
++
++export const todos = mysqlTable("todos", {
++  id: int().primaryKey().autoincrement(),
++  userId: varchar({ length: 36 }).notNull().references(() => users.id),
++  title: text().notNull(),
++  completed: boolean().notNull().default(false),
++});
++
++export type Todo = typeof todos.$inferSelect;
++export type InsertTodo = typeof todos.$inferInsert;
++```
++
++**Run migration:** The tool will handle `pnpm db:push` when needed.
++
++---
++
++### Step 3: Add Database Query Functions
++
++Add typed query functions to `server/db.ts`. Keep it simple—just export functions, no classes.
++
++```typescript
++import { todos } from "../drizzle/schema";
++
++export async function getUserTodos(userId: string) {
++  const db = await getDb();
++  if (!db) return [];
++
++  return db
++    .select()
++    .from(todos)
++    .where(eq(todos.userId, userId))
++    .orderBy(desc(todos.createdAt));
++}
++
++export async function createTodo(data: InsertTodo) {
++  const db = await getDb();
++  if (!db) throw new Error("Database not available");
++
++  const result = await db.insert(todos).values(data);
++  return result.insertId;
++}
++```
++
++**Pattern:** One function per query. Name them clearly: `getUserTodos`, `createTodo`, `deleteTodo`.
++
++---
++
++### Step 4: Define API Endpoints
++
++Define your API contract in `shared/endpoints.ts`. Both frontend and backend will use this.
++
++```typescript
++import { z } from "zod";
++
++const todoSchema = z.object({
++  userId: z.string(),
++  title: z.string(),
++  completed: z.boolean(),
++});
++
+ export const endpoints = {
++  // ... existing endpoints ...
++
+   todos: {
+     list: createEndpoint({
+       route: `${API_BASE_URL}/todos`,
+       method: "GET",
++      requireAuth: true,  // 🔒 User auto-injected in backend
+       schema: {
+-        request: z.object({
+-          filter: z.enum(["all", "active", "completed"]).optional(),
+-        }),
+-        response: z.object({
+-          todos: z.array(z.object({
+-            id: z.number(),
+-            title: z.string(),
+-            completed: z.boolean(),
+-            createdAt: z.string(),
+-          })),
+-        }),
++        request: z.object({}),
++        response: z.object({ todos: z.array(todoSchema) }),
+       },
+     }),
+ 
+     create: createEndpoint({
+       route: `${API_BASE_URL}/todos`,
+       method: "POST",
++      requireAuth: true,
+       schema: {
+         request: z.object({
+           title: z.string().min(1),
+         }),
+         response: z.object({
+-          todo: z.object({
+           id: z.number(),
+-            title: z.string(),
+-            completed: z.boolean(),
+-            createdAt: z.string(),
+-          }),
+         }),
+       },
+     }),
+@@ -91,288 +142,605 @@
+ };
+ ```
+ 
++**Key points:**
++- Set `requireAuth: true` for protected endpoints
++- Define Zod schemas for both request and response
++- The same schemas validate on both client and server
++
+ ---
+ 
+-### Step 3: Connect Frontend to API
++### Step 5: Implement Backend Route Handlers
+ 
+-Replace mock data with real API calls.
++Add handlers to `server/routes.ts`. For `requireAuth: true` endpoints, `user` is automatically injected as the first parameter.
+ 
+-**File:** `client/src/pages/TodoList.tsx`
++```typescript
++import * as db from "./db";
+ 
++export function registerRoutes(app: Express) {
++  // ... existing routes ...
++
++  // User is auto-injected! No need to call sdk.authenticateRequest()
++  registerRoute(app, endpoints.todos.list, async (user) => {
++    const todos = await db.getUserTodos(user.id);
++    return { todos };
++  });
++
++  registerRoute(app, endpoints.todos.create, async (user, params) => {
++    const id = await db.createTodo({
++      userId: user.id,
++      title: params.title,
++      completed: false,
++    });
++    return { id };
++  });
++}
++```
++
++**Authentication is invisible:**
++- Mark endpoint with `requireAuth: true` → User automatically injected
++- No manual `sdk.authenticateRequest()` calls
++- No middleware to remember
++
++---
++
++### Step 6: Connect Frontend to Real API
++
++Replace your mock data with real API calls.
++
+ ```tsx
+ import { callEndpoint } from "@/api";
+ import { endpoints } from "@shared/endpoints";
+ 
+ function TodoList() {
+   const [todos, setTodos] = useState([]);
+-  const [loading, setLoading] = useState(true);
+ 
+   useEffect(() => {
+-    async function fetchTodos() {
+-      try {
+-        const response = await callEndpoint(endpoints.todos.list, {});
+-        setTodos(response.todos);
+-      } catch (error) {
+-        console.error("Failed to fetch todos:", error);
+-      } finally {
+-        setLoading(false);
+-      }
++    async function loadTodos() {
++      const result = await callEndpoint(endpoints.todos.list, {});
++      setTodos(result.todos);
+     }
+-    fetchTodos();
++    loadTodos();
+   }, []);
+ 
+-  const handleCreate = async (title: string) => {
+-    const response = await callEndpoint(endpoints.todos.create, { title });
+-    setTodos([...todos, response.todo]);
+-  };
++  async function handleCreate(title: string) {
++    const result = await callEndpoint(endpoints.todos.create, { title });
++    // Optimistically update UI...
++  }
+ 
+-  if (loading) return <div>Loading...</div>;
+-
+-  return (
+-    // Your UI components here
+-  );
++  return (/* ... */);
+ }
+ ```
+ 
++**No wrapper needed:**
++- Import `callEndpoint` and `endpoints`
++- Call directly: `await callEndpoint(endpoints.todos.list, {})`
++- TypeScript infers request/response types automatically
++
+ ---
+ 
+-### Step 4: Implement Backend Routes
++## 🔐 Authentication (Behind the Scenes)
+ 
+-Now implement the actual backend logic.
++**You don't need to manually handle authentication.**
+ 
+-**File:** `server/routes.ts`
++When an endpoint has `requireAuth: true`:
++1. Framework verifies the session cookie
++2. Fetches user from database (or syncs from OAuth if needed)
++3. Injects `user` as the first parameter to your handler
+ 
+-```typescript
+-export function registerRoutes(app: Express) {
+-  // In-memory storage (replace with database later if needed)
+-  let todos = [
+-    { id: 1, title: "Example todo", completed: false, createdAt: new Date().toISOString() }
+-  ];
+-  let nextId = 2;
++---
+ 
+-  // List todos
+-  registerRoute(app, endpoints.todos.list, async (params) => {
+-    let filtered = todos;
+-    
+-    if (params.filter === "active") {
+-      filtered = todos.filter(t => !t.completed);
+-    } else if (params.filter === "completed") {
+-      filtered = todos.filter(t => t.completed);
+-    }
+-    
+-    return { todos: filtered };
+-  });
++## 📂 File Structure
+ 
+-  // Create todo
+-  registerRoute(app, endpoints.todos.create, async (params) => {
+-    const newTodo = {
+-      id: nextId++,
+-      title: params.title,
+-      completed: false,
+-      createdAt: new Date().toISOString(),
+-    };
+-    
+-    todos.push(newTodo);
+-    return { todo: newTodo };
+-  });
+-}
+ ```
++├── client/src/
++│   ├── pages/           # Your React components
++│   ├── hooks/           # useAuth() and custom hooks
++│   └── api/api.ts       # Re-exports callEndpoint helper
++│
++├── server/
++│   ├── routes.ts        # Register all API route handlers here
++│   ├── routesHelper.ts  # Provides registerRoute (handles auth injection)
++│   ├── db.ts            # Database query functions
++│   └── sdk.ts           # OAuth/session logic (rarely touch this)
++│
++├── shared/
++│   ├── endpoints.ts     # API contract definitions (Zod schemas)
++│   └── httpErrors.ts    # Shared error types
++│
++└── drizzle/
++    └── schema.ts        # Database table definitions
++```
+ 
+ ---
+ 
+-## 📦 Project Structure
++## 🛠 Common Patterns
+ 
++### Pattern: List with Filters
++```typescript
++// 1. Endpoint definition
++list: createEndpoint({
++  route: `${API_BASE_URL}/todos`,
++  method: "GET",
++  requireAuth: true,
++  schema: {
++    request: z.object({
++      completed: z.boolean().optional(),
++    }),
++    response: z.object({ todos: z.array(todoSchema) }),
++  },
++}),
++
++// 2. Backend handler
++registerRoute(app, endpoints.todos.list, async (user, params) => {
++  const todos = await db.getUserTodos(user.id, params.completed);
++  return { todos };
++});
++
++// 3. Frontend call
++const result = await callEndpoint(endpoints.todos.list, { completed: true });
+ ```
+-├── client/               # React frontend
+-│   ├── src/
+-│   │   ├── api.ts       # API client utilities
+-│   │   ├── components/  # Reusable UI components
+-│   │   ├── pages/       # Page components
+-│   │   └── App.tsx      # Main app component
+-│   └── index.html
+-├── server/              # Express backend
+-│   ├── index.ts         # Server entry point
+-│   ├── routes.ts        # API route handlers
+-│   └── sdk.ts           # Server utilities
+-├── shared/              # Shared types and contracts
+-│   └── endpoints.ts     # API endpoint definitions
+-└── package.json         # Dependencies and scripts
+-```
+ 
++## 📝 Environment Variables
++
++| Variable | Purpose |
++|----------|---------|
++| `DATABASE_URL` | MySQL connection string |
++| `JWT_SECRET` | Session cookie signing secret (min 32 chars) |
++| `VITE_APP_ID` | Manus OAuth app ID |
++| `OAUTH_SERVER_URL` | Manus OAuth server URL |
++| `VITE_OAUTH_PORTAL_URL` | Manus login portal URL |
++| `OWNER_OPEN_ID`, `OWNER_NAME` | Preview user identity (dev only) |
++
++**Update via tooling interface, not by editing `.env` directly.**
++
+ ---
+ 
+-## 🚀 Common Patterns
++## ✅ Checklist for New Features
+ 
+-### Error Handling
++- [ ] Build UI with mock data first
++- [ ] Verify UX before touching backend
++- [ ] Define database schema in `drizzle/schema.ts`
++- [ ] Add query functions to `server/db.ts`
++- [ ] Define endpoint contract in `shared/endpoints.ts`
++- [ ] Implement handler in `server/routes.ts`
++- [ ] Replace mock data with `callEndpoint()` calls
++- [ ] Test happy path and error cases
+ 
+-```typescript
+-// Frontend
+-try {
+-  const data = await callEndpoint(endpoints.todos.create, { title });
+-  // Handle success
+-} catch (error) {
+-  if (error instanceof HttpError) {
+-    if (error.statusCode === 400) {
+-      // Validation error
+-      console.error("Invalid input:", error.message);
+-    } else {
+-      // Other server error
+-      console.error("Server error:", error.message);
+-    }
+-  }
+-}
++**Remember: Frontend first, backend second.**
+ 
+-// Backend
+-registerRoute(app, endpoints.todos.create, async (params) => {
+-  if (params.title.length > 100) {
+-    throw BadRequestError("Title too long");
+-  }
+-  // ... rest of handler
+-});
+-```
++---
+ 
+-### Loading States
++## 附录：当前代码快照
+ 
++为便于 AI 理解上下文，这里内联了关键源文件的“当前实现”。仅展示源码，不引入新的范式说明；如需更新，请同步修改对应文件。出于安全考虑，不在 README 中内联 `.env` 的实际值。
++
++### Client
++
++`client/src/pages/Home.tsx`
++
+ ```tsx
+-function TodoList() {
+-  const [loading, setLoading] = useState(false);
+-  const [error, setError] = useState<string | null>(null);
++import { Button } from "@/components/ui/button";
++import { getLoginUrl } from "@/const";
++import { useAuth } from "@/hooks/use-auth";
+ 
+-  const handleAction = async () => {
+-    setLoading(true);
+-    setError(null);
+-    try {
+-      // ... API call
+-    } catch (err) {
+-      setError(err.message);
+-    } finally {
+-      setLoading(false);
+-    }
++export default function Home() {
++  const { user, loading, error, isAuthenticated, logout } = useAuth();
++
++  const handleLogin = () => {
++    window.location.href = getLoginUrl();
+   };
+ 
++  if (loading) {
++    return (
++      <div className="min-h-screen flex items-center justify-center bg-slate-50">
++        <p className="text-slate-600">Checking your session…</p>
++      </div>
++    );
++  }
++
+   return (
+-    <div>
+-      {loading && <Spinner />}
+-      {error && <Alert variant="error">{error}</Alert>}
+-      {/* ... rest of UI */}
++    <div className="min-h-screen bg-slate-50">
++      <div className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
++        <header className="space-y-2">
++          <h1 className="text-3xl font-semibold text-slate-900">Home Page</h1>
++          {isAuthenticated ? (
++            <p className="text-slate-600">
++              Welcome back, <span className="font-medium">{user?.name}</span>.
++            </p>
++          ) : (
++            <p className="text-slate-600">You are not logged in.</p>
++          )}
++        </header>
++
++        {isAuthenticated ? (
++          <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
++            <h2 className="text-lg font-semibold text-slate-900">
++              Session details
++            </h2>
++            <dl className="mt-4 space-y-2 text-sm text-slate-600">
++              <div className="flex justify-between">
++                <dt className="font-medium text-slate-700">User ID</dt>
++                <dd className="text-slate-500 font-mono text-xs">{user?.id}</dd>
++              </div>
++              <div className="flex justify-between">
++                <dt className="font-medium text-slate-700">Display name</dt>
++                <dd className="text-slate-500">{user?.name}</dd>
++              </div>
++            </dl>
++            <Button variant="outline" className="mt-6" onClick={logout}>
++              Log out
++            </Button>
++          </section>
++        ) : (
++          <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
++            <h2 className="text-lg font-semibold text-slate-900">Guest Mode</h2>
++            <p className="mt-4 text-sm text-slate-600">
++              You can browse this page without logging in, or click below to
++              sign in with Manus.
++            </p>
++            <Button className="mt-6" onClick={handleLogin}>
++              Log in with Manus
++            </Button>
++          </section>
++        )}
++
++        {error && <p className="text-sm text-red-600">{error.message}</p>}
++      </div>
+     </div>
+   );
+ }
+ ```
+ 
+-### Form Handling
++`client/src/App.tsx`
+ 
+ ```tsx
+-function CreateTodoForm() {
+-  const [title, setTitle] = useState("");
+-  const [submitting, setSubmitting] = useState(false);
++import { ManusDevErrorBoundary } from "@/components/ManusDevErrorBoundary";
++import { Toaster } from "@/components/ui/toaster";
++import { TooltipProvider } from "@/components/ui/tooltip";
++import Home from "@/pages/Home";
++import NotFound from "@/pages/NotFound";
++import { Route, Switch } from "wouter";
++import Example from "./pages/Example";
+ 
+-  const handleSubmit = async (e: React.FormEvent) => {
+-    e.preventDefault();
+-    if (!title.trim()) return;
++/**
++ * Main application router
++ * Add new routes following the pattern below
++ */
++function Router() {
++  return (
++    <Switch>
++      <Route path={"/"} component={Home} />
++      <Route path={"/404"} component={NotFound} />
++      <Route path={"/example"} component={Example} />
++      {/* TODO: Add more routes here following the pattern:
++          <Route path={pageRoutes.newPage} component={NewPageComponent} /> */}
+ 
+-    setSubmitting(true);
+-    try {
+-      await callEndpoint(endpoints.todos.create, { title });
+-      setTitle(""); // Clear form on success
+-    } catch (error) {
+-      console.error("Failed to create todo:", error);
+-    } finally {
+-      setSubmitting(false);
+-    }
+-  };
++      {/* final fallback route */}
++      <Route component={NotFound} />
++    </Switch>
++  );
++}
+ 
++/**
++ * Root application component
++ * Provides global providers and renders the main router
++ */
++function App() {
+   return (
+-    <form onSubmit={handleSubmit}>
+-      <input
+-        value={title}
+-        onChange={(e) => setTitle(e.target.value)}
+-        disabled={submitting}
+-        placeholder="What needs to be done?"
+-      />
+-      <button type="submit" disabled={submitting}>
+-        {submitting ? "Adding..." : "Add Todo"}
+-      </button>
+-    </form>
++    <ManusDevErrorBoundary>
++      <TooltipProvider>
++        <Toaster />
++        <Router />
++      </TooltipProvider>
++    </ManusDevErrorBoundary>
+   );
+ }
++
++export default App;
+ ```
+ 
+----
++### Shared
+ 
+-## 🛠️ Development Commands
++`shared/endpoints.ts`
+ 
+-```bash
+-# Install dependencies
+-pnpm install
++```ts
++import { z } from "zod";
+ 
+-# Start development server (frontend + backend)
+-pnpm dev
++// Type definition for API endpoint
++export type ApiEndpointDef<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++> = {
++  route: string;
++  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
++  requireAuth?: boolean;
++  schema: {
++    request: TRequestSchema;
++    response: TResponseSchema;
++  };
++};
+ 
+-# Type checking
+-pnpm check
++function createEndpoint<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++>(endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema>) {
++  return endpoint;
++}
+ 
+-# Build for production
+-pnpm build
++export const API_BASE_URL = "/api";
+ 
+-# Start production server
+-pnpm start
++// Define schemas for your data models
++const userSchema = z.object({
++  id: z.string(),
++  name: z.string(),
++});
++
++/**
++ * API Endpoint Definitions
++ *
++ * Add new endpoint groups here. Each endpoint defines:
++ * - route: API path
++ * - method: HTTP method (GET/POST/PUT/DELETE/PATCH)
++ * - requireAuth: true if user authentication is required
++ * - schema: Zod schemas for request and response
++ *
++ * When requireAuth: true, the user object is automatically injected
++ * as the first parameter in the backend handler.
++ */
++export const endpoints = {
++  health: {
++    check: createEndpoint({
++      route: `${API_BASE_URL}/health`,
++      method: "GET",
++      schema: {
++        request: z.object({
++          timestamp: z.coerce.number(),
++        }),
++        response: z.object({
++          ok: z.boolean(),
++        }),
++      },
++    }),
++  },
++
++  oauth: {
++    callback: createEndpoint({
++      route: `${API_BASE_URL}/oauth/callback`,
++      method: "GET",
++      schema: {
++        request: z.object({
++          code: z.string().min(1, "code is required"),
++          state: z.string().min(1, "state is required"),
++        }),
++        response: z.void(),
++      },
++    }),
++  },
++
++  user: {
++    me: createEndpoint({
++      route: `${API_BASE_URL}/user/me`,
++      method: "GET",
++      requireAuth: true,
++      schema: {
++        request: z.object({}),
++        response: z.object({
++          user: userSchema,
++        }),
++      },
++    }),
++    logout: createEndpoint({
++      route: `${API_BASE_URL}/logout`,
++      method: "POST",
++      schema: {
++        request: z.object({}),
++        response: z.object({
++          success: z.literal(true),
++        }),
++      },
++    }),
++  },
++
++  /**
++   * Add your endpoint groups here. Example:
++   *
++   * todos: {
++   *   list: createEndpoint({
++   *     route: `${API_BASE_URL}/todos`,
++   *     method: "GET",
++   *     requireAuth: true,
++   *     schema: {
++   *       request: z.object({}),
++   *       response: z.object({ todos: z.array(todoSchema) }),
++   *     },
++   *   }),
++   * },
++   */
++} as const;
++
++/**
++ * Type exports for convenience
++ * You can add namespace exports here for your endpoint types if needed.
++ */
++export namespace EndpointsTypes {
++  export type HeathCheckRequest = z.infer<
++    typeof endpoints.health.check.schema.request
++  >;
++  export type HeathCheckResponse = z.infer<
++    typeof endpoints.health.check.schema.response
++  >;
++
++  export namespace OAuth {
++    export type CallbackRequest = z.infer<
++      typeof endpoints.oauth.callback.schema.request
++    >;
++    export type CallbackResponse = z.infer<
++      typeof endpoints.oauth.callback.schema.response
++    >;
++  }
++
++  export namespace User {
++    export type MeRequest = z.infer<typeof endpoints.user.me.schema.request>;
++    export type MeResponse = z.infer<typeof endpoints.user.me.schema.response>;
++    export type LogoutRequest = z.infer<
++      typeof endpoints.user.logout.schema.request
++    >;
++    export type LogoutResponse = z.infer<
++      typeof endpoints.user.logout.schema.response
++    >;
++    export type Info = z.infer<typeof userSchema>;
++  }
++
++  // Add your type exports here
++}
+ ```
+ 
+----
++### Server
+ 
+-## 🎨 UI Components
++`server/env.ts`
+ 
+-This template includes shadcn/ui components. Use them for consistent styling:
++```ts
++// always ask user to set these variables via the tooling interface
++export const ENV = {
++  appId: process.env.VITE_APP_ID ?? "",
++  cookieSecret: process.env.JWT_SECRET ?? "",
++  databaseUrl: process.env.DATABASE_URL ?? "",
++  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
++  isProduction: process.env.NODE_ENV === "production",
++};
++```
+ 
+-```tsx
+-import { Button } from "@/components/ui/button";
+-import { Input } from "@/components/ui/input";
+-import { Card } from "@/components/ui/card";
++`server/routes.ts`
+ 
+-function MyComponent() {
+-  return (
+-    <Card className="p-6">
+-      <Input placeholder="Enter text..." />
+-      <Button>Submit</Button>
+-    </Card>
++```ts
++import { endpoints, EndpointsTypes } from "@shared/endpoints";
++import { BadRequestError } from "@shared/errors";
++import type { Express } from "express";
++import { registerRoute } from "./routesHelper";
++import { sdk } from "./sdk";
++import { ENV } from "./env";
++import * as db from "./db";
++import { COOKIE_NAME, ONE_YEAR_MS } from "@/const";
++import type { User } from "../drizzle/schema";
++
++export function registerRoutes(app: Express) {
++  // Health check endpoint (public)
++  registerRoute(app, endpoints.health.check, async params => {
++    if (params.timestamp < 0) {
++      throw BadRequestError("timestamp cannot be negative");
++    }
++
++    const response: EndpointsTypes.HeathCheckResponse = {
++      ok: true,
++    };
++    return response;
++  });
++
++  // Get current user (authenticated - user auto-injected)
++  registerRoute(
++    app,
++    endpoints.user.me as typeof endpoints.user.me & { requireAuth: true },
++    async (user: User) => {
++      return {
++        user: {
++          id: user.id,
++          name: user.name ?? "",
++        },
++      };
++    }
+   );
++  // <...truncated for brevity...>
++
++  // Add more API routes here as needed
+ }
+ ```
+ 
+----
++`server/db.ts`
+ 
+-## 📚 Next Steps
++```ts
++import { eq } from "drizzle-orm";
++import { drizzle } from "drizzle-orm/mysql2";
++import { InsertUser, users } from "../drizzle/schema";
+ 
+-### When to Add a Database
++let _db: ReturnType<typeof drizzle> | null = null;
+ 
+-Consider adding database capability when you need:
+-- Data persistence across server restarts
+-- Multiple users with separate data
+-- Complex queries or relationships
+-- Better performance for large datasets
++/**
++ * Get or initialize database connection.
++ * Returns null if DATABASE_URL is not configured.
++ */
++export async function getDb() {
++  if (!_db && process.env.DATABASE_URL) {
++    try {
++      _db = drizzle(process.env.DATABASE_URL);
++    } catch (error) {
++      console.warn("[Database] Failed to connect:", error);
++      _db = null;
++    }
++  }
++  return _db;
++}
+ 
+-Use the `webdev_add_capability` tool to add database support when needed.
++/**
++ * Upsert a user by id using MySQL's INSERT ... ON DUPLICATE KEY UPDATE.
++ * If the user exists, updates the name; otherwise inserts a new record.
++ */
++export async function upsertUser(user: InsertUser): Promise<void> {
++  if (!user.id) {
++    throw new Error("User ID is required for upsert");
++  }
+ 
+-### When to Add Authentication
++  const db = await getDb();
++  if (!db) {
++    console.warn("[Database] Cannot upsert user: database not available");
++    return;
++  }
+ 
+-Consider adding user authentication when you need:
+-- User-specific data
+-- Access control and permissions
+-- User profiles and settings
+-- Secure API endpoints
++  try {
++    // Use MySQL's ON DUPLICATE KEY UPDATE for atomic upsert
++    await db
++      .insert(users)
++      .values({
++        id: user.id,
++        name: user.name ?? null,
++      })
++      .onDuplicateKeyUpdate({
++        set: { name: user.name ?? null },
++      });
++  } catch (error) {
++    console.error("[Database] Failed to upsert user:", error);
++    throw error;
++  }
++}
+ 
+-First add database capability, then use `webdev_add_capability` to add user authentication.
++/**
++ * Get a user by id.
++ * Returns undefined if user not found or database not available.
++ */
++export async function getUser(id: string) {
++  const db = await getDb();
++  if (!db) {
++    console.warn("[Database] Cannot get user: database not available");
++    return undefined;
++  }
+ 
+----
++  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+ 
+-## 🔧 Configuration
++  return result.length > 0 ? result[0] : undefined;
++}
++```
+ 
+-Environment variables:
+-- `VITE_APP_ID` - Application identifier
+-- `VITE_APP_TITLE` - Application title
+-- `PORT` - Server port (default: 3000)
++### Database
+ 
+----
++`drizzle/schema.ts`
+ 
+-Remember: **Always start with the frontend!** Build what users will see first, then create the backend to support it. 🚀
+\ No newline at end of file
++```ts
++import { mysqlTable, text, varchar } from "drizzle-orm/mysql-core";
++
++export const users = mysqlTable("users", {
++  id: varchar({ length: 36 }).unique().notNull(),
++  name: text(),
++});
++
++export type User = typeof users.$inferSelect;
++export type InsertUser = typeof users.$inferInsert;
++```
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/client/src/const.ts web-db/client/src/const.ts
+--- web-basic/client/src/const.ts	2025-10-02 16:43:54
++++ web-db/client/src/const.ts	2025-09-30 19:25:28
+@@ -1,6 +1,22 @@
+-// API timeout configuration
+-export const AXIOS_TIMEOUT_MS = 10000;
++// Function to generate login URL with runtime-determined redirect URI stored in state
++export const getLoginUrl = () => {
++  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
+ 
+-// Application constants
+-export const APP_NAME = import.meta.env.VITE_APP_TITLE || 'Web App';
+-export const APP_ID = import.meta.env.VITE_APP_ID || '';
+\ No newline at end of file
++  const appId = import.meta.env.VITE_APP_ID;
++  const redirectUri = `${window.location.origin}/api/oauth/callback`;
++  const state = btoa(redirectUri);
++
++  const url = new URL(`${oauthPortalUrl}/app-auth`);
++  url.searchParams.set("appId", appId);
++  url.searchParams.set("redirectUri", redirectUri);
++  url.searchParams.set("state", state);
++  url.searchParams.set("type", "signIn");
++
++  return url.toString();
++};
++
++export const COOKIE_NAME = "app_session_id";
++
++export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
++
++export const AXIOS_TIMEOUT_MS = 10000;
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/client/src/hooks/use-auth.ts web-db/client/src/hooks/use-auth.ts
+--- web-basic/client/src/hooks/use-auth.ts	1970-01-01 07:30:00
++++ web-db/client/src/hooks/use-auth.ts	2025-10-02 12:08:31
+@@ -0,0 +1,82 @@
++import {
++  useCallback,
++  useEffect,
++  useRef,
++  useState,
++  type SetStateAction,
++} from "react";
++import { endpoints, EndpointsTypes } from "@shared/endpoints";
++import { callEndpoint, HttpError } from "@/api";
++
++type UseAuthState = {
++  user: EndpointsTypes.User.Info | null;
++  loading: boolean;
++  error: Error | null;
++};
++
++const initialState: UseAuthState = {
++  user: null,
++  loading: true,
++  error: null,
++};
++
++export function useAuth() {
++  const [state, setState] = useState<UseAuthState>(initialState);
++  const isMountedRef = useRef(true);
++
++  useEffect(() => {
++    return () => {
++      isMountedRef.current = false;
++    };
++  }, []);
++
++  const setStateSafe = useCallback((value: SetStateAction<UseAuthState>) => {
++    if (!isMountedRef.current) {
++      return;
++    }
++    setState(value);
++  }, []);
++
++  const handleError = useCallback(
++    (error: unknown) => {
++      if (error instanceof HttpError && error.statusCode === 403) {
++        setStateSafe({ user: null, loading: false, error: null });
++        return;
++      }
++
++      setStateSafe({ user: null, loading: false, error: error as Error });
++    },
++    [setStateSafe]
++  );
++
++  const loadUser = useCallback(async () => {
++    setStateSafe(prev => ({ ...prev, loading: true }));
++    try {
++      const response = await callEndpoint(endpoints.user.me, {});
++      setStateSafe({ user: response.user, loading: false, error: null });
++    } catch (error) {
++      handleError(error);
++    }
++  }, [handleError, setStateSafe]);
++
++  const logout = useCallback(async () => {
++    setStateSafe(prev => ({ ...prev, loading: true }));
++    try {
++      await callEndpoint(endpoints.user.logout, {});
++      setStateSafe({ user: null, loading: false, error: null });
++    } catch (error) {
++      handleError(error);
++    }
++  }, [handleError, setStateSafe]);
++
++  useEffect(() => {
++    loadUser();
++  }, [loadUser]);
++
++  return {
++    ...state,
++    isAuthenticated: Boolean(state.user),
++    refresh: loadUser,
++    logout,
++  };
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/client/src/pages/Example.tsx web-db/client/src/pages/Example.tsx
+--- web-basic/client/src/pages/Example.tsx	2025-10-02 16:43:58
++++ web-db/client/src/pages/Example.tsx	2025-10-02 12:08:31
+@@ -1,108 +1,104 @@
++import { ManusDialog } from "@/components/ManusDialog";
+ import { Button } from "@/components/ui/button";
+ import { endpoints, EndpointsTypes } from "@shared/endpoints";
+ import { callEndpoint, HttpError } from "@/api";
+ import { useState } from "react";
++import { useAuth } from "../hooks/use-auth";
+ import { useToast } from "../hooks/use-toast";
++import { getLoginUrl } from "../const";
+ 
+ export default function Example() {
+   const [healthData, setHealthData] =
+     useState<EndpointsTypes.HeathCheckResponse | null>(null);
+   const [healthLoading, setHealthLoading] = useState(false);
+-  const [exampleData, setExampleData] =
+-    useState<EndpointsTypes.Example.HelloResponse | null>(null);
+-  const [exampleLoading, setExampleLoading] = useState(false);
++  const [showLoginDialog, setShowLoginDialog] = useState(false);
+   const { toast } = useToast();
++  const { user, loading: authLoading, error: authError, isAuthenticated, logout } = useAuth();
+ 
+-  const handleHealthCheck = async () => {
+-    setHealthLoading(true);
++  const handleLogin = () => {
++    window.location.href = getLoginUrl();
++  };
++
++  const handleLogout = async () => {
++    await logout();
++  };
++
++  const handleProtectedRequest = async () => {
+     try {
+-      const data = await callEndpoint(endpoints.health.check, {
+-        timestamp: Date.now(),
+-        echo: "Hello from client!",
+-      });
+-      setHealthData(data);
+-      toast({
+-        title: "Health Check Success",
+-        description: "The server is healthy!",
+-      });
++      await callEndpoint(endpoints.user.me, {});
++      toast({ title: "You are authenticated", description: "The protected request succeeded." });
+     } catch (error) {
+-      if (error instanceof HttpError) {
+-        toast({
+-          title: "Health Check Failed",
+-          description: error.message,
+-          variant: "destructive",
+-        });
++      if (error instanceof HttpError && error.statusCode === 403) {
++        setShowLoginDialog(true);
++        return;
+       }
+-    } finally {
+-      setHealthLoading(false);
++      toast({ title: "Request failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+     }
+   };
+ 
+-  const handleExampleRequest = async () => {
+-    setExampleLoading(true);
++  const fetchHealth = async () => {
++    setHealthLoading(true);
+     try {
+-      const data = await callEndpoint(endpoints.example.hello, {
+-        name: "React Client",
+-      });
+-      setExampleData(data);
+-      toast({
+-        title: "Example Request Success",
+-        description: data.message,
+-      });
++      const data = await callEndpoint(endpoints.health.check, { timestamp: Date.now() });
++      setHealthData(data);
+     } catch (error) {
+-      if (error instanceof HttpError) {
+-        toast({
+-          title: "Example Request Failed",
+-          description: error.message,
+-          variant: "destructive",
+-        });
+-      }
+-    } finally {
+-      setExampleLoading(false);
++      toast({ title: "Error", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+     }
++    setHealthLoading(false);
+   };
+ 
+   return (
+-    <div className="max-w-2xl mx-auto p-8">
+-      <h1 className="text-3xl font-bold mb-8">API Example Page</h1>
+-      
+-      <div className="space-y-8">
+-        {/* Health Check Section */}
+-        <div className="border rounded-lg p-6">
+-          <h2 className="text-xl font-semibold mb-4">Health Check</h2>
+-          <Button onClick={handleHealthCheck} disabled={healthLoading}>
+-            {healthLoading ? "Checking..." : "Check Server Health"}
+-          </Button>
+-          {healthData && (
+-            <div className="mt-4 p-4 bg-green-50 rounded">
+-              <p className="text-green-800">
+-                Server is {healthData.ok ? "healthy" : "unhealthy"}
+-              </p>
+-              {healthData.echo && (
+-                <p className="text-sm text-green-600 mt-2">
+-                  Echo: {healthData.echo}
+-                </p>
+-              )}
+-            </div>
+-          )}
+-        </div>
++    <div className="p-8">
++      <h1 className="text-2xl font-bold mb-4">Home</h1>
++      <div className="space-y-6">
++        <section className="space-y-3 rounded border border-slate-200 bg-white p-6 shadow-sm">
++          <header className="space-y-1">
++            <h2 className="text-lg font-semibold text-slate-900">Health Check</h2>
++            <p className="text-sm text-slate-600">Ping the backend health endpoint to verify connectivity.</p>
++          </header>
++          <div className="flex flex-wrap items-center gap-3">
++            <Button onClick={fetchHealth} disabled={healthLoading} className="bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
++              {healthLoading ? "Loading..." : "Check Health"}
++            </Button>
++            {healthData && (
++              <span className="text-sm text-green-600">Service responded: {healthData.ok ? "Healthy" : "Unavailable"}</span>
++            )}
++          </div>
++        </section>
+ 
+-        {/* Example API Section */}
+-        <div className="border rounded-lg p-6">
+-          <h2 className="text-xl font-semibold mb-4">Example API</h2>
+-          <Button onClick={handleExampleRequest} disabled={exampleLoading}>
+-            {exampleLoading ? "Loading..." : "Call Example API"}
+-          </Button>
+-          {exampleData && (
+-            <div className="mt-4 p-4 bg-blue-50 rounded">
+-              <p className="text-blue-800">{exampleData.message}</p>
+-              <p className="text-sm text-blue-600 mt-2">
+-                Timestamp: {new Date(exampleData.timestamp).toLocaleString()}
+-              </p>
+-            </div>
+-          )}
+-        </div>
++        <section className="space-y-3 rounded border border-slate-200 bg-white p-6 shadow-sm">
++          <header className="space-y-1">
++            <h2 className="text-lg font-semibold text-slate-900">Protected Area</h2>
++            <p className="text-sm text-slate-600">Check current auth state, navigate to the protected page, or trigger a protected API call.</p>
++          </header>
++
++          <div className="space-y-2 text-slate-700">
++            {authLoading ? (
++              <p className="text-slate-600">Checking authentication…</p>
++            ) : isAuthenticated && user ? (
++              <div className="space-y-1">
++                <p className="font-medium">Logged in as: {user.name}</p>
++                <p className="text-sm break-all text-slate-500">id: {user.id}</p>
++                <Button onClick={handleLogout} disabled={authLoading} variant="outline">Log out</Button>
++              </div>
++            ) : (
++              <div className="space-y-2">
++                <p className="text-slate-600">You are not authenticated.</p>
++                <Button onClick={handleLogin} disabled={authLoading}>Log in with Manus</Button>
++              </div>
++            )}
++            {authError && <p className="text-sm text-red-600">Auth error: {authError.message}</p>}
++          </div>
++
++          <div className="flex flex-wrap gap-3">
++            <Button asChild variant="secondary"><a href="/app">Go to protected page</a></Button>
++            <Button onClick={handleProtectedRequest} variant="secondary">Call protected API</Button>
++          </div>
++        </section>
+       </div>
++
++      <ManusDialog open={showLoginDialog} onLogin={handleLogin} onOpenChange={setShowLoginDialog} />
+     </div>
+   );
+-}
+\ No newline at end of file
++}
++
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/drizzle/meta/_journal.json web-db/drizzle/meta/_journal.json
+--- web-basic/drizzle/meta/_journal.json	1970-01-01 07:30:00
++++ web-db/drizzle/meta/_journal.json	2025-09-30 19:22:22
+@@ -0,0 +1,5 @@
++{
++  "version": "7",
++  "dialect": "mysql",
++  "entries": []
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/drizzle/relations.ts web-db/drizzle/relations.ts
+--- web-basic/drizzle/relations.ts	1970-01-01 07:30:00
++++ web-db/drizzle/relations.ts	2025-10-02 12:08:31
+@@ -0,0 +1 @@
++import {} from "./schema";
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/drizzle/schema.ts web-db/drizzle/schema.ts
+--- web-basic/drizzle/schema.ts	1970-01-01 07:30:00
++++ web-db/drizzle/schema.ts	2025-10-02 12:08:31
+@@ -0,0 +1,9 @@
++import { mysqlTable, text, varchar } from "drizzle-orm/mysql-core";
++
++export const users = mysqlTable("users", {
++  id: varchar({ length: 36 }).unique().notNull(),
++  name: text(),
++});
++
++export type User = typeof users.$inferSelect;
++export type InsertUser = typeof users.$inferInsert;
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/drizzle.config.ts web-db/drizzle.config.ts
+--- web-basic/drizzle.config.ts	1970-01-01 07:30:00
++++ web-db/drizzle.config.ts	2025-09-30 19:22:22
+@@ -0,0 +1,15 @@
++import { defineConfig } from "drizzle-kit";
++
++const connectionString = process.env.DATABASE_URL;
++if (!connectionString) {
++  throw new Error("DATABASE_URL is required to run drizzle commands");
++}
++
++export default defineConfig({
++  schema: "./drizzle/schema.ts",
++  out: "./drizzle",
++  dialect: "mysql",
++  dbCredentials: {
++    url: connectionString,
++  },
++});
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/package.json web-db/package.json
+--- web-basic/package.json	2025-10-02 16:37:42
++++ web-db/package.json	2025-10-02 12:08:31
+@@ -7,7 +7,8 @@
+     "dev": "NODE_ENV=development tsx watch server/index.ts",
+     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+     "start": "NODE_ENV=production node dist/index.js",
+-    "check": "tsc --noEmit"
++    "check": "tsc --noEmit",
++    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+   },
+   "dependencies": {
+     "@radix-ui/react-accordion": "^1.2.4",
+@@ -43,12 +44,14 @@
+     "cmdk": "^1.1.1",
+     "cookie": "^1.0.2",
+     "dotenv": "^17.2.2",
++    "drizzle-orm": "^0.44.5",
+     "embla-carousel-react": "^8.6.0",
+     "express": "^4.21.2",
+     "framer-motion": "^12.23.22",
+     "input-otp": "^1.4.2",
+     "jose": "6.1.0",
+     "lucide-react": "^0.453.0",
++    "mysql2": "^3.15.0",
+     "nanoid": "^5.1.5",
+     "react": "^18.3.1",
+     "react-day-picker": "^8.10.1",
+@@ -73,6 +76,7 @@
+     "@vitejs/plugin-react": "^4.3.2",
+     "add": "^2.0.6",
+     "autoprefixer": "^10.4.20",
++    "drizzle-kit": "^0.31.4",
+     "esbuild": "^0.25.0",
+     "pnpm": "^10.15.1",
+     "postcss": "^8.4.47",
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/db.ts web-db/server/db.ts
+--- web-basic/server/db.ts	1970-01-01 07:30:00
++++ web-db/server/db.ts	2025-10-02 12:08:31
+@@ -0,0 +1,69 @@
++import { eq } from "drizzle-orm";
++import { drizzle } from "drizzle-orm/mysql2";
++import { InsertUser, users } from "../drizzle/schema";
++
++let _db: ReturnType<typeof drizzle> | null = null;
++
++/**
++ * Get or initialize database connection.
++ * Returns null if DATABASE_URL is not configured.
++ */
++export async function getDb() {
++  if (!_db && process.env.DATABASE_URL) {
++    try {
++      _db = drizzle(process.env.DATABASE_URL);
++    } catch (error) {
++      console.warn("[Database] Failed to connect:", error);
++      _db = null;
++    }
++  }
++  return _db;
++}
++
++/**
++ * Upsert a user by id using MySQL's INSERT ... ON DUPLICATE KEY UPDATE.
++ * If the user exists, updates the name; otherwise inserts a new record.
++ */
++export async function upsertUser(user: InsertUser): Promise<void> {
++  if (!user.id) {
++    throw new Error("User ID is required for upsert");
++  }
++
++  const db = await getDb();
++  if (!db) {
++    console.warn("[Database] Cannot upsert user: database not available");
++    return;
++  }
++
++  try {
++    // Use MySQL's ON DUPLICATE KEY UPDATE for atomic upsert
++    await db
++      .insert(users)
++      .values({
++        id: user.id,
++        name: user.name ?? null,
++      })
++      .onDuplicateKeyUpdate({
++        set: { name: user.name ?? null },
++      });
++  } catch (error) {
++    console.error("[Database] Failed to upsert user:", error);
++    throw error;
++  }
++}
++
++/**
++ * Get a user by id.
++ * Returns undefined if user not found or database not available.
++ */
++export async function getUser(id: string) {
++  const db = await getDb();
++  if (!db) {
++    console.warn("[Database] Cannot get user: database not available");
++    return undefined;
++  }
++
++  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
++
++  return result.length > 0 ? result[0] : undefined;
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/env.ts web-db/server/env.ts
+--- web-basic/server/env.ts	2025-10-02 16:43:54
++++ web-db/server/env.ts	2025-09-30 19:22:22
+@@ -1,5 +1,7 @@
+ export const ENV = {
+   appId: process.env.VITE_APP_ID ?? "",
++  cookieSecret: process.env.JWT_SECRET ?? "",
++  databaseUrl: process.env.DATABASE_URL ?? "",
++  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+   isProduction: process.env.NODE_ENV === "production",
+-  port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+-};
+\ No newline at end of file
++};
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/routes.ts web-db/server/routes.ts
+--- web-basic/server/routes.ts	2025-10-02 16:38:34
++++ web-db/server/routes.ts	2025-10-02 12:08:31
+@@ -2,6 +2,11 @@
+ import { BadRequestError } from "@shared/errors";
+ import type { Express } from "express";
+ import { registerRoute } from "./routesHelper";
++import { sdk } from "./sdk";
++import { ENV } from "./env";
++import * as db from "./db";
++import { COOKIE_NAME, ONE_YEAR_MS } from "@/const";
++import type { User } from "../drizzle/schema";
+ 
+ export function registerRoutes(app: Express) {
+   // Health check endpoint (public)
+@@ -13,19 +18,79 @@
+     const response: EndpointsTypes.HeathCheckResponse = {
+       ok: true,
+     };
++    return response;
++  });
+ 
+-    if (params.echo) {
+-      response.echo = params.echo;
++  // OAuth callback (public)
++  registerRoute(
++    app,
++    endpoints.oauth.callback,
++    async ({ code, state }, req, res) => {
++      const token = await sdk.oauth.getTokenByCode(code, state);
++      const userInfoResponse = await sdk.oauth.getUserInfoByToken(token);
++      const { openId, name } = userInfoResponse;
++
++      if (!openId) {
++        throw BadRequestError("openId missing from user info");
++      }
++
++      // Upsert user to database
++      await db.upsertUser({
++        id: openId,
++        name: name || null,
++      });
++
++      // Sign session cookie
++      const expiresInMs = ONE_YEAR_MS;
++      const cookieValue = await sdk.signSession(
++        {
++          openId,
++          appId: ENV.appId,
++          name: name ?? "",
++        },
++        { expiresInMs }
++      );
++
++      res.cookie(COOKIE_NAME, cookieValue, {
++        httpOnly: true,
++        sameSite: "lax",
++        secure: ENV.isProduction,
++        maxAge: expiresInMs,
++        path: "/",
++      });
++
++      res.redirect(302, "/");
+     }
++  );
+ 
+-    return response;
+-  });
++  // Get current user (authenticated - user auto-injected)
++  registerRoute(
++    app,
++    endpoints.user.me as typeof endpoints.user.me & { requireAuth: true },
++    async (user: User) => {
++      return {
++        user: {
++          id: user.id,
++          name: user.name ?? "",
++        },
++      };
++    }
++  );
+ 
+-  // Example API endpoint (public)
+-  registerRoute(app, endpoints.example.hello, async params => {
+-    return {
+-      message: `Hello, ${params.name || 'World'}!`,
+-      timestamp: Date.now()
++  // Logout (public)
++  registerRoute(app, endpoints.user.logout, async (_params, _req, res) => {
++    res.clearCookie(COOKIE_NAME, {
++      httpOnly: true,
++      sameSite: "lax",
++      secure: ENV.isProduction,
++      path: "/",
++    });
++
++    const response: EndpointsTypes.User.LogoutResponse = {
++      success: true,
+     };
++    return response;
+   });
+-}
+\ No newline at end of file
++
++  // Add more API routes here as needed
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/routesHelper.ts web-db/server/routesHelper.ts
+--- web-basic/server/routesHelper.ts	2025-10-02 16:43:54
++++ web-db/server/routesHelper.ts	2025-10-02 12:08:31
+@@ -1,81 +1,161 @@
++import type { ApiEndpointDef } from "@shared/endpoints";
+ import type { Express, Request, Response } from "express";
+-import type { ZodSchema } from "zod";
++import { z } from "zod";
+ import { sdk } from "./sdk";
++import type { User } from "../drizzle/schema";
+ 
+ /**
+- * Handler for routes that process requests and return responses.
++ * Handler for routes that DON'T require authentication.
+  */
+-export type RouteHandler<
+-  TRequestSchema extends ZodSchema,
+-  TResponseSchema extends ZodSchema
++export type PublicRouteHandler<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
+ > = (
+-  params: ReturnType<TRequestSchema["parse"]>,
++  params: z.infer<TRequestSchema>,
+   req: Request,
+   res: Response
+-) => Promise<ReturnType<TResponseSchema["parse"]>> | void;
++) => Promise<z.infer<TResponseSchema> | void> | z.infer<TResponseSchema> | void;
+ 
+ /**
+- * Register a route with automatic request/response validation.
++ * Handler for routes that REQUIRE authentication.
++ * User is automatically injected as the first parameter.
+  */
++export type AuthenticatedRouteHandler<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++> = (
++  user: User,
++  params: z.infer<TRequestSchema>,
++  req: Request,
++  res: Response
++) => Promise<z.infer<TResponseSchema> | void> | z.infer<TResponseSchema> | void;
++
++/**
++ * Register a public route (no authentication required).
++ */
+ export function registerRoute<
+-  TRequestSchema extends ZodSchema,
+-  TResponseSchema extends ZodSchema
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
+ >(
+   app: Express,
+-  endpoint: {
+-    method: "get" | "post" | "put" | "delete";
+-    path: string;
+-    schema: {
+-      request: TRequestSchema;
+-      response: TResponseSchema;
+-    };
++  endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema>,
++  handler: PublicRouteHandler<TRequestSchema, TResponseSchema>
++): void;
++
++/**
++ * Register an authenticated route (requires authentication).
++ * User will be automatically injected as the first parameter to the handler.
++ */
++export function registerRoute<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++>(
++  app: Express,
++  endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema> & {
++    requireAuth: true;
+   },
+-  handler: RouteHandler<TRequestSchema, TResponseSchema>
+-): void {
+-  app[endpoint.method](endpoint.path, async (req, res) => {
++  handler: (
++    user: User,
++    params: z.infer<TRequestSchema>,
++    req: Request,
++    res: Response
++  ) => Promise<z.infer<TResponseSchema> | void> | z.infer<TResponseSchema> | void
++): void;
++
++/**
++ * Implementation: register a route with automatic authentication handling.
++ */
++export function registerRoute<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++>(
++  app: Express,
++  endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema>,
++  handler:
++    | PublicRouteHandler<TRequestSchema, TResponseSchema>
++    | AuthenticatedRouteHandler<TRequestSchema, TResponseSchema>
++) {
++  const routeHandler = async (req: Request, res: Response) => {
+     try {
+-      // Parse and validate request parameters
+-      const rawParams = {
+-        ...req.query,
+-        ...req.body,
+-        ...req.params,
+-      };
++      // Parse parameters based on HTTP method
++      let rawParams: unknown;
++      const method = endpoint.method.toLowerCase();
+ 
++      if (method === "get" || method === "delete") {
++        rawParams = req.query;
++      } else {
++        rawParams = req.body;
++      }
++
+       // Validate parameters using endpoint schema
+       const params = endpoint.schema.request.parse(rawParams);
+ 
+-      // Execute handler
+-      const result = await handler(params, req, res);
++      let result: z.infer<TResponseSchema> | void;
+ 
+-      // If handler explicitly handled the response, return
++      // If authentication is required, authenticate and inject user
++      if (endpoint.requireAuth) {
++        const user = await sdk.authenticateRequest(req);
++        result = await (
++          handler as AuthenticatedRouteHandler<TRequestSchema, TResponseSchema>
++        )(user, params, req, res);
++      } else {
++        result = await (
++          handler as PublicRouteHandler<TRequestSchema, TResponseSchema>
++        )(params, req, res);
++      }
++
++      // If response already sent (e.g., redirect), skip
+       if (res.headersSent) {
+         return;
+       }
+ 
+-      // Validate and send response
+-      if (result !== undefined) {
+-        const validatedResult = endpoint.schema.response.parse(result);
+-        res.json(validatedResult);
+-      } else {
+-        res.status(204).send();
++      // If no result, send 204 No Content
++      if (typeof result === "undefined") {
++        res.status(204).end();
++        return;
+       }
+-    } catch (error: any) {
+-      // Handle validation errors
+-      if (error.name === "ZodError") {
++
++      // Validate and send response
++      const validatedResult = endpoint.schema.response.parse(result);
++      res.json(validatedResult);
++    } catch (error) {
++      if (error instanceof z.ZodError) {
+         res.status(400).json({
+-          error: "Validation Error",
++          error: "Invalid request parameters",
+           details: error.errors,
+         });
+-        return;
++      } else if (error instanceof Error && "statusCode" in error) {
++        res.status((error as any).statusCode).json({
++          error: error.message,
++        });
++      } else {
++        console.error("Route handler error:", error);
++        res.status(500).json({
++          error: "Internal server error",
++        });
+       }
+-
+-      // Handle other errors
+-      const statusCode = error.statusCode || 500;
+-      const message = error.message || "Internal Server Error";
+-      
+-      res.status(statusCode).json({
+-        error: message,
+-      });
+     }
+-  });
+-}
+\ No newline at end of file
++  };
++
++  // Register route with the correct HTTP method
++  const method = endpoint.method.toLowerCase();
++  switch (method) {
++    case "get":
++      app.get(endpoint.route, routeHandler);
++      break;
++    case "post":
++      app.post(endpoint.route, routeHandler);
++      break;
++    case "put":
++      app.put(endpoint.route, routeHandler);
++      break;
++    case "delete":
++      app.delete(endpoint.route, routeHandler);
++      break;
++    case "patch":
++      app.patch(endpoint.route, routeHandler);
++      break;
++    default:
++      throw new Error(`Unsupported HTTP method: ${endpoint.method}`);
++  }
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/sdk.ts web-db/server/sdk.ts
+--- web-basic/server/sdk.ts	2025-10-02 16:43:54
++++ web-db/server/sdk.ts	2025-10-02 12:08:31
+@@ -1,59 +1,268 @@
+ import axios, { type AxiosInstance } from "axios";
++import type { Request } from "express";
++import { parse as parseCookieHeader } from "cookie";
++import { SignJWT, jwtVerify } from "jose";
++import { ForbiddenError } from "@shared/errors";
++import type {
++  ExchangeTokenRequest,
++  ExchangeTokenResponse,
++  GetUserInfoResponse,
++  GetUserInfoWithJwtRequest,
++  GetUserInfoWithJwtResponse,
++} from "./types/manusTypes";
+ import { ENV } from "./env";
+-import { AXIOS_TIMEOUT_MS } from "@/const";
+-
++import * as db from "./db";
++import type { User } from "../drizzle/schema";
++import { AXIOS_TIMEOUT_MS, COOKIE_NAME, ONE_YEAR_MS } from "@/const";
+ // Utility function
+ const isNonEmptyString = (value: unknown): value is string =>
+   typeof value === "string" && value.length > 0;
+ 
+-const createHttpClient = (): AxiosInstance =>
++export type SessionPayload = {
++  openId: string;
++  appId: string;
++  name: string;
++};
++
++const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
++const GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
++const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
++
++class OAuthService {
++  constructor(private client: ReturnType<typeof axios.create>) {
++    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
++    if (!ENV.oAuthServerUrl) {
++      console.error(
++        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
++      );
++    }
++  }
++
++  private decodeState(state: string): string {
++    const redirectUri = atob(state);
++    return redirectUri;
++  }
++
++  async getTokenByCode(
++    code: string,
++    state: string
++  ): Promise<ExchangeTokenResponse> {
++    const payload: ExchangeTokenRequest = {
++      clientId: ENV.appId,
++      grantType: "authorization_code",
++      code,
++      redirectUri: this.decodeState(state),
++    };
++
++    const { data } = await this.client.post<ExchangeTokenResponse>(
++      EXCHANGE_TOKEN_PATH,
++      payload
++    );
++
++    return data;
++  }
++
++  async getUserInfoByToken(
++    token: ExchangeTokenResponse
++  ): Promise<GetUserInfoResponse> {
++    const { data } = await this.client.post<GetUserInfoResponse>(
++      GET_USER_INFO_PATH,
++      {
++        accessToken: token.accessToken,
++      }
++    );
++
++    return data;
++  }
++}
++
++const createOAuthHttpClient = (): AxiosInstance =>
+   axios.create({
++    baseURL: ENV.oAuthServerUrl,
+     timeout: AXIOS_TIMEOUT_MS,
+-    headers: {
+-      "Content-Type": "application/json",
+-    },
+   });
+ 
+-/**
+- * SDK for server-side operations.
+- * Provides basic HTTP client and utility functions.
+- */
+-export class SDK {
++class SDKServer {
+   private readonly client: AxiosInstance;
++  public readonly oauth: OAuthService;
+ 
+-  constructor(client: AxiosInstance = createHttpClient()) {
++  constructor(client: AxiosInstance = createOAuthHttpClient()) {
+     this.client = client;
++    this.oauth = new OAuthService(this.client);
+   }
+ 
+   /**
+-   * Get the configured app ID.
++   * Returns true when env has preview bypass identifiers.
++   * Requires NODE_ENV=development, OWNER_OPEN_ID, and OWNER_NAME.
+    */
+-  getAppId(): string {
+-    return ENV.appId;
++  public shouldPreviewBypass(): boolean {
++    return (
++      process.env.NODE_ENV === "development" &&
++      isNonEmptyString(process.env.OWNER_OPEN_ID) &&
++      isNonEmptyString(process.env.OWNER_NAME)
++    );
+   }
+ 
+   /**
+-   * Check if running in production mode.
++   * Build a signed session JWT using preview env values.
++   * Uses OWNER_OPEN_ID, OWNER_NAME, VITE_APP_ID.
+    */
+-  isProduction(): boolean {
+-    return ENV.isProduction;
++  public async previewBypass(options: { expiresInMs?: number } = {}): Promise<string> {
++    const openId = process.env.OWNER_OPEN_ID ?? "";
++    const name = process.env.OWNER_NAME ?? "";
++    const appId = ENV.appId;
++
++    if (!this.shouldPreviewBypass()) {
++      throw new Error("Preview bypass not enabled: missing VITE_OPEN_ID or VITE_OWNER_NAME");
++    }
++
++    if (!isNonEmptyString(appId)) {
++      throw new Error("Preview bypass requires VITE_APP_ID to be set");
++    }
++
++    return this.signSession(
++      {
++        openId,
++        appId,
++        name,
++      },
++      options
++    );
+   }
+ 
+-  /**
+-   * Make an HTTP GET request.
+-   */
+-  async get<T>(url: string, config?: any): Promise<T> {
+-    const response = await this.client.get<T>(url, config);
+-    return response.data;
++  private parseCookies(cookieHeader: string | undefined) {
++    if (!cookieHeader) {
++      return new Map<string, string>();
++    }
++
++    const parsed = parseCookieHeader(cookieHeader);
++    return new Map(Object.entries(parsed));
+   }
+ 
+-  /**
+-   * Make an HTTP POST request.
+-   */
+-  async post<T>(url: string, data?: any, config?: any): Promise<T> {
+-    const response = await this.client.post<T>(url, data, config);
+-    return response.data;
++  private getSessionSecret() {
++    const secret = ENV.cookieSecret;
++    return new TextEncoder().encode(secret);
+   }
++
++  async signSession(
++    payload: SessionPayload,
++    options: { expiresInMs?: number } = {}
++  ): Promise<string> {
++    const issuedAt = Date.now();
++    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
++    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1000);
++    const secretKey = this.getSessionSecret();
++
++    return new SignJWT({
++      openId: payload.openId,
++      appId: payload.appId,
++      name: payload.name,
++    })
++      .setProtectedHeader({ alg: "HS256", typ: "JWT" })
++      .setExpirationTime(expirationSeconds)
++      .sign(secretKey);
++  }
++
++  async verifySession(
++    cookieValue: string | undefined | null
++  ): Promise<{ openId: string; appId: string; name: string } | null> {
++    if (!cookieValue) {
++      console.warn("[Auth] Missing session cookie");
++      return null;
++    }
++
++    try {
++      const secretKey = this.getSessionSecret();
++      const { payload } = await jwtVerify(cookieValue, secretKey, {
++        algorithms: ["HS256"],
++      });
++      const { openId, appId, name } = payload as Record<string, unknown>;
++
++      if (
++        !isNonEmptyString(openId) ||
++        !isNonEmptyString(appId) ||
++        !isNonEmptyString(name)
++      ) {
++        console.warn("[Auth] Session payload missing required fields");
++        return null;
++      }
++
++      return {
++        openId,
++        appId,
++        name,
++      };
++    } catch (error) {
++      console.warn("[Auth] Session verification failed", {
++        error,
++      });
++      return null;
++    }
++  }
++
++  async getUserInfoWithJwt(
++    jwtToken: string
++  ): Promise<GetUserInfoWithJwtResponse> {
++    const payload: GetUserInfoWithJwtRequest = {
++      jwtToken,
++    };
++
++    const { data } = await this.client.post<GetUserInfoWithJwtResponse>(
++      GET_USER_INFO_WITH_JWT_PATH,
++      payload
++    );
++
++    return data;
++  }
++
++  async authenticateRequest(req: Request): Promise<User> {
++    // Try preview bypass first (only in development with explicit flag)
++    if (this.shouldPreviewBypass()) {
++      const openId = process.env.OWNER_OPEN_ID ?? "";
++      const name = process.env.OWNER_NAME ?? "";
++
++      // Ensure preview user exists in DB
++      await db.upsertUser({ id: openId, name });
++      const user = await db.getUser(openId);
++
++      if (user) {
++        return user;
++      }
++    }
++
++    // Regular authentication flow
++    const cookies = this.parseCookies(req.headers.cookie);
++    const sessionCookie = cookies.get(COOKIE_NAME);
++    const session = await this.verifySession(sessionCookie);
++
++    if (!session) {
++      throw ForbiddenError("Invalid session cookie");
++    }
++
++    const sessionUserId = session.openId;
++    let user = await db.getUser(sessionUserId);
++
++    // If user not in DB, sync from OAuth server automatically
++    if (!user) {
++      try {
++        const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
++        await db.upsertUser({
++          id: userInfo.openId,
++          name: userInfo.name || null,
++        });
++        user = await db.getUser(userInfo.openId);
++      } catch (error) {
++        console.error("[Auth] Failed to sync user from OAuth:", error);
++        throw ForbiddenError("Failed to sync user info");
++      }
++    }
++
++    if (!user) {
++      throw ForbiddenError("User not found");
++    }
++
++    return user;
++  }
+ }
+ 
+-export const sdk = new SDK();
+\ No newline at end of file
++export const sdk = new SDKServer();
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/types/cookie.d.ts web-db/server/types/cookie.d.ts
+--- web-basic/server/types/cookie.d.ts	1970-01-01 07:30:00
++++ web-db/server/types/cookie.d.ts	2025-09-30 19:22:22
+@@ -0,0 +1,6 @@
++declare module "cookie" {
++  export function parse(
++    str: string,
++    options?: Record<string, unknown>
++  ): Record<string, string>;
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/server/types/manusTypes.ts web-db/server/types/manusTypes.ts
+--- web-basic/server/types/manusTypes.ts	1970-01-01 07:30:00
++++ web-db/server/types/manusTypes.ts	2025-09-30 19:25:28
+@@ -0,0 +1,62 @@
++// WebDev Auth TypeScript types
++// Auto-generated from protobuf definitions
++// Generated on: 2025-09-24T05:57:57.338Z
++
++export interface AuthorizeRequest {
++  redirectUri: string;
++  projectId: string;
++  state: string;
++  responseType: string;
++  scope: string;
++}
++
++export interface AuthorizeResponse {
++  redirectUrl: string;
++}
++
++export interface ExchangeTokenRequest {
++  grantType: string;
++  code: string;
++  refreshToken?: string;
++  clientId: string;
++  clientSecret?: string;
++  redirectUri: string;
++}
++
++export interface ExchangeTokenResponse {
++  accessToken: string;
++  tokenType: string;
++  expiresIn: number;
++  refreshToken?: string;
++  scope: string;
++  idToken: string;
++}
++
++export interface GetUserInfoRequest {
++  accessToken: string;
++}
++
++export interface GetUserInfoResponse {
++  openId: string;
++  projectId: string;
++  name: string;
++}
++
++export interface CanAccessRequest {
++  openId: string;
++  projectId: string;
++}
++
++export interface CanAccessResponse {
++  canAccess: boolean;
++}
++
++export interface GetUserInfoWithJwtRequest {
++  jwtToken: string;
++}
++
++export interface GetUserInfoWithJwtResponse {
++  openId: string;
++  projectId: string;
++  name: string;
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-basic/shared/endpoints.ts web-db/shared/endpoints.ts
+--- web-basic/shared/endpoints.ts	2025-10-02 16:43:54
++++ web-db/shared/endpoints.ts	2025-10-02 12:08:31
+@@ -7,6 +7,7 @@
+ > = {
+   route: string;
+   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
++  requireAuth?: boolean;
+   schema: {
+     request: TRequestSchema;
+     response: TResponseSchema;
+@@ -22,13 +23,23 @@
+ 
+ export const API_BASE_URL = "/api";
+ 
++// Define schemas for your data models
++const userSchema = z.object({
++  id: z.string(),
++  name: z.string(),
++});
++
+ /**
+  * API Endpoint Definitions
+  *
+  * Add new endpoint groups here. Each endpoint defines:
+  * - route: API path
+  * - method: HTTP method (GET/POST/PUT/DELETE/PATCH)
++ * - requireAuth: true if user authentication is required
+  * - schema: Zod schemas for request and response
++ *
++ * When requireAuth: true, the user object is automatically injected
++ * as the first parameter in the backend handler.
+  */
+ export const endpoints = {
+   health: {
+@@ -37,39 +48,73 @@
+       method: "GET",
+       schema: {
+         request: z.object({
+-          timestamp: z.number().default(() => Date.now()),
+-          echo: z.string().optional(),
++          timestamp: z.coerce.number(),
+         }),
+         response: z.object({
+           ok: z.boolean(),
+-          echo: z.string().optional(),
+         }),
+       },
+     }),
+   },
+ 
+-  example: {
+-    hello: createEndpoint({
+-      route: `${API_BASE_URL}/example/hello`,
++  oauth: {
++    callback: createEndpoint({
++      route: `${API_BASE_URL}/oauth/callback`,
+       method: "GET",
+       schema: {
+         request: z.object({
+-          name: z.string().optional(),
++          code: z.string().min(1, "code is required"),
++          state: z.string().min(1, "state is required"),
+         }),
++        response: z.void(),
++      },
++    }),
++  },
++
++  user: {
++    me: createEndpoint({
++      route: `${API_BASE_URL}/user/me`,
++      method: "GET",
++      requireAuth: true,
++      schema: {
++        request: z.object({}),
+         response: z.object({
+-          message: z.string(),
+-          timestamp: z.number(),
++          user: userSchema,
+         }),
+       },
+     }),
++    logout: createEndpoint({
++      route: `${API_BASE_URL}/logout`,
++      method: "POST",
++      schema: {
++        request: z.object({}),
++        response: z.object({
++          success: z.literal(true),
++        }),
++      },
++    }),
+   },
+-};
+ 
++  /**
++   * Add your endpoint groups here. Example:
++   *
++   * todos: {
++   *   list: createEndpoint({
++   *     route: `${API_BASE_URL}/todos`,
++   *     method: "GET",
++   *     requireAuth: true,
++   *     schema: {
++   *       request: z.object({}),
++   *       response: z.object({ todos: z.array(todoSchema) }),
++   *     },
++   *   }),
++   * },
++   */
++} as const;
++
+ /**
+- * Type exports for endpoints
+- * 
+- * Import these types in your components:
+- * import type { EndpointsTypes } from "@shared/endpoints";
++ * Type exports for convenience
++ * You can add namespace exports here for your endpoint types if needed.
+  */
+ export namespace EndpointsTypes {
+   export type HeathCheckRequest = z.infer<
+@@ -79,12 +124,26 @@
+     typeof endpoints.health.check.schema.response
+   >;
+ 
+-  export namespace Example {
+-    export type HelloRequest = z.infer<
+-      typeof endpoints.example.hello.schema.request
++  export namespace OAuth {
++    export type CallbackRequest = z.infer<
++      typeof endpoints.oauth.callback.schema.request
+     >;
+-    export type HelloResponse = z.infer<
+-      typeof endpoints.example.hello.schema.response
++    export type CallbackResponse = z.infer<
++      typeof endpoints.oauth.callback.schema.response
+     >;
+   }
+-}
+\ No newline at end of file
++
++  export namespace User {
++    export type MeRequest = z.infer<typeof endpoints.user.me.schema.request>;
++    export type MeResponse = z.infer<typeof endpoints.user.me.schema.response>;
++    export type LogoutRequest = z.infer<
++      typeof endpoints.user.logout.schema.request
++    >;
++    export type LogoutResponse = z.infer<
++      typeof endpoints.user.logout.schema.response
++    >;
++    export type Info = z.infer<typeof userSchema>;
++  }
++
++  // Add your type exports here
++}

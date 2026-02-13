@@ -1,0 +1,136 @@
+[
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "script"
+  ],
+  "urlFilter": "||readthedocs.org/api/v2/sustainability/"
+ },
+ "id": 267,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "vide-greniers.org"
+  ],
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "script"
+  ],
+  "urlFilter": "||pagead2.googlesyndication.com/pagead/"
+ },
+ "id": 268,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "tvtropes.org"
+  ],
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "script"
+  ],
+  "urlFilter": "||global.proper.io/tvtropes.min.js"
+ },
+ "id": 269,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "files2zip.com"
+  ],
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "script"
+  ],
+  "urlFilter": "||pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
+ },
+ "id": 270,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "requestDomains": [
+   "ads.proboards.com",
+   "bidfilter.com"
+  ],
+  "resourceTypes": [
+   "script"
+  ]
+ },
+ "id": 271,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.js"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "initiatorDomains": [
+   "unknowncheats.me"
+  ],
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "xmlhttprequest"
+  ],
+  "urlFilter": "||googlesyndication.com/pagead/js/adsbygoogle.js"
+ },
+ "id": 272,
+ "priority": 2
+},
+{
+ "action": {
+  "redirect": {
+   "extensionPath": "/web_accessible_resources/noop.txt"
+  },
+  "type": "redirect"
+ },
+ "condition": {
+  "domainType": "firstParty",
+  "isUrlFilterCaseSensitive": false,
+  "resourceTypes": [
+   "xmlhttprequest"
+  ],
+  "urlFilter": "||georgiadogs.com/js/prebid-"
+ },
+ "id": 273,
+ "priority": 2
+}
+]

@@ -1,0 +1,41 @@
+server:
+  bind: "0.0.0.0:8333"
+  static: "/opt/.rubic/neko/client"
+  cert: ""
+  key: ""
+
+webrtc:
+  ice_lite: true
+  ice_servers: []
+  ephemeral_port_range:
+    min: 59000
+    max: 59100
+  nat_1to1_ips: ["127.0.0.1"]
+
+desktop:
+  screen: "1280x1029@30"
+
+capture:
+  display: ":0"
+  video_codec: "h264"
+  video_bitrate: 3000
+  video_fps: 15
+  audio_codec: "opus"
+  audio_bitrate: 128
+
+member:
+  provider: "multiuser"
+  multiuser:
+    admin_password: "temp"
+    user_password: "temp"
+
+session:
+  merciful_reconnect: true
+  implicit_hosting: true
+  cookie:
+    enabled: false
+
+clipboard:
+  enabled: true
+  read_enabled: true
+  write_enabled: true

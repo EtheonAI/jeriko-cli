@@ -1,0 +1,1479 @@
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/.env.example web-basic/.env.example
+--- web-static/.env.example	1970-01-01 07:30:00
++++ web-basic/.env.example	2025-10-02 16:42:21
+@@ -0,0 +1,5 @@
++VITE_APP_ID=proj_abc123def456
++VITE_APP_TITLE="My Web App"
++VITE_APP_LOGO="https://placehold.co/40x40/3b82f6/ffffff?text=W"
++# Infrastructure (server-only)
++PORT=3000
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/.prettierignore web-basic/.prettierignore
+--- web-static/.prettierignore	2025-10-02 16:50:09
++++ web-basic/.prettierignore	2025-09-30 19:22:22
+@@ -1,5 +1,35 @@
+-dist
+-node_modules
+-.git
+-*.min.js
+-*.min.css
++# Dependencies
++node_modules/
++.pnpm-store/
++
++# Build outputs
++dist/
++build/
++*.dist
++
++# Generated files
++*.tsbuildinfo
++coverage/
++
++# Package files
++package-lock.json
++pnpm-lock.yaml
++
++# Database
++*.db
++*.sqlite
++*.sqlite3
++
++# Logs
++*.log
++
++# Environment files
++.env*
++
++# IDE files
++.vscode/
++.idea/
++
++# OS files
++.DS_Store
++Thumbs.db
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/.prettierrc web-basic/.prettierrc
+--- web-static/.prettierrc	2025-10-02 16:50:09
++++ web-basic/.prettierrc	2025-09-30 19:22:22
+@@ -1,8 +1,15 @@
+ {
+-  "semi": false,
+-  "singleQuote": true,
+-  "tabWidth": 2,
++  "semi": true,
+   "trailingComma": "es5",
+-  "printWidth": 100,
+-  "plugins": ["prettier-plugin-tailwindcss"]
++  "singleQuote": false,
++  "printWidth": 80,
++  "tabWidth": 2,
++  "useTabs": false,
++  "bracketSpacing": true,
++  "bracketSameLine": false,
++  "arrowParens": "avoid",
++  "endOfLine": "lf",
++  "quoteProps": "as-needed",
++  "jsxSingleQuote": false,
++  "proseWrap": "preserve"
+ }
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/README.md web-basic/README.md
+--- web-static/README.md	2025-10-02 12:54:16
++++ web-basic/README.md	2025-10-02 16:43:54
+@@ -1,312 +1,378 @@
+-# Static Web App Template
++# Web App Template (Server)
+ 
+-This template provides a modern static website foundation with React, Vite, and TailwindCSS. **This README is your workflow guide—follow it step by step when building static websites.**
++This template provides a type-safe full-stack foundation with React frontend and Express backend. **This README is your workflow guide—follow it step by step when implementing features.**
+ 
+ ---
+ 
+-## 🎯 Development Workflow (Frontend Only)
++## 🎯 Development Workflow (Frontend First)
+ 
+-This is a pure static website template with no backend server. Perfect for:
+-- Landing pages
+-- Documentation sites  
+-- Portfolios
+-- Static marketing websites
+-- Client-side only applications
++When you receive a feature request, follow this workflow:
+ 
+-### Step 1: Build Your Components
++### Step 1: Build the UI with Mock Data
+ 
+-**Start here every time.** Focus on creating reusable UI components.
++**Start here every time.** Don't touch the backend yet.
+ 
+-1. Create your React components in `client/src/components/`
+-2. Use TailwindCSS for styling
+-3. Keep components small and focused
++1. Create your React component in `client/src/`
++2. Use hardcoded/mock data to build the complete UI
++3. Make sure the UX feels right before proceeding
+ 
+ **Example:**
+ ```tsx
+-// client/src/components/Hero.tsx
+-export function Hero() {
++// client/src/pages/TodoList.tsx
++function TodoList() {
++  // Mock data for prototyping
++  const [todos, setTodos] = useState([
++    { id: 1, title: "Buy milk", completed: false },
++    { id: 2, title: "Walk dog", completed: true },
++  ]);
++
+   return (
+-    <section className="py-20 px-4">
+-      <div className="max-w-4xl mx-auto text-center">
+-        <h1 className="text-5xl font-bold mb-6">
+-          Welcome to Your Static Site
+-        </h1>
+-        <p className="text-xl text-gray-600 mb-8">
+-          Build fast, beautiful websites with React and Vite
+-        </p>
+-        <button className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700">
+-          Get Started
+-        </button>
+-      </div>
+-    </section>
+-  )
++    <div>
++      {todos.map(todo => (
++        <TodoItem key={todo.id} todo={todo} />
++      ))}
++    </div>
++  );
+ }
+ ```
+ 
+-### Step 2: Create Your Pages
++**Why frontend first?**
++- Validate UX early
++- Discover what data shapes you actually need
++- Avoid building unused backend features
+ 
+-Organize your content into logical pages.
++---
+ 
+-**File:** `client/src/App.tsx`
++### Step 2: Define the API Contract
+ 
+-```tsx
+-import { Hero } from './components/Hero'
+-import { Features } from './components/Features'
+-import { Footer } from './components/Footer'
++Once your UI is working with mock data, define the API endpoints.
+ 
+-function App() {
+-  return (
+-    <div className="min-h-screen">
+-      <Hero />
+-      <Features />
+-      <Footer />
+-    </div>
+-  )
+-}
++**File:** `shared/endpoints.ts`
++
++```typescript
++export const endpoints = {
++  todos: {
++    list: createEndpoint({
++      route: `${API_BASE_URL}/todos`,
++      method: "GET",
++      schema: {
++        request: z.object({
++          filter: z.enum(["all", "active", "completed"]).optional(),
++        }),
++        response: z.object({
++          todos: z.array(z.object({
++            id: z.number(),
++            title: z.string(),
++            completed: z.boolean(),
++            createdAt: z.string(),
++          })),
++        }),
++      },
++    }),
++
++    create: createEndpoint({
++      route: `${API_BASE_URL}/todos`,
++      method: "POST",
++      schema: {
++        request: z.object({
++          title: z.string().min(1),
++        }),
++        response: z.object({
++          todo: z.object({
++          id: z.number(),
++            title: z.string(),
++            completed: z.boolean(),
++            createdAt: z.string(),
++          }),
++        }),
++      },
++    }),
++  },
++};
+ ```
+ 
+-### Step 3: Add Interactivity (Client-Side Only)
++---
+ 
+-Since this is a static site, all interactivity happens in the browser.
++### Step 3: Connect Frontend to API
+ 
+-**Example: Contact Form with Email Service**
++Replace mock data with real API calls.
++
++**File:** `client/src/pages/TodoList.tsx`
++
+ ```tsx
+-// client/src/components/ContactForm.tsx
+-import { useState } from 'react'
++import { callEndpoint } from "@/api";
++import { endpoints } from "@shared/endpoints";
+ 
+-export function ContactForm() {
+-  const [email, setEmail] = useState('')
+-  
+-  const handleSubmit = async (e: React.FormEvent) => {
+-    e.preventDefault()
+-    
+-    // Use a third-party service like Formspree, EmailJS, or Netlify Forms
+-    await fetch('https://formspree.io/f/YOUR_FORM_ID', {
+-      method: 'POST',
+-      headers: { 'Content-Type': 'application/json' },
+-      body: JSON.stringify({ email })
+-    })
+-    
+-    alert('Thank you for subscribing!')
+-    setEmail('')
+-  }
+-  
++function TodoList() {
++  const [todos, setTodos] = useState([]);
++  const [loading, setLoading] = useState(true);
++
++  useEffect(() => {
++    async function fetchTodos() {
++      try {
++        const response = await callEndpoint(endpoints.todos.list, {});
++        setTodos(response.todos);
++      } catch (error) {
++        console.error("Failed to fetch todos:", error);
++      } finally {
++        setLoading(false);
++      }
++    }
++    fetchTodos();
++  }, []);
++
++  const handleCreate = async (title: string) => {
++    const response = await callEndpoint(endpoints.todos.create, { title });
++    setTodos([...todos, response.todo]);
++  };
++
++  if (loading) return <div>Loading...</div>;
++
+   return (
+-    <form onSubmit={handleSubmit} className="max-w-md mx-auto">
+-      <input
+-        type="email"
+-        value={email}
+-        onChange={(e) => setEmail(e.target.value)}
+-        placeholder="Enter your email"
+-        className="w-full px-4 py-2 border rounded-lg"
+-        required
+-      />
+-      <button type="submit" className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg">
+-        Subscribe
+-      </button>
+-    </form>
+-  )
++    // Your UI components here
++  );
+ }
+ ```
+ 
+ ---
+ 
+-## 📦 Using External APIs
++### Step 4: Implement Backend Routes
+ 
+-For dynamic content, use client-side API calls to public APIs or serverless functions.
++Now implement the actual backend logic.
+ 
+-**Example: Fetching Data**
+-```tsx
+-// client/src/hooks/useWeather.ts
+-import { useState, useEffect } from 'react'
++**File:** `server/routes.ts`
+ 
+-export function useWeather(city: string) {
+-  const [weather, setWeather] = useState(null)
+-  const [loading, setLoading] = useState(true)
+-  
+-  useEffect(() => {
+-    fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=YOUR_API_KEY`)
+-      .then(res => res.json())
+-      .then(data => {
+-        setWeather(data)
+-        setLoading(false)
+-      })
+-  }, [city])
+-  
+-  return { weather, loading }
++```typescript
++export function registerRoutes(app: Express) {
++  // In-memory storage (replace with database later if needed)
++  let todos = [
++    { id: 1, title: "Example todo", completed: false, createdAt: new Date().toISOString() }
++  ];
++  let nextId = 2;
++
++  // List todos
++  registerRoute(app, endpoints.todos.list, async (params) => {
++    let filtered = todos;
++    
++    if (params.filter === "active") {
++      filtered = todos.filter(t => !t.completed);
++    } else if (params.filter === "completed") {
++      filtered = todos.filter(t => t.completed);
++    }
++    
++    return { todos: filtered };
++  });
++
++  // Create todo
++  registerRoute(app, endpoints.todos.create, async (params) => {
++    const newTodo = {
++      id: nextId++,
++      title: params.title,
++      completed: false,
++      createdAt: new Date().toISOString(),
++    };
++    
++    todos.push(newTodo);
++    return { todo: newTodo };
++  });
+ }
+ ```
+ 
+ ---
+ 
+-## 🎨 Styling Guidelines
++## 📦 Project Structure
+ 
+-1. **Use TailwindCSS utilities first**
+-   ```tsx
+-   <div className="container mx-auto px-4 py-8">
+-   ```
++```
++├── client/               # React frontend
++│   ├── src/
++│   │   ├── api.ts       # API client utilities
++│   │   ├── components/  # Reusable UI components
++│   │   ├── pages/       # Page components
++│   │   └── App.tsx      # Main app component
++│   └── index.html
++├── server/              # Express backend
++│   ├── index.ts         # Server entry point
++│   ├── routes.ts        # API route handlers
++│   └── sdk.ts           # Server utilities
++├── shared/              # Shared types and contracts
++│   └── endpoints.ts     # API endpoint definitions
++└── package.json         # Dependencies and scripts
++```
+ 
+-2. **Create custom CSS only when needed**
+-   ```css
+-   /* client/src/styles.css */
+-   @layer components {
+-     .btn-primary {
+-       @apply bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors;
+-     }
+-   }
+-   ```
+-
+-3. **Keep responsive design in mind**
+-   ```tsx
+-   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+-   ```
+-
+ ---
+ 
+-## 🚀 Deployment Options
++## 🚀 Common Patterns
+ 
+-Since this is a static site, you have many free hosting options:
++### Error Handling
+ 
+-### Vercel (Recommended)
+-```bash
+-# Install Vercel CLI
+-npm i -g vercel
++```typescript
++// Frontend
++try {
++  const data = await callEndpoint(endpoints.todos.create, { title });
++  // Handle success
++} catch (error) {
++  if (error instanceof HttpError) {
++    if (error.statusCode === 400) {
++      // Validation error
++      console.error("Invalid input:", error.message);
++    } else {
++      // Other server error
++      console.error("Server error:", error.message);
++    }
++  }
++}
+ 
+-# Deploy
+-vercel
+-
+-# Follow the prompts
++// Backend
++registerRoute(app, endpoints.todos.create, async (params) => {
++  if (params.title.length > 100) {
++    throw BadRequestError("Title too long");
++  }
++  // ... rest of handler
++});
+ ```
+ 
+-### Netlify
+-```bash
+-# Build the project
+-npm run build
++### Loading States
+ 
+-# Drag the 'dist' folder to Netlify
+-```
++```tsx
++function TodoList() {
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
+ 
+-### GitHub Pages
+-```bash
+-# Add to package.json
+-"scripts": {
+-  "deploy": "npm run build && gh-pages -d dist"
+-}
++  const handleAction = async () => {
++    setLoading(true);
++    setError(null);
++    try {
++      // ... API call
++    } catch (err) {
++      setError(err.message);
++    } finally {
++      setLoading(false);
++    }
++  };
+ 
+-# Deploy
+-npm run deploy
++  return (
++    <div>
++      {loading && <Spinner />}
++      {error && <Alert variant="error">{error}</Alert>}
++      {/* ... rest of UI */}
++    </div>
++  );
++}
+ ```
+ 
+----
++### Form Handling
+ 
+-## 🔧 Progressive Enhancement
++```tsx
++function CreateTodoForm() {
++  const [title, setTitle] = useState("");
++  const [submitting, setSubmitting] = useState(false);
+ 
+-Start static, add features as needed:
++  const handleSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!title.trim()) return;
+ 
+-1. **Add a Backend Later**: Use the `webdev_add_capability` tool to add server capability when needed
+-2. **Add Database**: Can be added after server capability
+-3. **Add Authentication**: Requires both server and database
++    setSubmitting(true);
++    try {
++      await callEndpoint(endpoints.todos.create, { title });
++      setTitle(""); // Clear form on success
++    } catch (error) {
++      console.error("Failed to create todo:", error);
++    } finally {
++      setSubmitting(false);
++    }
++  };
+ 
+-For now, focus on building a great static experience!
++  return (
++    <form onSubmit={handleSubmit}>
++      <input
++        value={title}
++        onChange={(e) => setTitle(e.target.value)}
++        disabled={submitting}
++        placeholder="What needs to be done?"
++      />
++      <button type="submit" disabled={submitting}>
++        {submitting ? "Adding..." : "Add Todo"}
++      </button>
++    </form>
++  );
++}
++```
+ 
+ ---
+ 
+-## 📱 PWA Support
++## 🛠️ Development Commands
+ 
+-This template includes basic PWA setup:
++```bash
++# Install dependencies
++pnpm install
+ 
+-1. **Service Worker**: Caches assets for offline access
+-2. **Web Manifest**: Allows installation as an app
+-3. **Icons**: Add your icons to `client/public/`
++# Start development server (frontend + backend)
++pnpm dev
+ 
+----
++# Type checking
++pnpm check
+ 
+-## 🎯 When to Stay Static vs Add Backend
++# Build for production
++pnpm build
+ 
+-**Stay Static When:**
+-- Content doesn't change often
+-- No user accounts needed
+-- Using third-party services for forms
+-- SEO is critical (with SSG)
++# Start production server
++pnpm start
++```
+ 
+-**Consider Adding Backend When:**
+-- Need user authentication
+-- Storing user data
+-- Complex business logic
+-- Real-time features
+-
+ ---
+ 
+-## 📚 Common Patterns
++## 🎨 UI Components
+ 
+-### Navigation
+-```tsx
+-// client/src/components/Navigation.tsx
+-export function Navigation() {
+-  return (
+-    <nav className="bg-white shadow-sm">
+-      <div className="container mx-auto px-4">
+-        <div className="flex justify-between items-center h-16">
+-          <a href="/" className="font-bold text-xl">YourSite</a>
+-          <div className="space-x-8">
+-            <a href="#features" className="hover:text-blue-600">Features</a>
+-            <a href="#about" className="hover:text-blue-600">About</a>
+-            <a href="#contact" className="hover:text-blue-600">Contact</a>
+-          </div>
+-        </div>
+-      </div>
+-    </nav>
+-  )
+-}
+-```
++This template includes shadcn/ui components. Use them for consistent styling:
+ 
+-### Loading States
+ ```tsx
+-// client/src/components/LoadingSpinner.tsx
+-export function LoadingSpinner() {
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Card } from "@/components/ui/card";
++
++function MyComponent() {
+   return (
+-    <div className="flex justify-center items-center p-8">
+-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+-    </div>
+-  )
++    <Card className="p-6">
++      <Input placeholder="Enter text..." />
++      <Button>Submit</Button>
++    </Card>
++  );
+ }
+ ```
+ 
+-### Error Boundaries
+-```tsx
+-// client/src/components/ErrorBoundary.tsx
+-import { Component, ReactNode } from 'react'
++---
+ 
+-export class ErrorBoundary extends Component<
+-  { children: ReactNode },
+-  { hasError: boolean }
+-> {
+-  state = { hasError: false }
+-  
+-  static getDerivedStateFromError() {
+-    return { hasError: true }
+-  }
+-  
+-  render() {
+-    if (this.state.hasError) {
+-      return (
+-        <div className="text-center py-20">
+-          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+-          <button 
+-            onClick={() => window.location.reload()}
+-            className="bg-blue-600 text-white px-6 py-2 rounded-lg"
+-          >
+-            Reload Page
+-          </button>
+-        </div>
+-      )
+-    }
+-    
+-    return this.props.children
+-  }
+-}
+-```
++## 📚 Next Steps
+ 
++### When to Add a Database
++
++Consider adding database capability when you need:
++- Data persistence across server restarts
++- Multiple users with separate data
++- Complex queries or relationships
++- Better performance for large datasets
++
++Use the `webdev_add_capability` tool to add database support when needed.
++
++### When to Add Authentication
++
++Consider adding user authentication when you need:
++- User-specific data
++- Access control and permissions
++- User profiles and settings
++- Secure API endpoints
++
++First add database capability, then use `webdev_add_capability` to add user authentication.
++
+ ---
+ 
+-Remember: **Keep it simple, keep it fast, keep it static!** 🚀
+\ No newline at end of file
++## 🔧 Configuration
++
++Environment variables:
++- `VITE_APP_ID` - Application identifier
++- `VITE_APP_TITLE` - Application title
++- `PORT` - Server port (default: 3000)
++
++---
++
++Remember: **Always start with the frontend!** Build what users will see first, then create the backend to support it. 🚀
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/client/src/App.tsx web-basic/client/src/App.tsx
+--- web-static/client/src/App.tsx	2025-10-02 16:02:56
++++ web-basic/client/src/App.tsx	2025-10-02 12:08:31
+@@ -4,6 +4,7 @@
+ import Home from "@/pages/Home";
+ import NotFound from "@/pages/NotFound";
+ import { Route, Switch } from "wouter";
++import Example from "./pages/Example";
+ 
+ /**
+  * Main application router
+@@ -14,6 +15,7 @@
+     <Switch>
+       <Route path={"/"} component={Home} />
+       <Route path={"/404"} component={NotFound} />
++      <Route path={"/example"} component={Example} />
+       {/* TODO: Add more routes here following the pattern:
+           <Route path={pageRoutes.newPage} component={NewPageComponent} /> */}
+ 
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/client/src/api.ts web-basic/client/src/api.ts
+--- web-static/client/src/api.ts	2025-10-02 12:27:08
++++ web-basic/client/src/api.ts	2025-10-02 12:08:31
+@@ -1,8 +1,64 @@
+ /**
+- * API client for static template
+- * This is a placeholder for when you add a backend server
++ * API Client
++ *
++ * Call endpoints directly from components:
++ *   import { callEndpoint } from '@/api'
++ *   import { endpoints } from '@shared/endpoints'
++ *
++ *   const result = await callEndpoint(endpoints.user.me, {})
+  */
+ 
+-export const api = {
+-  // Add your API methods here when you upgrade to include a server
+-};
+\ No newline at end of file
++import type { ApiEndpointDef } from "@shared/endpoints";
++import axios, { type AxiosRequestConfig, AxiosError } from "axios";
++import { z } from "zod";
++
++const client = axios.create({
++  baseURL: "/",
++  timeout: 10000,
++  headers: { "Content-Type": "application/json" },
++  withCredentials: true,
++});
++
++export class HttpError extends Error {
++  constructor(
++    public statusCode: number,
++    message: string
++  ) {
++    super(message);
++    this.name = "HttpError";
++  }
++}
++
++export async function callEndpoint<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++>(
++  endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema>,
++  data?: z.infer<TRequestSchema>
++): Promise<z.infer<TResponseSchema>> {
++  const method = endpoint.method.toLowerCase();
++
++  const config: AxiosRequestConfig = {
++    url: endpoint.route,
++    method: method,
++  };
++
++  if (method === "get" || method === "delete") {
++    config.params = data || {};
++  } else {
++    config.data = data || {};
++  }
++
++  try {
++    const response = await client(config);
++    return endpoint.schema.response.parse(response.data);
++  } catch (error) {
++    if (error instanceof AxiosError && error.response?.data?.error) {
++      throw new HttpError(
++        error.response.status || 500,
++        error.response.data.error
++      );
++    }
++    throw error;
++  }
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/client/src/const.ts web-basic/client/src/const.ts
+--- web-static/client/src/const.ts	2025-10-02 12:26:04
++++ web-basic/client/src/const.ts	2025-10-02 16:43:54
+@@ -1,22 +1,6 @@
+-// Function to generate login URL with runtime-determined redirect URI stored in state
+-export const getLoginUrl = () => {
+-  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
+-
+-  const appId = import.meta.env.VITE_APP_ID;
+-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+-  const state = btoa(redirectUri);
+-
+-  const url = new URL(`${oauthPortalUrl}/app-auth`);
+-  url.searchParams.set("appId", appId);
+-  url.searchParams.set("redirectUri", redirectUri);
+-  url.searchParams.set("state", state);
+-  url.searchParams.set("type", "signIn");
+-
+-  return url.toString();
+-};
+-
+-export const COOKIE_NAME = "app_session_id";
+-
+-export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
+-
++// API timeout configuration
+ export const AXIOS_TIMEOUT_MS = 10000;
++
++// Application constants
++export const APP_NAME = import.meta.env.VITE_APP_TITLE || 'Web App';
++export const APP_ID = import.meta.env.VITE_APP_ID || '';
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/client/src/pages/Example.tsx web-basic/client/src/pages/Example.tsx
+--- web-static/client/src/pages/Example.tsx	1970-01-01 07:30:00
++++ web-basic/client/src/pages/Example.tsx	2025-10-02 16:43:58
+@@ -0,0 +1,108 @@
++import { Button } from "@/components/ui/button";
++import { endpoints, EndpointsTypes } from "@shared/endpoints";
++import { callEndpoint, HttpError } from "@/api";
++import { useState } from "react";
++import { useToast } from "../hooks/use-toast";
++
++export default function Example() {
++  const [healthData, setHealthData] =
++    useState<EndpointsTypes.HeathCheckResponse | null>(null);
++  const [healthLoading, setHealthLoading] = useState(false);
++  const [exampleData, setExampleData] =
++    useState<EndpointsTypes.Example.HelloResponse | null>(null);
++  const [exampleLoading, setExampleLoading] = useState(false);
++  const { toast } = useToast();
++
++  const handleHealthCheck = async () => {
++    setHealthLoading(true);
++    try {
++      const data = await callEndpoint(endpoints.health.check, {
++        timestamp: Date.now(),
++        echo: "Hello from client!",
++      });
++      setHealthData(data);
++      toast({
++        title: "Health Check Success",
++        description: "The server is healthy!",
++      });
++    } catch (error) {
++      if (error instanceof HttpError) {
++        toast({
++          title: "Health Check Failed",
++          description: error.message,
++          variant: "destructive",
++        });
++      }
++    } finally {
++      setHealthLoading(false);
++    }
++  };
++
++  const handleExampleRequest = async () => {
++    setExampleLoading(true);
++    try {
++      const data = await callEndpoint(endpoints.example.hello, {
++        name: "React Client",
++      });
++      setExampleData(data);
++      toast({
++        title: "Example Request Success",
++        description: data.message,
++      });
++    } catch (error) {
++      if (error instanceof HttpError) {
++        toast({
++          title: "Example Request Failed",
++          description: error.message,
++          variant: "destructive",
++        });
++      }
++    } finally {
++      setExampleLoading(false);
++    }
++  };
++
++  return (
++    <div className="max-w-2xl mx-auto p-8">
++      <h1 className="text-3xl font-bold mb-8">API Example Page</h1>
++      
++      <div className="space-y-8">
++        {/* Health Check Section */}
++        <div className="border rounded-lg p-6">
++          <h2 className="text-xl font-semibold mb-4">Health Check</h2>
++          <Button onClick={handleHealthCheck} disabled={healthLoading}>
++            {healthLoading ? "Checking..." : "Check Server Health"}
++          </Button>
++          {healthData && (
++            <div className="mt-4 p-4 bg-green-50 rounded">
++              <p className="text-green-800">
++                Server is {healthData.ok ? "healthy" : "unhealthy"}
++              </p>
++              {healthData.echo && (
++                <p className="text-sm text-green-600 mt-2">
++                  Echo: {healthData.echo}
++                </p>
++              )}
++            </div>
++          )}
++        </div>
++
++        {/* Example API Section */}
++        <div className="border rounded-lg p-6">
++          <h2 className="text-xl font-semibold mb-4">Example API</h2>
++          <Button onClick={handleExampleRequest} disabled={exampleLoading}>
++            {exampleLoading ? "Loading..." : "Call Example API"}
++          </Button>
++          {exampleData && (
++            <div className="mt-4 p-4 bg-blue-50 rounded">
++              <p className="text-blue-800">{exampleData.message}</p>
++              <p className="text-sm text-blue-600 mt-2">
++                Timestamp: {new Date(exampleData.timestamp).toLocaleString()}
++              </p>
++            </div>
++          )}
++        </div>
++      </div>
++    </div>
++  );
++}
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/package.json web-basic/package.json
+--- web-static/package.json	2025-10-02 16:06:55
++++ web-basic/package.json	2025-10-02 16:37:42
+@@ -4,9 +4,9 @@
+   "type": "module",
+   "license": "MIT",
+   "scripts": {
+-    "dev": "vite --host",
+-    "build": "vite build",
+-    "preview": "vite preview --host",
++    "dev": "NODE_ENV=development tsx watch server/index.ts",
++    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
++    "start": "NODE_ENV=production node dist/index.js",
+     "check": "tsc --noEmit"
+   },
+   "dependencies": {
+@@ -41,9 +41,13 @@
+     "class-variance-authority": "^0.7.1",
+     "clsx": "^2.1.1",
+     "cmdk": "^1.1.1",
++    "cookie": "^1.0.2",
++    "dotenv": "^17.2.2",
+     "embla-carousel-react": "^8.6.0",
++    "express": "^4.21.2",
+     "framer-motion": "^12.23.22",
+     "input-otp": "^1.4.2",
++    "jose": "6.1.0",
+     "lucide-react": "^0.453.0",
+     "nanoid": "^5.1.5",
+     "react": "^18.3.1",
+@@ -62,15 +66,19 @@
+     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
+     "@tailwindcss/typography": "^0.5.15",
+     "@tailwindcss/vite": "^4.1.3",
++    "@types/express": "4.17.21",
+     "@types/node": "20.16.11",
+     "@types/react": "^18.3.11",
+     "@types/react-dom": "^18.3.1",
+     "@vitejs/plugin-react": "^4.3.2",
++    "add": "^2.0.6",
+     "autoprefixer": "^10.4.20",
++    "esbuild": "^0.25.0",
+     "pnpm": "^10.15.1",
+     "postcss": "^8.4.47",
+     "prettier": "^3.6.2",
+     "tailwindcss": "^3.4.17",
++    "tsx": "^4.19.1",
+     "typescript": "5.6.3",
+     "vite": "^5.4.19",
+     "vite-plugin-web-dev-previewer": "^1.0.6"
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/env.ts web-basic/server/env.ts
+--- web-static/server/env.ts	1970-01-01 07:30:00
++++ web-basic/server/env.ts	2025-10-02 16:43:54
+@@ -0,0 +1,5 @@
++export const ENV = {
++  appId: process.env.VITE_APP_ID ?? "",
++  isProduction: process.env.NODE_ENV === "production",
++  port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
++};
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/index.ts web-basic/server/index.ts
+--- web-static/server/index.ts	1970-01-01 07:30:00
++++ web-basic/server/index.ts	2025-09-30 19:22:22
+@@ -0,0 +1,52 @@
++import "dotenv/config";
++import express from "express";
++import { createServer } from "http";
++import net from "net";
++import { registerRoutes } from "./routes";
++import { serveStatic, setupVite } from "./vite";
++
++function isPortAvailable(port: number): Promise<boolean> {
++  return new Promise(resolve => {
++    const server = net.createServer();
++    server.listen(port, () => {
++      server.close(() => resolve(true));
++    });
++    server.on("error", () => resolve(false));
++  });
++}
++
++async function findAvailablePort(startPort: number = 3000): Promise<number> {
++  for (let port = startPort; port < startPort + 20; port++) {
++    if (await isPortAvailable(port)) {
++      return port;
++    }
++  }
++  throw new Error(`No available port found starting from ${startPort}`);
++}
++
++async function startServer() {
++  const app = express();
++  const server = createServer(app);
++  app.use(express.json());
++  // register api routes
++  registerRoutes(app);
++  // development mode uses Vite, production mode uses static files
++  if (process.env.NODE_ENV === "development") {
++    await setupVite(app, server);
++  } else {
++    serveStatic(app);
++  }
++
++  const preferredPort = parseInt(process.env.PORT || "3000");
++  const port = await findAvailablePort(preferredPort);
++
++  if (port !== preferredPort) {
++    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
++  }
++
++  server.listen(port, () => {
++    console.log(`Server running on http://localhost:${port}/`);
++  });
++}
++
++startServer().catch(console.error);
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/routes.ts web-basic/server/routes.ts
+--- web-static/server/routes.ts	1970-01-01 07:30:00
++++ web-basic/server/routes.ts	2025-10-02 16:38:34
+@@ -0,0 +1,31 @@
++import { endpoints, EndpointsTypes } from "@shared/endpoints";
++import { BadRequestError } from "@shared/errors";
++import type { Express } from "express";
++import { registerRoute } from "./routesHelper";
++
++export function registerRoutes(app: Express) {
++  // Health check endpoint (public)
++  registerRoute(app, endpoints.health.check, async params => {
++    if (params.timestamp < 0) {
++      throw BadRequestError("timestamp cannot be negative");
++    }
++
++    const response: EndpointsTypes.HeathCheckResponse = {
++      ok: true,
++    };
++
++    if (params.echo) {
++      response.echo = params.echo;
++    }
++
++    return response;
++  });
++
++  // Example API endpoint (public)
++  registerRoute(app, endpoints.example.hello, async params => {
++    return {
++      message: `Hello, ${params.name || 'World'}!`,
++      timestamp: Date.now()
++    };
++  });
++}
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/routesHelper.ts web-basic/server/routesHelper.ts
+--- web-static/server/routesHelper.ts	1970-01-01 07:30:00
++++ web-basic/server/routesHelper.ts	2025-10-02 16:43:54
+@@ -0,0 +1,81 @@
++import type { Express, Request, Response } from "express";
++import type { ZodSchema } from "zod";
++import { sdk } from "./sdk";
++
++/**
++ * Handler for routes that process requests and return responses.
++ */
++export type RouteHandler<
++  TRequestSchema extends ZodSchema,
++  TResponseSchema extends ZodSchema
++> = (
++  params: ReturnType<TRequestSchema["parse"]>,
++  req: Request,
++  res: Response
++) => Promise<ReturnType<TResponseSchema["parse"]>> | void;
++
++/**
++ * Register a route with automatic request/response validation.
++ */
++export function registerRoute<
++  TRequestSchema extends ZodSchema,
++  TResponseSchema extends ZodSchema
++>(
++  app: Express,
++  endpoint: {
++    method: "get" | "post" | "put" | "delete";
++    path: string;
++    schema: {
++      request: TRequestSchema;
++      response: TResponseSchema;
++    };
++  },
++  handler: RouteHandler<TRequestSchema, TResponseSchema>
++): void {
++  app[endpoint.method](endpoint.path, async (req, res) => {
++    try {
++      // Parse and validate request parameters
++      const rawParams = {
++        ...req.query,
++        ...req.body,
++        ...req.params,
++      };
++
++      // Validate parameters using endpoint schema
++      const params = endpoint.schema.request.parse(rawParams);
++
++      // Execute handler
++      const result = await handler(params, req, res);
++
++      // If handler explicitly handled the response, return
++      if (res.headersSent) {
++        return;
++      }
++
++      // Validate and send response
++      if (result !== undefined) {
++        const validatedResult = endpoint.schema.response.parse(result);
++        res.json(validatedResult);
++      } else {
++        res.status(204).send();
++      }
++    } catch (error: any) {
++      // Handle validation errors
++      if (error.name === "ZodError") {
++        res.status(400).json({
++          error: "Validation Error",
++          details: error.errors,
++        });
++        return;
++      }
++
++      // Handle other errors
++      const statusCode = error.statusCode || 500;
++      const message = error.message || "Internal Server Error";
++      
++      res.status(statusCode).json({
++        error: message,
++      });
++    }
++  });
++}
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/sdk.ts web-basic/server/sdk.ts
+--- web-static/server/sdk.ts	1970-01-01 07:30:00
++++ web-basic/server/sdk.ts	2025-10-02 16:43:54
+@@ -0,0 +1,59 @@
++import axios, { type AxiosInstance } from "axios";
++import { ENV } from "./env";
++import { AXIOS_TIMEOUT_MS } from "@/const";
++
++// Utility function
++const isNonEmptyString = (value: unknown): value is string =>
++  typeof value === "string" && value.length > 0;
++
++const createHttpClient = (): AxiosInstance =>
++  axios.create({
++    timeout: AXIOS_TIMEOUT_MS,
++    headers: {
++      "Content-Type": "application/json",
++    },
++  });
++
++/**
++ * SDK for server-side operations.
++ * Provides basic HTTP client and utility functions.
++ */
++export class SDK {
++  private readonly client: AxiosInstance;
++
++  constructor(client: AxiosInstance = createHttpClient()) {
++    this.client = client;
++  }
++
++  /**
++   * Get the configured app ID.
++   */
++  getAppId(): string {
++    return ENV.appId;
++  }
++
++  /**
++   * Check if running in production mode.
++   */
++  isProduction(): boolean {
++    return ENV.isProduction;
++  }
++
++  /**
++   * Make an HTTP GET request.
++   */
++  async get<T>(url: string, config?: any): Promise<T> {
++    const response = await this.client.get<T>(url, config);
++    return response.data;
++  }
++
++  /**
++   * Make an HTTP POST request.
++   */
++  async post<T>(url: string, data?: any, config?: any): Promise<T> {
++    const response = await this.client.post<T>(url, data, config);
++    return response.data;
++  }
++}
++
++export const sdk = new SDK();
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/server/vite.ts web-basic/server/vite.ts
+--- web-static/server/vite.ts	1970-01-01 07:30:00
++++ web-basic/server/vite.ts	2025-10-01 22:53:07
+@@ -0,0 +1,65 @@
++import express, { type Express } from "express";
++import fs from "fs";
++import { type Server } from "http";
++import { nanoid } from "nanoid";
++import path from "path";
++import { createServer as createViteServer } from "vite";
++import viteConfig from "../vite.config";
++
++export async function setupVite(app: Express, server: Server) {
++  const serverOptions = {
++    middlewareMode: true,
++    hmr: { server },
++    allowedHosts: true as const,
++  };
++
++  const vite = await createViteServer({
++    ...viteConfig,
++    configFile: false,
++    server: serverOptions,
++    appType: "custom",
++  });
++
++  app.use(vite.middlewares);
++  app.use("*", async (req, res, next) => {
++    const url = req.originalUrl;
++
++    try {
++      const clientTemplate = path.resolve(
++        import.meta.dirname,
++        "..",
++        "client",
++        "index.html"
++      );
++
++      // always reload the index.html file from disk incase it changes
++      let template = await fs.promises.readFile(clientTemplate, "utf-8");
++      template = template.replace(
++        `src="/src/main.tsx"`,
++        `src="/src/main.tsx?v=${nanoid()}"`
++      );
++      const page = await vite.transformIndexHtml(url, template);
++      res.status(200).set({ "Content-Type": "text/html" }).end(page);
++    } catch (e) {
++      vite.ssrFixStacktrace(e as Error);
++      next(e);
++    }
++  });
++}
++
++export function serveStatic(app: Express) {
++  const distPath = path.resolve(import.meta.dirname, "public");
++
++  if (!fs.existsSync(distPath)) {
++    throw new Error(
++      `Could not find the build directory: ${distPath}, make sure to build the client first`
++    );
++  }
++
++  app.use(express.static(distPath));
++
++  // fall through to index.html if the file doesn't exist
++  app.use("*", (_req, res) => {
++    res.sendFile(path.resolve(distPath, "index.html"));
++  });
++}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/shared/endpoints.ts web-basic/shared/endpoints.ts
+--- web-static/shared/endpoints.ts	1970-01-01 07:30:00
++++ web-basic/shared/endpoints.ts	2025-10-02 16:43:54
+@@ -0,0 +1,90 @@
++import { z } from "zod";
++
++// Type definition for API endpoint
++export type ApiEndpointDef<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++> = {
++  route: string;
++  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
++  schema: {
++    request: TRequestSchema;
++    response: TResponseSchema;
++  };
++};
++
++function createEndpoint<
++  TRequestSchema extends z.ZodType,
++  TResponseSchema extends z.ZodType,
++>(endpoint: ApiEndpointDef<TRequestSchema, TResponseSchema>) {
++  return endpoint;
++}
++
++export const API_BASE_URL = "/api";
++
++/**
++ * API Endpoint Definitions
++ *
++ * Add new endpoint groups here. Each endpoint defines:
++ * - route: API path
++ * - method: HTTP method (GET/POST/PUT/DELETE/PATCH)
++ * - schema: Zod schemas for request and response
++ */
++export const endpoints = {
++  health: {
++    check: createEndpoint({
++      route: `${API_BASE_URL}/health`,
++      method: "GET",
++      schema: {
++        request: z.object({
++          timestamp: z.number().default(() => Date.now()),
++          echo: z.string().optional(),
++        }),
++        response: z.object({
++          ok: z.boolean(),
++          echo: z.string().optional(),
++        }),
++      },
++    }),
++  },
++
++  example: {
++    hello: createEndpoint({
++      route: `${API_BASE_URL}/example/hello`,
++      method: "GET",
++      schema: {
++        request: z.object({
++          name: z.string().optional(),
++        }),
++        response: z.object({
++          message: z.string(),
++          timestamp: z.number(),
++        }),
++      },
++    }),
++  },
++};
++
++/**
++ * Type exports for endpoints
++ * 
++ * Import these types in your components:
++ * import type { EndpointsTypes } from "@shared/endpoints";
++ */
++export namespace EndpointsTypes {
++  export type HeathCheckRequest = z.infer<
++    typeof endpoints.health.check.schema.request
++  >;
++  export type HeathCheckResponse = z.infer<
++    typeof endpoints.health.check.schema.response
++  >;
++
++  export namespace Example {
++    export type HelloRequest = z.infer<
++      typeof endpoints.example.hello.schema.request
++    >;
++    export type HelloResponse = z.infer<
++      typeof endpoints.example.hello.schema.response
++    >;
++  }
++}
+\ No newline at end of file
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/shared/errors.ts web-basic/shared/errors.ts
+--- web-static/shared/errors.ts	1970-01-01 07:30:00
++++ web-basic/shared/errors.ts	2025-10-02 12:08:31
+@@ -0,0 +1,19 @@
++/**
++ * Base HTTP error class with status code.
++ * Throw this from route handlers to send specific HTTP errors.
++ */
++export class HttpError extends Error {
++  constructor(
++    public statusCode: number,
++    message: string
++  ) {
++    super(message);
++    this.name = "HttpError";
++  }
++}
++
++// Convenience constructors
++export const BadRequestError = (msg: string) => new HttpError(400, msg);
++export const UnauthorizedError = (msg: string) => new HttpError(401, msg);
++export const ForbiddenError = (msg: string) => new HttpError(403, msg);
++export const NotFoundError = (msg: string) => new HttpError(404, msg);
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/tsconfig.json web-basic/tsconfig.json
+--- web-static/tsconfig.json	2025-10-02 16:06:36
++++ web-basic/tsconfig.json	2025-10-01 17:34:29
+@@ -1,5 +1,5 @@
+ {
+-  "include": ["client/src/**/*"],
++  "include": ["client/src/**/*", "shared/**/*", "server/**/*"],
+   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+   "compilerOptions": {
+     "incremental": true,
+@@ -16,7 +16,8 @@
+     "baseUrl": ".",
+     "types": ["node", "vite/client"],
+     "paths": {
+-      "@/*": ["./client/src/*"]
++      "@/*": ["./client/src/*"],
++      "@shared/*": ["./shared/*"]
+     }
+   }
+ }
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/tsconfig.node.json web-basic/tsconfig.node.json
+--- web-static/tsconfig.node.json	2025-10-02 16:50:09
++++ web-basic/tsconfig.node.json	1970-01-01 07:30:00
+@@ -1,22 +0,0 @@
+-{
+-  "compilerOptions": {
+-    "target": "ES2022",
+-    "lib": ["ES2023"],
+-    "module": "ESNext",
+-    "skipLibCheck": true,
+-
+-    /* Bundler mode */
+-    "moduleResolution": "bundler",
+-    "allowImportingTsExtensions": true,
+-    "isolatedModules": true,
+-    "moduleDetection": "force",
+-    "noEmit": true,
+-
+-    /* Linting */
+-    "strict": true,
+-    "noUnusedLocals": true,
+-    "noUnusedParameters": true,
+-    "noFallthroughCasesInSwitch": true
+-  },
+-  "include": ["vite.config.ts"]
+-}
+diff -ruN --exclude=template.json --exclude=pnpm-lock.yaml --exclude=.gitignore --exclude=node_modules --exclude=.git web-static/vite.config.ts web-basic/vite.config.ts
+--- web-static/vite.config.ts	2025-10-02 16:06:36
++++ web-basic/vite.config.ts	2025-09-30 19:22:22
+@@ -9,6 +9,8 @@
+   resolve: {
+     alias: {
+       "@": path.resolve(import.meta.dirname, "client", "src"),
++      "@shared": path.resolve(import.meta.dirname, "shared"),
++      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+     },
+   },
+   envDir: path.resolve(import.meta.dirname),

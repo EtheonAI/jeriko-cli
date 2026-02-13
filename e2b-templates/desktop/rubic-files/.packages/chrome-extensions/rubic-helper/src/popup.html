@@ -1,0 +1,54 @@
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Manus Helper</title>
+    
+    <script type="module" crossorigin src="/popup.html.js"></script>
+  </head>
+  <style>
+    body {
+      background-color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      width: 300px;
+    }
+
+    #container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .click-box {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 2px;
+    }
+
+    .click-box input {
+      flex: 1;
+    }
+  </style>
+
+  <body>
+    <div id="container" style="visibility: hidden;">
+      <button id="extract">Extract Content</button>
+      <button id="mark">Mark Element</button>
+      <button id="clear">Clear Mark</button>
+      <button id="checkReady">Check Ready</button>
+      <div class="click-box">
+        <input id="element-id-input" type="text" placeholder="Id or 'x,y'. coords are visual only" autofocus>
+        <button id="click">Click</button>
+        <button id="locate">Locate</button>
+      </div>
+      <button id="extract-img">Extract Img</button>
+      <div class="find-box">
+        <input id="keyword-input" type="text" placeholder="Search keyword">
+        <button id="find">Find</button>
+      </div>
+    </div>
+  </body>
+
+</html>

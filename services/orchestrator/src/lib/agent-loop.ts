@@ -62,15 +62,20 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   }
 
   // Build tool context
+  const terminalServerUrl = sandboxId
+    ? `https://8330-${sandboxId}.${process.env.SANDBOX_DOMAIN || 'e2b.dev'}`
+    : '';
+
   const toolCtx: ToolContext = {
     sessionId,
     userId,
     userName,
     db: createNoopDb(),
     sandboxId: sandboxId || 'no-sandbox',
+    terminalServerUrl: terminalServerUrl || 'no-sandbox',
+    e2bSandboxId: sandboxId || '',
     ws: createNoopWs(),
     storage: createNoopStorage(),
-    processMap: new Map(),
   };
 
   // Build system prompt
@@ -134,6 +139,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     model,
     system: systemPrompt,
     messages,
+    maxOutputTokens: 16384,
     stopWhen: stepCountIs(maxSteps),
     tools,
     abortSignal,

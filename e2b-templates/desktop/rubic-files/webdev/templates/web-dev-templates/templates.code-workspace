@@ -1,0 +1,24 @@
+{
+	"folders": [
+		{
+			"path": "templates/web-static"
+		},
+		{
+			"path": "templates/web-db-user"
+		},
+		{
+			"path": "scripts"
+		},
+		{
+			"path": "alternative_readmes"
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"wouter"
+		],
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": "never"
+		}
+	}
+}

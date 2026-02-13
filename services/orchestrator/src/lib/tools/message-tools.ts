@@ -1,5 +1,5 @@
 /**
- * Message tools - Communication with the user
+ * Message tools — Communication with the user
  */
 
 import { tool } from 'ai';
@@ -9,30 +9,23 @@ import { uploadAttachments } from './executor/sandbox-executor.js';
 
 export function createMessageNotifyUserTool(ctx: ToolContext) {
   return tool({
-    description: `Send an informational or result message to the user without blocking execution.
-
-Use this for:
-- Progress updates during task execution
-- Final results delivery
-- Status notifications
-
-Do NOT use for:
-- Questions requiring user response (use message_ask_user)
-`,
+    description: `Send a message to user without requiring a response. Use for acknowledging receipt of messages, providing progress updates, reporting task completion, or explaining changes in approach.`,
     inputSchema: z.object({
-      text: z.string().describe('Message content in markdown format'),
+      text: z.string().describe('Message text to display to user'),
       attachments: z
-        .array(z.string())
+        .union([z.string(), z.array(z.string())])
         .optional()
-        .describe('Array of absolute file paths to attach from sandbox'),
+        .describe('List of attachments to show to user, can be file paths or URLs'),
     }),
     execute: async (params) => {
-      const { text, attachments = [] } = params;
+      const { text } = params;
+      const rawAttachments = params.attachments;
+      const attachmentList = rawAttachments
+        ? Array.isArray(rawAttachments) ? rawAttachments : [rawAttachments]
+        : [];
 
-      // Upload attachments to S3 if present
-      const uploadedAttachments = await uploadAttachments(ctx, attachments);
+      const uploadedAttachments = await uploadAttachments(ctx, attachmentList);
 
-      // Persist to database
       await ctx.db.insertMessage({
         sessionId: ctx.sessionId,
         role: 'assistant',
@@ -41,7 +34,6 @@ Do NOT use for:
         metadata: { attachments: uploadedAttachments },
       });
 
-      // Broadcast via WebSocket
       await ctx.ws.emit(ctx.sessionId, {
         type: 'message',
         role: 'assistant',
@@ -61,27 +53,26 @@ Do NOT use for:
 
 export function createMessageAskUserTool(ctx: ToolContext) {
   return tool({
-    description: `Ask the user a question and wait for their response. This BLOCKS execution.
-
-Use this only when:
-- You need user input to proceed
-- Multiple valid approaches exist and user preference matters
-- Critical decision requires user approval
-
-Avoid overusing - prefer making reasonable decisions autonomously.
-`,
+    description: `Ask user a question and wait for response. Use for requesting clarification, asking for confirmation, or gathering additional information.`,
     inputSchema: z.object({
-      text: z.string().describe('Question text in markdown format'),
-      attachments: z.array(z.string()).optional().describe('Array of absolute file paths to attach'),
-      suggested_action: z
-        .string()
+      text: z.string().describe('Question text to present to user'),
+      attachments: z
+        .union([z.string(), z.array(z.string())])
         .optional()
-        .describe('Your recommended answer/action for user consideration'),
+        .describe('List of question-related files or reference materials'),
+      suggest_user_takeover: z
+        .enum(['none', 'browser'])
+        .optional()
+        .describe('Suggested operation for user takeover'),
     }),
     execute: async (params) => {
-      const { text, attachments = [], suggested_action } = params;
+      const { text, suggest_user_takeover } = params;
+      const rawAttachments = params.attachments;
+      const attachmentList = rawAttachments
+        ? Array.isArray(rawAttachments) ? rawAttachments : [rawAttachments]
+        : [];
 
-      const uploadedAttachments = await uploadAttachments(ctx, attachments);
+      const uploadedAttachments = await uploadAttachments(ctx, attachmentList);
 
       await ctx.db.insertMessage({
         sessionId: ctx.sessionId,
@@ -90,7 +81,7 @@ Avoid overusing - prefer making reasonable decisions autonomously.
         contentType: 'ask',
         metadata: {
           attachments: uploadedAttachments,
-          suggestedAction: suggested_action,
+          suggestUserTakeover: suggest_user_takeover,
         },
       });
 
@@ -100,11 +91,10 @@ Avoid overusing - prefer making reasonable decisions autonomously.
         content: text,
         messageType: 'ask',
         attachments: uploadedAttachments,
-        suggestedAction: suggested_action,
+        suggestUserTakeover: suggest_user_takeover,
         timestamp: Date.now(),
       });
 
-      // Signal to orchestrator loop to pause
       return {
         status: 'waiting_for_user',
         message: 'Question sent. Awaiting user response.',

@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { abortSession, isSessionStreaming } from "./completions.js";
 
 type Role = "user" | "assistant" | "system";
 
@@ -221,5 +222,31 @@ export const sessionRoutes: FastifyPluginAsync = async (fastify) => {
       sessionId: session.sessionId,
       events: session.events.slice(-query.limit),
     };
+  });
+
+  // POST /v1/sessions/:id/stop — Stop a running completion for this session
+  fastify.post("/v1/sessions/:id/stop", async (request, reply) => {
+    const params = z.object({ id: z.string() }).parse(request.params);
+    const sessionId = params.id;
+
+    if (!isSessionStreaming(sessionId)) {
+      return reply.status(404).send({
+        error: "No active completion for this session",
+      });
+    }
+
+    const aborted = abortSession(sessionId);
+    const session = sessions.get(sessionId);
+    if (session) {
+      const now = new Date().toISOString();
+      session.events.push({
+        type: "session.stopped",
+        timestamp: now,
+        sessionId,
+      });
+      session.updatedAt = now;
+    }
+
+    return { success: aborted, sessionId };
   });
 };

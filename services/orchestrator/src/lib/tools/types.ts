@@ -13,6 +13,8 @@ export interface ToolContext {
 
   // E2B Sandbox
   sandboxId: string;
+  terminalServerUrl: string;
+  e2bSandboxId: string;
 
   // WebSocket
   ws: WebSocketClient;
@@ -21,9 +23,6 @@ export interface ToolContext {
   searchProvider?: SearchProvider;
   imageProvider?: ImageProvider;
   storage: StorageClient;
-
-  // State
-  processMap: Map<string, SandboxProcess>;
 }
 
 export interface DatabaseClient {
@@ -76,10 +75,8 @@ export interface SearchProvider {
 }
 
 export interface SearchParams {
-  type: 'info' | 'image' | 'news' | 'api' | 'data' | 'research';
-  queries: string[];
-  timeRange?: 'all' | 'past_day' | 'past_week' | 'past_month' | 'past_year';
-  maxResults: number;
+  query: string;
+  dateRange?: 'all' | 'past_hour' | 'past_day' | 'past_week' | 'past_month' | 'past_year';
 }
 
 export interface SearchResult {

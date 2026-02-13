@@ -198,7 +198,7 @@ function FileTreeItem({
 // IDE Tab Types
 // ============================================================================
 
-type IDEView = "preview" | "code" | "terminal" | "browser";
+type IDEView = "preview" | "code" | "editor" | "terminal" | "browser";
 
 const IDE_VIEWS: {
   id: IDEView;
@@ -207,6 +207,7 @@ const IDE_VIEWS: {
 }[] = [
   { id: "preview", label: "Preview", Icon: GlobeIcon },
   { id: "code", label: "Code", Icon: CodeIcon },
+  { id: "editor", label: "Editor", Icon: MonitorIcon },
   { id: "terminal", label: "Terminal", Icon: TerminalIcon },
   { id: "browser", label: "Desktop", Icon: MonitorIcon },
 ];
@@ -229,6 +230,7 @@ export default function TestIDEPage() {
     { id: "schema", label: "Push Drizzle schema to TiDB", status: "pending" },
     { id: "devserver", label: "Start Vite dev server", status: "pending" },
     { id: "preview", label: "Verify preview is live", status: "pending" },
+    { id: "codeserver", label: "Start code-server (VS Code)", status: "pending" },
     { id: "checkpoint", label: "Save git checkpoint", status: "pending" },
     { id: "stream", label: "Test LLM completion stream", status: "pending" },
   ]);
@@ -303,49 +305,64 @@ export default function TestIDEPage() {
   }, []);
 
   const createSandbox = useCallback(async (): Promise<string> => {
-    const res = await fetchJson(`${SANDBOX_API}`, {
+    // Create sandbox via orchestrator (registers in session cache for code-server)
+    const res = await fetchJson(`${ORCHESTRATOR}/api/sandbox/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template: "desktop" }),
+      body: JSON.stringify({
+        sessionId: "test-ide-session",
+        userId,
+      }),
     });
     if (!res.ok) throw new Error(`Create: ${res.status} ${JSON.stringify(res.data)}`);
-    const d = res.data?.data || res.data;
-    sandboxIdRef.current = d.id;
-    setSandboxIdDisplay(d.id);
-    e2bSandboxIdRef.current = d.e2bSandboxId;
+
+    const { sandboxId, e2bSandboxId, nekoUrl } = res.data as {
+      sandboxId: string;
+      e2bSandboxId: string | null;
+      nekoUrl: string | null;
+    };
+
+    sandboxIdRef.current = sandboxId;
+    e2bSandboxIdRef.current = e2bSandboxId;
+    setSandboxIdDisplay(sandboxId);
+
     setSandbox((prev) => ({
       ...prev,
-      sandboxId: d.id,
-      e2bSandboxId: d.e2bSandboxId,
-      nekoUrl: d.nekoUrl || null,
+      sandboxId,
+      e2bSandboxId,
+      nekoUrl: nekoUrl || null,
     }));
+
     await new Promise((r) => setTimeout(r, 5000));
-    return `Sandbox: ${d.id}\nE2B: ${d.e2bSandboxId}`;
-  }, []);
+    return `Sandbox: ${sandboxId}\nE2B: ${e2bSandboxId}`;
+  }, [userId]);
 
   const bootstrapNode = useCallback(async (): Promise<string> => {
     const sbx = sandboxIdRef.current;
     if (!sbx) throw new Error("No sandbox");
+
+    // Node.js 22 and pnpm are pre-installed in the E2B desktop template
     const res = await fetchJson(`${SANDBOX_API}/${sbx}/shell`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ command: "node --version && pnpm --version", timeout: 10000 }),
     });
+
+    if (!res.ok) {
+      throw new Error(`Shell request failed: ${res.status} - ${JSON.stringify(res.data)}`);
+    }
+
     const d = res.data?.data || res.data;
-    if (d?.stdout?.includes("v")) return d.stdout.trim();
-    // Install if not available
-    const install = await fetchJson(`${SANDBOX_API}/${sbx}/shell`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        command:
-          "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt-get install -y nodejs && sudo corepack enable && sudo corepack prepare pnpm@latest --activate && node --version && pnpm --version",
-        timeout: 120000,
-      }),
-    });
-    const id = install.data?.data || install.data;
-    if (id?.exitCode !== 0) throw new Error(id?.stderr || "Install failed");
-    return id.stdout?.trim() || "Installed";
+
+    if (!d || typeof d !== 'object') {
+      throw new Error(`Invalid response format: ${JSON.stringify(res.data)}`);
+    }
+
+    if (d.exitCode !== 0) {
+      throw new Error(`Command failed (exit ${d.exitCode}): ${d.stderr || d.stdout || "No output"}`);
+    }
+
+    return d.stdout?.trim() || "Node.js and pnpm verified";
   }, []);
 
   const initProject = useCallback(async (): Promise<string> => {
@@ -712,6 +729,71 @@ export default defineConfig({
     return JSON.stringify(res.data, null, 2);
   }, [userId]);
 
+  const startCodeServer = useCallback(async (): Promise<string> => {
+    const sbx = sandboxIdRef.current;
+    const e2bId = e2bSandboxIdRef.current;
+    if (!sbx || !e2bId) throw new Error("No sandbox");
+
+    // Manus 3-layer code-server architecture:
+    //   Layer 1: code-server with auth: password on port 8329 (random per-sandbox password)
+    //   Layer 2: Terminal server reverse proxy at /cs/ on port 8330 (auto auth-cookie injection)
+    //   Layer 3: E2B port proxy (unguessable URL)
+    //
+    // Flow: pre-auth → start code-server → terminal server logs in → proxy serves editor
+
+    // Step 1: Call orchestrator pre-auth (triggers code-server start + generates token)
+    const preAuthRes = await fetchJson(
+      `${ORCHESTRATOR}/api/code-server/pre-auth?sessionId=test-ide-session&userId=${userId}`
+    );
+    if (!preAuthRes.ok) {
+      throw new Error(`Pre-auth failed: ${JSON.stringify(preAuthRes.data)}`);
+    }
+
+    const { pre_auth_token, url: proxyUrl, ready } = preAuthRes.data as {
+      pre_auth_token: string;
+      url: string | null;
+      ready: boolean;
+    };
+
+    if (!ready) {
+      throw new Error("Code-server failed to start within timeout");
+    }
+
+    // Step 2: Validate token and get password (for debugging/verification)
+    const authRes = await fetchJson(`${ORCHESTRATOR}/api/code-server/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pre_auth_token,
+        sessionId: "test-ide-session",
+        userId,
+      }),
+    });
+    if (!authRes.ok) {
+      throw new Error(`Auth validation failed: ${JSON.stringify(authRes.data)}`);
+    }
+
+    const { password, proxy_path } = authRes.data as {
+      password: string;
+      proxy_path: string;
+    };
+
+    // Step 3: Use the terminal server proxy URL (port 8330 + /cs/ path)
+    // The reverse proxy in terminal-server.mjs handles code-server authentication
+    // by logging in once, caching the session cookie, and injecting it for all requests.
+    // No login page is ever shown to the user.
+    const csUrl = proxyUrl || `https://8330-${e2bId}.e2b.dev/cs/`;
+    setSandbox((prev) => ({ ...prev, codeServerUrl: csUrl }));
+
+    return [
+      `Code-server ready (auth: password)`,
+      `Password: ${password}`,
+      `Proxy path: ${proxy_path}`,
+      `URL: ${csUrl}`,
+      `Architecture: code-server:8329 ← terminal-server:8330/cs/ ← E2B proxy`,
+    ].join("\n");
+  }, [userId]);
+
   const testStream = useCallback(async (): Promise<string> => {
     const res = await fetch(`${ORCHESTRATOR}/v1/completions`, {
       method: "POST",
@@ -824,6 +906,7 @@ export default defineConfig({
       ["schema", pushSchema],
       ["devserver", startDevServer],
       ["preview", verifyPreview],
+      ["codeserver", startCodeServer],
       ["checkpoint", saveCheckpoint],
       ["stream", testStream],
     ];
@@ -831,7 +914,7 @@ export default defineConfig({
     for (const [id, fn] of fns) {
       const ok = await runStep(id, fn);
       // Non-fatal steps: schema (no TiDB), stream (no API key)
-      if (!ok && (id === "schema" || id === "stream")) continue;
+      if (!ok && (id === "schema" || id === "stream" || id === "codeserver")) continue;
       if (!ok && ["health", "sandbox", "bootstrap"].includes(id)) {
         for (const [skipId] of fns) {
           setSteps((prev) =>
@@ -858,6 +941,7 @@ export default defineConfig({
     writeFiles,
     startDevServer,
     verifyPreview,
+    startCodeServer,
     saveCheckpoint,
     testStream,
     loadFileTree,
@@ -1144,6 +1228,17 @@ export default defineConfig({
               Open
             </a>
           )}
+          {sandbox.codeServerUrl && activeView === "editor" && (
+            <a
+              href={sandbox.codeServerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mr-2 flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300"
+            >
+              <ExternalLinkIcon className="size-3" />
+              Open
+            </a>
+          )}
         </div>
 
         {/* View content */}
@@ -1237,6 +1332,28 @@ export default defineConfig({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── Editor view (code-server iframe) ────────────────────── */}
+          {activeView === "editor" && (
+            <div className="flex flex-1 flex-col">
+              {sandbox.codeServerUrl ? (
+                <iframe
+                  src={sandbox.codeServerUrl}
+                  className="h-full w-full border-0"
+                  allow="clipboard-read; clipboard-write"
+                  title="Code Editor"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center bg-[#0e1117]">
+                  <div className="text-center">
+                    <CodeIcon className="mx-auto mb-3 size-10 text-zinc-800" />
+                    <p className="text-sm text-zinc-600">Run setup to open VS Code</p>
+                    <p className="mt-1 text-[11px] text-zinc-700">code-server on port 8329</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

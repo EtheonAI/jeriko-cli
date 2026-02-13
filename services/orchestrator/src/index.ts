@@ -13,7 +13,16 @@ import { webdevRoutes } from "./routes/webdev.js";
 import { codeServerRoutes } from "./routes/code-server.js";
 import { forgeRoutes } from "./routes/forge.js";
 import { deployRoutes } from "./routes/deploy.js";
+import { sandboxRuntimeRoutes } from "./routes/sandbox-runtime.js";
+import { fileOpsRoutes } from "./routes/file-ops.js";
+import { emailRoutes } from "./routes/email.js";
+import { imageOpsRoutes } from "./routes/image-ops.js";
+import { slideRoutes } from "./routes/slides.js";
+import { skillRoutes } from "./routes/skills.js";
+import { sandboxManagerRoutes } from "./routes/sandbox-manager.js";
+import { apiProxyRoutes } from "./routes/apiproxy.js";
 import { startCleanupLoop, stopCleanupLoop } from "./lib/e2b-manager.js";
+import { initRsaSigning } from "./lib/rsa-auth.js";
 
 const logger = createLogger({ service: "orchestrator" });
 
@@ -65,6 +74,14 @@ export async function buildApp() {
   await app.register(codeServerRoutes);
   await app.register(forgeRoutes);
   await app.register(deployRoutes);
+  await app.register(sandboxRuntimeRoutes);
+  await app.register(fileOpsRoutes);
+  await app.register(emailRoutes);
+  await app.register(imageOpsRoutes);
+  await app.register(slideRoutes);
+  await app.register(skillRoutes);
+  await app.register(sandboxManagerRoutes);
+  await app.register(apiProxyRoutes);
 
   // Remove X-Frame-Options for neko-client routes — must be embeddable in iframes.
   // Helmet sets headers on raw response, so we must override at that level.
@@ -79,6 +96,12 @@ export async function buildApp() {
 }
 
 async function main() {
+  // 19 route plugins + shutdown listeners exceeds default 10
+  process.setMaxListeners(25);
+
+  // Initialize RSA signing for sandbox API calls
+  initRsaSigning();
+
   const { app, port, host } = await buildApp();
 
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, request, reply) => {
