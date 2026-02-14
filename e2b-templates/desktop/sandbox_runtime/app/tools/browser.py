@@ -1,5 +1,12 @@
 """Browser tool — Manus parity via Playwright CDP.
 
+Features (Manus parity):
+  - Element indexing via collectClickableElements.js
+  - Screenshot annotation with numbered bounding boxes (Pillow)
+  - Markdown extraction from page content
+  - Click/input by element index (resolves to coordinates)
+  - Shadow DOM traversal for element finding
+
 Endpoints:
   GET  /browser/status
   POST /browser/action
@@ -11,6 +18,8 @@ import asyncio
 import os
 import json
 import subprocess
+import time
+import random
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -23,12 +32,348 @@ router = APIRouter()
 HOME = os.getenv("HOME", "/home/ubuntu")
 CHROME_PATH = os.getenv("CHROME_INSTANCE_PATH", "/usr/bin/chromium-browser")
 CDP_PORT = 9222
+SCREENSHOTS_DIR = os.path.join(HOME, "screenshots")
 
 # Browser state
 _browser = None
 _context = None
 _page = None
 
+# ── Manus-parity JS scripts ──────────────────────────────────────────────────
+
+# Collects all clickable/interactive elements with indices and bounding boxes.
+# Adapted from Manus collectClickableElements.js.
+COLLECT_ELEMENTS_JS = """
+(args) => {
+  const startIndex = args.startIndex || 1;
+  const clickIdAttr = args.clickIdAttr || 'data-rubic_click_id';
+  const elements = [];
+  let index = startIndex;
+  const interactiveTags = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary', 'option', 'canvas']);
+  const interactiveRoles = new Set([
+    'button', 'tab', 'link', 'checkbox', 'menuitem',
+    'menuitemcheckbox', 'menuitemradio', 'radio',
+  ]);
+
+  const normalizeText = (value, limit = 120) => {
+    if (!value) return '';
+    const trimmed = value.replace(/\\s+/g, ' ').trim();
+    if (!trimmed) return '';
+    return trimmed.length > limit ? trimmed.slice(0, limit) + '...' : trimmed;
+  };
+
+  const buildDescription = (el, tagName, text, inputType) => {
+    const hints = [];
+    const idValue = normalizeText(el.id, 60);
+    if (idValue) hints.push('id:"' + idValue + '"');
+    const ariaLabel = normalizeText(el.getAttribute('aria-label') || el.title || '', 80);
+    if (ariaLabel) hints.push('hint:"' + ariaLabel + '"');
+    const placeholder = normalizeText(el.getAttribute('placeholder') || '', 80);
+    if (placeholder) hints.push('placeholder:"' + placeholder + '"');
+    const role = normalizeText(el.getAttribute('role') || '', 40);
+    if (role) hints.push('role:"' + role + '"');
+    if (inputType) hints.push('type:"' + inputType + '"');
+    const hintText = hints.length ? '{' + hints.join(',') + '}' : '{}';
+    return text ? tagName + ' ' + hintText + ' ' + text : tagName + ' ' + hintText;
+  };
+
+  const getPrimaryText = (el, tagName, inputType) => {
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      if (el.value) return normalizeText(el.value);
+      if (el.placeholder) return normalizeText(el.placeholder);
+    }
+    if (tagName === 'option' && el instanceof HTMLOptionElement) {
+      return normalizeText(el.innerText || el.textContent || '');
+    }
+    if (tagName === 'select' && el instanceof HTMLSelectElement) {
+      const options = Array.from(el.options || []).slice(0, 5);
+      const optionTexts = options.map((opt, idx) => {
+        const val = normalizeText(opt.textContent || '');
+        return val ? 'option#' + idx + ':' + val : null;
+      }).filter(Boolean);
+      if (optionTexts.length) return optionTexts.join(', ');
+    }
+    const text = normalizeText(el.innerText || el.textContent || '');
+    if (text) return text;
+    if (inputType === 'submit' || inputType === 'button') {
+      return normalizeText(el.value || 'submit');
+    }
+    return '';
+  };
+
+  const isProbablyClickable = (el, tagName) => {
+    if (interactiveTags.has(tagName)) return true;
+    const role = (el.getAttribute('role') || '').split(' ').map(r => r.trim().toLowerCase());
+    if (role.some(r => interactiveRoles.has(r))) return true;
+    const contentEditable = el.getAttribute('contenteditable');
+    if (contentEditable && contentEditable.toLowerCase() !== 'false') return true;
+    return false;
+  };
+
+  const isVisible = (el, rect) => {
+    if (!rect || rect.width <= 1 || rect.height <= 1) return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (style.pointerEvents === 'none') return false;
+    const opacity = parseFloat(style.opacity || '1');
+    if (!isNaN(opacity) && opacity <= 0) return false;
+    return true;
+  };
+
+  const seen = new Set();
+  const traverse = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      if (node instanceof HTMLElement && !seen.has(node)) {
+        seen.add(node);
+        const tagName = node.tagName.toLowerCase();
+        if (isProbablyClickable(node, tagName)) {
+          const rect = node.getBoundingClientRect();
+          if (isVisible(node, rect)) {
+            const inputTypeRaw = tagName === 'input' ? node.getAttribute('type') || 'text' : null;
+            const inputType = inputTypeRaw ? inputTypeRaw.toLowerCase() : null;
+            const text = getPrimaryText(node, tagName, inputType);
+            const description = buildDescription(node, tagName, text, inputType);
+            node.setAttribute(clickIdAttr, String(index));
+            elements.push({
+              index: index,
+              x: rect.x,
+              y: rect.y,
+              width: rect.width,
+              height: rect.height,
+              tag: tagName,
+              inputType: inputType,
+              description: description,
+            });
+            index += 1;
+          }
+        }
+        if (node.shadowRoot) traverse(node.shadowRoot);
+      }
+      node = walker.nextNode();
+    }
+  };
+  traverse(document);
+
+  return {
+    elements: elements,
+    nextIndex: index,
+    viewport: {
+      width: window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : null),
+      height: window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : null),
+      devicePixelRatio: window.devicePixelRatio || 1,
+    },
+  };
+}
+"""
+
+# Find element by click index (traverses shadow DOM + iframes).
+# Adapted from Manus findElementByClickId.js.
+FIND_ELEMENT_BY_INDEX_JS = """
+(index) => {
+  const attr = 'data-rubic_click_id';
+  const target = String(index);
+  const visited = new Set();
+  const MAX_DEPTH = 10;
+
+  const walk = (root, depth) => {
+    if (!root || depth > MAX_DEPTH) return null;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      if (node instanceof Element && node.getAttribute(attr) === target) {
+        const rect = node.getBoundingClientRect();
+        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, tag: node.tagName.toLowerCase() };
+      }
+      if (node instanceof Element && node.shadowRoot) {
+        const found = walk(node.shadowRoot, depth + 1);
+        if (found) return found;
+      }
+      node = walker.nextNode();
+    }
+    return null;
+  };
+
+  const searchFrames = (doc, depth) => {
+    if (!doc || depth > MAX_DEPTH) return null;
+    const foundInDoc = walk(doc, depth);
+    if (foundInDoc) return foundInDoc;
+    const frames = doc.querySelectorAll('iframe, frame');
+    for (const frame of frames) {
+      if (!(frame instanceof HTMLIFrameElement || frame instanceof HTMLFrameElement)) continue;
+      if (visited.has(frame)) continue;
+      visited.add(frame);
+      try {
+        const childDoc = frame.contentDocument;
+        const found = searchFrames(childDoc, depth + 1);
+        if (found) return found;
+      } catch (e) { continue; }
+    }
+    return null;
+  };
+
+  return searchFrames(document, 0);
+}
+"""
+
+# Simple markdown extraction — converts page content to markdown-like text.
+# Preserves headings, links, lists, and text structure.
+EXTRACT_MARKDOWN_JS = """
+(() => {
+  const body = document.body;
+  if (!body) return '';
+
+  const walk = (node, depth) => {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent.replace(/\\s+/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName.toLowerCase();
+    const style = window.getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden') return '';
+
+    // Skip script, style, noscript
+    if (['script', 'style', 'noscript', 'svg', 'path'].includes(tag)) return '';
+
+    let children = '';
+    for (const child of node.childNodes) {
+      children += walk(child, depth + 1);
+    }
+    children = children.trim();
+    if (!children && !['img', 'br', 'hr', 'input'].includes(tag)) return '';
+
+    switch (tag) {
+      case 'h1': return '\\n# ' + children + '\\n';
+      case 'h2': return '\\n## ' + children + '\\n';
+      case 'h3': return '\\n### ' + children + '\\n';
+      case 'h4': return '\\n#### ' + children + '\\n';
+      case 'h5': return '\\n##### ' + children + '\\n';
+      case 'h6': return '\\n###### ' + children + '\\n';
+      case 'p': return '\\n' + children + '\\n';
+      case 'br': return '\\n';
+      case 'hr': return '\\n---\\n';
+      case 'a': {
+        const href = node.getAttribute('href') || '';
+        if (href && !href.startsWith('javascript:')) {
+          return '[' + children + '](' + href + ')';
+        }
+        return children;
+      }
+      case 'img': {
+        const alt = node.getAttribute('alt') || '';
+        const src = node.getAttribute('src') || '';
+        return '![' + alt + '](' + src + ')';
+      }
+      case 'strong': case 'b': return '**' + children + '**';
+      case 'em': case 'i': return '*' + children + '*';
+      case 'code': return '`' + children + '`';
+      case 'pre': return '\\n```\\n' + children + '\\n```\\n';
+      case 'blockquote': return '\\n> ' + children.replace(/\\n/g, '\\n> ') + '\\n';
+      case 'li': return '- ' + children + '\\n';
+      case 'ul': case 'ol': return '\\n' + children;
+      case 'table': return '\\n' + children + '\\n';
+      case 'tr': return children + '\\n';
+      case 'td': case 'th': return children + ' | ';
+      case 'div': case 'section': case 'article': case 'main':
+        return '\\n' + children + '\\n';
+      default: return children;
+    }
+  };
+
+  let md = walk(body, 0);
+  // Clean up excessive newlines
+  md = md.replace(/\\n{3,}/g, '\\n\\n').trim();
+  // Truncate to 15000 chars
+  return md.length > 15000 ? md.slice(0, 15000) + '\\n...(truncated)' : md;
+})()
+"""
+
+
+# ── Screenshot annotation (Pillow) ───────────────────────────────────────────
+
+def annotate_screenshot(screenshot_path: str, elements: list[dict]) -> str:
+    """Draw numbered bounding boxes on screenshot for element indexing.
+
+    Returns the path to the annotated screenshot.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        logger.warning("Pillow not installed — skipping screenshot annotation")
+        return screenshot_path
+
+    if not elements or not os.path.exists(screenshot_path):
+        return screenshot_path
+
+    try:
+        img = Image.open(screenshot_path)
+        draw = ImageDraw.Draw(img)
+
+        # Try to load a small font, fall back to default
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
+        except (OSError, IOError):
+            font = ImageFont.load_default()
+
+        # Colors cycle for different elements
+        colors = [
+            (255, 0, 0),     # red
+            (0, 128, 255),   # blue
+            (0, 180, 0),     # green
+            (255, 128, 0),   # orange
+            (180, 0, 255),   # purple
+            (0, 180, 180),   # teal
+        ]
+
+        for elem in elements:
+            idx = elem.get("index", 0)
+            x = elem.get("x", 0)
+            y = elem.get("y", 0)
+            w = elem.get("width", 0)
+            h = elem.get("height", 0)
+
+            if w <= 0 or h <= 0:
+                continue
+
+            color = colors[idx % len(colors)]
+
+            # Draw bounding box
+            draw.rectangle(
+                [x, y, x + w, y + h],
+                outline=color,
+                width=2,
+            )
+
+            # Draw index label (small box with number)
+            label = str(idx)
+            label_bbox = draw.textbbox((0, 0), label, font=font)
+            label_w = label_bbox[2] - label_bbox[0] + 6
+            label_h = label_bbox[3] - label_bbox[1] + 4
+
+            # Position label at top-left of bounding box
+            lx = max(0, x)
+            ly = max(0, y - label_h - 1)
+            if ly < 0:
+                ly = y  # Place inside if no room above
+
+            draw.rectangle([lx, ly, lx + label_w, ly + label_h], fill=color)
+            draw.text((lx + 3, ly + 2), label, fill=(255, 255, 255), font=font)
+
+        # Save annotated version
+        annotated_path = screenshot_path.replace(".png", "_annotated.png").replace(".webp", "_annotated.webp")
+        if annotated_path == screenshot_path:
+            annotated_path = screenshot_path + ".annotated.png"
+        img.save(annotated_path)
+        return annotated_path
+    except Exception as e:
+        logger.warning("Screenshot annotation failed: %s", e)
+        return screenshot_path
+
+
+# ── Browser lifecycle ─────────────────────────────────────────────────────────
 
 async def _get_playwright():
     """Lazy-import playwright to avoid startup cost if browser isn't used."""
@@ -78,19 +423,119 @@ async def _ensure_browser():
     return _page
 
 
+# ── Screenshot + element collection ──────────────────────────────────────────
+
 async def _take_screenshot() -> str | None:
     """Take a screenshot and return the file path."""
     if _page is None:
         return None
     try:
-        path = os.path.join(HOME, "screenshots", "screenshot.png")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+        ts = int(time.time())
+        rand = random.randint(1000, 9999)
+        path = os.path.join(SCREENSHOTS_DIR, f"screenshot_{ts}_{rand}.png")
         await _page.screenshot(path=path, full_page=False)
         return path
     except Exception as e:
         logger.warning("Screenshot failed: %s", e)
         return None
 
+
+async def _collect_elements() -> dict[str, Any]:
+    """Collect all clickable elements from the page with indices.
+
+    Returns dict with 'elements' list and 'viewport' info.
+    """
+    if _page is None:
+        return {"elements": [], "viewport": {}}
+    try:
+        result = await _page.evaluate(
+            COLLECT_ELEMENTS_JS,
+            {"startIndex": 1, "clickIdAttr": "data-rubic_click_id"},
+        )
+        return result
+    except Exception as e:
+        logger.warning("Element collection failed: %s", e)
+        return {"elements": [], "viewport": {}}
+
+
+async def _find_element_by_index(index: int) -> dict[str, Any] | None:
+    """Find element center coordinates by its click index.
+
+    Returns {x, y, tag} or None.
+    """
+    if _page is None:
+        return None
+    try:
+        result = await _page.evaluate(FIND_ELEMENT_BY_INDEX_JS, index)
+        return result
+    except Exception as e:
+        logger.warning("Find element by index %d failed: %s", index, e)
+        return None
+
+
+async def _extract_markdown() -> str:
+    """Extract page content as markdown."""
+    if _page is None:
+        return ""
+    try:
+        result = await _page.evaluate(EXTRACT_MARKDOWN_JS)
+        return result or ""
+    except Exception as e:
+        logger.warning("Markdown extraction failed: %s", e)
+        # Fallback to innerText
+        try:
+            text = await _page.evaluate("document.body?.innerText || ''")
+            return text[:10000] if text else ""
+        except Exception:
+            return ""
+
+
+async def _build_page_snapshot() -> dict[str, Any]:
+    """Build a full page snapshot: elements, screenshot (annotated), markdown.
+
+    This is the core function called by browser_view and browser_navigate.
+    Returns Manus-parity response.
+    """
+    page = await _ensure_browser()
+    title = await page.title()
+    url = page.url
+
+    # Collect elements, take screenshot, extract markdown in parallel
+    element_data, screenshot_path, markdown = await asyncio.gather(
+        _collect_elements(),
+        _take_screenshot(),
+        _extract_markdown(),
+    )
+
+    elements = element_data.get("elements", [])
+    viewport = element_data.get("viewport", {})
+
+    # Annotate screenshot with element indices
+    annotated_path = screenshot_path
+    if screenshot_path and elements:
+        annotated_path = annotate_screenshot(screenshot_path, elements)
+
+    # Build element descriptions for LLM (compact text format)
+    element_descriptions = []
+    for elem in elements:
+        desc = elem.get("description", "")
+        idx = elem.get("index", 0)
+        element_descriptions.append(f"[{idx}] {desc}")
+
+    return {
+        "ok": True,
+        "title": title,
+        "url": url,
+        "markdown": markdown[:15000],
+        "elements": element_descriptions,
+        "element_count": len(elements),
+        "screenshot": annotated_path or screenshot_path,
+        "viewport": viewport,
+    }
+
+
+# ── Action handlers ───────────────────────────────────────────────────────────
 
 async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
     """Route browser action to appropriate handler."""
@@ -102,60 +547,66 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
             return {"error": "url is required"}
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            title = await page.title()
-            current_url = page.url
-            screenshot = await _take_screenshot()
-            return {
-                "ok": True,
-                "title": title,
-                "url": current_url,
-                "screenshot": screenshot,
-            }
+            # Build full page snapshot (elements + annotated screenshot + markdown)
+            return await _build_page_snapshot()
         except Exception as e:
             return {"error": str(e)}
 
     elif action == "view":
-        page = await _ensure_browser()
         try:
-            title = await page.title()
-            url = page.url
-            # Get page content (text only)
-            content = await page.evaluate("document.body?.innerText || ''")
-            screenshot = await _take_screenshot()
-            return {
-                "ok": True,
-                "title": title,
-                "url": url,
-                "content": content[:10000] if content else "",
-                "screenshot": screenshot,
-            }
+            return await _build_page_snapshot()
         except Exception as e:
             return {"error": str(e)}
 
     elif action == "click":
         page = await _ensure_browser()
+        index = body.get("index")
         coord = body.get("coordinate")
+
+        # Resolve index to coordinates if provided
+        if index is not None and coord is None:
+            found = await _find_element_by_index(int(index))
+            if found:
+                coord = [found["x"], found["y"]]
+            else:
+                return {"error": f"Element with index {index} not found"}
+
         if not coord or len(coord) < 2:
-            return {"error": "coordinate [x, y] is required"}
+            return {"error": "coordinate [x, y] or index is required"}
+
         try:
             await page.mouse.click(coord[0], coord[1])
             await asyncio.sleep(0.5)
-            screenshot = await _take_screenshot()
-            return {"ok": True, "screenshot": screenshot}
+            # Return updated page state
+            return await _build_page_snapshot()
         except Exception as e:
             return {"error": str(e)}
 
     elif action == "input":
         page = await _ensure_browser()
         text = body.get("text", "")
+        press_enter = body.get("press_enter", False)
+        index = body.get("index")
         coord = body.get("coordinate")
+
+        # Resolve index to coordinates if provided
+        if index is not None and coord is None:
+            found = await _find_element_by_index(int(index))
+            if found:
+                coord = [found["x"], found["y"]]
+            else:
+                return {"error": f"Element with index {index} not found"}
+
         if coord and len(coord) >= 2:
             await page.mouse.click(coord[0], coord[1])
             await asyncio.sleep(0.2)
+
         try:
             # Clear existing text and type new
             await page.keyboard.press("Control+a")
             await page.keyboard.type(text)
+            if press_enter:
+                await page.keyboard.press("Enter")
             await asyncio.sleep(0.3)
             screenshot = await _take_screenshot()
             return {"ok": True, "screenshot": screenshot}
@@ -175,8 +626,8 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
             y = coord[1] if coord and len(coord) >= 2 else 360
             await page.mouse.wheel(0, delta)
             await asyncio.sleep(0.3)
-            screenshot = await _take_screenshot()
-            return {"ok": True, "screenshot": screenshot}
+            # Return full snapshot after scroll so LLM sees new elements
+            return await _build_page_snapshot()
         except Exception as e:
             return {"error": str(e)}
 
@@ -206,10 +657,41 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
 
     elif action == "select_option":
         page = await _ensure_browser()
+        index = body.get("index")
         selector = body.get("selector", "")
         value = body.get("value", "")
+
+        # If index is provided, resolve to a CSS selector
+        if index is not None and not selector:
+            found = await _find_element_by_index(int(index))
+            if found:
+                # Click the select element first, then use page.select_option
+                coord = [found["x"], found["y"]]
+                await page.mouse.click(coord[0], coord[1])
+                await asyncio.sleep(0.2)
+                # Try to select by option index
+                try:
+                    select_el = await page.evaluate(
+                        FIND_ELEMENT_BY_INDEX_JS, int(index)
+                    )
+                    if select_el:
+                        await page.evaluate(
+                            f"""(idx) => {{
+                                const el = document.querySelector('[data-rubic_click_id="' + idx + '"]');
+                                if (el && el.tagName.toLowerCase() === 'select' && el.options[{int(value)}]) {{
+                                    el.value = el.options[{int(value)}].value;
+                                    el.dispatchEvent(new Event('change'));
+                                }}
+                            }}""",
+                            str(index),
+                        )
+                except Exception:
+                    pass
+                screenshot = await _take_screenshot()
+                return {"ok": True, "screenshot": screenshot}
+
         if not selector:
-            return {"error": "selector is required"}
+            return {"error": "selector or index is required"}
         try:
             await page.select_option(selector, value)
             await asyncio.sleep(0.3)
@@ -253,6 +735,8 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
     else:
         return {"error": f"Unknown browser action: {action}"}
 
+
+# ── HTTP endpoints ────────────────────────────────────────────────────────────
 
 @router.get("/browser/status")
 async def browser_status() -> dict[str, Any]:

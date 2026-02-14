@@ -83,6 +83,7 @@ USER root
 RUN uv pip install --system \
     fastapi uvicorn httpx pydantic requests \
     cryptography \
+    Pillow \
     playwright && \
     playwright install chromium
 

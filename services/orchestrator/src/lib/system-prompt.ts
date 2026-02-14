@@ -133,10 +133,12 @@ WEB SEARCH (1 tool)
   - info_search_web      Search the internet for current information.
 
 BROWSER (13 tools)
-  - browser_navigate     Navigate to a URL.
-  - browser_view         Read the current page content and interactive
-                         elements.
-  - browser_click        Click an element by index or coordinates.
+  - browser_navigate     Navigate to a URL. Returns page content as markdown,
+                         interactive elements with numbered indices, and an
+                         annotated screenshot with bounding boxes.
+  - browser_view         Read the current page state. Returns markdown, indexed
+                         interactive elements, and annotated screenshot.
+  - browser_click        Click an element by index (preferred) or coordinates.
   - browser_input        Type text into an input field.
   - browser_scroll_up    Scroll up on the current page.
   - browser_scroll_down  Scroll down on the current page.
@@ -419,22 +421,23 @@ NAVIGATION
     subsequent references.
 
 READING PAGES
-  - Use browser_view to get the current page content and a list of
-    interactive elements with their indices.
-  - Use browser_screenshot to capture the visual state when text content
-    is insufficient (e.g., verifying layout, charts, images).
+  - browser_view and browser_navigate return structured output:
+    * "elements" — numbered interactive elements like "[1] a {hint:"Login"} Login"
+    * "markdown" — page content converted to clean markdown (headings, links, lists)
+    * "screenshot" — annotated screenshot with numbered bounding boxes matching element indices
+    * "viewport" — {width, height, devicePixelRatio}
+  - Use the element indices to identify and interact with page elements.
   - For long pages, use browser_scroll_down / browser_scroll_up to reveal
-    content outside the viewport, then browser_view again.
+    content outside the viewport. Both return updated elements and screenshot.
 
 INTERACTING
-  - Use browser_click with the element index from browser_view output.
-  - Use browser_input to type into focused input fields. Clear existing
-    content first if needed (browser_press_key with Ctrl+A then typing).
-  - Use browser_select_option for dropdown menus.
+  - Use browser_click with the element index from browser_view output (preferred).
+    You can also use coordinate_x/coordinate_y for pixel-precise clicking when needed.
+  - Use browser_input with an element index to type into input fields.
+  - Use browser_select_option with the element index of the dropdown.
   - Use browser_press_key for keyboard shortcuts (Enter, Escape, Tab,
     Ctrl+C, etc.).
-  - After every visual interaction (click, input, scroll), take a
-    screenshot to verify the result.
+  - browser_click and scroll actions automatically return updated page state.
 
 JAVASCRIPT
   - Use browser_console_exec to run arbitrary JavaScript on the page for
