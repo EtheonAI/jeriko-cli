@@ -59,10 +59,14 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // Build tool context
   // terminalServerUrl uses the e2b sandbox ID for E2B port proxying
   // Format: https://{port}-{e2b_sandbox_id}.e2b.dev
+  // LOCAL_SANDBOX_URL override: use local Docker container for testing
+  const localSandboxUrl = process.env.LOCAL_SANDBOX_URL || "";
   const sandboxIdForUrl = e2bSandboxId || sandboxId;
-  const terminalServerUrl = sandboxIdForUrl
-    ? `https://8330-${sandboxIdForUrl}.${process.env.SANDBOX_DOMAIN || "e2b.dev"}`
-    : "";
+  const terminalServerUrl = localSandboxUrl
+    ? localSandboxUrl
+    : sandboxIdForUrl
+      ? `https://8330-${sandboxIdForUrl}.${process.env.SANDBOX_DOMAIN || "e2b.dev"}`
+      : "";
 
   const toolCtx: ToolContext = {
     sessionId,

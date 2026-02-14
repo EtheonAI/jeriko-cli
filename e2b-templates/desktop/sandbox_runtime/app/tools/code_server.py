@@ -22,16 +22,33 @@ router = APIRouter()
 HOME = os.getenv("HOME", "/home/ubuntu")
 CS_PORT = 8329
 TRIGGER_FILE = "/tmp/start_code_server"
+CS_CONFIG_PATH = os.path.join(HOME, ".config", "code-server", "config.yaml")
 
 # Pre-auth token storage
 _cs_tokens: dict[str, dict[str, Any]] = {}
 _cs_auth_cookie: str | None = None
 
 
+def _get_cs_password() -> str:
+    """Get code-server password from env var or config file."""
+    from_env = os.getenv("CODE_SERVER_PASSWORD")
+    if from_env:
+        return from_env
+    # Read from config.yaml
+    try:
+        with open(CS_CONFIG_PATH, "r") as f:
+            for line in f:
+                if line.startswith("password:"):
+                    return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return "rubic-default"
+
+
 async def _login_to_code_server() -> None:
     """Log into code-server and cache the auth cookie."""
     global _cs_auth_cookie
-    password = os.getenv("CODE_SERVER_PASSWORD", "rubic-default")
+    password = _get_cs_password()
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -62,7 +79,7 @@ async def cs_pre_auth() -> dict[str, Any]:
     # Generate pre-auth token
     import secrets
     token = f"cs_{int(time.time())}_{secrets.token_hex(4)}"
-    password = os.getenv("CODE_SERVER_PASSWORD", "rubic-default")
+    password = _get_cs_password()
     _cs_tokens[token] = {"password": password, "createdAt": time.time()}
 
     # Cleanup expired tokens

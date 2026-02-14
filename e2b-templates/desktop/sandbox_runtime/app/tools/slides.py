@@ -27,11 +27,18 @@ async def slide_action(action: str, request: Request) -> dict[str, Any]:
     slides_json = os.path.join(slides_dir, "slides.json")
 
     if action == "init-project":
+        # Use app_name for project path if provided
+        app_name = body.get("app_name")
+        if app_name:
+            project_path = os.path.join(HOME, app_name)
+            slides_dir = os.path.join(project_path, "slides")
+            slides_json = os.path.join(slides_dir, "slides.json")
         os.makedirs(slides_dir, exist_ok=True)
+        slide_title = body.get("title", "Title Slide")
         initial = [
             {
                 "id": 1,
-                "title": "Title Slide",
+                "title": slide_title,
                 "content": "Welcome",
                 "notes": "",
                 "background": "#ffffff",
@@ -52,9 +59,19 @@ async def slide_action(action: str, request: Request) -> dict[str, Any]:
         try:
             with open(slides_json) as f:
                 data = json.load(f)
-            slide = next((s for s in data if s["id"] == body.get("slideId")), None)
-            if slide:
-                slide.update(body.get("changes", {}))
+            # Accept both slideId (Manus) and slide_id (orchestrator snake_case)
+            slide_id = body.get("slideId") or body.get("slide_id")
+            slide = next((s for s in data if str(s["id"]) == str(slide_id)), None)
+            if slide is None:
+                return {"error": f"Slide {slide_id} not found"}
+            # Accept both nested changes object and flat fields
+            changes = body.get("changes", {})
+            if not changes:
+                # Build changes from flat fields (orchestrator sends flat)
+                for key in ("title", "content", "background", "order"):
+                    if key in body:
+                        changes[key] = body[key]
+            slide.update(changes)
             with open(slides_json, "w") as f:
                 json.dump(data, f, indent=2)
             return {"ok": True, "slide": slide}
@@ -65,9 +82,12 @@ async def slide_action(action: str, request: Request) -> dict[str, Any]:
         try:
             with open(slides_json) as f:
                 data = json.load(f)
-            slide = next((s for s in data if s["id"] == body.get("slideId")), None)
-            if slide:
-                slide["notes"] = body.get("notes", "")
+            # Accept both slideId and slide_id
+            slide_id = body.get("slideId") or body.get("slide_id")
+            slide = next((s for s in data if str(s["id"]) == str(slide_id)), None)
+            if slide is None:
+                return {"error": f"Slide {slide_id} not found"}
+            slide["notes"] = body.get("notes", "")
             with open(slides_json, "w") as f:
                 json.dump(data, f, indent=2)
             return {"ok": True}

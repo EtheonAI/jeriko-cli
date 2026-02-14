@@ -20,12 +20,28 @@ HOME = os.getenv("HOME", "/home/ubuntu")
 
 @router.post("/skills/sync-skills")
 @router.post("/sync-skills")
-async def sync_skills() -> dict[str, Any]:
+async def sync_skills(request: Request) -> dict[str, Any]:
+    # Read body for optional skill_ids filter
+    body: dict[str, Any] = {}
     try:
-        subprocess.run(
-            f"cp -r /opt/.rubic/skills/* {HOME}/skills/ 2>/dev/null || true",
-            shell=True, timeout=10,
-        )
+        body = await request.json()
+    except Exception:
+        pass
+    skill_ids = body.get("skill_ids") or body.get("skillIds")
+    try:
+        if skill_ids and isinstance(skill_ids, list):
+            # Selective sync — only copy specified skills
+            for sid in skill_ids:
+                safe_name = str(sid).replace("/", "").replace("..", "")
+                subprocess.run(
+                    f"cp -r /opt/.rubic/skills/{safe_name} {HOME}/skills/ 2>/dev/null || true",
+                    shell=True, timeout=10,
+                )
+        else:
+            subprocess.run(
+                f"cp -r /opt/.rubic/skills/* {HOME}/skills/ 2>/dev/null || true",
+                shell=True, timeout=10,
+            )
     except Exception:
         pass
     skills: list[str] = []

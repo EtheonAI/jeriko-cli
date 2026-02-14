@@ -78,8 +78,16 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         abortSignal: abortController.signal,
       });
 
-      // Set SSE headers — must include CORS manually since reply.raw bypasses Fastify
-      const origin = request.headers.origin || "http://localhost:3000";
+      // Set SSE headers — must include CORS manually since reply.raw bypasses Fastify.
+      // Use the request Origin if it matches ALLOWED_ORIGINS, otherwise use the first allowed origin.
+      const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean);
+      const requestOrigin = request.headers.origin || "";
+      const origin = allowedOrigins.includes(requestOrigin)
+        ? requestOrigin
+        : allowedOrigins[0] || "http://localhost:3000";
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",

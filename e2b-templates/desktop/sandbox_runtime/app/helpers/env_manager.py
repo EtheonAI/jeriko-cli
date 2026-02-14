@@ -47,7 +47,11 @@ def set_env_vars(env_vars: dict[str, str]) -> list[str]:
 
     updated_keys: list[str] = []
     for key, value in env_vars.items():
-        export_line = f'export {key}="{value}"'
+        # Coerce to string — protects against non-string values from JSON
+        str_value = str(value) if not isinstance(value, str) else value
+        # Escape backslashes, double quotes, and dollar signs for valid bash
+        escaped = str_value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+        export_line = f'export {key}="{escaped}"'
         # Find and replace existing line, or append
         found = False
         for i, line in enumerate(lines):
@@ -58,7 +62,7 @@ def set_env_vars(env_vars: dict[str, str]) -> list[str]:
         if not found:
             lines.append(export_line)
         # Also update process env
-        os.environ[key] = value
+        os.environ[key] = str_value
         updated_keys.append(key)
 
     USER_ENV_PATH.write_text("\n".join(lines) + "\n")

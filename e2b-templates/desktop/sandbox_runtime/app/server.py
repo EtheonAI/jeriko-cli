@@ -1,21 +1,23 @@
-"""FastAPI app with RSA auth middleware — Manus parity sandbox runtime.
+"""FastAPI app with RSA auth — Manus parity sandbox runtime.
 
 External port 8330 (0.0.0.0) — orchestrator calls this (RSA-signed)
 Internal port 9330 (127.0.0.1) — in-sandbox processes call this (no auth)
+
+Auth: Uses FastAPI Depends() for RSA signature verification (Manus pattern).
+Starlette caches request.body() in _body after first read, so the dependency
+reads and verifies the body, and the route handler can re-read it for free.
 """
 
-import json
 import os
 import time
 from typing import Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from .logger import get_logger
 from .router import register_routes
-from .helpers.rsa_auth import init_rsa, is_rsa_enabled, verify_rsa_signature
+from .helpers.rsa_auth import init_rsa, is_rsa_enabled, verify_body_signature
 from .helpers.env_manager import set_env_vars, write_secret
 from ..runtime_version import VERSION
 
@@ -25,6 +27,69 @@ logger = get_logger("server")
 _initialized = False
 _init_data: dict[str, Any] = {}
 
+# Paths that skip RSA auth (health/version/docs)
+_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json"}
+
+
+async def rsa_auth_dependency(request: Request) -> None:
+    """FastAPI dependency — verifies RSA signature on every request.
+
+    Manus pattern: X-Sandbox-Api-Signature-V2 header contains base64(RSA-sign(body)).
+    Starlette caches request.body() in request._body after the first call,
+    so downstream handlers can call request.json() / request.body() without issue.
+    """
+    if request.url.path in _SKIP_AUTH_PATHS:
+        return
+    if not is_rsa_enabled():
+        return
+
+    sig_header = request.headers.get("X-Sandbox-Api-Signature-V2")
+    if not sig_header:
+        raise HTTPException(status_code=401, detail="Missing signature header")
+
+    body = await request.body()  # Starlette caches this in request._body
+
+    try:
+        verify_body_signature(sig_header, body)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+
+class LoggingMiddleware:
+    """Pure ASGI middleware for request logging.
+
+    Wraps send to capture the HTTP response status code.
+    Does NOT touch receive/body — safe to use with any other middleware.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        start = time.time()
+        status_code = 0
+
+        async def logging_send(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 0)
+            await send(message)
+
+        try:
+            await self.app(scope, receive, logging_send)
+        except Exception:
+            status_code = 500
+            raise
+        finally:
+            duration = (time.time() - start) * 1000
+            method = scope.get("method", "?")
+            path = scope.get("path", "?")
+            logger.info("%s %s → %d (%.1fms)", method, path, status_code, duration)
+
 
 def create_app(internal: bool = False) -> FastAPI:
     """Create the FastAPI application.
@@ -33,7 +98,12 @@ def create_app(internal: bool = False) -> FastAPI:
         internal: If True, creates the internal-only app (port 9330, no RSA auth).
     """
     title = "Rubic Sandbox Runtime (internal)" if internal else "Rubic Sandbox Runtime"
-    app = FastAPI(title=title, version=VERSION)
+
+    # External app: RSA auth dependency on every route (Manus pattern)
+    # Internal app: no auth
+    deps = [Depends(rsa_auth_dependency)] if not internal else []
+
+    app = FastAPI(title=title, version=VERSION, dependencies=deps)
 
     # CORS — allow all origins (sandbox is not publicly exposed)
     app.add_middleware(
@@ -44,41 +114,8 @@ def create_app(internal: bool = False) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # RSA auth middleware (external only)
-    if not internal:
-        @app.middleware("http")
-        async def rsa_auth_middleware(request: Request, call_next):
-            # Skip auth for health/version/internal endpoints
-            skip_paths = {"/healthz", "/version", "/health"}
-            if request.url.path in skip_paths:
-                return await call_next(request)
-
-            # Verify RSA signature if enabled
-            if is_rsa_enabled():
-                try:
-                    await verify_rsa_signature(request)
-                except Exception as e:
-                    return JSONResponse(
-                        {"error": "Unauthorized", "detail": str(e)},
-                        status_code=401,
-                    )
-
-            return await call_next(request)
-
-    # Request logging middleware
-    @app.middleware("http")
-    async def log_requests(request: Request, call_next):
-        start = time.time()
-        response = await call_next(request)
-        duration = (time.time() - start) * 1000
-        logger.info(
-            "%s %s → %d (%.1fms)",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration,
-        )
-        return response
+    # Request logging — pure ASGI, does not touch body
+    app.add_middleware(LoggingMiddleware)
 
     # ── Core endpoints ─────────────────────────────────────────────
 

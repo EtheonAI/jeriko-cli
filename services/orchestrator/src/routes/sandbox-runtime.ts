@@ -51,7 +51,7 @@ async function getTurnCredentials(): Promise<TurnCredentials> {
         },
         body: JSON.stringify({ ttl: 86400 }),
         signal: AbortSignal.timeout(10000),
-      },
+      }
     );
 
     if (resp.ok) {
@@ -91,9 +91,7 @@ async function getTurnCredentials(): Promise<TurnCredentials> {
 // Route registration
 // ---------------------------------------------------------------------------
 
-export async function sandboxRuntimeRoutes(
-  app: FastifyInstance,
-): Promise<void> {
+export async function sandboxRuntimeRoutes(app: FastifyInstance): Promise<void> {
   // =========================================================================
   // POST /api/sandbox/init — Initialize sandbox, verify tools
   // =========================================================================
@@ -104,9 +102,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId are required" });
+      return reply.status(400).send({ error: "sandboxId and userId are required" });
     }
 
     try {
@@ -115,9 +111,9 @@ export async function sandboxRuntimeRoutes(
       // Source environment files
       await sandboxExec(
         sandboxId,
-        "[ -f /home/user/.env ] && source /home/user/.env; [ -f /home/user/.user_env ] && source /home/user/.user_env; echo 'env sourced'",
+        "[ -f /home/ubuntu/.env ] && source /home/ubuntu/.env; [ -f /home/ubuntu/.user_env ] && source /home/ubuntu/.user_env; echo 'env sourced'",
         userId,
-        10000,
+        10000
       );
 
       // Verify available tools in parallel
@@ -128,30 +124,21 @@ export async function sandboxRuntimeRoutes(
       ]);
 
       const nodeVersion =
-        nodeResult.status === "fulfilled"
-          ? nodeResult.value.stdout.trim()
-          : "unavailable";
+        nodeResult.status === "fulfilled" ? nodeResult.value.stdout.trim() : "unavailable";
       const pythonVersion =
-        pythonResult.status === "fulfilled"
-          ? pythonResult.value.stdout.trim()
-          : "unavailable";
+        pythonResult.status === "fulfilled" ? pythonResult.value.stdout.trim() : "unavailable";
       const pnpmVersion =
-        pnpmResult.status === "fulfilled"
-          ? pnpmResult.value.stdout.trim()
-          : "unavailable";
+        pnpmResult.status === "fulfilled" ? pnpmResult.value.stdout.trim() : "unavailable";
 
       // Ensure required directories exist
       await sandboxExec(
         sandboxId,
-        "mkdir -p /home/user/{screenshots,Downloads,.browser_data_dir,.search_cache,upload,skills,terminal_full_output}",
+        "mkdir -p /home/ubuntu/{screenshots,Downloads,.browser_data_dir,.search_cache,upload,skills,terminal_full_output}",
         userId,
-        10000,
+        10000
       );
 
-      logger.info(
-        { sandboxId, nodeVersion, pythonVersion, pnpmVersion },
-        "Sandbox initialized",
-      );
+      logger.info({ sandboxId, nodeVersion, pythonVersion, pnpmVersion }, "Sandbox initialized");
 
       return reply.send({
         ok: true,
@@ -162,13 +149,13 @@ export async function sandboxRuntimeRoutes(
           pnpm: pnpmVersion,
         },
         directories: [
-          "/home/user/screenshots",
-          "/home/user/Downloads",
-          "/home/user/.browser_data_dir",
-          "/home/user/.search_cache",
-          "/home/user/upload",
-          "/home/user/skills",
-          "/home/user/terminal_full_output",
+          "/home/ubuntu/screenshots",
+          "/home/ubuntu/Downloads",
+          "/home/ubuntu/.browser_data_dir",
+          "/home/ubuntu/.search_cache",
+          "/home/ubuntu/upload",
+          "/home/ubuntu/skills",
+          "/home/ubuntu/terminal_full_output",
         ],
       });
     } catch (err) {
@@ -188,13 +175,7 @@ export async function sandboxRuntimeRoutes(
       version: "1.0.0",
       server: "rubic-sandbox",
       runtime: "e2b-desktop",
-      features: [
-        "neko-webrtc",
-        "terminal-server",
-        "code-server",
-        "playwright",
-        "webdev-templates",
-      ],
+      features: ["neko-webrtc", "terminal-server", "code-server", "playwright", "webdev-templates"],
     });
   });
 
@@ -210,10 +191,7 @@ export async function sandboxRuntimeRoutes(
     try {
       const credentials = await getTurnCredentials();
 
-      logger.info(
-        { sandboxId, urlCount: credentials.urls.length },
-        "TURN credentials refreshed",
-      );
+      logger.info({ sandboxId, urlCount: credentials.urls.length }, "TURN credentials refreshed");
 
       return reply.send({
         ok: true,
@@ -246,9 +224,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId are required" });
+      return reply.status(400).send({ error: "sandboxId and userId are required" });
     }
 
     if (!env || typeof env !== "object" || Object.keys(env).length === 0) {
@@ -260,9 +236,7 @@ export async function sandboxRuntimeRoutes(
       const lines = Object.entries(env)
         .map(([key, value]) => {
           // Sanitize: strip newlines from values, escape single quotes
-          const safeValue = String(value)
-            .replace(/\n/g, "\\n")
-            .replace(/'/g, "'\\''");
+          const safeValue = String(value).replace(/\n/g, "\\n").replace(/'/g, "'\\''");
           return `export ${key}='${safeValue}'`;
         })
         .join("\n");
@@ -270,11 +244,7 @@ export async function sandboxRuntimeRoutes(
       // Read existing .user_env, filter out duplicate keys, append new ones
       let existing = "";
       try {
-        existing = await sandboxReadFile(
-          sandboxId,
-          "/home/user/.user_env",
-          userId,
-        );
+        existing = await sandboxReadFile(sandboxId, "/home/ubuntu/.user_env", userId);
       } catch {
         // File may not exist yet
       }
@@ -290,30 +260,17 @@ export async function sandboxRuntimeRoutes(
 
       const finalContent = [...filteredLines, lines].join("\n") + "\n";
 
-      await sandboxWriteFile(
-        sandboxId,
-        "/home/user/.user_env",
-        finalContent,
-        userId,
-      );
+      await sandboxWriteFile(sandboxId, "/home/ubuntu/.user_env", finalContent, userId);
 
       // Source the updated env in the current shell session
-      await sandboxExec(
-        sandboxId,
-        "source /home/user/.user_env",
-        userId,
-        5000,
-      );
+      await sandboxExec(sandboxId, "source /home/ubuntu/.user_env", userId, 5000);
 
-      logger.info(
-        { sandboxId, keys: Object.keys(env) },
-        "Environment variables set",
-      );
+      logger.info({ sandboxId, keys: Object.keys(env) }, "Environment variables set");
 
       return reply.send({
         ok: true,
         keys: Object.keys(env),
-        path: "/home/user/.user_env",
+        path: "/home/ubuntu/.user_env",
       });
     } catch (err) {
       logger.error({ sandboxId, err }, "Failed to set env vars");
@@ -334,28 +291,18 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId query params are required" });
+      return reply.status(400).send({ error: "sandboxId and userId query params are required" });
     }
 
     try {
-      const result = await sandboxExec(
-        sandboxId,
-        "gh auth status 2>&1",
-        userId,
-        15000,
-      );
+      const result = await sandboxExec(sandboxId, "gh auth status 2>&1", userId, 15000);
 
       const output = result.stdout + result.stderr;
-      const isAuthenticated =
-        result.exitCode === 0 && output.includes("Logged in to");
+      const isAuthenticated = result.exitCode === 0 && output.includes("Logged in to");
 
       // Extract username if authenticated
       let username: string | null = null;
-      const userMatch = output.match(
-        /Logged in to [\w.]+\s+as\s+(\S+)/,
-      );
+      const userMatch = output.match(/Logged in to [\w.]+\s+as\s+(\S+)/);
       if (userMatch?.[1]) {
         username = userMatch[1];
       }
@@ -387,59 +334,49 @@ export async function sandboxRuntimeRoutes(
   // =========================================================================
   // POST /api/sandbox/notify-browser-config-update — Push browser config
   // =========================================================================
-  app.post(
-    "/api/sandbox/notify-browser-config-update",
-    async (request, reply) => {
-      const { sandboxId, userId, config } = request.body as {
-        sandboxId: string;
-        userId: string;
-        config: Record<string, unknown>;
-      };
+  app.post("/api/sandbox/notify-browser-config-update", async (request, reply) => {
+    const { sandboxId, userId, config } = request.body as {
+      sandboxId: string;
+      userId: string;
+      config: Record<string, unknown>;
+    };
 
-      if (!sandboxId || !userId) {
-        return reply
-          .status(400)
-          .send({ error: "sandboxId and userId are required" });
-      }
+    if (!sandboxId || !userId) {
+      return reply.status(400).send({ error: "sandboxId and userId are required" });
+    }
 
-      if (!config || typeof config !== "object") {
-        return reply.status(400).send({ error: "config must be an object" });
-      }
+    if (!config || typeof config !== "object") {
+      return reply.status(400).send({ error: "config must be an object" });
+    }
 
-      try {
-        const configJson = JSON.stringify(config, null, 2);
+    try {
+      const configJson = JSON.stringify(config, null, 2);
 
-        // Ensure browser data dir exists
-        await sandboxExec(
-          sandboxId,
-          "mkdir -p /home/user/.browser_data_dir",
-          userId,
-          5000,
-        );
+      // Ensure browser data dir exists
+      await sandboxExec(sandboxId, "mkdir -p /home/ubuntu/.browser_data_dir", userId, 5000);
 
-        // Write config file
-        await sandboxWriteFile(
-          sandboxId,
-          "/home/user/.browser_data_dir/config.json",
-          configJson,
-          userId,
-        );
+      // Write config file
+      await sandboxWriteFile(
+        sandboxId,
+        "/home/ubuntu/.browser_data_dir/config.json",
+        configJson,
+        userId
+      );
 
-        logger.info({ sandboxId }, "Browser config updated");
+      logger.info({ sandboxId }, "Browser config updated");
 
-        return reply.send({
-          ok: true,
-          path: "/home/user/.browser_data_dir/config.json",
-        });
-      } catch (err) {
-        logger.error({ sandboxId, err }, "Browser config update failed");
-        return reply.status(500).send({
-          error: "Failed to update browser config",
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
-    },
-  );
+      return reply.send({
+        ok: true,
+        path: "/home/ubuntu/.browser_data_dir/config.json",
+      });
+    } catch (err) {
+      logger.error({ sandboxId, err }, "Browser config update failed");
+      return reply.status(500).send({
+        error: "Failed to update browser config",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
 
   // =========================================================================
   // POST /api/browser/action — Execute browser action (proxy to terminal server)
@@ -453,9 +390,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId are required" });
+      return reply.status(400).send({ error: "sandboxId and userId are required" });
     }
 
     if (!action) {
@@ -465,10 +400,15 @@ export async function sandboxRuntimeRoutes(
     try {
       logger.info({ sandboxId, action }, "Executing browser action via terminal server");
 
-      const result = await terminalServerPost(sandboxId, "/browser/action", {
-        action,
-        ...(params || {}),
-      }, 45000);
+      const result = await terminalServerPost(
+        sandboxId,
+        "/browser/action",
+        {
+          action,
+          ...(params || {}),
+        },
+        45000
+      );
 
       return reply.send({ action, sandboxId, result });
     } catch (err) {
@@ -491,9 +431,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId query params are required" });
+      return reply.status(400).send({ error: "sandboxId and userId query params are required" });
     }
 
     try {
@@ -501,7 +439,7 @@ export async function sandboxRuntimeRoutes(
         sandboxId,
         `ps aux 2>/dev/null | grep -E '(chromium|firefox|chrome)' | grep -v grep | head -5`,
         userId,
-        10000,
+        10000
       );
 
       const processes = result.stdout
@@ -516,7 +454,7 @@ export async function sandboxRuntimeRoutes(
         sandboxId,
         `pgrep -f neko >/dev/null 2>&1 && echo 'running' || echo 'stopped'`,
         userId,
-        5000,
+        5000
       );
 
       const nekoRunning = nekoResult.stdout.trim() === "running";
@@ -529,9 +467,9 @@ export async function sandboxRuntimeRoutes(
         },
         neko: {
           running: nekoRunning,
-          port: 8080,
+          port: 8333,
         },
-        display: ":99",
+        display: ":0",
       });
     } catch (err) {
       logger.error({ sandboxId, err }, "Browser status check failed");
@@ -552,9 +490,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !userId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and userId are required" });
+      return reply.status(400).send({ error: "sandboxId and userId are required" });
     }
 
     try {
@@ -565,32 +501,32 @@ export async function sandboxRuntimeRoutes(
         sandboxId,
         "pkill -f chromium 2>/dev/null; pkill -f chrome 2>/dev/null; pkill -f firefox 2>/dev/null; true",
         userId,
-        10000,
+        10000
       );
 
       // Clear browser data directory (preserve the directory itself)
       const clearResult = await sandboxExec(
         sandboxId,
         [
-          "rm -rf /home/user/.browser_data_dir/* 2>/dev/null",
-          "rm -rf /home/user/.search_cache/* 2>/dev/null",
-          "rm -rf /home/user/screenshots/* 2>/dev/null",
+          "rm -rf /home/ubuntu/.browser_data_dir/* 2>/dev/null",
+          "rm -rf /home/ubuntu/.search_cache/* 2>/dev/null",
+          "rm -rf /home/ubuntu/screenshots/* 2>/dev/null",
           // Recreate dirs in case rm -rf removed them
-          "mkdir -p /home/user/.browser_data_dir",
-          "mkdir -p /home/user/.search_cache",
-          "mkdir -p /home/user/screenshots",
+          "mkdir -p /home/ubuntu/.browser_data_dir",
+          "mkdir -p /home/ubuntu/.search_cache",
+          "mkdir -p /home/ubuntu/screenshots",
           'echo "cleared"',
         ].join(" && "),
         userId,
-        15000,
+        15000
       );
 
       return reply.send({
         ok: clearResult.exitCode === 0,
         cleared: [
-          "/home/user/.browser_data_dir",
-          "/home/user/.search_cache",
-          "/home/user/screenshots",
+          "/home/ubuntu/.browser_data_dir",
+          "/home/ubuntu/.search_cache",
+          "/home/ubuntu/screenshots",
         ],
       });
     } catch (err) {
@@ -622,9 +558,9 @@ export async function sandboxRuntimeRoutes(
       const result = await terminalServerPost(
         sandboxId,
         "/terminals",
-        { cwd: cwd || "/home/user" },
+        { cwd: cwd || "/home/ubuntu" },
         30000,
-        userId || "system",
+        userId || "system"
       );
       logger.info({ sandboxId, terminalId: result.id }, "Terminal created");
       return reply.send({ ok: true, ...result });
@@ -648,9 +584,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !terminalId || !command) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId, terminalId, and command are required" });
+      return reply.status(400).send({ error: "sandboxId, terminalId, and command are required" });
     }
 
     try {
@@ -659,7 +593,7 @@ export async function sandboxRuntimeRoutes(
         `/terminal/${encodeURIComponent(terminalId)}/exec`,
         { command, timeout: timeout || 30000 },
         (timeout || 30000) + 5000,
-        userId || "system",
+        userId || "system"
       );
       return reply.send(result);
     } catch (err) {
@@ -681,16 +615,14 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !terminalId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and terminalId are required" });
+      return reply.status(400).send({ error: "sandboxId and terminalId are required" });
     }
 
     try {
       const result = await terminalServerPost(
         sandboxId,
         `/terminal/${encodeURIComponent(terminalId)}/write`,
-        { input: input || "", command: input || "", enter: enter ?? true },
+        { input: input || "", command: input || "", enter: enter ?? true }
       );
       return reply.send(result);
     } catch (err) {
@@ -718,7 +650,7 @@ export async function sandboxRuntimeRoutes(
     try {
       const result = await terminalServerGet(
         sandboxId,
-        `/terminal/${encodeURIComponent(terminalId)}/view`,
+        `/terminal/${encodeURIComponent(terminalId)}/view`
       );
       return reply.send(result);
     } catch (err) {
@@ -738,16 +670,14 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !terminalId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and terminalId are required" });
+      return reply.status(400).send({ error: "sandboxId and terminalId are required" });
     }
 
     try {
       const result = await terminalServerPost(
         sandboxId,
         `/terminal/${encodeURIComponent(terminalId)}/kill`,
-        {},
+        {}
       );
       logger.info({ sandboxId, terminalId }, "Terminal killed");
       return reply.send(result);
@@ -768,16 +698,14 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !terminalId) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and terminalId are required" });
+      return reply.status(400).send({ error: "sandboxId and terminalId are required" });
     }
 
     try {
       const result = await terminalServerPost(
         sandboxId,
         `/terminal/${encodeURIComponent(terminalId)}/reset`,
-        {},
+        {}
       );
       logger.info({ sandboxId, terminalId, newId: result.newId }, "Terminal reset");
       return reply.send(result);
@@ -799,11 +727,7 @@ export async function sandboxRuntimeRoutes(
     }
 
     try {
-      const result = await terminalServerPost(
-        sandboxId,
-        "/terminal/reset-all",
-        {},
-      );
+      const result = await terminalServerPost(sandboxId, "/terminal/reset-all", {});
       logger.info({ sandboxId, killed: result.killed }, "All terminals reset");
       return reply.send(result);
     } catch (err) {
@@ -831,7 +755,7 @@ export async function sandboxRuntimeRoutes(
     try {
       const result = await terminalServerGet(
         sandboxId,
-        `/terminal/${encodeURIComponent(terminalId)}`,
+        `/terminal/${encodeURIComponent(terminalId)}`
       );
       return reply.send(result);
     } catch (err) {
@@ -861,20 +785,17 @@ export async function sandboxRuntimeRoutes(
     }
 
     if (!editorParams.command || !editorParams.path) {
-      return reply
-        .status(400)
-        .send({ error: "command and path are required" });
+      return reply.status(400).send({ error: "command and path are required" });
     }
 
     try {
-      const result = await terminalServerPost(
-        sandboxId,
-        "/text_editor",
-        editorParams,
-      );
+      const result = await terminalServerPost(sandboxId, "/text_editor", editorParams);
       return reply.send(result);
     } catch (err) {
-      logger.error({ sandboxId, command: editorParams.command, err }, "Text editor operation failed");
+      logger.error(
+        { sandboxId, command: editorParams.command, err },
+        "Text editor operation failed"
+      );
       return reply.status(500).send({
         error: "Text editor operation failed",
         detail: err instanceof Error ? err.message : String(err),
@@ -897,9 +818,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !paths?.length) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and paths are required" });
+      return reply.status(400).send({ error: "sandboxId and paths are required" });
     }
 
     try {
@@ -925,9 +844,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !paths?.length) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and paths are required" });
+      return reply.status(400).send({ error: "sandboxId and paths are required" });
     }
 
     try {
@@ -954,9 +871,7 @@ export async function sandboxRuntimeRoutes(
     };
 
     if (!sandboxId || !filePath) {
-      return reply
-        .status(400)
-        .send({ error: "sandboxId and filePath are required" });
+      return reply.status(400).send({ error: "sandboxId and filePath are required" });
     }
 
     try {
@@ -964,7 +879,7 @@ export async function sandboxRuntimeRoutes(
         sandboxId,
         "/file/upload_to_s3",
         { file_path: filePath },
-        60000,
+        60000
       );
       return reply.send(result);
     } catch (err) {

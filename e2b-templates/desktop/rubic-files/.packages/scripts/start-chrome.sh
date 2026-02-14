@@ -43,7 +43,15 @@ sudo tee /etc/chromium/policies/managed/rubic-downloads.json >/dev/null <<'JSON'
 }
 JSON
 
-chromium-browser \
+# Use Playwright's Chrome binary (chromium-browser is a snap wrapper on Ubuntu 22.04)
+CHROME_BIN="${PLAYWRIGHT_BROWSERS_PATH:-/root/.cache/ms-playwright}/chromium-1208/chrome-linux64/chrome"
+if [ ! -f "$CHROME_BIN" ]; then
+    # Fallback to system chromium
+    CHROME_BIN="chromium-browser"
+fi
+
+"$CHROME_BIN" \
+    --no-sandbox \
     --disable-features=HighEfficiencyModeAvailable,HighEfficiencyModeToggle,DestroyProfileOnBrowserClose,Translate,PaintHolding,AcceptCHFrame \
     --disable-permission-action-reporting \
     --disable-field-trial-config \

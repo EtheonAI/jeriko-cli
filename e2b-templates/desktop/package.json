@@ -1,9 +1,0 @@
-{
-  "name": "rubic-desktop-template",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.982.0",
-    "e2b": "^2.12.0"
-  }
-}

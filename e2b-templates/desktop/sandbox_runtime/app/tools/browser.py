@@ -38,6 +38,7 @@ SCREENSHOTS_DIR = os.path.join(HOME, "screenshots")
 _browser = None
 _context = None
 _page = None
+_playwright_instance = None  # Track for proper cleanup via __aexit__
 
 # ── Manus-parity JS scripts ──────────────────────────────────────────────────
 
@@ -385,8 +386,12 @@ async def _get_playwright():
 
 
 async def _ensure_browser():
-    """Ensure browser is launched and return the active page."""
-    global _browser, _context, _page
+    """Ensure browser is connected and return the active page.
+
+    Manus pattern: Chromium is pre-launched by start-chrome.sh with CDP on port 9222.
+    We connect via CDP rather than launching a new instance.
+    """
+    global _browser, _context, _page, _playwright_instance
 
     if _page is not None:
         try:
@@ -401,26 +406,57 @@ async def _ensure_browser():
     if pw_factory is None:
         raise RuntimeError("Playwright not installed")
 
+    # Properly close previous playwright instance if it exists
+    if _playwright_instance is not None:
+        try:
+            await _playwright_instance.__aexit__(None, None, None)
+        except Exception:
+            pass
+        _playwright_instance = None
+
     pw = await pw_factory().__aenter__()
-    _browser = await pw.chromium.launch(
-        executable_path=CHROME_PATH,
-        headless=False,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            f"--remote-debugging-port={CDP_PORT}",
-            "--disable-gpu",
-            "--window-size=1280,720",
-            f"--user-data-dir={HOME}/.browser_data_dir",
-        ],
-    )
-    _context = await _browser.new_context(
-        viewport={"width": 1280, "height": 720},
-        user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    )
-    _page = await _context.new_page()
-    return _page
+    _playwright_instance = pw  # Store for proper cleanup
+
+    # Connect to existing Chromium via CDP (Manus pattern — Chrome is pre-launched)
+    try:
+        _browser = await pw.chromium.connect_over_cdp(
+            f"http://127.0.0.1:{CDP_PORT}",
+            timeout=10000,
+        )
+        # Use existing contexts/pages if available
+        contexts = _browser.contexts
+        if contexts:
+            _context = contexts[0]
+            pages = _context.pages
+            if pages:
+                _page = pages[0]
+                return _page
+        # Create new context if none exists
+        _context = await _browser.new_context(
+            viewport={"width": 1280, "height": 720},
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+        _page = await _context.new_page()
+        return _page
+    except Exception as e:
+        logger.warning("CDP connect failed, falling back to launch: %s", e)
+        # Fallback: launch new browser (for environments without pre-launched Chrome)
+        _browser = await pw.chromium.launch(
+            executable_path=CHROME_PATH,
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--window-size=1280,720",
+            ],
+        )
+        _context = await _browser.new_context(
+            viewport={"width": 1280, "height": 720},
+        )
+        _page = await _context.new_page()
+        return _page
 
 
 # ── Screenshot + element collection ──────────────────────────────────────────
@@ -624,6 +660,7 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
             coord = body.get("coordinate")
             x = coord[0] if coord and len(coord) >= 2 else 640
             y = coord[1] if coord and len(coord) >= 2 else 360
+            await page.mouse.move(x, y)
             await page.mouse.wheel(0, delta)
             await asyncio.sleep(0.3)
             # Return full snapshot after scroll so LLM sees new elements
@@ -675,13 +712,22 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
                         FIND_ELEMENT_BY_INDEX_JS, int(index)
                     )
                     if select_el:
+                        # value can be numeric index or string value — handle both
+                        safe_value = str(value).replace("'", "\\'").replace('"', '\\"')
                         await page.evaluate(
                             f"""(idx) => {{
                                 const el = document.querySelector('[data-rubic_click_id="' + idx + '"]');
-                                if (el && el.tagName.toLowerCase() === 'select' && el.options[{int(value)}]) {{
-                                    el.value = el.options[{int(value)}].value;
-                                    el.dispatchEvent(new Event('change'));
+                                if (!el || el.tagName.toLowerCase() !== 'select') return;
+                                const val = "{safe_value}";
+                                // Try as numeric index first
+                                const numIdx = parseInt(val, 10);
+                                if (!isNaN(numIdx) && el.options[numIdx]) {{
+                                    el.value = el.options[numIdx].value;
+                                }} else {{
+                                    // Try as option value string
+                                    el.value = val;
                                 }}
+                                el.dispatchEvent(new Event('change'));
                             }}""",
                             str(index),
                         )
@@ -721,15 +767,30 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "screenshot": screenshot}
 
     elif action == "restart":
-        global _browser, _context, _page
+        global _browser, _context, _page, _playwright_instance
         if _browser:
             try:
                 await _browser.close()
             except Exception:
                 pass
+        if _playwright_instance:
+            try:
+                await _playwright_instance.__aexit__(None, None, None)
+            except Exception:
+                pass
         _browser = None
         _context = None
         _page = None
+        _playwright_instance = None
+        # Navigate to URL after restart if provided (Manus parity)
+        url = body.get("url")
+        if url:
+            page = await _ensure_browser()
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                return await _build_page_snapshot()
+            except Exception as e:
+                return {"ok": True, "message": "Browser restarted but navigation failed", "error": str(e)}
         return {"ok": True, "message": "Browser restarted"}
 
     else:

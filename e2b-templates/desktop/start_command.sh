@@ -58,12 +58,43 @@ add_env_to_rc() {
 add_env_to_rc "$HOME/.bashrc"
 add_env_to_rc "$HOME/.zshrc"
 
+# Set up gh command alias (Manus pattern — avoids terminal control sequences)
+for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc_file" ] && ! grep -q "^alias gh=" "$rc_file"; then
+        echo 'alias gh="TERM=dumb gh"' >>"$rc_file"
+    fi
+done
+
 # Load user environment (if exists)
 if [ -f "$HOME/.user_env" ]; then
     echo "Loading user environment from ~/.user_env"
     set -a
     source "$HOME/.user_env"
     set +a
+fi
+
+# ─── Phase 1.5: Persist E2B-injected env vars ─────────────────────────────
+# E2B injects env vars into this process at sandbox creation.
+# We write critical ones to ~/.user_env so they survive sudo supervisord
+# (which clears the environment). This is a safety net — the orchestrator
+# also calls POST /init-sandbox to set these in the Python process.
+CRITICAL_VARS="ORCHESTRATOR_URL OPENAI_API_KEY OPENAI_BASE_URL OPENAI_API_BASE RUBIC_UPLOAD_URL CODE_SERVER_PASSWORD CODE_SERVER_PORT CODE_SERVER_DOMAIN BUILT_IN_FORGE_API_KEY BUILT_IN_FORGE_API_URL VITE_FRONTEND_FORGE_API_KEY VITE_FRONTEND_FORGE_API_URL"
+touch "$HOME/.user_env"
+for var in $CRITICAL_VARS; do
+    eval val=\$$var
+    if [ -n "$val" ]; then
+        if ! grep -q "^export $var=" "$HOME/.user_env" 2>/dev/null; then
+            echo "export $var=\"$val\"" >> "$HOME/.user_env"
+        fi
+    fi
+done
+
+# Write sandbox token as secret file (Manus pattern)
+if [ -n "$SANDBOX_API_TOKEN" ]; then
+    mkdir -p "$HOME/.secrets"
+    echo -n "$SANDBOX_API_TOKEN" > "$HOME/.secrets/sandbox_api_token"
+    chmod 600 "$HOME/.secrets/sandbox_api_token"
+    echo "Sandbox API token written to ~/.secrets/sandbox_api_token"
 fi
 
 # Force key env vars for this session

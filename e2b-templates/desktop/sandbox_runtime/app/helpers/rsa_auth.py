@@ -9,8 +9,6 @@ import base64
 import os
 from pathlib import Path
 
-from fastapi import Request, HTTPException
-
 from ..logger import get_logger
 
 logger = get_logger("rsa_auth")
@@ -57,31 +55,22 @@ def is_rsa_enabled() -> bool:
     return _rsa_enabled
 
 
-async def verify_rsa_signature(request: Request) -> None:
-    """FastAPI dependency that verifies RSA signature on requests.
+def verify_body_signature(sig_b64: str, body: bytes) -> None:
+    """Verify RSA signature over raw body bytes.
 
-    Reads X-Sandbox-Api-Signature-V2 header and verifies against body.
-    Skips verification if RSA is disabled (no public key).
+    Called by the pure ASGI middleware — does NOT consume the request stream.
+    Raises Exception if signature is invalid.
     """
-    if not _rsa_enabled:
+    if not _rsa_enabled or not _public_key:
         return
 
-    signature_header = request.headers.get("X-Sandbox-Api-Signature-V2")
-    if not signature_header:
-        raise HTTPException(status_code=401, detail="Missing signature header")
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
 
-    body = await request.body()
-
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import padding
-
-        signature = base64.b64decode(signature_header)
-        _public_key.verify(
-            signature,
-            body,
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid signature")
+    signature = base64.b64decode(sig_b64)
+    _public_key.verify(
+        signature,
+        body,
+        padding.PKCS1v15(),
+        hashes.SHA256(),
+    )

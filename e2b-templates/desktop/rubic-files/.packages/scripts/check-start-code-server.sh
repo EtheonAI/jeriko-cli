@@ -8,8 +8,11 @@ done
 
 echo "sandbox-runtime is ready, starting code server..."
 CODE_SERVER_CONFIG='/home/ubuntu/.config/code-server/config.yaml'
+mkdir -p /home/ubuntu/.config/code-server
 CODE_SERVER_PORT=8329
-echo "export CODE_SERVER_PORT=\"$CODE_SERVER_PORT\"" >> /home/ubuntu/.env
+if ! grep -q "CODE_SERVER_PORT=" "/home/ubuntu/.env"; then
+    echo "export CODE_SERVER_PORT=\"$CODE_SERVER_PORT\"" >> /home/ubuntu/.env
+fi
 # Generate random password for code server auth and write to environment variables
 if ! grep -q "CODE_SERVER_PASSWORD=" "/home/ubuntu/.env"; then
 CODE_SERVER_PASSWORD=$(openssl rand -base64 8 | md5sum | head -c16)

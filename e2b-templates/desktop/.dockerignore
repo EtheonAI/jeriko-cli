@@ -1,0 +1,17 @@
+# Audit docs (not needed in image)
+AUDIT-SESSION-2.md
+CHANGELOG-E2E-AUDIT.md
+*.md
+
+# Private key (NEVER bake into image — only public.pem is needed)
+keys/private.pem
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Git
+.git
+.gitignore

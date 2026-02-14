@@ -5,18 +5,26 @@
  * Matches Manus parallel_tasks module.
  */
 
-import { tool } from 'ai';
-import { z } from 'zod';
-import type { ToolContext } from './types.js';
-import { getRsaHeaders } from '../rsa-auth.js';
+import { tool } from "ai";
+import { z } from "zod";
+import type { ToolContext } from "./types.js";
+import { getRsaHeaders } from "../rsa-auth.js";
 
 /**
  * Task types for model routing — Manus pattern:
  *   - text/research/code → gpt-4.1-mini (cheap, fast)
  *   - image_generation   → DALL-E 3 (via images API)
+ *   - gemini_image       → Gemini 2.5 Flash (via generateContent API)
  *   - image_analysis     → gpt-4o (has vision capability)
  */
-type TaskType = 'text' | 'image_generation' | 'image_analysis' | 'code';
+type TaskType =
+  | "text"
+  | "image_generation"
+  | "gemini_image"
+  | "image_analysis"
+  | "code"
+  | "quick"
+  | "research";
 
 interface ParallelTask {
   task_id: string;
@@ -26,7 +34,7 @@ interface ParallelTask {
 
 interface ParallelTaskResult {
   task_id: string;
-  status: 'success' | 'error';
+  status: "success" | "error";
   result?: string;
   error?: string;
   model_used?: string;
@@ -39,14 +47,14 @@ const MAX_CONCURRENT_WORKERS = 4;
  */
 async function executeParallelTasks(
   ctx: ToolContext,
-  tasks: ParallelTask[],
+  tasks: ParallelTask[]
 ): Promise<ParallelTaskResult[]> {
   const baseUrl = ctx.terminalServerUrl;
-  if (!baseUrl || baseUrl === 'no-sandbox') {
+  if (!baseUrl || baseUrl === "no-sandbox") {
     return tasks.map((t) => ({
       task_id: t.task_id,
-      status: 'error' as const,
-      error: 'No sandbox available',
+      status: "error" as const,
+      error: "No sandbox available",
     }));
   }
 
@@ -55,9 +63,7 @@ async function executeParallelTasks(
 
   for (let i = 0; i < tasks.length; i += MAX_CONCURRENT_WORKERS) {
     const wave = tasks.slice(i, i + MAX_CONCURRENT_WORKERS);
-    const waveResults = await Promise.all(
-      wave.map((task) => executeOneTask(ctx, baseUrl, task)),
-    );
+    const waveResults = await Promise.all(wave.map((task) => executeOneTask(ctx, baseUrl, task)));
     results.push(...waveResults);
   }
 
@@ -74,37 +80,45 @@ function detectTaskType(task: ParallelTask): TaskType {
 
   const lower = task.prompt.toLowerCase();
 
-  // Image generation keywords
+  // Gemini image generation keywords
   if (
-    lower.includes('generate image') ||
-    lower.includes('create image') ||
-    lower.includes('draw') ||
-    lower.includes('illustration') ||
-    lower.includes('generate a picture') ||
-    lower.includes('create a picture') ||
-    lower.includes('make an image') ||
-    lower.includes('design a logo') ||
-    lower.includes('dall-e') ||
-    lower.includes('dalle')
+    lower.includes("gemini") &&
+    (lower.includes("image") || lower.includes("draw") || lower.includes("picture"))
   ) {
-    return 'image_generation';
+    return "gemini_image";
+  }
+
+  // Image generation keywords (defaults to DALL-E)
+  if (
+    lower.includes("generate image") ||
+    lower.includes("create image") ||
+    lower.includes("draw") ||
+    lower.includes("illustration") ||
+    lower.includes("generate a picture") ||
+    lower.includes("create a picture") ||
+    lower.includes("make an image") ||
+    lower.includes("design a logo") ||
+    lower.includes("dall-e") ||
+    lower.includes("dalle")
+  ) {
+    return "image_generation";
   }
 
   // Image analysis keywords (vision tasks)
   if (
-    lower.includes('analyze image') ||
-    lower.includes('describe image') ||
-    lower.includes('what is in this image') ||
-    lower.includes('look at this image') ||
-    lower.includes('screenshot') ||
-    lower.includes('image shows') ||
-    lower.includes('ocr') ||
-    lower.includes('read the text in')
+    lower.includes("analyze image") ||
+    lower.includes("describe image") ||
+    lower.includes("what is in this image") ||
+    lower.includes("look at this image") ||
+    lower.includes("screenshot") ||
+    lower.includes("image shows") ||
+    lower.includes("ocr") ||
+    lower.includes("read the text in")
   ) {
-    return 'image_analysis';
+    return "image_analysis";
   }
 
-  return 'text';
+  return "text";
 }
 
 /**
@@ -112,91 +126,159 @@ function detectTaskType(task: ParallelTask): TaskType {
  */
 function getModelForTaskType(taskType: TaskType): string {
   switch (taskType) {
-    case 'image_analysis':
-      return 'gpt-4o'; // Has vision capability
-    case 'code':
-      return 'gpt-4.1-mini'; // Good at code, cheap
-    case 'text':
+    case "image_analysis":
+      return "gpt-4o"; // Has vision capability
+    case "code":
+      return "gpt-4.1-mini"; // Good at code, cheap
+    case "research":
+      return "gpt-4.1-mini"; // Deeper research tasks
+    case "quick":
+      return "gpt-4.1-nano"; // Ultra-fast, ultra-cheap for simple lookups
+    case "text":
     default:
-      return 'gpt-4.1-mini'; // Fast, cheap for research
+      return "gpt-4.1-mini"; // Fast, cheap for general tasks
   }
 }
 
 async function executeOneTask(
   ctx: ToolContext,
   baseUrl: string,
-  task: ParallelTask,
+  task: ParallelTask
 ): Promise<ParallelTaskResult> {
   try {
-    const apiKey = process.env.OPENAI_API_KEY || '';
-    if (!apiKey) {
+    const taskType = detectTaskType(task);
+
+    // Gemini tasks need GOOGLE_API_KEY, everything else needs OPENAI_API_KEY
+    const apiKey = process.env.OPENAI_API_KEY || "";
+    if (taskType !== "gemini_image" && !apiKey) {
       return {
         task_id: task.task_id,
-        status: 'error',
-        error: 'No OpenAI API key configured for sub-agent',
+        status: "error",
+        error: "No OpenAI API key configured for sub-agent",
       };
     }
-
-    const taskType = detectTaskType(task);
     let content: string;
     let modelUsed: string;
 
-    if (taskType === 'image_generation') {
-      // Route to DALL-E 3 via images API
-      modelUsed = 'dall-e-3';
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
+    if (taskType === "gemini_image") {
+      // Route to Gemini image generation via generateContent API
+      const googleApiKey = process.env.GOOGLE_API_KEY || "";
+      if (!googleApiKey) {
+        return {
+          task_id: task.task_id,
+          status: "error",
+          error: "No GOOGLE_API_KEY configured for Gemini image generation",
+        };
+      }
+
+      modelUsed = "gemini-2.5-flash-image";
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelUsed}:generateContent`;
+
+      const response = await fetch(geminiUrl, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
+          "x-goog-api-key": googleApiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: task.prompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+        signal: AbortSignal.timeout(90000),
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        return {
+          task_id: task.task_id,
+          status: "error",
+          error: `Gemini image error (${response.status}): ${text}`,
+          model_used: modelUsed,
+        };
+      }
+
+      const data = (await response.json()) as {
+        candidates?: Array<{
+          content?: {
+            parts?: Array<{
+              text?: string;
+              inlineData?: { mimeType: string; data: string };
+            }>;
+          };
+        }>;
+      };
+
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((p) => p.inlineData);
+      const textPart = parts.find((p) => p.text);
+
+      if (imagePart?.inlineData) {
+        content = JSON.stringify({
+          image_base64: imagePart.inlineData.data,
+          mime_type: imagePart.inlineData.mimeType,
+          description: textPart?.text || "",
+        });
+      } else {
+        content = textPart?.text || "No image generated";
+      }
+    } else if (taskType === "image_generation") {
+      // Route to DALL-E 3 via images API
+      modelUsed = "dall-e-3";
+      const response = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'dall-e-3',
+          model: "dall-e-3",
           prompt: task.prompt,
-          size: '1024x1024',
+          size: "1024x1024",
           n: 1,
         }),
         signal: AbortSignal.timeout(60000),
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
+        const text = await response.text().catch(() => "");
         return {
           task_id: task.task_id,
-          status: 'error',
+          status: "error",
           error: `DALL-E error (${response.status}): ${text}`,
           model_used: modelUsed,
         };
       }
 
-      const data = (await response.json()) as { data: Array<{ url: string; revised_prompt?: string }> };
-      const imageUrl = data.data[0]?.url ?? '';
-      const revisedPrompt = data.data[0]?.revised_prompt ?? '';
+      const data = (await response.json()) as {
+        data: Array<{ url: string; revised_prompt?: string }>;
+      };
+      const imageUrl = data.data[0]?.url ?? "";
+      const revisedPrompt = data.data[0]?.revised_prompt ?? "";
       content = JSON.stringify({ image_url: imageUrl, revised_prompt: revisedPrompt });
     } else {
       // Route to chat completions (gpt-4.1-mini or gpt-4o)
-      const llmProxyUrl = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+      const llmProxyUrl = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
       modelUsed = getModelForTaskType(taskType);
 
       const response = await fetch(`${llmProxyUrl}/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: modelUsed,
-          messages: [{ role: 'user', content: task.prompt }],
+          messages: [{ role: "user", content: task.prompt }],
           max_tokens: 4096,
         }),
         signal: AbortSignal.timeout(60000),
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
+        const text = await response.text().catch(() => "");
         return {
           task_id: task.task_id,
-          status: 'error',
+          status: "error",
           error: `LLM error (${response.status}): ${text}`,
           model_used: modelUsed,
         };
@@ -204,7 +286,7 @@ async function executeOneTask(
 
       const data = (await response.json()) as Record<string, unknown>;
       const choices = data.choices as Array<{ message: { content: string } }>;
-      content = choices?.[0]?.message?.content || '';
+      content = choices?.[0]?.message?.content || "";
     }
 
     // Store result on sandbox
@@ -213,9 +295,9 @@ async function executeOneTask(
       const rsaHeaders = getRsaHeaders(storeBody);
 
       await fetch(`${baseUrl}/file/store_parallel_tasks_result`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           ...rsaHeaders,
         },
         body: storeBody,
@@ -227,14 +309,14 @@ async function executeOneTask(
 
     return {
       task_id: task.task_id,
-      status: 'success',
+      status: "success",
       result: content,
       model_used: modelUsed,
     };
   } catch (error) {
     return {
       task_id: task.task_id,
-      status: 'error',
+      status: "error",
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -248,28 +330,40 @@ export function createParallelTasksTool(ctx: ToolContext) {
   return {
     parallel_tasks: tool({
       description:
-        'Execute multiple independent tasks in parallel using sub-agent LLMs (GPT-4.1-mini). ' +
-        'Each task gets its own independent completion. Max 4 concurrent workers per wave. ' +
-        'Use this for genuinely parallelizable work like researching multiple topics simultaneously.',
+        "Execute multiple independent tasks in parallel using sub-agent LLMs (GPT-4.1-mini). " +
+        "Each task gets its own independent completion. Max 4 concurrent workers per wave. " +
+        "Use this for genuinely parallelizable work like researching multiple topics simultaneously.",
       inputSchema: z.object({
-        tasks: z.array(
-          z.object({
-            task_id: z.string().describe('Unique task identifier'),
-            prompt: z.string().describe('The task prompt for the sub-agent'),
-            task_type: z
-              .enum(['text', 'image_generation', 'image_analysis', 'code'])
-              .optional()
-              .describe('Task type for model routing. text/code→GPT-4.1-mini, image_generation→DALL-E 3, image_analysis→GPT-4o. Auto-detected if omitted.'),
-          }),
-        ).describe('Array of tasks to execute in parallel'),
+        tasks: z
+          .array(
+            z.object({
+              task_id: z.string().describe("Unique task identifier"),
+              prompt: z.string().describe("The task prompt for the sub-agent"),
+              task_type: z
+                .enum([
+                  "text",
+                  "image_generation",
+                  "gemini_image",
+                  "image_analysis",
+                  "code",
+                  "quick",
+                  "research",
+                ])
+                .optional()
+                .describe(
+                  "Task type for model routing. text/code/research→GPT-4.1-mini, quick→GPT-4.1-nano, image_generation→DALL-E 3, gemini_image→Gemini 2.5 Flash, image_analysis→GPT-4o. Auto-detected if omitted."
+                ),
+            })
+          )
+          .describe("Array of tasks to execute in parallel"),
       }),
       execute: async (args) => {
         const results = await executeParallelTasks(ctx, args.tasks);
         return {
-          status: 'success' as const,
+          status: "success" as const,
           results,
           totalTasks: args.tasks.length,
-          completedTasks: results.filter((r) => r.status === 'success').length,
+          completedTasks: results.filter((r) => r.status === "success").length,
         };
       },
     }),

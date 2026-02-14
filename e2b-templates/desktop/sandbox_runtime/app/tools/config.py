@@ -28,11 +28,15 @@ async def config_set_env(request: Request) -> dict[str, Any]:
     if "env" in body and isinstance(body["env"], dict):
         keys = set_env_vars(body["env"])
         updated_keys.extend(keys)
+    elif "env_vars" in body and isinstance(body["env_vars"], dict):
+        keys = set_env_vars(body["env_vars"])
+        updated_keys.extend(keys)
     elif "secrets" not in body and "enabledBuiltInMCP" not in body:
-        # Bare object fallback
+        # Bare object fallback — only process string values as env vars
         bare = {
             k: v for k, v in body.items()
-            if k not in ("env", "secrets", "enabledBuiltInMCP")
+            if k not in ("env", "env_vars", "secrets", "enabledBuiltInMCP")
+            and isinstance(v, str)
         }
         if bare:
             keys = set_env_vars(bare)

@@ -20,8 +20,15 @@ from .tools.apiproxy import router as apiproxy_router
 
 
 def register_routes(app: FastAPI) -> None:
-    """Register all tool route modules on the app."""
+    """Register all tool route modules on the app.
+
+    IMPORTANT: parallel_tasks_router MUST come before files_router because
+    files_router has a catch-all /file/{command} route that would shadow
+    the explicit /file/store_parallel_tasks_result and
+    /file/get_parallel_tasks_result routes.
+    """
     app.include_router(terminal_router)
+    app.include_router(parallel_tasks_router)  # Before files_router — see docstring
     app.include_router(files_router)
     app.include_router(text_editor_router)
     app.include_router(browser_router)
@@ -34,5 +41,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(image_router)
     app.include_router(deploy_router)
     app.include_router(webdev_router)
-    app.include_router(parallel_tasks_router)
     app.include_router(apiproxy_router)

@@ -32,7 +32,8 @@ RUN yes | unminimize || true && \
     gstreamer1.0-pulseaudio gstreamer1.0-tools \
     golang-go && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/fdfind /usr/bin/fd
 
 # Node.js 22 + supervisor
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
@@ -45,8 +46,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 # Python uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
-# Chromium
-RUN apt-get update && apt-get install -y chromium-browser && apt-get clean
+# Chromium — installed via Playwright (system chromium-browser is a snap wrapper on 22.04)
+# Playwright install happens in the Python deps step below
 
 # GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
@@ -85,8 +86,24 @@ RUN uv pip install --system \
     cryptography \
     Pillow \
     rembg \
-    playwright && \
-    playwright install chromium
+    playwright \
+    numpy pandas openpyxl xlsxwriter \
+    beautifulsoup4 lxml \
+    pdfminer.six pdfplumber PyPDF2 reportlab \
+    python-pptx python-docx \
+    PyYAML toml python-dotenv \
+    psutil aiofiles aiohttp \
+    jinja2 markdown \
+    sympy scipy scikit-learn \
+    matplotlib seaborn plotly \
+    anthropic openai google-generativeai \
+    tiktoken tokenizers \
+    selenium \
+    yt-dlp \
+    chardet charset-normalizer \
+    paramiko \
+    redis \
+    && playwright install chromium
 
 # ── Build Go binaries ────────────────────────────────────────────
 # rubic-upload-file (matches manus-upload-file Go binary)
@@ -142,6 +159,7 @@ COPY supervisor-terminal-server.conf /etc/supervisor/conf.d/1-sandbox-runtime.co
 COPY supervisor-neko-server.conf /etc/supervisor/conf.d/2-neko-server.conf
 COPY supervisor-upgrade.conf /etc/supervisor/conf.d/3-upgrade-service.conf
 COPY supervisor-mcp-server.conf /etc/supervisor/conf.d/4-mcp-server.conf
+COPY supervisor-chrome.conf /etc/supervisor/conf.d/6-chrome.conf
 COPY supervisor-code-server.conf /etc/supervisor/conf.d/7-code-server.conf
 
 # MCP server startup script
@@ -160,8 +178,10 @@ COPY pip3-wrapper.sh /usr/local/bin/pip3
 RUN chmod +x /usr/local/bin/pip /usr/local/bin/pip3
 
 # Set permissions
+# CRITICAL: sandbox_runtime/ must stay ubuntu-owned so Python can create __pycache__
 RUN chown -R ubuntu:ubuntu /home/ubuntu && \
     chown -R root:root /opt/.rubic && \
+    chown -R ubuntu:ubuntu /opt/.rubic/runtime/sandbox_runtime && \
     chmod -R 755 /opt/.rubic
 
 USER ubuntu
