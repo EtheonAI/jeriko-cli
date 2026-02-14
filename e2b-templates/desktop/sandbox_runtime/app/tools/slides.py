@@ -50,7 +50,8 @@ async def slide_action(action: str, request: Request) -> dict[str, Any]:
 
     elif action == "modify":
         try:
-            data = json.loads(open(slides_json).read())
+            with open(slides_json) as f:
+                data = json.load(f)
             slide = next((s for s in data if s["id"] == body.get("slideId")), None)
             if slide:
                 slide.update(body.get("changes", {}))
@@ -62,7 +63,8 @@ async def slide_action(action: str, request: Request) -> dict[str, Any]:
 
     elif action == "notes":
         try:
-            data = json.loads(open(slides_json).read())
+            with open(slides_json) as f:
+                data = json.load(f)
             slide = next((s for s in data if s["id"] == body.get("slideId")), None)
             if slide:
                 slide["notes"] = body.get("notes", "")

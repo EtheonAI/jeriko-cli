@@ -50,8 +50,11 @@ async def get_results(task_id: str | None = None) -> dict[str, Any]:
             return {"ok": True, "task_id": task_id, "result": _results[task_id]}
         path = os.path.join(RESULTS_DIR, f"{task_id}.json")
         if os.path.exists(path):
-            with open(path) as f:
-                return {"ok": True, "task_id": task_id, "result": json.load(f)}
+            try:
+                with open(path) as f:
+                    return {"ok": True, "task_id": task_id, "result": json.load(f)}
+            except json.JSONDecodeError:
+                return {"error": f"Corrupted result file for task_id: {task_id}"}
         return {"error": f"No result for task_id: {task_id}"}
 
     # Return all results

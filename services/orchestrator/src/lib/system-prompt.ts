@@ -167,6 +167,10 @@ SCHEDULING (1 tool)
 ANALYTICS (1 tool)
   - track_analytics      Track an analytics event.
 
+PARALLEL EXECUTION (2 tools)
+  - parallel_tasks       Execute multiple independent sub-tasks concurrently.
+  - idle                 Do nothing (used when waiting for user input or pausing).
+
 PAGE CREATION (1 tool)
   - make_manus_page      Create a standalone shareable page from MDX content.
 

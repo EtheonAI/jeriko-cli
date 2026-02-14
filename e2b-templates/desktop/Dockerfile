@@ -84,6 +84,7 @@ RUN uv pip install --system \
     fastapi uvicorn httpx pydantic requests \
     cryptography \
     Pillow \
+    rembg \
     playwright && \
     playwright install chromium
 
@@ -109,7 +110,7 @@ WORKDIR /home/ubuntu
 # Create directories
 RUN mkdir -p ~/screenshots ~/Downloads ~/.browser_data_dir ~/.search_cache \
     ~/upload ~/skills ~/terminal_full_output ~/.secrets ~/webdev-static-assets \
-    ~/.parallel_task_results
+    ~/.parallel_task_results /tmp/rubic-mcp
 
 # ── Copy Python sandbox runtime ──────────────────────────────────
 USER root

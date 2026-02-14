@@ -5,10 +5,10 @@
  * This is what the Next.js chat route proxies to.
  */
 
-import { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
-import type { ModelMessage } from 'ai';
-import { runStreamingAgentLoop } from '../lib/agent-loop.js';
+import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
+import type { ModelMessage } from "ai";
+import { runStreamingAgentLoop } from "../lib/agent-loop.js";
 
 // ── Active stream tracking ────────────────────────────────────────────────
 // Maps sessionId → AbortController for active streaming completions.
@@ -34,9 +34,9 @@ export function abortSession(sessionId: string): boolean {
 const completionBodySchema = z.object({
   messages: z.array(
     z.object({
-      role: z.enum(['user', 'assistant', 'system']),
+      role: z.enum(["user", "assistant", "system"]),
       content: z.union([z.string(), z.array(z.any())]),
-    }),
+    })
   ),
   sessionId: z.string().optional(),
   userId: z.string().optional(),
@@ -47,11 +47,11 @@ const completionBodySchema = z.object({
 
 export const completionRoutes: FastifyPluginAsync = async (fastify) => {
   // SSE streaming completion
-  fastify.post('/v1/completions', async (request, reply) => {
+  fastify.post("/v1/completions", async (request, reply) => {
     const parsed = completionBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({
-        error: 'Invalid request body',
+        error: "Invalid request body",
         details: parsed.error.issues,
       });
     }
@@ -59,8 +59,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
     const {
       messages,
       sessionId = `sess_${Date.now()}`,
-      userId = request.headers['x-user-id'] as string || 'anonymous',
-      userName = request.headers['x-user-name'] as string || undefined,
+      userId = (request.headers["x-user-id"] as string) || "anonymous",
+      userName = (request.headers["x-user-name"] as string) || undefined,
       maxSteps,
     } = parsed.data;
 
@@ -79,16 +79,16 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       // Set SSE headers — must include CORS manually since reply.raw bypasses Fastify
-      const origin = request.headers.origin || 'http://localhost:3000';
+      const origin = request.headers.origin || "http://localhost:3000";
       reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-        'x-vercel-ai-ui-message-stream': 'v1',
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Credentials': 'true',
-        ...(sandboxId ? { 'x-sandbox-id': sandboxId } : {}),
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+        "x-vercel-ai-ui-message-stream": "v1",
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        ...(sandboxId ? { "x-sandbox-id": sandboxId } : {}),
       });
 
       // Pipe the stream to the response
@@ -104,8 +104,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       } catch (error) {
         // Stream error — write error event (ignore abort errors)
         if (!abortController.signal.aborted) {
-          const errMsg = error instanceof Error ? error.message : 'Stream error';
-          reply.raw.write(`data: ${JSON.stringify({ type: 'error', error: errMsg })}\n\n`);
+          const errMsg = error instanceof Error ? error.message : "Stream error";
+          reply.raw.write(`data: ${JSON.stringify({ type: "error", error: errMsg })}\n\n`);
         }
       } finally {
         activeStreams.delete(sessionId);
@@ -113,32 +113,32 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       }
     } catch (error) {
       activeStreams.delete(sessionId);
-      const errMsg = error instanceof Error ? error.message : 'Completion failed';
+      const errMsg = error instanceof Error ? error.message : "Completion failed";
       return reply.status(500).send({ error: errMsg });
     }
   });
 
   // Stop an active streaming completion
   fastify.post<{ Params: { sessionId: string } }>(
-    '/v1/completions/:sessionId/stop',
+    "/v1/completions/:sessionId/stop",
     async (request, reply) => {
       const { sessionId } = request.params;
       const aborted = abortSession(sessionId);
       if (aborted) {
-        return { success: true, message: 'Completion stopped' };
+        return { success: true, message: "Completion stopped" };
       }
       return reply.status(404).send({
-        error: 'No active completion found for this session',
+        error: "No active completion found for this session",
       });
-    },
+    }
   );
 
   // Health check for completion service
-  fastify.get('/v1/completions/health', async () => {
+  fastify.get("/v1/completions/health", async () => {
     return {
-      status: 'ok',
-      hasApiKey: !!process.env.ANTHROPIC_API_KEY,
-      model: process.env.ORCHESTRATOR_MODEL || 'claude-sonnet-4-5-20250929',
+      status: "ok",
+      hasApiKey: !!process.env.ANTHROPIC_API_KEY || !!process.env.OPENAI_API_KEY,
+      model: process.env.ORCHESTRATOR_MODEL || "claude-sonnet-4-5-20250929",
       activeStreams: activeStreams.size,
     };
   });

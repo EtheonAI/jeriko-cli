@@ -153,6 +153,10 @@ else
     echo "Sandbox Runtime ready"
 fi
 
+# Start MCP server (depends on sandbox runtime being ready)
+echo "Starting MCP server via supervisord..."
+sudo supervisorctl start mcp-server || true
+
 # ─── Phase 8: Code-server watcher ───────────────────────────────────────
 # Code-server starts on-demand when /tmp/start_code_server trigger is created
 

@@ -57,28 +57,24 @@ class Terminal:
         self._start(shell, cols, rows)
 
     def _start(self, shell: str, cols: int, rows: int) -> None:
-        pid, fd = pty.openpty()
-        self.master_fd = fd
-        self.pid = pid
+        master_fd, slave_fd = pty.openpty()
+        self.master_fd = master_fd
 
         # Fork
         child_pid = os.fork()
         if child_pid == 0:
-            # Child process
+            # Child process — use slave side for stdio
             os.setsid()
-            os.close(fd)
-            # Set up slave as controlling terminal
-            slave_fd = os.open(os.ttyname(pid), os.O_RDWR)
-            # Set window size
+            os.close(master_fd)
+            # Set window size on slave
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
             fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
-            # Redirect stdio
+            # Redirect stdio to slave
             os.dup2(slave_fd, 0)
             os.dup2(slave_fd, 1)
             os.dup2(slave_fd, 2)
             if slave_fd > 2:
                 os.close(slave_fd)
-            os.close(pid)
             # Set env
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
@@ -88,13 +84,13 @@ class Terminal:
             os.chdir(HOME)
             os.execvpe(shell, [shell, "--login"], env)
         else:
-            # Parent
-            os.close(pid)
+            # Parent — keep master side for reading child output
+            os.close(slave_fd)
             self.pid = child_pid
             self.alive = True
             # Make master_fd non-blocking
-            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+            flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+            fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
             # Ensure output dir exists
             os.makedirs(os.path.dirname(self.full_output_path), exist_ok=True)
 

@@ -369,13 +369,11 @@ async function handleShellWriteToProcess(
 ): Promise<Record<string, unknown>> {
   const id = (params.id as string) || "default";
   const input = params.input as string;
-  const pressEnter = params.press_enter as boolean;
-
-  // Append \n when enter is requested (sandbox only reads text field)
-  const text = pressEnter ? input + "\n" : input;
+  const pressEnter = (params.press_enter as boolean) ?? false;
 
   const result = await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/write`, {
-    text,
+    text: input,
+    enter: pressEnter,
   });
 
   return { status: "success", ...result };
