@@ -3,6 +3,7 @@ from typing import Any
 
 
 class TerminalCreateRequest(BaseModel):
+    id: str | None = None
     cols: int = 80
     rows: int = 24
     shell: str = "/bin/bash"
@@ -10,6 +11,7 @@ class TerminalCreateRequest(BaseModel):
 
 class TerminalWriteRequest(BaseModel):
     text: str
+    enter: bool = False
 
 
 class TerminalResizeRequest(BaseModel):

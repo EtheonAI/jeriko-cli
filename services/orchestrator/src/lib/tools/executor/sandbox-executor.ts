@@ -1,19 +1,22 @@
 /**
- * Sandbox tool executor — routes tool calls to the terminal server inside the E2B sandbox.
+ * Sandbox tool executor — routes tool calls to the sandbox runtime inside the E2B sandbox.
  *
- * The terminal server runs on port 8330 inside the sandbox and provides:
- *   - Terminal (PTY sessions): /terminal/{id}/write, /terminal/{id}/view, /terminal/{id}/kill
+ * The sandbox runtime runs on port 8330 inside the sandbox and provides:
+ *   - Terminal (PTY sessions): /terminal/create, /terminal/{id}/write, /terminal/{id}/view, /terminal/{id}/kill
  *   - Text editor (files):    /text_editor (unified endpoint)
  *   - Browser control:        /browser/action (unified endpoint)
  *   - Deploy:                 /deploy/zip-and-upload, expose-port via E2B SDK
- *   - File I/O:               /file (raw read/write)
+ *   - File I/O:               /file/{command}
  */
 
 import type { ToolContext } from '../types.js';
 import { getRsaHeaders } from '../../rsa-auth.js';
 
+// Track which terminal IDs have been created this session
+const createdTerminals = new Set<string>();
+
 /**
- * Execute a tool by routing to the correct terminal server endpoint.
+ * Execute a tool by routing to the correct sandbox runtime endpoint.
  */
 export async function executeSandboxTool(
   ctx: ToolContext,
@@ -22,7 +25,7 @@ export async function executeSandboxTool(
 ): Promise<Record<string, unknown>> {
   const baseUrl = ctx.terminalServerUrl;
   if (!baseUrl || baseUrl === 'no-sandbox') {
-    return { status: 'error', error: 'No sandbox available. Terminal server is not reachable.' };
+    return { status: 'error', error: 'No sandbox available. Sandbox runtime is not reachable.' };
   }
 
   try {
@@ -37,7 +40,7 @@ export async function executeSandboxTool(
 
     let result: Record<string, unknown>;
 
-    // Route to correct terminal server endpoint
+    // Route to correct sandbox runtime endpoint
     if (toolName === 'file_read') {
       result = await handleFileRead(baseUrl, params);
     } else if (toolName === 'file_write') {
@@ -95,7 +98,7 @@ export async function executeSandboxTool(
   }
 }
 
-// ── Helper: POST JSON to terminal server ────────────────────────────────────
+// ── Helper: POST JSON to sandbox runtime ─────────────────────────────────────
 
 async function postJson(
   url: string,
@@ -124,7 +127,6 @@ async function postJson(
 }
 
 async function getJson(url: string, timeoutMs = 15000): Promise<Record<string, unknown>> {
-  // GET requests have empty body — sign empty string
   const rsaHeaders = getRsaHeaders('');
 
   const response = await fetch(url, {
@@ -140,7 +142,21 @@ async function getJson(url: string, timeoutMs = 15000): Promise<Record<string, u
   return (await response.json()) as Record<string, unknown>;
 }
 
-// ── File tools (via /text_editor) ───────────────────────────────────────────
+// ── Ensure terminal exists ───────────────────────────────────────────────────
+
+async function ensureTerminal(baseUrl: string, id: string): Promise<void> {
+  const key = `${baseUrl}:${id}`;
+  if (createdTerminals.has(key)) return;
+
+  try {
+    await postJson(`${baseUrl}/terminal/create`, { id }, 10000);
+  } catch {
+    // Terminal may already exist — not fatal
+  }
+  createdTerminals.add(key);
+}
+
+// ── File tools (via /text_editor) ────────────────────────────────────────────
 
 async function handleFileRead(
   baseUrl: string,
@@ -175,13 +191,24 @@ async function handleFileWrite(
   if (leadingNewline) content = '\n' + content;
   if (trailingNewline) content = content + '\n';
 
-  const command = append ? 'write' : 'create';
-  const body: Record<string, unknown> = { command, path: file, file_text: content };
-  if (append) body.insert_line = -1; // append at end
-  if (sudo) body.sudo = true;
-
-  const result = await postJson(`${baseUrl}/text_editor`, body);
-  return { status: 'success', file, bytesWritten: Buffer.byteLength(content, 'utf-8'), ...result };
+  if (append) {
+    // Append: use 'insert' command at end of file
+    const body: Record<string, unknown> = {
+      command: 'insert',
+      path: file,
+      new_str: content,
+      insert_line: -1,
+    };
+    if (sudo) body.sudo = true;
+    const result = await postJson(`${baseUrl}/text_editor`, body);
+    return { status: 'success', file, bytesWritten: Buffer.byteLength(content, 'utf-8'), ...result };
+  } else {
+    // Create/overwrite: use 'create' command
+    const body: Record<string, unknown> = { command: 'create', path: file, file_text: content };
+    if (sudo) body.sudo = true;
+    const result = await postJson(`${baseUrl}/text_editor`, body);
+    return { status: 'success', file, bytesWritten: Buffer.byteLength(content, 'utf-8'), ...result };
+  }
 }
 
 async function handleFileStrReplace(
@@ -213,7 +240,8 @@ async function handleFileFindInContent(
   const regex = params.regex as string;
   const sudo = params.sudo as boolean | undefined;
 
-  const body: Record<string, unknown> = { command: 'grep', path: file, regex };
+  // Sandbox text_editor uses "find" command (not "grep")
+  const body: Record<string, unknown> = { command: 'find', path: file, regex };
   if (sudo) body.sudo = true;
 
   const result = await postJson(`${baseUrl}/text_editor`, body);
@@ -235,22 +263,25 @@ async function handleFileFindByName(
   return { status: 'success', files: result.files ?? result.output ?? '', ...result };
 }
 
-// ── Shell tools (via /terminal/{id}/*) ──────────────────────────────────────
+// ── Shell tools (via /terminal/{id}/*) ───────────────────────────────────────
 
 async function handleShellExec(
   baseUrl: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = params.id as string;
+  const id = (params.id as string) || 'default';
   const execDir = params.exec_dir as string;
   const command = params.command as string;
 
-  // Write command to terminal. If exec_dir is specified, cd first.
+  // Ensure terminal exists
+  await ensureTerminal(baseUrl, id);
+
+  // Build command — if exec_dir specified, cd first
   const fullCommand = execDir ? `cd ${JSON.stringify(execDir)} && ${command}` : command;
 
+  // Append \n to text so the command actually executes (sandbox reads text only)
   await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/write`, {
-    text: fullCommand,
-    enter: true,
+    text: fullCommand + '\n',
   }, 120000);
 
   // Brief pause to let output accumulate
@@ -270,7 +301,7 @@ async function handleShellView(
   baseUrl: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = params.id as string;
+  const id = (params.id as string) || 'default';
 
   const result = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
 
@@ -285,7 +316,7 @@ async function handleShellWait(
   baseUrl: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = params.id as string;
+  const id = (params.id as string) || 'default';
   const seconds = (params.seconds as number) ?? 30;
 
   // Poll terminal view until output stabilizes or timeout
@@ -301,7 +332,6 @@ async function handleShellWait(
     if (currentOutput === lastOutput) {
       stableCount++;
       if (stableCount >= 3) {
-        // Output has stabilized — process likely finished
         return { status: 'success', completed: true, output: currentOutput, ...result };
       }
     } else {
@@ -312,7 +342,6 @@ async function handleShellWait(
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  // Timeout — return what we have
   return {
     status: 'success',
     completed: false,
@@ -324,13 +353,15 @@ async function handleShellWriteToProcess(
   baseUrl: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = params.id as string;
+  const id = (params.id as string) || 'default';
   const input = params.input as string;
   const pressEnter = params.press_enter as boolean;
 
+  // Append \n when enter is requested (sandbox only reads text field)
+  const text = pressEnter ? input + '\n' : input;
+
   const result = await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/write`, {
-    text: input,
-    enter: pressEnter,
+    text,
   });
 
   return { status: 'success', ...result };
@@ -340,14 +371,14 @@ async function handleShellKillProcess(
   baseUrl: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const id = params.id as string;
+  const id = (params.id as string) || 'default';
 
   const result = await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/kill`, {});
 
   return { status: 'success', ...result };
 }
 
-// ── Code execution (via shell) ──────────────────────────────────────────────
+// ── Code execution (via shell) ───────────────────────────────────────────────
 
 async function handleCodeExecute(
   baseUrl: string,
@@ -356,7 +387,6 @@ async function handleCodeExecute(
   const code = params.code as string;
   const language = (params.language as string) || 'python';
 
-  // Execute code via a terminal session
   let command: string;
   if (language === 'python') {
     command = `python3 -c ${JSON.stringify(code)}`;
@@ -368,10 +398,12 @@ async function handleCodeExecute(
     return { status: 'error', error: `Unsupported language: ${language}` };
   }
 
-  // Use a dedicated code execution terminal
+  // Ensure the code_exec terminal exists
+  await ensureTerminal(baseUrl, 'code_exec');
+
+  // Write command with newline so it executes
   await postJson(`${baseUrl}/terminal/code_exec/write`, {
-    text: command,
-    enter: true,
+    text: command + '\n',
   }, 120000);
 
   await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -385,41 +417,61 @@ async function handleCodeExecute(
   };
 }
 
-// ── Browser tools (via /browser/action) ─────────────────────────────────────
+// ── Browser tools (via /browser/action) ──────────────────────────────────────
 
 async function handleBrowser(
   baseUrl: string,
   toolName: string,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  // Map tool name to browser action name
-  const actionMap: Record<string, string> = {
-    browser_view: 'browser_view',
-    browser_navigate: 'browser_navigate',
-    browser_restart: 'browser_restart',
-    browser_click: 'browser_click',
-    browser_input: 'browser_input',
-    browser_move_mouse: 'browser_move_mouse',
-    browser_press_key: 'browser_press_key',
-    browser_select_option: 'browser_select_option',
-    browser_scroll_up: 'browser_scroll_up',
-    browser_scroll_down: 'browser_scroll_down',
-    browser_console_exec: 'browser_console_exec',
-    browser_console_view: 'browser_console_view',
-    browser_screenshot: 'browser_screenshot',
-  };
+  // Strip 'browser_' prefix — sandbox expects bare action names
+  const action = toolName.replace(/^browser_/, '');
 
-  const action = actionMap[toolName] || toolName;
+  // Transform parameters to match sandbox expected format
+  const transformedParams = { ...params };
+
+  // Convert {coordinate_x, coordinate_y} → {coordinate: [x, y]}
+  if ('coordinate_x' in transformedParams && 'coordinate_y' in transformedParams) {
+    transformedParams.coordinate = [transformedParams.coordinate_x, transformedParams.coordinate_y];
+    delete transformedParams.coordinate_x;
+    delete transformedParams.coordinate_y;
+  }
+
+  // console_exec: {javascript} → {script}
+  if (action === 'console_exec' && 'javascript' in transformedParams) {
+    transformedParams.script = transformedParams.javascript;
+    delete transformedParams.javascript;
+  }
+
+  // select_option: {index, option} → {selector, value}
+  if (action === 'select_option') {
+    if ('index' in transformedParams) {
+      transformedParams.selector = transformedParams.index;
+      delete transformedParams.index;
+    }
+    if ('option' in transformedParams) {
+      transformedParams.value = transformedParams.option;
+      delete transformedParams.option;
+    }
+  }
+
+  // scroll_up/scroll_down: {to_top} → {amount}
+  if ((action === 'scroll_up' || action === 'scroll_down') && 'to_top' in transformedParams) {
+    if (transformedParams.to_top) {
+      transformedParams.amount = 99999;
+    }
+    delete transformedParams.to_top;
+  }
 
   const result = await postJson(`${baseUrl}/browser/action`, {
     action,
-    ...params,
+    ...transformedParams,
   }, 45000);
 
   return { status: 'success', ...result };
 }
 
-// ── Deploy tools ────────────────────────────────────────────────────────────
+// ── Deploy tools ─────────────────────────────────────────────────────────────
 
 async function handleDeployExposePort(
   ctx: ToolContext,
@@ -446,7 +498,6 @@ async function handleDeployApplyDeployment(
   const type = params.type as string;
   const localDir = params.local_dir as string;
 
-  // Call the terminal server's deploy endpoint
   const result = await postJson(`${baseUrl}/deploy/zip-and-upload`, {
     type,
     local_dir: localDir,
@@ -457,7 +508,7 @@ async function handleDeployApplyDeployment(
   return { status: 'success', type, local_dir: localDir, ...result };
 }
 
-// ── Upload attachments ──────────────────────────────────────────────────────
+// ── Upload attachments ───────────────────────────────────────────────────────
 
 export async function uploadAttachments(
   ctx: ToolContext,
@@ -471,8 +522,8 @@ export async function uploadAttachments(
   for (const filePath of attachments) {
     try {
       if (baseUrl && baseUrl !== 'no-sandbox') {
-        // Use terminal server's file upload endpoint
-        const result = await postJson(`${baseUrl}/file/upload_to_s3`, {
+        // Use sandbox runtime's file upload endpoint
+        const result = await postJson(`${baseUrl}/file/upload`, {
           file_path: filePath,
           user_id: ctx.userId,
         });

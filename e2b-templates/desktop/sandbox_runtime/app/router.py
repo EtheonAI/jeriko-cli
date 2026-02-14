@@ -16,6 +16,7 @@ from .tools.image import router as image_router
 from .tools.deploy import router as deploy_router
 from .tools.webdev import router as webdev_router
 from .tools.parallel_tasks import router as parallel_tasks_router
+from .tools.apiproxy import router as apiproxy_router
 
 
 def register_routes(app: FastAPI) -> None:
@@ -34,3 +35,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(deploy_router)
     app.include_router(webdev_router)
     app.include_router(parallel_tasks_router)
+    app.include_router(apiproxy_router)

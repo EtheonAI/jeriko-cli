@@ -69,7 +69,7 @@ Use this when you need fine-grained file operations beyond simple read/write.`,
           'str_replace',
           'insert',
           'undo_edit',
-          'find_content',
+          'find',
           'find_file',
           'multi_edit',
         ])
@@ -147,8 +147,8 @@ export function createImageRmbgTool(ctx: ToolContext) {
   return tool({
     description: `Remove the background from an image file. The processed image is saved back to the sandbox filesystem.`,
     inputSchema: z.object({
-      image_path: z.string().describe('Absolute path of the image file in the sandbox'),
-      output_path: z
+      input: z.string().describe('Absolute path of the image file in the sandbox'),
+      output: z
         .string()
         .optional()
         .describe('Optional output path. Defaults to <original>_nobg.png'),
@@ -181,7 +181,7 @@ export function createImageSearchUploadTool(ctx: ToolContext) {
   return tool({
     description: `Upload an image for reverse image search. Returns search results with visually similar images and source URLs.`,
     inputSchema: z.object({
-      image_path: z.string().describe('Absolute path of the image file to search'),
+      file_path: z.string().describe('Absolute path of the image file to search'),
     }),
     execute: async (params) => {
       const baseUrl = ctx.terminalServerUrl;
@@ -329,7 +329,7 @@ export function createGmailDownloadTool(ctx: ToolContext) {
 
       try {
         const result = await postJson(
-          `${baseUrl}/request-download-gmail-attachments`,
+          `${baseUrl}/gmail/download-attachments`,
           { ...params, user_id: ctx.userId } as Record<string, unknown>,
           60000,
         );
@@ -426,8 +426,8 @@ export function createSkillsPackageTool(ctx: ToolContext) {
   return tool({
     description: `Package a skill for distribution. Takes a skill directory and creates a distributable archive that can be shared or installed by other users.`,
     inputSchema: z.object({
-      skill_dir: z.string().describe('Absolute path of the skill directory to package'),
-      name: z.string().describe('Display name of the skill'),
+      skill_path: z.string().describe('Absolute path of the skill directory to package'),
+      skill_name: z.string().describe('Display name of the skill'),
       description: z.string().optional().describe('Brief description of what the skill does'),
       version: z.string().optional().default('1.0.0').describe('Semantic version'),
     }),

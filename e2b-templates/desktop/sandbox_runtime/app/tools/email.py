@@ -1,6 +1,7 @@
 """Email endpoints — stubs matching Manus parity.
 
 POST /gmail/send-or-save-draft
+POST /gmail/download-attachments
 POST /outlook/send-or-save-draft
 POST /outlook/download-mail-attachments
 """
@@ -18,6 +19,14 @@ router = APIRouter()
 
 @router.post("/gmail/send-or-save-draft")
 async def gmail_send() -> JSONResponse:
+    return JSONResponse(
+        {"error": "Gmail integration not configured. Connect your account in Settings."},
+        status_code=501,
+    )
+
+
+@router.post("/gmail/download-attachments")
+async def gmail_download() -> JSONResponse:
     return JSONResponse(
         {"error": "Gmail integration not configured. Connect your account in Settings."},
         status_code=501,

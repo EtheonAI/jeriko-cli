@@ -18,7 +18,7 @@ class ApiClient:
         """
         Initialize the API client with the base host URL for the proxy service.
         """
-        host = os.getenv('RUNTIME_API_HOST', 'https://api.rubic.ai')  # Changed from manus.im
+        host = os.getenv('RUNTIME_API_HOST', 'http://127.0.0.1:9330')
         self.host = f'{host}/apiproxy.v1.ApiProxyService/CallApi'
         with Path().home().joinpath('.secrets/sandbox_api_token').open('r') as f:
             self.token = f.read().strip()

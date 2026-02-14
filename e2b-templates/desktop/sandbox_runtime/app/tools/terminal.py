@@ -189,7 +189,11 @@ def _get_next_id() -> str:
 
 @router.post("/terminal/create")
 async def create_terminal(req: TerminalCreateRequest) -> dict[str, Any]:
-    tid = _get_next_id()
+    # Use provided ID or auto-generate (Manus parity: orchestrator sends explicit IDs)
+    tid = req.id if req.id else _get_next_id()
+    # Return existing terminal if ID already exists
+    if tid in terminals:
+        return {"id": tid, "pid": terminals[tid].pid, "output": "", "exists": True}
     t = Terminal(tid, cols=req.cols, rows=req.rows, shell=req.shell)
     terminals[tid] = t
     # Wait briefly for shell prompt
@@ -203,7 +207,9 @@ async def write_terminal(terminal_id: str, req: TerminalWriteRequest) -> dict[st
     t = terminals.get(terminal_id)
     if not t:
         return {"error": f"Terminal {terminal_id} not found"}
-    t.write(req.text)
+    # Append newline when enter=true (Manus parity)
+    text = req.text + "\n" if req.enter else req.text
+    t.write(text)
     # Brief wait for output
     await asyncio.sleep(0.1)
     output = t.read_output()

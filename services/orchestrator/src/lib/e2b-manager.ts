@@ -24,6 +24,12 @@ const LLM_PROXY_URL = process.env.LLM_PROXY_URL || '';
 // Code-server domain for port proxy URLs (Manus pattern: us2.manus.computer)
 const CODE_SERVER_DOMAIN = process.env.CODE_SERVER_DOMAIN || '';
 
+// Orchestrator URL — injected into sandboxes so they can call back for apiproxy, upload, etc.
+// Must be reachable from inside E2B sandboxes.
+// In prod: https://api.rubic.ai (or orchestrator.rubic.ai)
+// In dev: expose via tunnel or use host.docker.internal
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || '';
+
 // Forge API for webdev projects (separate from LLM proxy)
 const FORGE_API_URL = process.env.FORGE_API_URL || '';
 const FORGE_API_KEY = process.env.FORGE_API_KEY || '';
@@ -113,6 +119,14 @@ export async function getOrCreateSandbox(
     const uploadUrl = LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, '/upload/presign');
     env.RUBIC_UPLOAD_URL = uploadUrl;
   }
+
+  // Orchestrator URL — for apiproxy and upload calls from inside the sandbox
+  if (ORCHESTRATOR_URL) {
+    env.ORCHESTRATOR_URL = ORCHESTRATOR_URL;
+  }
+
+  // Sandbox API token as secret file path (Manus pattern)
+  env.SANDBOX_API_TOKEN = proxyToken;
 
   // Code-server password — generated per sandbox (Manus pattern: random per session)
   const codeServerPassword = crypto.randomBytes(8).toString("hex");
