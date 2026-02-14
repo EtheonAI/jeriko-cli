@@ -10,7 +10,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-import { executeSandboxTool } from './executor/sandbox-executor.js';
+import { getRsaHeaders } from '../rsa-auth.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -19,16 +19,22 @@ async function postJson(
   body: Record<string, unknown>,
   timeoutMs = 30000,
 ): Promise<Record<string, unknown>> {
+  const jsonBody = JSON.stringify(body);
+  const rsaHeaders = getRsaHeaders(jsonBody);
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
+      ...rsaHeaders,
+    },
+    body: jsonBody,
     signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
     const text = await response.text().catch(() => response.statusText);
-    throw new Error(`Terminal server error (${response.status}): ${text}`);
+    throw new Error(`Sandbox runtime error (${response.status}): ${text}`);
   }
 
   return (await response.json()) as Record<string, unknown>;
@@ -309,7 +315,7 @@ export function createGmailDownloadTool(ctx: ToolContext) {
       output_dir: z
         .string()
         .optional()
-        .default('/home/user/Downloads')
+        .default('/home/ubuntu/Downloads')
         .describe('Directory to save attachments'),
     }),
     execute: async (params) => {
@@ -348,7 +354,7 @@ export function createOutlookDownloadTool(ctx: ToolContext) {
       output_dir: z
         .string()
         .optional()
-        .default('/home/user/Downloads')
+        .default('/home/ubuntu/Downloads')
         .describe('Directory to save attachments'),
     }),
     execute: async (params) => {

@@ -2,6 +2,7 @@
  * Tool index — aggregates all tool categories into a single registry
  */
 
+import type { ToolSet } from 'ai';
 import type { ToolContext } from './types.js';
 import { createMessageNotifyUserTool, createMessageAskUserTool } from './message-tools.js';
 import { createFileTools } from './file-tools.js';
@@ -35,7 +36,7 @@ export type AgentMode = 'base' | 'browser' | 'webdev';
  * @param ctx - Tool context
  * @param mode - Agent mode (defaults to 'browser' for full tool access)
  */
-export function createAllTools(ctx: ToolContext, mode: AgentMode = 'browser') {
+export function createAllTools(ctx: ToolContext, mode: AgentMode = 'browser'): ToolSet {
   // Base tools (always available)
   const baseTools = {
     // Communication (2)
@@ -71,7 +72,7 @@ export function createAllTools(ctx: ToolContext, mode: AgentMode = 'browser') {
   };
 
   if (mode === 'base') {
-    return baseTools as Record<string, unknown>;
+    return baseTools as ToolSet;
   }
 
   // Browser mode: base + browser + deploy
@@ -82,11 +83,11 @@ export function createAllTools(ctx: ToolContext, mode: AgentMode = 'browser') {
   };
 
   if (mode === 'browser') {
-    return browserTools as Record<string, unknown>;
+    return browserTools as ToolSet;
   }
 
   // Webdev mode: browser + all (same for now, extensible)
-  return browserTools as Record<string, unknown>;
+  return browserTools as ToolSet;
 }
 
 /**
@@ -149,5 +150,7 @@ export function getAllToolNames(): string[] {
     'outlook_download',
     'skills_sync',
     'skills_package',
+    // Parallel tasks
+    'parallel_tasks',
   ];
 }

@@ -191,7 +191,7 @@ export async function getOrCreateSandbox(
 export function getSandboxInfo(sessionId: string): SandboxResult | undefined {
   const cached = sandboxCache.get(sessionId);
   if (!cached) return undefined;
-  return { sandboxId: cached.sandboxId, nekoUrl: cached.nekoUrl };
+  return { sandboxId: cached.sandboxId, e2bSandboxId: cached.e2bSandboxId, nekoUrl: cached.nekoUrl };
 }
 
 /**

@@ -5,6 +5,8 @@
  * Matches Manus parallel_tasks module.
  */
 
+import { tool } from 'ai';
+import { z } from 'zod';
 import type { ToolContext } from './types.js';
 import { getRsaHeaders } from '../rsa-auth.js';
 
@@ -25,7 +27,7 @@ const MAX_CONCURRENT_WORKERS = 4;
 /**
  * Execute multiple tasks in parallel using sub-agent LLM (GPT-4.1-mini).
  */
-export async function executeParallelTasks(
+async function executeParallelTasks(
   ctx: ToolContext,
   tasks: ParallelTask[],
 ): Promise<ParallelTaskResult[]> {
@@ -58,7 +60,7 @@ async function executeOneTask(
   task: ParallelTask,
 ): Promise<ParallelTaskResult> {
   try {
-    // Call the LLM proxy within the sandbox to get sub-agent to process
+    // Call OpenAI directly (server-side, real key) for sub-agent completions
     const llmProxyUrl = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
     const apiKey = process.env.OPENAI_API_KEY || '';
 
@@ -131,41 +133,32 @@ async function executeOneTask(
 
 /**
  * Create the parallel_tasks tool definition for AI SDK.
+ * Uses proper AI SDK tool() wrapper with Zod inputSchema.
  */
 export function createParallelTasksTool(ctx: ToolContext) {
   return {
-    parallel_tasks: {
+    parallel_tasks: tool({
       description:
         'Execute multiple independent tasks in parallel using sub-agent LLMs (GPT-4.1-mini). ' +
         'Each task gets its own independent completion. Max 4 concurrent workers per wave. ' +
         'Use this for genuinely parallelizable work like researching multiple topics simultaneously.',
-      parameters: {
-        type: 'object' as const,
-        properties: {
-          tasks: {
-            type: 'array' as const,
-            items: {
-              type: 'object' as const,
-              properties: {
-                task_id: { type: 'string' as const, description: 'Unique task identifier' },
-                prompt: { type: 'string' as const, description: 'The task prompt for the sub-agent' },
-              },
-              required: ['task_id', 'prompt'],
-            },
-            description: 'Array of tasks to execute in parallel',
-          },
-        },
-        required: ['tasks'],
-      },
-      execute: async (args: { tasks: ParallelTask[] }) => {
+      inputSchema: z.object({
+        tasks: z.array(
+          z.object({
+            task_id: z.string().describe('Unique task identifier'),
+            prompt: z.string().describe('The task prompt for the sub-agent'),
+          }),
+        ).describe('Array of tasks to execute in parallel'),
+      }),
+      execute: async (args) => {
         const results = await executeParallelTasks(ctx, args.tasks);
         return {
-          status: 'success',
+          status: 'success' as const,
           results,
           totalTasks: args.tasks.length,
           completedTasks: results.filter((r) => r.status === 'success').length,
         };
       },
-    },
+    }),
   };
 }

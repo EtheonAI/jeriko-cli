@@ -52,16 +52,19 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
 
   // Create sandbox (lazy — won't block if sandbox service is down)
   let sandboxId: string | null = null;
+  let e2bSandboxId: string | null = null;
   let nekoUrl: string | null = null;
   try {
     const sandbox = await getOrCreateSandbox(sessionId, userId);
     sandboxId = sandbox.sandboxId;
+    e2bSandboxId = sandbox.e2bSandboxId;
     nekoUrl = sandbox.nekoUrl;
   } catch {
     // Sandbox not available — tools requiring sandbox will fail gracefully
   }
 
   // Build tool context
+  // terminalServerUrl uses sandboxId (the E2B sandbox ID used for port proxying)
   const terminalServerUrl = sandboxId
     ? `https://8330-${sandboxId}.${process.env.SANDBOX_DOMAIN || 'e2b.dev'}`
     : '';
@@ -73,9 +76,11 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     db: createNoopDb(),
     sandboxId: sandboxId || 'no-sandbox',
     terminalServerUrl: terminalServerUrl || 'no-sandbox',
-    e2bSandboxId: sandboxId || '',
+    e2bSandboxId: e2bSandboxId || sandboxId || '',
     ws: createNoopWs(),
     storage: createNoopStorage(),
+    searchProvider: createDefaultSearchProvider(),
+    imageProvider: createDefaultImageProvider(),
   };
 
   // Build system prompt
@@ -225,5 +230,78 @@ function createNoopStorage(): ToolContext['storage'] {
   return {
     uploadFromUrl: async (url: string) => url,
     uploadFromSandbox: async (_sid: string, path: string) => path,
+  };
+}
+
+// ── Default search provider (DuckDuckGo HTML scraping) ──
+
+function createDefaultSearchProvider(): ToolContext['searchProvider'] {
+  return {
+    search: async (params) => {
+      try {
+        const query = encodeURIComponent(params.query);
+        const response = await fetch(`https://html.duckduckgo.com/html/?q=${query}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RubicBot/1.0)' },
+          signal: AbortSignal.timeout(10000),
+        });
+        const html = await response.text();
+
+        // Extract search results from DuckDuckGo HTML
+        const results: Array<{ title: string; url: string; snippet: string }> = [];
+        const resultRegex = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi;
+        const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([^<]*)<\/a>/gi;
+
+        let match;
+        while ((match = resultRegex.exec(html)) !== null) {
+          const url = decodeURIComponent(match[1] ?? '').replace(/^\/\/duckduckgo\.com\/l\/\?uddg=/, '').split('&')[0] ?? '';
+          const title = match[2] ?? '';
+          const snippetMatch = snippetRegex.exec(html);
+          results.push({
+            title,
+            url,
+            snippet: snippetMatch?.[1] ?? '',
+          });
+          if (results.length >= 10) break;
+        }
+
+        return results;
+      } catch {
+        return [];
+      }
+    },
+  };
+}
+
+// ── Default image provider (OpenAI DALL-E) ──
+
+function createDefaultImageProvider(): ToolContext['imageProvider'] {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) return undefined;
+
+  return {
+    generate: async (params) => {
+      const response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: params.prompt,
+          size: params.size || '1024x1024',
+          n: 1,
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Image generation failed (${response.status}): ${text}`);
+      }
+
+      const data = (await response.json()) as { data: Array<{ url: string }> };
+      return { url: data.data[0]?.url ?? '' };
+    },
   };
 }
