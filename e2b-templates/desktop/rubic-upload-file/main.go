@@ -24,10 +24,10 @@ import (
 )
 
 type PresignResponse struct {
-	UploadURL   string `json:"uploadUrl"`
-	PublicURL   string `json:"publicUrl"`
-	Key         string `json:"key"`
-	Error       string `json:"error"`
+	UploadURL string `json:"uploadUrl"`
+	AccessURL string `json:"accessUrl"`
+	S3Key     string `json:"s3Key"`
+	Error     string `json:"error"`
 }
 
 func readToken() (string, error) {
@@ -154,6 +154,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Print public URL
-	fmt.Println(presign.PublicURL)
+	// Print access URL (CDN or presigned GET URL)
+	fmt.Println(presign.AccessURL)
 }

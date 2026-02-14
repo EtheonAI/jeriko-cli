@@ -189,6 +189,12 @@ SKILLS (2 tools)
   - skills_sync          Sync skills to the sandbox.
   - skills_package       Package a skill for distribution.
 
+SLIDES (4 tools)
+  - slide_init           Initialize a new slide presentation project.
+  - slide_modify         Modify a slide (title, content, background, order).
+  - slide_add_notes      Add or update speaker notes for a slide.
+  - slide_present        Enter presentation mode and get a viewable URL.
+
 CONNECTED APPS (dynamic -- loaded per-user)
   - Composio-powered tools for Gmail, Google Calendar, Slack, Notion,
     GitHub, Linear, and other third-party services the user has connected.
