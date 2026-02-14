@@ -188,22 +188,22 @@ async function handleFileWrite(
   const trailingNewline = params.trailing_newline as boolean | undefined;
   const sudo = params.sudo as boolean | undefined;
 
-  if (leadingNewline) content = '\n' + content;
-  if (trailingNewline) content = content + '\n';
-
   if (append) {
-    // Append: use 'insert' command at end of file
+    // Append: use /file/write with append=true
+    // Let the /file/write endpoint handle leading/trailing newlines natively
     const body: Record<string, unknown> = {
-      command: 'insert',
       path: file,
-      new_str: content,
-      insert_line: -1,
+      content,
+      append: true,
+      leading_newline: !!leadingNewline,
+      trailing_newline: trailingNewline !== false,
     };
-    if (sudo) body.sudo = true;
-    const result = await postJson(`${baseUrl}/text_editor`, body);
+    const result = await postJson(`${baseUrl}/file/write`, body);
     return { status: 'success', file, bytesWritten: Buffer.byteLength(content, 'utf-8'), ...result };
   } else {
-    // Create/overwrite: use 'create' command
+    // Create/overwrite: prepend/append newlines here, then use text_editor 'create'
+    if (leadingNewline) content = '\n' + content;
+    if (trailingNewline) content = content + '\n';
     const body: Record<string, unknown> = { command: 'create', path: file, file_text: content };
     if (sudo) body.sudo = true;
     const result = await postJson(`${baseUrl}/text_editor`, body);
@@ -455,12 +455,20 @@ async function handleBrowser(
     }
   }
 
-  // scroll_up/scroll_down: {to_top} → {amount}
-  if ((action === 'scroll_up' || action === 'scroll_down') && 'to_top' in transformedParams) {
+  // scroll_up: {to_top} → {amount}
+  if (action === 'scroll_up' && 'to_top' in transformedParams) {
     if (transformedParams.to_top) {
       transformedParams.amount = 99999;
     }
     delete transformedParams.to_top;
+  }
+
+  // scroll_down: {to_bottom} → {amount}
+  if (action === 'scroll_down' && 'to_bottom' in transformedParams) {
+    if (transformedParams.to_bottom) {
+      transformedParams.amount = 99999;
+    }
+    delete transformedParams.to_bottom;
   }
 
   const result = await postJson(`${baseUrl}/browser/action`, {

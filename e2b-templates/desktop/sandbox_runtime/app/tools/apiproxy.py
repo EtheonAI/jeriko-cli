@@ -55,7 +55,11 @@ async def call_api(request: Request):
 
 @router.post("/api/upload/presign")
 async def upload_presign(request: Request):
-    """Forward upload presign requests to the orchestrator."""
+    """Forward upload presign requests to the orchestrator.
+
+    The orchestrator's upload route expects Authorization: Bearer <token>,
+    NOT x-sandbox-token. Use the sandbox API token as Bearer token.
+    """
     orchestrator_url = os.getenv("ORCHESTRATOR_URL", "")
     if not orchestrator_url:
         return {"error": "ORCHESTRATOR_URL not configured"}
@@ -77,7 +81,7 @@ async def upload_presign(request: Request):
                 content=body,
                 headers={
                     "Content-Type": "application/json",
-                    "x-sandbox-token": sandbox_token,
+                    "Authorization": f"Bearer {sandbox_token}",
                 },
             )
 

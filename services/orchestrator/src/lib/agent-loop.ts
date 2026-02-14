@@ -64,9 +64,11 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   }
 
   // Build tool context
-  // terminalServerUrl uses sandboxId (the E2B sandbox ID used for port proxying)
-  const terminalServerUrl = sandboxId
-    ? `https://8330-${sandboxId}.${process.env.SANDBOX_DOMAIN || 'e2b.dev'}`
+  // terminalServerUrl uses the e2b sandbox ID for E2B port proxying
+  // Format: https://{port}-{e2b_sandbox_id}.e2b.dev
+  const sandboxIdForUrl = e2bSandboxId || sandboxId;
+  const terminalServerUrl = sandboxIdForUrl
+    ? `https://8330-${sandboxIdForUrl}.${process.env.SANDBOX_DOMAIN || 'e2b.dev'}`
     : '';
 
   const toolCtx: ToolContext = {
