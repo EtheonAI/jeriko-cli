@@ -37,7 +37,7 @@ interface ToolRegistryContextValue {
 const ToolRegistryContext = createContext<ToolRegistryContextValue | null>(null);
 
 /**
- * Default tool renderers — 33 canonical agent tools + 5 aliases from TOOL_VIEW_MAP.
+ * Default tool renderers — 49 canonical agent tools + aliases from TOOL_VIEW_MAP.
  * Every tool name that can appear in the SSE stream or TOOL_VIEW_MAP has a renderer.
  * Unknown tools fall through to GenericTool via "*".
  */
@@ -97,9 +97,39 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   message_ask_user: ProgressTool as ToolRenderer,
 
   // Scheduling & Analytics
+  schedule_task: ProgressTool as ToolRenderer,
   schedule_recurring_task: ProgressTool as ToolRenderer,
   check_outcomes: ProgressTool as ToolRenderer,
   track_analytics: ProgressTool as ToolRenderer,
+
+  // Idle (no-op)
+  idle: ProgressTool as ToolRenderer,
+
+  // Text editor (unified file editor)
+  text_editor: FilePreview as ToolRenderer,
+
+  // Image utilities
+  image_rmbg: ImageResult as ToolRenderer,
+  image_search_upload: ImageResult as ToolRenderer,
+
+  // Email (Gmail & Outlook)
+  gmail_send: ProgressTool as ToolRenderer,
+  gmail_download: ProgressTool as ToolRenderer,
+  outlook_send: ProgressTool as ToolRenderer,
+  outlook_download: ProgressTool as ToolRenderer,
+
+  // Skills
+  skills_sync: ProgressTool as ToolRenderer,
+  skills_package: ProgressTool as ToolRenderer,
+
+  // Slides
+  slide_init: ProgressTool as ToolRenderer,
+  slide_modify: ProgressTool as ToolRenderer,
+  slide_add_notes: ProgressTool as ToolRenderer,
+  slide_present: DeployResult as ToolRenderer,
+
+  // Parallel tasks
+  parallel_tasks: ProgressTool as ToolRenderer,
 
   // Fallback for any unknown tool
   "*": GenericTool,
@@ -126,7 +156,10 @@ export function ToolRegistry({ children, customRenderers = {} }: ToolRegistryPro
   };
 
   const registerRenderer = (toolName: string, renderer: ToolRenderer) => {
-    renderers[toolName] = renderer;
+    // Intentional no-op: React Compiler disallows mutating useMemo results.
+    // Use customRenderers prop on ToolRegistry instead.
+    void toolName;
+    void renderer;
   };
 
   return (

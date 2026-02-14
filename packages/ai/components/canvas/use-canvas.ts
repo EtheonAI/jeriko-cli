@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import type {
-  UIMessage,
-  StaticToolUIPart,
-  DynamicToolUIPart,
-} from "../../lib/types/ui-message";
+import type { UIMessage, StaticToolUIPart, DynamicToolUIPart } from "../../lib/types/ui-message";
 import { isToolUIPart, getToolName } from "../../lib/types/ui-message";
 import type { FileNode, FileTab } from "./views/code-view";
 
@@ -167,16 +163,19 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
 
   // Manus page -> browser
   make_manus_page: "browser",
+
+  // Text editor -> code (operates on files)
+  text_editor: "code",
+
+  // Slide present -> browser (generates viewable URL)
+  slide_present: "browser",
 };
 
 // ============================================================================
 // Tool Name -> Action Label Generator
 // ============================================================================
 
-const TOOL_ACTION_MAP: Record<
-  string,
-  (args: Record<string, unknown>) => ToolAction
-> = {
+const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAction> = {
   browser_navigate: (args) => ({
     type: "browsing",
     label: `Browsing ${tryHostname(args.url as string)}`,
@@ -266,6 +265,14 @@ const TOOL_ACTION_MAP: Record<
     type: "creating",
     label: "Creating page",
   }),
+  text_editor: (args) => ({
+    type: "editing",
+    label: `Editing ${fileName((args.path as string) ?? "")}`,
+  }),
+  slide_present: () => ({
+    type: "browsing",
+    label: "Presenting slides",
+  }),
 };
 
 // ============================================================================
@@ -295,9 +302,7 @@ function normalizeScreenshot(raw: string): string {
 }
 
 /** Extract screenshot from tool output, checking multiple keys */
-function extractScreenshot(
-  output: Record<string, unknown> | undefined
-): string | undefined {
+function extractScreenshot(output: Record<string, unknown> | undefined): string | undefined {
   if (!output) return undefined;
   // Check common keys where E2B / agent returns screenshots
   const candidates = [
@@ -326,9 +331,7 @@ function extractBrowserUrl(
 }
 
 /** Extract text content from tool output */
-function extractBrowserContent(
-  output: Record<string, unknown> | undefined
-): string | undefined {
+function extractBrowserContent(output: Record<string, unknown> | undefined): string | undefined {
   if (!output) return undefined;
   if (typeof output.content === "string" && output.content.length > 0) return output.content;
   if (typeof output.text === "string" && output.text.length > 0) return output.text;
@@ -336,9 +339,7 @@ function extractBrowserContent(
 }
 
 /** Extract page title from tool output */
-function extractBrowserTitle(
-  output: Record<string, unknown> | undefined
-): string | undefined {
+function extractBrowserTitle(output: Record<string, unknown> | undefined): string | undefined {
   if (!output) return undefined;
   if (typeof output.title === "string" && output.title.length > 0) return output.title;
   return undefined;
@@ -354,7 +355,9 @@ function extractSearchResults(
   return results
     .filter(
       (r: unknown): r is Record<string, unknown> =>
-        typeof r === "object" && r !== null && typeof (r as Record<string, unknown>).title === "string"
+        typeof r === "object" &&
+        r !== null &&
+        typeof (r as Record<string, unknown>).title === "string"
     )
     .map((r) => ({
       title: String(r.title || ""),
@@ -476,11 +479,12 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         if (toolName === "file_read" && toolPart.state === "output-available" && output) {
           const path = ((args.path ?? args.file) as string) ?? "";
           const result = output.result as Record<string, unknown> | undefined;
-          const content = typeof output === "string"
-            ? output
-            : (output.content as string)
-              ?? (result?.content as string)
-              ?? JSON.stringify(output);
+          const content =
+            typeof output === "string"
+              ? output
+              : ((output.content as string) ??
+                (result?.content as string) ??
+                JSON.stringify(output));
           if (path) contents[path] = typeof content === "string" ? content : String(content);
         }
         if (toolName === "file_str_replace" && toolPart.state === "output-available" && output) {
@@ -565,17 +569,17 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
         // Tool is working if it hasn't produced output yet AND the stream is still active.
         // Once streaming ends, treat stuck tools as done (agent moved on without result).
-        const isActive = isStreaming && (
-          toolPart.state === "input-streaming" ||
-          toolPart.state === "input-available" ||
-          toolPart.state === "approval-responded"
-        );
+        const isActive =
+          isStreaming &&
+          (toolPart.state === "input-streaming" ||
+            toolPart.state === "input-available" ||
+            toolPart.state === "approval-responded");
 
         // Count all tool calls across all messages for the step counter
         let total = 0;
         for (const m of messages) {
           if (m.role !== "assistant") continue;
-          for (const p of (m.parts ?? [])) {
+          for (const p of m.parts ?? []) {
             if (p && isToolUIPart(p)) total++;
           }
         }
@@ -622,20 +626,23 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }, []);
 
   // Timeline scrubber → pin to a specific tool call by percentage
-  const onTimelineChange = useCallback((percentage: number) => {
-    if (allToolCallIds.length === 0) return;
-    if (percentage >= 100) {
-      // Jump to live
-      setPinnedToolCallId(undefined);
-      return;
-    }
-    const index = Math.min(
-      Math.floor((percentage / 100) * allToolCallIds.length),
-      allToolCallIds.length - 1,
-    );
-    const toolCallId = allToolCallIds[index];
-    if (toolCallId) setPinnedToolCallId(toolCallId);
-  }, [allToolCallIds]);
+  const onTimelineChange = useCallback(
+    (percentage: number) => {
+      if (allToolCallIds.length === 0) return;
+      if (percentage >= 100) {
+        // Jump to live
+        setPinnedToolCallId(undefined);
+        return;
+      }
+      const index = Math.min(
+        Math.floor((percentage / 100) * allToolCallIds.length),
+        allToolCallIds.length - 1
+      );
+      const toolCallId = allToolCallIds[index];
+      if (toolCallId) setPinnedToolCallId(toolCallId);
+    },
+    [allToolCallIds]
+  );
 
   // Accumulate terminal output from shell_exec results
   // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
@@ -650,8 +657,8 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       const rawOutput =
         typeof latestTool.output === "string"
           ? latestTool.output
-          : (latestTool.output as Record<string, unknown>)?.stdout ??
-            JSON.stringify(latestTool.output, null, 2);
+          : ((latestTool.output as Record<string, unknown>)?.stdout ??
+            JSON.stringify(latestTool.output, null, 2));
       const outputStr = typeof rawOutput === "string" ? rawOutput : String(rawOutput);
 
       setTerminalHistory((prev) => {
@@ -673,7 +680,9 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     const agentFilePath = (latestTool.args?.path ?? latestTool.args?.file) as string | undefined;
     if (
       agentFilePath &&
-      (latestTool.toolName === "file_read" || latestTool.toolName === "file_write" || latestTool.toolName === "file_str_replace")
+      (latestTool.toolName === "file_read" ||
+        latestTool.toolName === "file_write" ||
+        latestTool.toolName === "file_str_replace")
     ) {
       setUserSelectedPath(null);
     }
@@ -687,8 +696,8 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       const content =
         typeof latestTool.output === "string"
           ? latestTool.output
-          : (latestTool.output as Record<string, unknown>)?.content ??
-            JSON.stringify(latestTool.output);
+          : ((latestTool.output as Record<string, unknown>)?.content ??
+            JSON.stringify(latestTool.output));
       setFileContents((prev) => ({
         ...prev,
         [path]: typeof content === "string" ? content : String(content),
@@ -729,10 +738,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     if (url) {
       setBrowserUrl((prev) => (prev === url ? prev : url));
       // Push to history on navigation (with screenshot + title snapshot)
-      if (
-        latestTool.toolName === "browser_navigate" ||
-        latestTool.toolName === "browser_restart"
-      ) {
+      if (latestTool.toolName === "browser_navigate" || latestTool.toolName === "browser_restart") {
         const shot = latestTool.output ? extractScreenshot(latestTool.output) : undefined;
         const title = extractBrowserTitle(latestTool.output);
         setBrowserHistory((prev) => {
@@ -783,34 +789,40 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     });
   }, []);
 
-  const onSelectTab = useCallback((tabId: string) => {
-    // Tab IDs are indexes into open paths (excluding closed tabs)
-    const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
-    const idx = Number(tabId);
-    if (!Number.isNaN(idx) && openPaths[idx]) {
-      setUserSelectedPath(openPaths[idx]);
-    }
-  }, [fileContents, closedTabs]);
+  const onSelectTab = useCallback(
+    (tabId: string) => {
+      // Tab IDs are indexes into open paths (excluding closed tabs)
+      const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
+      const idx = Number(tabId);
+      if (!Number.isNaN(idx) && openPaths[idx]) {
+        setUserSelectedPath(openPaths[idx]);
+      }
+    },
+    [fileContents, closedTabs]
+  );
 
-  const onCloseTab = useCallback((tabId: string) => {
-    const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
-    const idx = Number(tabId);
-    const closedPath = openPaths[idx];
-    if (!closedPath) return;
+  const onCloseTab = useCallback(
+    (tabId: string) => {
+      const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
+      const idx = Number(tabId);
+      const closedPath = openPaths[idx];
+      if (!closedPath) return;
 
-    setClosedTabs((prev) => {
-      const next = new Set(prev);
-      next.add(closedPath);
-      return next;
-    });
+      setClosedTabs((prev) => {
+        const next = new Set(prev);
+        next.add(closedPath);
+        return next;
+      });
 
-    // If closing the active tab, select the next available tab
-    setUserSelectedPath((prev) => {
-      if (prev !== closedPath) return prev;
-      const remaining = openPaths.filter((p) => p !== closedPath);
-      return remaining.length > 0 ? remaining[remaining.length - 1]! : null;
-    });
-  }, [fileContents, closedTabs]);
+      // If closing the active tab, select the next available tab
+      setUserSelectedPath((prev) => {
+        if (prev !== closedPath) return prev;
+        const remaining = openPaths.filter((p) => p !== closedPath);
+        return remaining.length > 0 ? remaining[remaining.length - 1]! : null;
+      });
+    },
+    [fileContents, closedTabs]
+  );
 
   // Browser navigation callbacks
   const onBrowserNavigate = useCallback(
@@ -977,13 +989,13 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     statusText: pinnedTool
       ? `Viewing: ${pinnedTool.currentAction?.label ?? pinnedTool.toolName.replace(/_/g, " ")}`
       : latestTool?.isWorking
-        ? (latestTool.currentAction
+        ? latestTool.currentAction
           ? `Rubic is working: ${latestTool.currentAction.label}`
-          : "Rubic is working...")
+          : "Rubic is working..."
         : undefined,
     currentStep,
     totalSteps: totalToolCalls,
-    timelinePercentage: pinnedTool ? 100 : (latestTool?.isWorking ? undefined : 100),
+    timelinePercentage: pinnedTool ? 100 : latestTool?.isWorking ? undefined : 100,
     onTimelineChange,
     sandboxId,
     nekoUrl,
@@ -1001,7 +1013,9 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     if (pinnedTool && pinnedTool.viewType === "browser") {
       // Pinned: extract browser data from the pinned tool
       state.browserUrl = extractBrowserUrl(pinnedTool.output, pinnedTool.args);
-      state.browserScreenshot = pinnedTool.output ? extractScreenshot(pinnedTool.output) : undefined;
+      state.browserScreenshot = pinnedTool.output
+        ? extractScreenshot(pinnedTool.output)
+        : undefined;
       state.browserContent = extractBrowserContent(pinnedTool.output);
       state.browserTitle = extractBrowserTitle(pinnedTool.output);
       state.browserSearchResults = extractSearchResults(pinnedTool.output);
@@ -1042,21 +1056,28 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // Code view data — populate when code is available (for view switching)
   if (effectiveViewType === "code" || availableViews.has("code")) {
-    const agentPath = ((activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined);
+    const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
 
     if (pinnedTool && pinnedTool.viewType === "code") {
       // Pinned: extract file content from the pinned tool's output
-      const pinnedPath = ((pinnedTool.args?.path ?? pinnedTool.args?.file) as string | undefined);
+      const pinnedPath = (pinnedTool.args?.path ?? pinnedTool.args?.file) as string | undefined;
       const pinOutput = pinnedTool.output as Record<string, unknown> | undefined;
       const content =
         typeof pinnedTool.output === "string"
           ? pinnedTool.output
-          : pinOutput?.content ?? (pinnedTool.args?.content as string | undefined);
+          : (pinOutput?.content ?? (pinnedTool.args?.content as string | undefined));
       if (content) {
         state.activeFileContent = typeof content === "string" ? content : String(content);
         state.activeFileLanguage = pinnedPath ? getLanguage(pinnedPath) : undefined;
         if (pinnedPath) {
-          state.fileTabs = [{ id: "0", name: pinnedPath.split("/").pop() || pinnedPath, path: pinnedPath, isActive: true }];
+          state.fileTabs = [
+            {
+              id: "0",
+              name: pinnedPath.split("/").pop() || pinnedPath,
+              path: pinnedPath,
+              isActive: true,
+            },
+          ];
           state.fileTree = buildFileTree([pinnedPath]);
         }
       }
@@ -1091,15 +1112,10 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
       state.fileContents = fileContents;
-    } else if (
-      activeTool?.toolName === "file_write" &&
-      activeTool?.args?.content
-    ) {
+    } else if (activeTool?.toolName === "file_write" && activeTool?.args?.content) {
       // Show content being written even before output
       state.activeFileContent = activeTool.args.content as string;
-      state.activeFileLanguage = agentPath
-        ? getLanguage(agentPath)
-        : undefined;
+      state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
     }
   }
 
