@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Sandbox as E2BSandbox } from "@e2b/code-interpreter";
 import { createService, typedRoute, getEnv, createId } from "@repo/service-utils";
 import {
@@ -353,6 +354,7 @@ async function main() {
     name: "sandbox",
     port: parseInt(getEnv("PORT", "4012"), 10),
     cors: true,
+    publicRoutes: ["/internal/"],
     onShutdown: [
       async () => {
         logger.info({ activeSandboxes: sandboxMap.size }, "Killing active E2B sandboxes");
@@ -400,6 +402,8 @@ async function main() {
       const sandboxEnvs: Record<string, string> = { ...(config?.env || {}) };
 
       // Create E2B sandbox with Desktop template
+      // Resource allocation: Manus uses 6 vCPUs / 4GB RAM.
+      // CPU + RAM are set at template build time: e2b template build --cpu-count 4 --memory-mb 4096
       let e2bSandbox: E2BSandbox;
       try {
         // E2B SDK: create(template, opts) or create(opts)
@@ -425,7 +429,8 @@ async function main() {
       const dbId = createId();
 
       // Determine stream URLs based on template type
-      const isNekoTemplate = templateId === "desktop";
+      // Template can be "desktop" or "rubic-desktop" (E2B template name)
+      const isNekoTemplate = templateId === "desktop" || templateId === "rubic-desktop";
 
       // Neko WebRTC URL — Desktop template exposes Neko signaling on port 8333.
       // CDN mode (Manus pattern): client hosted on S3/CDN, ?server= points to sandbox.
@@ -434,8 +439,8 @@ async function main() {
       const nekoClientBase = process.env.NEKO_CLIENT_URL; // e.g. https://cdn.rubic.ai/neko-client
       const nekoUrl = nekoHost
         ? nekoClientBase
-          ? `${nekoClientBase}/autoconnect.html?server=${encodeURIComponent(`https://${nekoHost}`)}&usr=Rubic&pwd=neko`
-          : `https://${nekoHost}/autoconnect.html?usr=Rubic&pwd=neko`
+          ? `${nekoClientBase}/autoconnect.html?server=${encodeURIComponent(`https://${nekoHost}`)}`
+          : `https://${nekoHost}/autoconnect.html`
         : null;
 
       // Legacy noVNC URL — for non-Neko templates that use port 6080
@@ -1310,12 +1315,12 @@ async function main() {
         .limit(1);
 
       const e2bSandbox = await getE2BSandbox(id);
-      const isNeko = record?.templateId === "desktop";
+      const isNeko = record?.templateId === "desktop" || record?.templateId === "rubic-desktop";
 
       if (isNeko) {
         // Neko WebRTC — autoconnect.html calls REST API login then redirects to client
         const nekoHost = e2bSandbox.getHost(8333);
-        const nekoUrl = `https://${nekoHost}/autoconnect.html?usr=Rubic&pwd=neko`;
+        const nekoUrl = `https://${nekoHost}/autoconnect.html`;
         logger.info({ sandboxId: id, provider: "neko" }, "Browser stream URL requested");
         return reply.success({ streamUrl: nekoUrl, nekoUrl, provider: "neko", sandboxId: id });
       }
@@ -1343,6 +1348,111 @@ async function main() {
       return reply.success({ streamUrl, sandboxId: id });
     })
   );
+
+  // -------------------------------------------------------------------------
+  // E2B Lifecycle Webhook — receives events from E2B when sandboxes change state
+  // Events: sandbox.lifecycle.created, killed, updated, paused, resumed
+  // Docs: https://e2b.dev/docs/sandbox/lifecycle-events-webhooks
+  // -------------------------------------------------------------------------
+  const E2B_WEBHOOK_SECRET = getEnv("E2B_WEBHOOK_SIGNATURE_SECRET", "");
+
+  app.post("/internal/e2b-webhook", async (request, reply) => {
+    // Verify signature if secret is configured
+    if (E2B_WEBHOOK_SECRET) {
+      const signature = request.headers["e2b-signature"] as string | undefined;
+      if (!signature) {
+        logger.warn("E2B webhook: missing e2b-signature header");
+        return reply.code(401).send({ error: "Missing signature" });
+      }
+
+      const rawBody = JSON.stringify(request.body);
+      const expected = crypto
+        .createHmac("sha256", E2B_WEBHOOK_SECRET)
+        .update(rawBody)
+        .digest("hex");
+
+      if (signature !== expected) {
+        logger.warn("E2B webhook: invalid signature");
+        return reply.code(401).send({ error: "Invalid signature" });
+      }
+    }
+
+    const event = request.body as {
+      version?: string;
+      id?: string;
+      type?: string;
+      sandboxId?: string;
+      sandboxTemplateId?: string;
+      sandboxTeamId?: string;
+      timestamp?: string;
+      eventData?: Record<string, unknown>;
+    };
+
+    const eventType = event.type || "unknown";
+    const e2bSandboxId = event.sandboxId;
+
+    logger.info(
+      { eventType, e2bSandboxId, eventId: event.id, timestamp: event.timestamp },
+      "E2B lifecycle webhook received"
+    );
+
+    // Find our sandbox record by e2bSandboxId
+    if (e2bSandboxId) {
+      try {
+        const [record] = await db
+          .select({ id: sandboxes.id, status: sandboxes.status })
+          .from(sandboxes)
+          .where(eq(sandboxes.e2bSandboxId, e2bSandboxId))
+          .limit(1);
+
+        if (record) {
+          switch (eventType) {
+            case "sandbox.lifecycle.killed": {
+              // Sandbox was killed — mark as terminated, clean up in-memory state
+              await db
+                .update(sandboxes)
+                .set({ status: "terminated" })
+                .where(eq(sandboxes.id, record.id));
+              sandboxMap.delete(record.id);
+              terminalSessionMap.delete(record.id);
+              logger.info({ sandboxId: record.id, e2bSandboxId }, "Sandbox marked terminated via webhook");
+              break;
+            }
+            case "sandbox.lifecycle.paused": {
+              await db
+                .update(sandboxes)
+                .set({ status: "stopped" })
+                .where(eq(sandboxes.id, record.id));
+              sandboxMap.delete(record.id);
+              terminalSessionMap.delete(record.id);
+              logger.info({ sandboxId: record.id, e2bSandboxId }, "Sandbox paused via webhook");
+              break;
+            }
+            case "sandbox.lifecycle.resumed": {
+              await db
+                .update(sandboxes)
+                .set({ status: "running", lastActivityAt: new Date() })
+                .where(eq(sandboxes.id, record.id));
+              logger.info({ sandboxId: record.id, e2bSandboxId }, "Sandbox resumed via webhook");
+              break;
+            }
+            case "sandbox.lifecycle.created":
+            case "sandbox.lifecycle.updated":
+            default:
+              // Log only — creation is already handled by our POST /sandboxes route
+              logger.debug({ sandboxId: record.id, eventType }, "E2B webhook event (no action needed)");
+              break;
+          }
+        } else {
+          logger.debug({ e2bSandboxId, eventType }, "E2B webhook for unknown sandbox (not in our DB)");
+        }
+      } catch (err) {
+        logger.error({ e2bSandboxId, eventType, error: err }, "Failed to process E2B webhook");
+      }
+    }
+
+    return reply.code(200).send({ received: true });
+  });
 
   // -------------------------------------------------------------------------
   // Start

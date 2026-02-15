@@ -60,10 +60,11 @@ describe("Agents Router Logic", () => {
 
     it("should set name to null if not provided", () => {
       const input = { sessionId: "s1", type: "coder" as const };
+      const name: undefined | null = undefined;
       const values = {
         ...input,
         id: "test-agent-id",
-        name: undefined || null,
+        name: name ?? null,
         status: "idle",
         progress: 0,
       };
@@ -139,8 +140,8 @@ describe("Agents Router Logic", () => {
 
     it("should set default priority to 0 if not provided", () => {
       const input = { agentId: "a1", title: "Task" };
-      const priority = undefined || 0;
-      expect(priority).toBe(0);
+      const priority: number | undefined = undefined;
+      expect(priority ?? 0).toBe(0);
     });
   });
 
@@ -194,7 +195,7 @@ describe("Agents Router Logic", () => {
       ];
 
       expect(result[0]?.agent).toBeDefined();
-      expect(result[0].agent.type).toBe("coder");
+      expect(result[0]!.agent.type).toBe("coder");
     });
 
     it("should return null for non-existent agent", () => {

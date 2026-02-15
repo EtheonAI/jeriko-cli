@@ -15,6 +15,8 @@ Endpoints:
 """
 
 import asyncio
+import base64
+import io
 import os
 import json
 import subprocess
@@ -298,7 +300,7 @@ EXTRACT_MARKDOWN_JS = """
 def annotate_screenshot(screenshot_path: str, elements: list[dict]) -> str:
     """Draw numbered bounding boxes on screenshot for element indexing.
 
-    Returns the path to the annotated screenshot.
+    Accepts base64-encoded PNG, returns base64-encoded annotated PNG.
     """
     try:
         from PIL import Image, ImageDraw, ImageFont
@@ -306,11 +308,11 @@ def annotate_screenshot(screenshot_path: str, elements: list[dict]) -> str:
         logger.warning("Pillow not installed — skipping screenshot annotation")
         return screenshot_path
 
-    if not elements or not os.path.exists(screenshot_path):
+    if not elements:
         return screenshot_path
 
     try:
-        img = Image.open(screenshot_path)
+        img = Image.open(io.BytesIO(base64.b64decode(screenshot_path)))
         draw = ImageDraw.Draw(img)
 
         # Try to load a small font, fall back to default
@@ -363,12 +365,15 @@ def annotate_screenshot(screenshot_path: str, elements: list[dict]) -> str:
             draw.rectangle([lx, ly, lx + label_w, ly + label_h], fill=color)
             draw.text((lx + 3, ly + 2), label, fill=(255, 255, 255), font=font)
 
-        # Save annotated version
-        annotated_path = screenshot_path.replace(".png", "_annotated.png").replace(".webp", "_annotated.webp")
-        if annotated_path == screenshot_path:
-            annotated_path = screenshot_path + ".annotated.png"
-        img.save(annotated_path)
-        return annotated_path
+        # Save annotated version to disk as WebP (Manus parity)
+        ts = int(time.time())
+        annotated_disk_path = os.path.join(SCREENSHOTS_DIR, f"screenshot_{ts}_annotated.webp")
+        img.save(annotated_disk_path, format="WEBP", quality=80)
+
+        # Return as base64 WebP for frontend rendering
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=80)
+        return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception as e:
         logger.warning("Screenshot annotation failed: %s", e)
         return screenshot_path
@@ -462,16 +467,25 @@ async def _ensure_browser():
 # ── Screenshot + element collection ──────────────────────────────────────────
 
 async def _take_screenshot() -> str | None:
-    """Take a screenshot and return the file path."""
+    """Take a screenshot and return base64-encoded WebP data (Manus parity)."""
     if _page is None:
         return None
     try:
         os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
         ts = int(time.time())
         rand = random.randint(1000, 9999)
-        path = os.path.join(SCREENSHOTS_DIR, f"screenshot_{ts}_{rand}.png")
-        await _page.screenshot(path=path, full_page=False)
-        return path
+        path = os.path.join(SCREENSHOTS_DIR, f"screenshot_{ts}_{rand}.webp")
+        await _page.screenshot(path=path, full_page=False, type="jpeg", quality=80)
+        # Playwright doesn't support webp directly — convert via Pillow
+        from PIL import Image
+        img = Image.open(path)
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=80)
+        webp_data = buf.getvalue()
+        # Also save the webp to disk for agent file access
+        with open(path, "wb") as f:
+            f.write(webp_data)
+        return base64.b64encode(webp_data).decode("ascii")
     except Exception as e:
         logger.warning("Screenshot failed: %s", e)
         return None

@@ -165,8 +165,8 @@ const teamSlice = createSlice({
     // Update a team
     updateTeam: (state, action: PayloadAction<{ id: string; updates: Partial<Team> }>) => {
       const index = state.teams.findIndex((t) => t.id === action.payload.id);
-      if (index !== -1) {
-        state.teams[index] = { ...state.teams[index], ...action.payload.updates };
+      if (index !== -1 && state.teams[index]) {
+        Object.assign(state.teams[index], action.payload.updates);
         if (state.currentTeamId === action.payload.id) {
           state.currentTeam = state.teams[index];
         }
@@ -206,11 +206,8 @@ const teamSlice = createSlice({
     // Update a member
     updateMember: (state, action: PayloadAction<{ id: string; updates: Partial<TeamMember> }>) => {
       const index = state.members.findIndex((m) => m.id === action.payload.id);
-      if (index !== -1) {
-        state.members[index] = {
-          ...state.members[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.members[index]) {
+        Object.assign(state.members[index], action.payload.updates);
       }
     },
 
@@ -249,11 +246,8 @@ const teamSlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<TeamInvitation> }>
     ) => {
       const index = state.invitations.findIndex((i) => i.id === action.payload.id);
-      if (index !== -1) {
-        state.invitations[index] = {
-          ...state.invitations[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.invitations[index]) {
+        Object.assign(state.invitations[index], action.payload.updates);
       }
     },
 

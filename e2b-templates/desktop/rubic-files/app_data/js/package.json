@@ -1,0 +1,13 @@
+{
+  "name": "sandbox-runtime-js-utils",
+  "version": "1.0.0",
+  "description": "JavaScript utilities for sandbox runtime",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@babel/parser": "^7.26.3",
+    "@babel/traverse": "^7.26.5",
+    "magic-string": "^0.30.18"
+  }
+}
+

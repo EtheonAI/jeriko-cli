@@ -33,7 +33,7 @@ describe("Redux Store Performance", () => {
         }>,
       },
       reducers: {
-        addMessage: (state, action) => {
+        addMessage: (state: any, action: any) => {
           state.items.push(action.payload);
         },
       },
@@ -87,7 +87,7 @@ describe("Redux Store Performance", () => {
       name: "counter",
       initialState: { value: 0 },
       reducers: {
-        increment: (state) => {
+        increment: (state: any) => {
           state.value += 1;
         },
       },
@@ -151,7 +151,7 @@ describe("Redux Store Performance", () => {
         items: [] as Session[],
       },
       reducers: {
-        setSessions: (state, action) => {
+        setSessions: (state: any, action: any) => {
           state.items = action.payload;
         },
       },
@@ -206,27 +206,27 @@ describe("Redux Store Performance", () => {
         toolCalls: [] as Array<{ id: string; tool: string; status: string }>,
       },
       reducers: {
-        setStreaming: (state, action) => {
+        setStreaming: (state: any, action: any) => {
           state.isStreaming = action.payload;
         },
-        setSession: (state, action) => {
+        setSession: (state: any, action: any) => {
           state.currentSessionId = action.payload;
         },
-        addMessage: (state, action) => {
+        addMessage: (state: any, action: any) => {
           state.messages.push(action.payload);
         },
-        addToolCall: (state, action) => {
+        addToolCall: (state: any, action: any) => {
           state.toolCalls.push(action.payload);
         },
-        updateToolCall: (state, action) => {
+        updateToolCall: (state: any, action: any) => {
           const tc = state.toolCalls.find(
-            (t) => t.id === action.payload.id
+            (t: any) => t.id === action.payload.id
           );
           if (tc) {
             tc.status = action.payload.status;
           }
         },
-        clearMessages: (state) => {
+        clearMessages: (state: any) => {
           state.messages = [];
           state.toolCalls = [];
         },
@@ -305,7 +305,7 @@ describe("Redux Store Performance", () => {
       name: "data",
       initialState: { value: 0 },
       reducers: {
-        increment: (state) => {
+        increment: (state: any) => {
           state.value += 1;
         },
       },

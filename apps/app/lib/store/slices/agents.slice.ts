@@ -92,8 +92,8 @@ const agentsSlice = createSlice({
       const agents = state.agents[sessionId];
       if (agents) {
         const index = agents.findIndex((a) => a.id === id);
-        if (index !== -1) {
-          agents[index] = { ...agents[index], ...updates };
+        if (index !== -1 && agents[index]) {
+          Object.assign(agents[index], updates);
         }
       }
     },
@@ -127,8 +127,8 @@ const agentsSlice = createSlice({
       const tasks = state.tasks[agentId];
       if (tasks) {
         const index = tasks.findIndex((t) => t.id === id);
-        if (index !== -1) {
-          tasks[index] = { ...tasks[index], ...updates };
+        if (index !== -1 && tasks[index]) {
+          Object.assign(tasks[index], updates);
         }
       }
     },

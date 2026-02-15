@@ -57,18 +57,12 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # code-server
 RUN curl -fsSL https://code-server.dev/install.sh | sh
 
-# Copy ALL Rubic runtime files (174MB)
+# Copy ALL Rubic runtime files (pre-extracted directories, ~120MB)
+# Tar archives excluded via .dockerignore — directories already contain all content
 COPY --chown=ubuntu:ubuntu rubic-files /opt/.rubic
 
-# Extract compressed archives to proper locations
-RUN cd /opt/.rubic && \
-    tar -xzf app_data.tar.gz && \
-    tar -xzf webdev-templates.tar.gz -C webdev/ && \
-    tar -xzf deploy-templates.tar.gz -C deploy/ && \
-    tar -xzf chrome-extensions.tar.gz -C .packages/ && \
-    tar -xzf neko-binary.tar.gz -C neko/ && \
-    rm -f *.tar.gz && \
-    chown -R root:root /opt/.rubic && \
+# Set ownership and permissions
+RUN chown -R root:root /opt/.rubic && \
     chmod -R 755 /opt/.rubic
 
 # Build neko input driver
@@ -124,10 +118,16 @@ RUN cd /tmp/rubic-mcp-cli-src && \
 USER ubuntu
 WORKDIR /home/ubuntu
 
-# Create directories
+# Create directories (Manus parity — all dirs that exist in /home/ubuntu/)
 RUN mkdir -p ~/screenshots ~/Downloads ~/.browser_data_dir ~/.search_cache \
     ~/upload ~/skills ~/terminal_full_output ~/.secrets ~/webdev-static-assets \
-    ~/.parallel_task_results /tmp/rubic-mcp
+    ~/.parallel_task_results ~/.config/code-server /tmp/rubic-mcp \
+    ~/.logs/mcp-cli ~/.logs/state-sync ~/.logs/upload-file ~/.logs/render-diagram \
+    ~/.history ~/.mcp ~/page_texts ~/gmail-attachments \
+    ~/.config/state-sync ~/.config/rclone ~/.config/matplotlib \
+    ~/.config/chromium && \
+    echo '{}' > ~/.mcp/servers.json && \
+    touch ~/.config/state-sync/.sync-ready
 
 # ── Copy Python sandbox runtime ──────────────────────────────────
 USER root

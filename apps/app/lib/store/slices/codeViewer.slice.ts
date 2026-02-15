@@ -118,7 +118,7 @@ const codeViewerSlice = createSlice({
         if (state.activeTabId === action.payload) {
           if (state.fileTabList.length > 0) {
             const newIndex = Math.min(index, state.fileTabList.length - 1);
-            state.activeTabId = state.fileTabList[newIndex].id;
+            state.activeTabId = state.fileTabList[newIndex]?.id ?? null;
           } else {
             state.activeTabId = null;
           }

@@ -272,9 +272,11 @@ const toolCallsSlice = createSlice({
         // Remove from session index
         const sessionCalls = state.bySessionId[toolCall.sessionId];
         if (sessionCalls) {
-          state.bySessionId[toolCall.sessionId] = sessionCalls.filter((id) => id !== correlationId);
-          if (state.bySessionId[toolCall.sessionId].length === 0) {
+          const filtered = sessionCalls.filter((id) => id !== correlationId);
+          if (filtered.length === 0) {
             delete state.bySessionId[toolCall.sessionId];
+          } else {
+            state.bySessionId[toolCall.sessionId] = filtered;
           }
         }
 

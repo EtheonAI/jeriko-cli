@@ -28,7 +28,7 @@ _initialized = False
 _init_data: dict[str, Any] = {}
 
 # Paths that skip RSA auth (health/version/docs)
-_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json"}
+_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json", "/neko/pre-auth", "/vnc/pre-auth"}
 
 
 async def rsa_auth_dependency(request: Request) -> None:

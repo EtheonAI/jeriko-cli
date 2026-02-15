@@ -86,7 +86,7 @@ describe("usePlannerState", () => {
     expect(result.current.hasSteps).toBe(false);
   });
 
-  it("single show_plan with 3 todos → correct steps/progress", () => {
+  it("single show_plan with 3 todos → correct steps/progress (while streaming)", () => {
     const messages: UIMessage[] = [
       makeAssistantMessage([
         makeShowPlanPart({
@@ -100,7 +100,8 @@ describe("usePlannerState", () => {
       ]),
     ];
 
-    const { result } = renderHook(() => usePlannerState(messages));
+    // isStreaming=true to prevent auto-completion of pending/in_progress steps
+    const { result } = renderHook(() => usePlannerState(messages, true));
 
     expect(result.current.hasSteps).toBe(true);
     expect(result.current.steps).toHaveLength(3);
@@ -233,7 +234,7 @@ describe("usePlannerState", () => {
     }
   });
 
-  it('status "in_progress" / "doing" / "running" → "in_progress"', () => {
+  it('status "in_progress" / "doing" / "running" → "in_progress" (while streaming)', () => {
     const statuses = ["in_progress", "doing", "running"];
     for (const status of statuses) {
       const messages: UIMessage[] = [
@@ -243,7 +244,8 @@ describe("usePlannerState", () => {
           }),
         ]),
       ];
-      const { result } = renderHook(() => usePlannerState(messages));
+      // isStreaming=true to prevent auto-completion
+      const { result } = renderHook(() => usePlannerState(messages, true));
       expect(result.current.steps[0].status).toBe("in_progress");
     }
   });
@@ -263,7 +265,7 @@ describe("usePlannerState", () => {
     }
   });
 
-  it('unknown status → "pending"', () => {
+  it('unknown status → "pending" (while streaming)', () => {
     const messages: UIMessage[] = [
       makeAssistantMessage([
         makeShowPlanPart({
@@ -271,11 +273,12 @@ describe("usePlannerState", () => {
         }),
       ]),
     ];
-    const { result } = renderHook(() => usePlannerState(messages));
+    // isStreaming=true to prevent auto-completion of pending steps
+    const { result } = renderHook(() => usePlannerState(messages, true));
     expect(result.current.steps[0].status).toBe("pending");
   });
 
-  it('undefined status → "pending"', () => {
+  it('undefined status → "pending" (while streaming)', () => {
     const messages: UIMessage[] = [
       makeAssistantMessage([
         makeShowPlanPart({
@@ -283,7 +286,8 @@ describe("usePlannerState", () => {
         }),
       ]),
     ];
-    const { result } = renderHook(() => usePlannerState(messages));
+    // isStreaming=true to prevent auto-completion of pending steps
+    const { result } = renderHook(() => usePlannerState(messages, true));
     expect(result.current.steps[0].status).toBe("pending");
   });
 
@@ -309,7 +313,7 @@ describe("usePlannerState", () => {
           title: "Steps Plan",
           steps: [
             { id: "s1", label: "Alpha", status: "completed" },
-            { id: "s2", label: "Beta", status: "pending" },
+            { id: "s2", label: "Beta", status: "completed" },
           ],
         }),
       ]),
@@ -328,7 +332,7 @@ describe("usePlannerState", () => {
           title: "Phased Plan",
           phases: [
             { id: "p1", label: "Phase 1", status: "completed" },
-            { id: "p2", label: "Phase 2", status: "in_progress" },
+            { id: "p2", label: "Phase 2", status: "completed" },
           ],
         }),
       ]),
@@ -339,7 +343,7 @@ describe("usePlannerState", () => {
     expect(result.current.totalSteps).toBe(2);
   });
 
-  it("progress calculation: 2/5 completed → 40%", () => {
+  it("progress calculation: 2/5 completed → 40% (while streaming)", () => {
     const messages: UIMessage[] = [
       makeAssistantMessage([
         makeShowPlanPart({
@@ -354,7 +358,8 @@ describe("usePlannerState", () => {
       ]),
     ];
 
-    const { result } = renderHook(() => usePlannerState(messages));
+    // isStreaming=true to prevent auto-completion of pending/in_progress steps
+    const { result } = renderHook(() => usePlannerState(messages, true));
     expect(result.current.progress).toBe(40);
     expect(result.current.completedSteps).toBe(2);
     expect(result.current.totalSteps).toBe(5);
@@ -378,7 +383,7 @@ describe("usePlannerState", () => {
     expect(result.current.isActive).toBe(false);
   });
 
-  it("currentStepIndex points to in_progress step", () => {
+  it("currentStepIndex points to in_progress step (while streaming)", () => {
     const messages: UIMessage[] = [
       makeAssistantMessage([
         makeShowPlanPart({
@@ -391,7 +396,8 @@ describe("usePlannerState", () => {
       ]),
     ];
 
-    const { result } = renderHook(() => usePlannerState(messages));
+    // isStreaming=true to keep in_progress/pending as-is
+    const { result } = renderHook(() => usePlannerState(messages, true));
     expect(result.current.currentStepIndex).toBe(1);
   });
 

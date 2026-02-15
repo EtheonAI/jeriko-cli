@@ -56,7 +56,7 @@ export const POST = async (req: Request) => {
 
     if (!resp.ok) {
       const errorText = await resp.text();
-      log.error({ errorText }, "Sandbox service browser control error");
+      log.error(`Sandbox service browser control error: ${errorText}`);
       return new Response(errorText, {
         status: resp.status,
         headers: { "Content-Type": "application/json" },
@@ -69,7 +69,7 @@ export const POST = async (req: Request) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    log.error({ error }, "Browser proxy error");
+    log.error(`Browser proxy error: ${error instanceof Error ? error.message : "unknown"}`);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Failed" }),
       { status: 500, headers: { "Content-Type": "application/json" } }

@@ -63,7 +63,7 @@ describe("Sessions Router Logic", () => {
       // Verify the query structure is correct
       mockOrderBy.mockReturnValue(sessions);
       expect(sessions).toHaveLength(2);
-      expect(sessions[0].userId).toBe(mockUser.id);
+      expect(sessions[0]!.userId).toBe(mockUser.id);
     });
 
     it("should only return sessions for the authenticated user", () => {
@@ -74,7 +74,7 @@ describe("Sessions Router Logic", () => {
 
       const filtered = allSessions.filter((s) => s.userId === mockUser.id);
       expect(filtered).toHaveLength(1);
-      expect(filtered[0].title).toBe("Mine");
+      expect(filtered[0]!.title).toBe("Mine");
     });
   });
 
@@ -112,10 +112,11 @@ describe("Sessions Router Logic", () => {
     });
 
     it("should set title to null if not provided", () => {
+      const title: undefined | null = undefined;
       const values = {
         id: "test-session-id",
         userId: mockUser.id,
-        title: undefined || null,
+        title: title ?? null,
         status: "active",
       };
 

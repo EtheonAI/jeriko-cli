@@ -248,35 +248,27 @@ export const mailAgentSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility (mailManus slice name)
-    builder.addCase(
-      "mailManus/setAgentEmailInfo",
-      (state, action: PayloadAction<AgentEmailInfo | null>) => {
-        state.agentEmailInfo = action.payload ?? null;
-        state.isLoading = false;
-        if (action.payload) {
-          state.canEditAgentEmail = action.payload.canEditAgentEmail;
-          state.canEditTime = action.payload.canEditTime;
-        }
+    builder.addCase("mailManus/setAgentEmailInfo", (state, action) => {
+      const payload = (action as any).payload;
+      state.agentEmailInfo = payload ?? null;
+      state.isLoading = false;
+      if (payload) {
+        state.canEditAgentEmail = payload.canEditAgentEmail;
+        state.canEditTime = payload.canEditTime;
       }
-    );
-    builder.addCase(
-      "mailManus/setEmailWhiteList",
-      (state, action: PayloadAction<AgentEmailWhiteListInfo[]>) => {
-        state.emailWhiteList = action.payload ?? [];
-      }
-    );
-    builder.addCase("mailManus/setCanEditAgentEmail", (state, action: PayloadAction<boolean>) => {
-      state.canEditAgentEmail = action.payload;
     });
-    builder.addCase("mailManus/setCanEditTime", (state, action: PayloadAction<string | null>) => {
-      state.canEditTime = action.payload;
+    builder.addCase("mailManus/setEmailWhiteList", (state, action) => {
+      state.emailWhiteList = (action as any).payload ?? [];
     });
-    builder.addCase(
-      "mailManus/setAgentSubEmails",
-      (state, action: PayloadAction<AgentSubEmail[]>) => {
-        state.agentSubEmails = action.payload ?? [];
-      }
-    );
+    builder.addCase("mailManus/setCanEditAgentEmail", (state, action) => {
+      state.canEditAgentEmail = (action as any).payload ?? false;
+    });
+    builder.addCase("mailManus/setCanEditTime", (state, action) => {
+      state.canEditTime = (action as any).payload ?? null;
+    });
+    builder.addCase("mailManus/setAgentSubEmails", (state, action) => {
+      state.agentSubEmails = (action as any).payload ?? [];
+    });
   },
 });
 

@@ -112,19 +112,21 @@ export const webdevAuthSlice = createSlice({
       state,
       action: PayloadAction<{ projectId: string; key: string; value: string }>
     ) => {
-      if (!state.envVars[action.payload.projectId]) {
-        state.envVars[action.payload.projectId] = {};
+      const projectVars = state.envVars[action.payload.projectId];
+      if (!projectVars) {
+        state.envVars[action.payload.projectId] = { [action.payload.key]: action.payload.value };
+      } else {
+        projectVars[action.payload.key] = action.payload.value;
       }
-      state.envVars[action.payload.projectId][action.payload.key] =
-        action.payload.value;
     },
 
     removeEnvVar: (
       state,
       action: PayloadAction<{ projectId: string; key: string }>
     ) => {
-      if (state.envVars[action.payload.projectId]) {
-        delete state.envVars[action.payload.projectId][action.payload.key];
+      const vars = state.envVars[action.payload.projectId];
+      if (vars) {
+        delete vars[action.payload.key];
       }
     },
 

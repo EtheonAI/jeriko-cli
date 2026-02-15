@@ -40,8 +40,8 @@ describe("Messages Router Logic", () => {
 
       // Messages should be in chronological order
       for (let i = 1; i < messages.length; i++) {
-        expect(messages[i].createdAt.getTime()).toBeGreaterThan(
-          messages[i - 1].createdAt.getTime()
+        expect(messages[i]!.createdAt.getTime()).toBeGreaterThan(
+          messages[i - 1]!.createdAt.getTime()
         );
       }
     });
@@ -105,10 +105,11 @@ describe("Messages Router Logic", () => {
 
     it("should set parts to null if not provided", () => {
       const input = { sessionId: "s1", role: "assistant" as const, content: "Hi" };
+      const parts: undefined | null = undefined;
       const values = {
         ...input,
         id: "test-message-id",
-        parts: undefined ?? null,
+        parts: parts ?? null,
         metadata: undefined,
       };
 

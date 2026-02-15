@@ -191,7 +191,7 @@ export async function getOrCreateSandbox(
     body: JSON.stringify({
       sessionId,
       template: process.env.E2B_TEMPLATE || "desktop",
-      config: { env },
+      config: { env, timeout: 30 * 60 * 1000 },
     }),
     signal: AbortSignal.timeout(30000),
   });

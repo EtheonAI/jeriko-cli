@@ -254,11 +254,9 @@ export const aiCanvasSlice = createSlice({
       state,
       action: PayloadAction<{ id: string; updates: Partial<CanvasShape> }>
     ) => {
-      if (state.shapes[action.payload.id]) {
-        state.shapes[action.payload.id] = {
-          ...state.shapes[action.payload.id],
-          ...action.payload.updates,
-        };
+      const shape = state.shapes[action.payload.id];
+      if (shape) {
+        Object.assign(shape, action.payload.updates);
       }
     },
 

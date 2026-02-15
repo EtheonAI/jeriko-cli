@@ -177,8 +177,8 @@ export const slideEditorSlice = createSlice({
 
     duplicateSlide: (state, action: PayloadAction<string>) => {
       const slideIndex = state.slides.findIndex((s) => s.id === action.payload);
-      if (slideIndex !== -1) {
-        const slide = state.slides[slideIndex];
+      const slide = state.slides[slideIndex];
+      if (slideIndex !== -1 && slide) {
         const newSlide: Slide = {
           ...slide,
           id: `slide_${Date.now()}`,

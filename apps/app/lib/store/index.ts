@@ -143,61 +143,15 @@ export type AppStore = ReturnType<typeof makeStore>;
 export type RootState = ReturnType<AppStore["getState"]>;
 export type AppDispatch = AppStore["dispatch"];
 
-// Re-export slices and actions
-// Core slices
-export * from "./slices/auth.slice";
-export * from "./slices/chat.slice";
-export * from "./slices/agents.slice";
-export * from "./slices/sessions.slice";
-// files.slice merged into library.slice
-export * from "./slices/websocket.slice";
-export * from "./slices/ui.slice";
-// Feature slices (Manus-style)
-export * from "./slices/connectors.slice";
-export * from "./slices/notifications.slice";
-export * from "./slices/scheduledTasks.slice";
-export * from "./slices/team.slice";
-export * from "./slices/projects.slice";
-export * from "./slices/experiment.slice";
-export * from "./slices/knowledge.slice";
-export * from "./slices/configs.slice";
-// Additional feature slices
-export * from "./slices/workspace.slice";
-export * from "./slices/navbar.slice";
-export * from "./slices/webDev.slice";
-export * from "./slices/codeViewer.slice";
-export * from "./slices/filePreviewer.slice";
-export * from "./slices/slideEditor.slice";
-export * from "./slices/aiCanvas.slice";
-export * from "./slices/onboarding.slice";
-export * from "./slices/billing.slice";
-// Complete Manus-style slices
-export * from "./slices/sessionSwitch.slice";
-export * from "./slices/community.slice";
-export * from "./slices/fileManagement.slice";
-export * from "./slices/fileConnector.slice";
-export * from "./slices/products.slice";
-export * from "./slices/fileShare.slice";
-export * from "./slices/mapReduce.slice";
-export * from "./slices/mailAgent.slice";
-export * from "./slices/webDevUsage.slice";
-export * from "./slices/library.slice";
-export * from "./slices/timeline.slice";
-export * from "./slices/login.slice";
-export * from "./slices/example.slice";
-export * from "./slices/guestPage.slice";
-export * from "./slices/myBrowser.slice";
-// New Manus slices
-export * from "./slices/agentWorkspace.slice";
-export * from "./slices/webdevAuth.slice";
-export * from "./slices/aiCanvasEditor.slice";
-// chatPage.slice merged into chat.slice
-export * from "./slices/search.slice";
-export * from "./slices/devices.slice";
-export * from "./slices/toolCalls.slice";
-// Rubic-specific slices
-export * from "./slices/skills.slice";
-export * from "./slices/enterpriseTeam.slice";
+// ---------------------------------------------------------------------------
+// Re-export types only — NO barrel-exporting slice actions.
+// With 46 slices, 59+ action names collide (setLoading in 9 slices, setError
+// in 13 slices, etc.). Consumers import actions directly from slice files:
+//   import { setLoading } from "@/lib/store/slices/auth.slice"
+// ---------------------------------------------------------------------------
+
+// Types consumers need from the barrel
+export type { SearchResultType, SearchResultItem } from "./slices/search.slice";
 
 // Re-export API hooks
 export * from "./api/api.slice";
@@ -210,11 +164,3 @@ export {
   wsLeaveRoom,
   wsSend,
 } from "./middleware/websocket.middleware";
-
-// Resolve ambiguous export * collisions (multiple slices export the same action names)
-export { setLoading } from "./slices/auth.slice";
-export { setError } from "./slices/auth.slice";
-export { setSearchQuery } from "./slices/sessions.slice";
-export { setFilterStatus } from "./slices/sessions.slice";
-export { setSortBy } from "./slices/sessions.slice";
-export { setSortOrder } from "./slices/sessions.slice";

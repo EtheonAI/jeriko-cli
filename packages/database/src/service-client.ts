@@ -13,7 +13,7 @@ if (!process.env.DATABASE_URL) {
     for (const line of envContent.split("\n")) {
       const match = line.match(/^DATABASE_URL\s*=\s*(.+)/);
       if (match) {
-        process.env.DATABASE_URL = match[1].trim();
+        process.env.DATABASE_URL = match[1]!.trim();
         break;
       }
     }

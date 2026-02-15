@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { users } from "./users";
+import { agentSessions } from "./sessions";
 
 // Sandbox status enum values
 export const sandboxStatuses = ["creating", "running", "paused", "stopped", "error", "terminated"] as const;
@@ -23,10 +24,13 @@ export const sandboxes = pgTable("sandboxes", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => createId()),
-  userId: text("user_id").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
   organizationId: text("organization_id"),
   projectId: text("project_id"),
-  agentSessionId: text("agent_session_id"),
+  agentSessionId: text("agent_session_id")
+    .references(() => agentSessions.id, { onDelete: "set null" }),
 
   // E2B sandbox details
   e2bSandboxId: text("e2b_sandbox_id"), // External E2B sandbox ID
@@ -72,6 +76,10 @@ export const sandboxesRelations = relations(sandboxes, ({ one, many }) => ({
   user: one(users, {
     fields: [sandboxes.userId],
     references: [users.id],
+  }),
+  agentSession: one(agentSessions, {
+    fields: [sandboxes.agentSessionId],
+    references: [agentSessions.id],
   }),
   executions: many(sandboxExecutions),
   files: many(sandboxFiles),

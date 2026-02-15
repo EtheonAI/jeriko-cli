@@ -16,12 +16,33 @@ export interface AgentLoopInput {
   userName?: string;
   messages: ModelMessage[];
   maxSteps?: number;
+  skills?: string[];
+  connections?: { id: string; type?: string; name?: string }[];
   abortSignal?: AbortSignal;
 }
 
 export interface AgentLoopResult {
   stream: ReadableStream<Uint8Array>;
   sandboxId: string | null;
+}
+
+/** Extract file references from user messages for system prompt context. */
+function extractFileContext(messages: ModelMessage[]): { name: string; type: string }[] {
+  const files: { name: string; type: string }[] = [];
+  for (const msg of messages) {
+    if (msg.role !== "user" || typeof msg.content === "string") continue;
+    if (!Array.isArray(msg.content)) continue;
+    for (const part of msg.content) {
+      const p = part as unknown as Record<string, unknown>;
+      if (p.type === "file" || p.type === "image") {
+        files.push({
+          name: (p.filename as string) || (p.url as string)?.split("/").pop() || "unnamed",
+          type: (p.mediaType as string) || (p.mimeType as string) || "application/octet-stream",
+        });
+      }
+    }
+  }
+  return files;
 }
 
 const encoder = new TextEncoder();
@@ -35,7 +56,7 @@ function sseEvent(data: Record<string, unknown>): Uint8Array {
  * Returns a ReadableStream that emits SSE events compatible with UIMessage stream protocol.
  */
 export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
-  const { sessionId, userId, userName, messages, maxSteps = 25, abortSignal } = input;
+  const { sessionId, userId, userName, messages, maxSteps = 25, skills, connections, abortSignal } = input;
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -82,17 +103,21 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     imageProvider: createDefaultImageProvider(),
   };
 
-  // Build system prompt
+  // Build system prompt — thread skills and connections for Manus parity
   const promptCtx: SystemPromptContext = {
     userName,
     sessionId,
     sandboxId: sandboxId || undefined,
     currentDate: new Date().toISOString().split("T")[0] ?? new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    activeSkills: skills,
+    connectedApps: connections?.map((c) => c.name || c.id),
+    selectedConnections: connections,
+    fileContext: extractFileContext(messages),
   };
 
-  // Create all tools
-  const tools = createAllTools(toolCtx);
+  // Create all tools — webdev mode gives access to base + browser + webdev tools
+  const tools = createAllTools(toolCtx, "webdev");
 
   // If no API key at all, return a fallback stream
   if (!anthropicApiKey && !openaiApiKey) {
@@ -151,48 +176,36 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     abortSignal,
   });
 
-  // Get the UIMessage stream response and extract its body
+  // Build sandbox metadata for message-metadata events
+  // nekoUrl is included so the frontend can offer "Take Control" → Neko WebRTC iframe.
+  // The BrowserView only shows the iframe when user explicitly clicks Take Control
+  // (not automatically), so the Neko readiness race condition is avoided.
+  const sandboxMeta = sandboxId
+    ? { sandboxId, ...(nekoUrl ? { nekoUrl } : {}) }
+    : undefined;
+
+  // Get the UIMessage stream response using the proper messageMetadata callback
+  // AI SDK v6 sends metadata via protocol-compliant message-metadata events
   const response = result.toUIMessageStreamResponse({
     headers: {
       "x-vercel-ai-ui-message-stream": "v1",
     },
+    ...(sandboxMeta
+      ? {
+          messageMetadata: ({ part }: { part: { type: string } }) => {
+            // Send sandbox metadata at stream start so client gets it immediately
+            if (part.type === "start") {
+              return sandboxMeta;
+            }
+            return undefined;
+          },
+        }
+      : {}),
   });
 
   const uiStream = response.body;
   if (!uiStream) {
     throw new Error("Failed to create UI message stream");
-  }
-
-  // Wrap stream to inject sandbox_info metadata at the start
-  if (sandboxId) {
-    const wrappedStream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        // Send sandbox info as first metadata event
-        controller.enqueue(
-          sseEvent({
-            type: "message-metadata",
-            sandboxId,
-            ...(nekoUrl ? { nekoUrl } : {}),
-          })
-        );
-
-        const reader = uiStream.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
-          }
-        } catch (error) {
-          const errMsg = error instanceof Error ? error.message : "Stream error";
-          controller.enqueue(sseEvent({ type: "error", error: errMsg }));
-        } finally {
-          controller.close();
-        }
-      },
-    });
-
-    return { stream: wrappedStream, sandboxId };
   }
 
   return { stream: uiStream, sandboxId };

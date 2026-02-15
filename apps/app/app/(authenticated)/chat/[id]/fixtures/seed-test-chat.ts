@@ -13,7 +13,7 @@ import { resolve } from "path";
 // Load DATABASE_URL from packages/database/.env
 config({ path: resolve(__dirname, "../../../../../../packages/database/.env") });
 
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -165,7 +165,7 @@ async function seed() {
     console.error("No users found in DB. Please create a user first.");
     process.exit(1);
   }
-  const userId = users[0].id as string;
+  const userId = users[0]!.id as string;
   console.log(`Using user: ${userId}`);
 
   // Delete existing test data

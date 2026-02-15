@@ -98,13 +98,11 @@ const scheduledTasksSlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<ScheduledTask> }>
     ) => {
       const index = state.tasks.findIndex((t) => t.id === action.payload.id);
-      if (index !== -1) {
+      if (index !== -1 && state.tasks[index]) {
         const updates = action.payload.updates;
-        state.tasks[index] = {
-          ...state.tasks[index],
-          ...updates,
+        Object.assign(state.tasks[index], updates, {
           updatedAt: updates.updatedAt ?? new Date().toISOString(),
-        };
+        });
       }
     },
 
@@ -169,8 +167,8 @@ const scheduledTasksSlice = createSlice({
       const executions = state.executions[action.payload.taskId];
       if (executions) {
         const index = executions.findIndex((e) => e.id === action.payload.executionId);
-        if (index !== -1) {
-          executions[index] = { ...executions[index], ...action.payload.updates };
+        if (index !== -1 && executions[index]) {
+          Object.assign(executions[index], action.payload.updates);
 
           const task = state.tasks.find((t) => t.id === action.payload.taskId);
           if (task && action.payload.updates.status === "success") {

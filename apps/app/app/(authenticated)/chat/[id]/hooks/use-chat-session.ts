@@ -291,7 +291,7 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
       const body = { chatId: sessionId, ...(options?.body ?? {}) };
       const files = mapAttachmentsToFiles(options?.attachments);
       return sdkSendMessage(
-        files ? { text, files } : { text },
+        (files ? { text, files } : { text }) as any,
         { body },
       );
     },

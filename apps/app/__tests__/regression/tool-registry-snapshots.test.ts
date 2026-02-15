@@ -10,11 +10,11 @@ import { describe, it, expect } from "vitest";
 // ============================================================================
 
 /**
- * The canonical list of 34 tool names that must have explicit renderers
+ * The canonical list of tool names that must have explicit renderers
  * in the tool registry. This mirrors the `defaultRenderers` object in
  * `packages/ai/components/tools/tool-registry.tsx`.
  *
- * Tools are grouped by category matching the agent service's 32 core tools
+ * Tools are grouped by category matching the agent service's core tools
  * plus aliases for TOOL_VIEW_MAP compatibility.
  */
 const EXPECTED_TOOL_NAMES: string[] = [
@@ -76,6 +76,16 @@ const EXPECTED_TOOL_NAMES: string[] = [
   "schedule_recurring_task",
   "check_outcomes",
   "track_analytics",
+
+  // WebDev IDE
+  "webdev_init_project",
+  "webdev_save_checkpoint",
+  "webdev_check_status",
+  "webdev_restart_server",
+  "webdev_rollback_checkpoint",
+  "webdev_execute_sql",
+  "webdev_push_schema",
+  "webdev_list_versions",
 ];
 
 /**
@@ -141,6 +151,16 @@ const TOOL_TO_RENDERER_CATEGORY: Record<string, string> = {
   schedule_recurring_task: "ProgressTool",
   check_outcomes: "ProgressTool",
   track_analytics: "ProgressTool",
+
+  // WebDev IDE
+  webdev_init_project: "DeployResult",
+  webdev_save_checkpoint: "ProgressTool",
+  webdev_check_status: "ProgressTool",
+  webdev_restart_server: "ProgressTool",
+  webdev_rollback_checkpoint: "ProgressTool",
+  webdev_execute_sql: "ProgressTool",
+  webdev_push_schema: "ProgressTool",
+  webdev_list_versions: "ProgressTool",
 };
 
 // ============================================================================
@@ -156,10 +176,10 @@ describe("Tool Registry Snapshots", () => {
     expect(registeredNames).toMatchSnapshot();
   });
 
-  it("contains all 34 expected tool names plus wildcard fallback", () => {
-    // 34 named tools + "*" wildcard = 35 entries in the actual registry
-    // We test only the 34 named tools here (wildcard is tested separately)
-    expect(EXPECTED_TOOL_NAMES.length).toBe(39);
+  it("contains all expected tool names plus wildcard fallback", () => {
+    // Named tools + "*" wildcard in the actual registry
+    // We test only the named tools here (wildcard is tested separately)
+    expect(EXPECTED_TOOL_NAMES.length).toBe(47);
     for (const name of EXPECTED_TOOL_NAMES) {
       expect(TOOL_TO_RENDERER_CATEGORY).toHaveProperty(name);
     }

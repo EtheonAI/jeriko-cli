@@ -41,6 +41,14 @@ exports[`Tool Registry Snapshots > has exactly the expected set of registered to
   "show_plan",
   "track_analytics",
   "web_search",
+  "webdev_check_status",
+  "webdev_execute_sql",
+  "webdev_init_project",
+  "webdev_list_versions",
+  "webdev_push_schema",
+  "webdev_restart_server",
+  "webdev_rollback_checkpoint",
+  "webdev_save_checkpoint",
 ]
 `;
 
@@ -48,10 +56,10 @@ exports[`Tool Registry Snapshots > renderer category distribution matches snapsh
 {
   "BrowserViewerEnhanced": 15,
   "CodeBlockEnhanced": 1,
-  "DeployResult": 3,
+  "DeployResult": 4,
   "FilePreview": 5,
   "ImageResult": 1,
-  "ProgressTool": 5,
+  "ProgressTool": 12,
   "ShowPlanRenderer": 1,
   "TerminalOutputEnhanced": 5,
   "WebSearchEnhanced": 3,

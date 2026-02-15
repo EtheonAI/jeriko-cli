@@ -122,12 +122,10 @@ const projectsSlice = createSlice({
     // Update a project
     updateProject: (state, action: PayloadAction<{ id: string; updates: Partial<Project> }>) => {
       const index = state.projects.findIndex((p) => p.id === action.payload.id);
-      if (index !== -1) {
-        state.projects[index] = {
-          ...state.projects[index],
-          ...action.payload.updates,
+      if (index !== -1 && state.projects[index]) {
+        Object.assign(state.projects[index], action.payload.updates, {
           updatedAt: new Date().toISOString(),
-        };
+        });
         if (state.currentProjectId === action.payload.id) {
           state.currentProject = state.projects[index];
         }
@@ -222,11 +220,8 @@ const projectsSlice = createSlice({
       const project = state.projects.find((p) => p.id === action.payload.projectId);
       if (project) {
         const memberIndex = project.members.findIndex((m) => m.userId === action.payload.userId);
-        if (memberIndex !== -1) {
-          project.members[memberIndex] = {
-            ...project.members[memberIndex],
-            ...action.payload.updates,
-          };
+        if (memberIndex !== -1 && project.members[memberIndex]) {
+          Object.assign(project.members[memberIndex], action.payload.updates);
         }
       }
     },

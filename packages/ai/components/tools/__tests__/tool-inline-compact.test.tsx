@@ -7,7 +7,7 @@ import { ToolInlineCompact } from "../renderers/tool-inline-compact";
 
 describe("ToolInlineCompact", () => {
   describe("browser tools", () => {
-    it("shows URL when navigating", () => {
+    it("shows URL hostname when navigating", () => {
       render(
         <ToolInlineCompact
           toolName="browser_navigate"
@@ -18,7 +18,7 @@ describe("ToolInlineCompact", () => {
       expect(screen.getByText(/example\.com/)).toBeInTheDocument();
     });
 
-    it("shows done label with title on output-available", () => {
+    it("keeps same label on output-available (Manus-style — no state change)", () => {
       render(
         <ToolInlineCompact
           toolName="browser_navigate"
@@ -27,7 +27,31 @@ describe("ToolInlineCompact", () => {
           output={{ title: "Example Domain", url: "https://example.com" }}
         />
       );
-      expect(screen.getByText(/Example Domain/)).toBeInTheDocument();
+      // Same hostname label shown regardless of state
+      const labels = screen.getAllByText(/example\.com/);
+      expect(labels.length).toBeGreaterThan(0);
+    });
+
+    it("shows descriptive label for browser_click", () => {
+      render(
+        <ToolInlineCompact
+          toolName="browser_click"
+          state="input-available"
+          input={{ description: "News section link" }}
+        />
+      );
+      expect(screen.getByText(/News section link/)).toBeInTheDocument();
+    });
+
+    it("shows screenshot label", () => {
+      render(
+        <ToolInlineCompact
+          toolName="browser_screenshot"
+          state="output-available"
+          input={{}}
+        />
+      );
+      expect(screen.getByText("Capturing screenshot")).toBeInTheDocument();
     });
   });
 
@@ -43,7 +67,7 @@ describe("ToolInlineCompact", () => {
       expect(screen.getByText(/ls -la/)).toBeInTheDocument();
     });
 
-    it("shows exit code on completion", () => {
+    it("keeps command label on completion (Manus-style)", () => {
       render(
         <ToolInlineCompact
           toolName="shell_exec"
@@ -52,19 +76,9 @@ describe("ToolInlineCompact", () => {
           output={{ exit_code: 0 }}
         />
       );
-      expect(screen.getByText(/Exit 0/)).toBeInTheDocument();
-    });
-
-    it("shows error exit code", () => {
-      render(
-        <ToolInlineCompact
-          toolName="shell_exec"
-          state="output-available"
-          input={{ command: "false" }}
-          output={{ exit_code: 1 }}
-        />
-      );
-      expect(screen.getByText(/Exit 1/)).toBeInTheDocument();
+      // Label contains the command
+      const labels = screen.getAllByText(/ls -la/);
+      expect(labels.length).toBeGreaterThan(0);
     });
   });
 
@@ -80,16 +94,15 @@ describe("ToolInlineCompact", () => {
       expect(screen.getByText(/test\.py/)).toBeInTheDocument();
     });
 
-    it("shows line count on completion", () => {
+    it("shows file_write with creating label", () => {
       render(
         <ToolInlineCompact
-          toolName="file_read"
+          toolName="file_write"
           state="output-available"
-          input={{ path: "/home/user/test.py" }}
-          output={{ content: "line1\nline2\nline3", lines: 3 }}
+          input={{ path: "/home/user/index.html" }}
         />
       );
-      expect(screen.getByText(/3 lines/)).toBeInTheDocument();
+      expect(screen.getByText(/index\.html/)).toBeInTheDocument();
     });
   });
 
@@ -105,53 +118,93 @@ describe("ToolInlineCompact", () => {
       expect(screen.getByText(/React hooks tutorial/)).toBeInTheDocument();
     });
 
-    it("shows result count on completion", () => {
+    it("keeps query label on completion (Manus-style)", () => {
       render(
         <ToolInlineCompact
           toolName="web_search"
           state="output-available"
-          input={{ query: "test" }}
+          input={{ query: "test query" }}
           output={{ results: [{}, {}, {}] }}
         />
       );
-      expect(screen.getByText(/3 results/)).toBeInTheDocument();
+      expect(screen.getByText(/test query/)).toBeInTheDocument();
     });
   });
 
   describe("state indicators", () => {
-    it("shows spinner for input-streaming", () => {
+    it("shows pulse dot for input-streaming (active state)", () => {
       const { container } = render(
         <ToolInlineCompact
-          toolName="shell_exec"
+          toolName="browser_view"
           state="input-streaming"
-          input={{ command: "ls" }}
+          input={{}}
         />
       );
-      // Spinner has animate-spin class
-      const spinner = container.querySelector(".animate-spin");
-      expect(spinner).toBeInTheDocument();
+      // Active state shows pulse dot with animate-ping
+      const pulse = container.querySelector(".animate-ping");
+      expect(pulse).toBeInTheDocument();
     });
 
-    it("shows error styling for output-error", () => {
-      render(
+    it("shows pulse dot for input-available (active state)", () => {
+      const { container } = render(
         <ToolInlineCompact
-          toolName="shell_exec"
-          state="output-error"
-          input={{ command: "bad" }}
+          toolName="browser_view"
+          state="input-available"
+          input={{}}
         />
       );
-      expect(screen.getByText("Failed")).toBeInTheDocument();
+      const pulse = container.querySelector(".animate-ping");
+      expect(pulse).toBeInTheDocument();
     });
 
-    it("shows denied styling for output-denied", () => {
-      render(
+    it("no pulse dot for completed state", () => {
+      const { container } = render(
         <ToolInlineCompact
-          toolName="shell_exec"
-          state="output-denied"
-          input={{ command: "rm -rf /" }}
+          toolName="browser_view"
+          state="output-available"
+          input={{}}
         />
       );
-      expect(screen.getByText("Denied")).toBeInTheDocument();
+      const pulse = container.querySelector(".animate-ping");
+      expect(pulse).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Manus-style pill styling", () => {
+    it("has rounded-[15px] pill shape", () => {
+      const { container } = render(
+        <ToolInlineCompact
+          toolName="browser_navigate"
+          state="output-available"
+          input={{ url: "https://example.com" }}
+        />
+      );
+      const pill = container.querySelector(".rounded-\\[15px\\]");
+      expect(pill).toBeInTheDocument();
+    });
+
+    it("has h-7 height", () => {
+      const { container } = render(
+        <ToolInlineCompact
+          toolName="browser_navigate"
+          state="output-available"
+          input={{ url: "https://example.com" }}
+        />
+      );
+      const heightContainer = container.querySelector(".h-7");
+      expect(heightContainer).toBeInTheDocument();
+    });
+
+    it("has tooltip with full details", () => {
+      render(
+        <ToolInlineCompact
+          toolName="browser_navigate"
+          state="output-available"
+          input={{ url: "https://www.yahoo.com/finance" }}
+        />
+      );
+      const pill = screen.getByTitle("Browsing: https://www.yahoo.com/finance");
+      expect(pill).toBeInTheDocument();
     });
   });
 
@@ -164,7 +217,6 @@ describe("ToolInlineCompact", () => {
           input={{ foo: "bar" }}
         />
       );
-      // Unknown tools show formatted name (some_unknown_tool → Some unknown tool)
       expect(screen.getByText("Some unknown tool")).toBeInTheDocument();
     });
   });

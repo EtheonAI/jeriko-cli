@@ -6,8 +6,12 @@ CHANGELOG-E2E-AUDIT.md
 # Private key (NEVER bake into image — only public.pem is needed)
 keys/private.pem
 
+# Tar archives — pre-extracted directories in rubic-files/ already have all content
+rubic-files/*.tar.gz
+
 # macOS
 .DS_Store
+**/.DS_Store
 
 # Node
 node_modules/

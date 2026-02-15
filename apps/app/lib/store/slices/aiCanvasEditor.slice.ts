@@ -164,12 +164,10 @@ export const aiCanvasEditorSlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<CanvasShape> }>
     ) => {
       const index = state.shapes.findIndex((s) => s.id === action.payload.id);
-      if (index !== -1) {
-        state.shapes[index] = {
-          ...state.shapes[index],
-          ...action.payload.updates,
+      if (index !== -1 && state.shapes[index]) {
+        Object.assign(state.shapes[index], action.payload.updates, {
           updatedAt: new Date().toISOString(),
-        };
+        });
       }
     },
 

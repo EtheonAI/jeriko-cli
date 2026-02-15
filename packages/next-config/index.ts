@@ -57,12 +57,31 @@ export const config: NextConfig = {
   // Turbopack exposes source maps by default — disable for security
   productionBrowserSourceMaps: false,
 
-  // Auto-transform barrel imports to direct imports at build time.
-  // Prevent Turbopack hash mismatches in pnpm monorepo (GitHub #87737)
+  // Externalize server-only packages so Node.js resolves them natively.
+  // Required for pnpm strict hoisting — Turbopack can't resolve transitive
+  // deps of transpiled workspace packages from the app root.
   serverExternalPackages: [
     "@node-rs/argon2",
     "@node-rs/bcrypt",
     "sharp",
+    // NOTE: better-auth is NOT here — it has /react hooks used in SSR of client
+    // components. Resolution is handled by public-hoist-pattern in .npmrc instead.
+    // @repo/database
+    "drizzle-orm",
+    "@neondatabase/serverless",
+    // @repo/observability
+    "@logtail/next",
+    // @repo/analytics
+    "posthog-node",
+    // @repo/notifications
+    "@knocklabs/node",
+    // @repo/collaboration
+    "@liveblocks/node",
+    // @repo/security
+    "@arcjet/next",
+    "@nosecone/next",
+    // @repo/webhooks
+    "svix",
   ],
 
   experimental: {

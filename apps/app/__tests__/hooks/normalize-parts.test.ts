@@ -51,7 +51,7 @@ describe("normalizeParts", () => {
       { type: "tool-browser_navigate", toolName: "browser_navigate", toolCallId: "tc1" },
     ];
     const result = normalizeParts(parts);
-    expect(result[0].state).toBe("output-available");
+    expect(result[0]!.state).toBe("output-available");
   });
 
   it("derives toolName from type when missing", () => {
@@ -59,7 +59,7 @@ describe("normalizeParts", () => {
       { type: "tool-shell_exec", state: "output-available", toolCallId: "tc1" },
     ];
     const result = normalizeParts(parts);
-    expect(result[0].toolName).toBe("shell_exec");
+    expect(result[0]!.toolName).toBe("shell_exec");
   });
 
   it("derives both state and toolName when both missing", () => {
@@ -67,8 +67,8 @@ describe("normalizeParts", () => {
       { type: "tool-file_read", toolCallId: "tc1" },
     ];
     const result = normalizeParts(parts);
-    expect(result[0].state).toBe("output-available");
-    expect(result[0].toolName).toBe("file_read");
+    expect(result[0]!.state).toBe("output-available");
+    expect(result[0]!.toolName).toBe("file_read");
   });
 
   it("preserves existing state and toolName", () => {
@@ -76,8 +76,8 @@ describe("normalizeParts", () => {
       { type: "tool-web_search", state: "output-error", toolName: "web_search", toolCallId: "tc1" },
     ];
     const result = normalizeParts(parts);
-    expect(result[0].state).toBe("output-error");
-    expect(result[0].toolName).toBe("web_search");
+    expect(result[0]!.state).toBe("output-error");
+    expect(result[0]!.toolName).toBe("web_search");
   });
 
   it("handles empty/null parts gracefully", () => {
@@ -94,10 +94,10 @@ describe("normalizeParts", () => {
     ];
     const result = normalizeParts(parts);
     expect(result).toHaveLength(3);
-    expect(result[0].type).toBe("text");
-    expect(result[1].toolName).toBe("web_search");
-    expect(result[1].state).toBe("output-available");
-    expect(result[2].type).toBe("text");
+    expect(result[0]!.type).toBe("text");
+    expect(result[1]!.toolName).toBe("web_search");
+    expect(result[1]!.state).toBe("output-available");
+    expect(result[2]!.type).toBe("text");
   });
 
   it("defaults toolName to 'unknown' for type 'tool-' with no name suffix", () => {
@@ -105,6 +105,6 @@ describe("normalizeParts", () => {
       { type: "tool-", toolCallId: "tc1" },
     ];
     const result = normalizeParts(parts);
-    expect(result[0].toolName).toBe("unknown");
+    expect(result[0]!.toolName).toBe("unknown");
   });
 });

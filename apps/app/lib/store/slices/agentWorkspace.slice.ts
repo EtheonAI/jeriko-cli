@@ -10,7 +10,7 @@ import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
  * - Chat reply search
  */
 
-export type WorkspaceSidebarType = "agents" | "sources" | "files" | "computer" | null;
+export type WorkspaceSidebarType = "agents" | "sources" | "files" | "computer" | "planner" | "browser" | "webdev" | null;
 
 export interface ComputerPosition {
   top: number;
@@ -278,15 +278,12 @@ const agentWorkspaceSlice = createSlice({
       .addCase("websocket/timeline:toggle", (state) => {
         state.isTimelinePlaying = !state.isTimelinePlaying;
       })
-      .addCase(
-        "websocket/workspace:sidebar:open",
-        (state, action: { payload?: { type?: WorkspaceSidebarType } }) => {
-          const sidebarType = action.payload?.type || null;
-          state.prevAutoOpenedSidebarType = state.sidebarType;
-          state.sidebarType = sidebarType;
-          recomputeWorkspaceLayout(state);
-        }
-      )
+      .addCase("websocket/workspace:sidebar:open", (state, action) => {
+        const sidebarType = (action as any).payload?.type || null;
+        state.prevAutoOpenedSidebarType = state.sidebarType;
+        state.sidebarType = sidebarType;
+        recomputeWorkspaceLayout(state);
+      })
       .addCase("websocket/workspace:sidebar:close", (state) => {
         state.prevAutoOpenedSidebarType = state.sidebarType;
         state.sidebarType = null;

@@ -165,7 +165,7 @@ describe("Security Headers", () => {
     const header = findHeader("Strict-Transport-Security")!;
     const match = header.value.match(/max-age=(\d+)/);
     expect(match).not.toBeNull();
-    const maxAge = Number.parseInt(match![1], 10);
+    const maxAge = Number.parseInt(match![1]!, 10);
     expect(maxAge).toBeGreaterThanOrEqual(31_536_000);
   });
 

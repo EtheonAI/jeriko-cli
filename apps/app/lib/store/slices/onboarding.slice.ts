@@ -96,7 +96,7 @@ const onboardingSlice = createSlice({
       }
       const currentIndex = steps.indexOf(state.currentStep);
       if (currentIndex >= 0 && currentIndex < steps.length - 1) {
-        state.currentStep = steps[currentIndex + 1];
+        state.currentStep = steps[currentIndex + 1] ?? null;
       }
     },
 
@@ -112,7 +112,7 @@ const onboardingSlice = createSlice({
       if (!state.currentStep) return;
       const currentIndex = steps.indexOf(state.currentStep);
       if (currentIndex > 0) {
-        state.currentStep = steps[currentIndex - 1];
+        state.currentStep = steps[currentIndex - 1] ?? null;
       }
     },
 
@@ -129,7 +129,7 @@ const onboardingSlice = createSlice({
       state.skippedSteps.push(state.currentStep);
       const currentIndex = steps.indexOf(state.currentStep);
       if (currentIndex >= 0 && currentIndex < steps.length - 1) {
-        state.currentStep = steps[currentIndex + 1];
+        state.currentStep = steps[currentIndex + 1] ?? null;
       }
     },
 

@@ -1,5 +1,5 @@
-if (!window.__manusOriginalPostMessage) {
-  window.__manusOriginalPostMessage = window.postMessage
-  window.__manusOrigin = window.origin
-  // console.log('postMessage protected', window.__manusOriginalPostMessage, window.__manusOrigin)
+if (!window.__rubicOriginalPostMessage) {
+  window.__rubicOriginalPostMessage = window.postMessage
+  window.__rubicOrigin = window.origin
+  // console.log('postMessage protected', window.__rubicOriginalPostMessage, window.__rubicOrigin)
 }

@@ -43,6 +43,14 @@ const completionBodySchema = z.object({
   userName: z.string().optional(),
   maxSteps: z.number().int().min(1).max(50).optional(),
   model: z.string().optional(),
+  skills: z.array(z.string()).optional(),
+  connections: z.array(
+    z.object({
+      id: z.string(),
+      type: z.string().optional(),
+      name: z.string().optional(),
+    })
+  ).optional(),
 });
 
 export const completionRoutes: FastifyPluginAsync = async (fastify) => {
@@ -62,6 +70,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       userId = (request.headers["x-user-id"] as string) || "anonymous",
       userName = (request.headers["x-user-name"] as string) || undefined,
       maxSteps,
+      skills,
+      connections,
     } = parsed.data;
 
     // Create abort controller for this session
@@ -75,6 +85,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         userName,
         messages: messages as ModelMessage[],
         maxSteps,
+        skills,
+        connections,
         abortSignal: abortController.signal,
       });
 
@@ -99,6 +111,14 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         ...(sandboxId ? { "x-sandbox-id": sandboxId } : {}),
       });
 
+      // Abort agent loop if client disconnects (TCP close)
+      reply.raw.on("close", () => {
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+          activeStreams.delete(sessionId);
+        }
+      });
+
       // Pipe the stream to the response
       const reader = stream.getReader();
 
@@ -110,14 +130,15 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
           reply.raw.write(value);
         }
       } catch (error) {
-        // Stream error — write error event (ignore abort errors)
+        // Client disconnected or stream error — abort agent loop
         if (!abortController.signal.aborted) {
+          abortController.abort();
           const errMsg = error instanceof Error ? error.message : "Stream error";
-          reply.raw.write(`data: ${JSON.stringify({ type: "error", error: errMsg })}\n\n`);
+          try { reply.raw.write(`data: ${JSON.stringify({ type: "error", error: errMsg })}\n\n`); } catch { /* client gone */ }
         }
       } finally {
         activeStreams.delete(sessionId);
-        reply.raw.end();
+        try { reply.raw.end(); } catch { /* already closed */ }
       }
     } catch (error) {
       activeStreams.delete(sessionId);

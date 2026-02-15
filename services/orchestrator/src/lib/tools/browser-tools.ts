@@ -8,7 +8,7 @@
  * browser_view and browser_navigate return:
  *   - elements: list of interactive elements with indices (e.g. "[1] a {hint:"Login"} Login")
  *   - markdown: page content as markdown
- *   - screenshot: annotated screenshot with numbered bounding boxes
+ *   - screenshot: S3 URL of annotated screenshot with numbered bounding boxes
  *   - viewport: {width, height, devicePixelRatio}
  *
  * browser_click and browser_input support clicking by element index.
@@ -19,6 +19,21 @@ import { z } from "zod";
 import type { ToolContext } from "./types.js";
 import { executeSandboxTool } from "./executor/sandbox-executor.js";
 
+/**
+ * Strip screenshot from tool output before feeding back to LLM.
+ * The full output (with S3 screenshot URL) goes to the frontend via tool-output-available.
+ * The model only gets elements, markdown, status — no screenshot URL in context.
+ */
+function browserModelOutput({ output }: { toolCallId: string; input: unknown; output: unknown }) {
+  if (!output || typeof output !== "object") {
+    return { type: "json" as const, value: output as Record<string, unknown> };
+  }
+  const o = output as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { screenshot, ...rest } = o;
+  return { type: "json" as const, value: rest };
+}
+
 export function createBrowserTools(ctx: ToolContext) {
   return {
     browser_view: tool({
@@ -27,6 +42,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async () => {
         return executeSandboxTool(ctx, "browser_view", {});
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_navigate: tool({
@@ -37,6 +53,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_navigate", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_restart: tool({
@@ -49,6 +66,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_restart", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_click: tool({
@@ -73,6 +91,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_click", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_input: tool({
@@ -93,6 +112,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_input", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_move_mouse: tool({
@@ -104,6 +124,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_move_mouse", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_press_key: tool({
@@ -118,6 +139,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_press_key", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_select_option: tool({
@@ -132,6 +154,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_select_option", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_scroll_up: tool({
@@ -145,6 +168,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_scroll_up", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_scroll_down: tool({
@@ -158,6 +182,7 @@ export function createBrowserTools(ctx: ToolContext) {
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_scroll_down", params);
       },
+      toModelOutput: browserModelOutput,
     }),
 
     browser_console_exec: tool({
@@ -185,11 +210,12 @@ export function createBrowserTools(ctx: ToolContext) {
     }),
 
     browser_screenshot: tool({
-      description: `Take a screenshot of the current browser viewport. Returns the screenshot file path.`,
+      description: `Take a screenshot of the current browser viewport. Returns the screenshot URL.`,
       inputSchema: z.object({}),
       execute: async () => {
         return executeSandboxTool(ctx, "browser_screenshot", {});
       },
+      toModelOutput: browserModelOutput,
     }),
   };
 }

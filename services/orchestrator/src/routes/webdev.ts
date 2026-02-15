@@ -294,7 +294,7 @@ export async function webdevRoutes(app: FastifyInstance) {
     const { sandboxId, userId } = body;
     const appName = body.app_name || "my-app";
     const templateId = body.template_id || "web-static";
-    const projectDir = body.directory || `/home/user/${appName}`;
+    const projectDir = body.directory || `/home/ubuntu/${appName}`;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -401,26 +401,65 @@ export async function webdevRoutes(app: FastifyInstance) {
         await sandboxWriteFile(sandboxId, `${projectDir}/.env`, envLines.join("\n") + "\n", userId);
       }
 
-      // ── Step 3b: Write vite.config.ts with allowedHosts ─────────────────
-      // E2B sandbox URLs (https://3000-<id>.e2b.dev) are external hosts —
-      // Vite 6+ blocks them by default. Allow all hosts for sandbox dev.
-      const viteConfig = `import { defineConfig } from 'vite'
+      // ── Step 3b: Write clean vite.config.ts ──────────────────────────────
+      // The Manus templates ship with proprietary plugins (vite-plugin-manus-runtime,
+      // @builder.io/vite-plugin-jsx-loc) that may not be installable from npm,
+      // and have allowedHosts restricted to Manus domains. We write a clean config
+      // with React + Tailwind + path aliases + allowedHosts: true for E2B URLs.
+      const isFullStack = templateId === "web-db-user";
+      const cleanViteConfig = `import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import path from "node:path";
+import { defineConfig } from "vite";
 
 export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+    },
+  },
+  envDir: path.resolve(import.meta.dirname),
+  root: path.resolve(import.meta.dirname, "client"),${isFullStack ? `\n  publicDir: path.resolve(import.meta.dirname, "client", "public"),` : ""}
+  build: {
+    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    emptyOutDir: true,
+  },
   server: {
-    host: '0.0.0.0',
+    host: true,
     port: 3000,
     allowedHosts: true,
   },
-})
+});
 `;
-      await sandboxWriteFile(sandboxId, `${projectDir}/vite.config.ts`, viteConfig, userId);
+      await sandboxWriteFile(sandboxId, `${projectDir}/vite.config.ts`, cleanViteConfig, userId);
+
+      // ── Step 3c: Strip Manus-specific devDependencies from package.json ─
+      // Remove proprietary Manus plugins that may not be on npm and aren't
+      // needed for Rubic projects. This prevents pnpm install from failing.
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectDir} && node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+if (pkg.devDependencies) {
+  delete pkg.devDependencies['@builder.io/vite-plugin-jsx-loc'];
+  delete pkg.devDependencies['vite-plugin-manus-runtime'];
+}
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');
+console.log('stripped Manus devDependencies');
+"`,
+        userId,
+        10000
+      );
 
       // ── Step 4: Install dependencies ────────────────────────────────────
       // Manus uses pnpm. Fallback to npm if pnpm not available.
       const pmCheck = await sandboxExec(sandboxId, `which pnpm 2>/dev/null && echo "pnpm" || echo "npm"`, userId, 15000);
       const pm = pmCheck.stdout.trim().endsWith("pnpm") ? "pnpm" : "npm";
-      await sandboxExec(sandboxId, `cd ${projectDir} && ${pm} install`, userId, 120000);
+      await sandboxExec(sandboxId, `cd ${projectDir} && ${pm} install --no-frozen-lockfile`, userId, 120000);
 
       // ── Step 5: Initialize git repo ─────────────────────────────────────
       // Manus pattern: git config before first commit
@@ -432,10 +471,10 @@ export default defineConfig({
       );
 
       // ── Step 6: Start dev server (backgrounded) ─────────────────────────
-      // Manus uses `pnpm dev`. Fallback to `npx vite` if no pnpm scripts.
-      const devCmd = pm === "pnpm"
-        ? `cd ${projectDir} && nohup pnpm dev --host 0.0.0.0 --port 3000 > /tmp/devserver.log 2>&1 &`
-        : `cd ${projectDir} && nohup npx vite --host 0.0.0.0 --port 3000 > /tmp/devserver.log 2>&1 &`;
+      // web-static: `pnpm dev` runs `vite --host` (port from vite.config.ts)
+      // web-db-user: `pnpm dev` runs `tsx watch server/_core/index.ts` (Express reads PORT from .env)
+      // Don't pass --host/--port flags — they're in config and .env already.
+      const devCmd = `cd ${projectDir} && nohup ${pm} dev > /tmp/devserver.log 2>&1 &`;
       await sandboxExec(sandboxId, devCmd, userId, 10000);
 
       logger.info({ sandboxId, appName, templateId, projectDir }, "Webdev project initialized");
@@ -468,7 +507,7 @@ export default defineConfig({
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -531,7 +570,7 @@ export default defineConfig({
       message?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
     const message = body.message || "Checkpoint";
 
     if (!sandboxId || !userId) {
@@ -571,11 +610,11 @@ export default defineConfig({
         const filename = `checkpoint-${commitHash}.png`;
         await sandboxExec(
           sandboxId,
-          `DISPLAY=:99 scrot /home/user/screenshots/${filename}`,
+          `DISPLAY=:99 scrot /home/ubuntu/screenshots/${filename}`,
           userId,
           5000
         );
-        screenshotPath = `/home/user/screenshots/${filename}`;
+        screenshotPath = `/home/ubuntu/screenshots/${filename}`;
       } catch {
         // Screenshot is best-effort
       }
@@ -610,7 +649,7 @@ export default defineConfig({
       versionId?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -664,7 +703,7 @@ export default defineConfig({
       versionId: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app", versionId } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app", versionId } = body;
 
     if (!sandboxId || !userId || !versionId) {
       return reply.status(400).send({ error: "sandboxId, userId, and versionId required" });
@@ -719,7 +758,7 @@ export default defineConfig({
       database?: { connection_string?: string };
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -771,22 +810,21 @@ export default defineConfig({
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
     }
 
     try {
-      // Kill existing dev server
-      await sandboxExec(sandboxId, `pkill -f "vite" 2>/dev/null || true`, userId, 5000);
+      // Kill existing dev server (both vite and tsx for full-stack templates)
+      await sandboxExec(sandboxId, `pkill -f "vite|tsx" 2>/dev/null || true`, userId, 5000);
 
-      // Restart — use pnpm if available, fallback to npx vite
+      // Restart — use pnpm if available, fallback to npx vite.
+      // Don't pass --host/--port flags — vite.config.ts and .env already set them.
       const pmCheck = await sandboxExec(sandboxId, `which pnpm 2>/dev/null && echo "pnpm" || echo "npm"`, userId, 15000);
       const pm = pmCheck.stdout.trim().endsWith("pnpm") ? "pnpm" : "npm";
-      const devCmd = pm === "pnpm"
-        ? `cd ${projectPath} && nohup pnpm dev --host 0.0.0.0 --port 3000 > /tmp/devserver.log 2>&1 &`
-        : `cd ${projectPath} && nohup npx vite --host 0.0.0.0 --port 3000 > /tmp/devserver.log 2>&1 &`;
+      const devCmd = `cd ${projectPath} && nohup ${pm} dev > /tmp/devserver.log 2>&1 &`;
       await sandboxExec(sandboxId, devCmd, userId, 10000);
 
       // Wait for it to be ready
@@ -836,7 +874,7 @@ export default defineConfig({
     };
 
     const { sandboxId, userId, operation } = body;
-    const projectPath = body.projectPath || `/home/user/${body.project_name || "my-app"}`;
+    const projectPath = body.projectPath || `/home/ubuntu/${body.project_name || "my-app"}`;
 
     if (!sandboxId || !userId || !operation) {
       return reply.status(400).send({ error: "sandboxId, userId, and operation required" });
@@ -946,7 +984,7 @@ export default defineConfig({
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -993,7 +1031,7 @@ export default defineConfig({
       remote?: string;
       branch?: string;
     };
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
     const remote = body.remote || "origin";
     const branch = body.branch || "main";
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -1010,7 +1048,7 @@ export default defineConfig({
    */
   app.post("/api/webdev/git-sync-check", async (request, reply) => {
     const body = request.body as { sandboxId: string; userId: string; projectPath?: string };
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
     try {
       const status = await sandboxExec(sandboxId, `cd ${projectPath} && git status --porcelain`, userId, 10000);
@@ -1041,7 +1079,7 @@ export default defineConfig({
       projectPath?: string;
       edits: Array<{ file: string; search: string; replace: string }>;
     };
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
     if (!sandboxId || !userId || !body.edits?.length) return reply.status(400).send({ error: "sandboxId, userId, and edits required" });
     try {
       const results: Array<{ file: string; success: boolean; error?: string }> = [];
@@ -1077,7 +1115,7 @@ export default defineConfig({
       templateUrl?: string;
       gitUrl?: string;
     };
-    const { sandboxId, userId, projectPath = "/home/user/my-app" } = body;
+    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
     try {
       if (body.gitUrl) {
@@ -1105,7 +1143,7 @@ export default defineConfig({
       // Write GitHub token to sandbox for git operations
       await sandboxExec(body.sandboxId, `echo "${body.token}" | gh auth login --with-token 2>&1`, body.userId, 10000);
       // Also set as credential helper
-      await sandboxExec(body.sandboxId, `git config --global credential.helper store && echo "https://oauth2:${body.token}@github.com" > /home/user/.git-credentials`, body.userId, 5000);
+      await sandboxExec(body.sandboxId, `git config --global credential.helper store && echo "https://oauth2:${body.token}@github.com" > /home/ubuntu/.git-credentials`, body.userId, 5000);
       return reply.send({ success: true });
     } catch (err) { return reply.status(500).send({ error: err instanceof Error ? err.message : String(err) }); }
   });

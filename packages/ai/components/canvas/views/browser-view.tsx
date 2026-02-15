@@ -35,10 +35,12 @@ export interface BrowserViewProps {
   sandboxId?: string;
   /** Called when user control actions return a new screenshot */
   onScreenshotUpdate?: (screenshot: string, url?: string, title?: string) => void;
-  /** Neko WebRTC URL — primary live desktop stream (port 8080 inside sandbox) */
+  /** Neko WebRTC URL — primary live desktop stream (port 8333 inside sandbox) */
   nekoUrl?: string;
   /** E2B stream URL — fallback live desktop stream (noVNC) */
   streamUrl?: string;
+  /** Called when user control mode changes (Take Control on/off) — used to pause prompt */
+  onUserControlChange?: (active: boolean) => void;
 }
 
 // ============================================================================
@@ -149,9 +151,9 @@ function BrowserUrlBar({
           />
         </div>
       </form>
-      {/* Take Control button — only shown when sandbox is available AND not in live stream mode
-          (Neko/noVNC iframe handles mouse/keyboard natively) */}
-      {sandboxId && !isLiveStream && (
+      {/* Take Control button — shown when sandbox is available.
+          Toggles between screenshot-based control and Neko WebRTC live stream. */}
+      {sandboxId && (
         <button
           type="button"
           className={cn(
@@ -201,31 +203,44 @@ export function BrowserView({
   onScreenshotUpdate,
   nekoUrl,
   streamUrl,
+  onUserControlChange,
 }: BrowserViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [userControlActive, setUserControlActive] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
 
-  // Live stream mode — Neko WebRTC (primary) or E2B noVNC stream (fallback)
-  // Neko handles mouse/keyboard natively via WebRTC data channel
+  // Live stream URL — Neko WebRTC (primary) or E2B noVNC stream (fallback)
   const liveStreamUrl = nekoUrl || streamUrl || null;
-  const isLiveStreamMode = !!liveStreamUrl;
+  // Only enter live stream iframe mode when user explicitly clicks "Take Control"
+  // AND a Neko/noVNC URL is available. Default view shows S3 screenshots from tool results.
+  // This avoids the 404 when Neko isn't ready at sandbox start.
+  const isLiveStreamMode = userControlActive && !!liveStreamUrl;
 
   const toggleUserControl = useCallback(() => {
-    setUserControlActive((prev) => !prev);
-  }, []);
+    setUserControlActive((prev) => {
+      const next = !prev;
+      onUserControlChange?.(next);
+      return next;
+    });
+  }, [onUserControlChange]);
+
+  // Deactivate Take Control — shared helper to keep state + parent callback in sync
+  const deactivateUserControl = useCallback(() => {
+    setUserControlActive(false);
+    onUserControlChange?.(false);
+  }, [onUserControlChange]);
 
   // Deactivate Take Control on outside click
   React.useEffect(() => {
     if (!userControlActive) return;
     const handleMouseDown = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setUserControlActive(false);
+        deactivateUserControl();
       }
     };
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [userControlActive]);
+  }, [userControlActive, deactivateUserControl]);
 
   // Send a browser action to the sandbox (for screenshot-based Take Control)
   const sendBrowserAction = useCallback(
@@ -283,7 +298,7 @@ export function BrowserView({
       // Escape deactivates Take Control mode
       if (e.key === "Escape") {
         e.preventDefault();
-        setUserControlActive(false);
+        deactivateUserControl();
         return;
       }
 

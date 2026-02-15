@@ -6,6 +6,8 @@ import {
   leaveRoom,
   setLastError,
   setLastPongTime,
+  setTaskFinished,
+  setContextLengthStatus,
 } from "../slices/websocket.slice";
 import { addAgent, addTask, updateAgent, updateTask } from "../slices/agents.slice";
 import {
@@ -27,9 +29,26 @@ import {
   type Notification,
 } from "../slices/notifications.slice";
 import { updateDeviceStatus } from "../slices/devices.slice";
-import { addMessage, appendToMessage, updateMessage } from "../slices/chat.slice";
-import { startToolCall, completeToolCall, failToolCall } from "../slices/toolCalls.slice";
+import { addMessage, appendToMessage, updateMessage, addToolApproval, setChatError, type Message } from "../slices/chat.slice";
+import { startToolCall, completeToolCall, failToolCall, updateToolCallMetadata } from "../slices/toolCalls.slice";
 import { addUsageRecord } from "../slices/billing.slice";
+import {
+  setFrameMetadata,
+  type BrowserFrameMetadata,
+} from "../slices/myBrowser.slice";
+import { addSegmentEvent } from "../slices/timeline.slice";
+import {
+  setProject,
+  type WebDevProject,
+} from "../slices/webDev.slice";
+import { addFile, updateFile, type FileItem } from "../slices/library.slice";
+import { setConnectorSyncStatus } from "../slices/connectors.slice";
+import {
+  startTask as startMapTask,
+  updateProgress as updateMapProgress,
+  addResult as addMapResult,
+  completeTask as completeMapTask,
+} from "../slices/mapReduce.slice";
 import type { Agent, AgentTask } from "../slices/agents.slice";
 import type { ScheduledTask, ScheduledTaskExecution } from "../slices/scheduledTasks.slice";
 
@@ -101,6 +120,32 @@ export type WebSocketEvent =
   | { type: "plan.update"; data?: { planId?: string; phases?: unknown[]; currentPhase?: number } }
   | { type: "plan.advance"; data?: { planId?: string; nextPhase?: number } }
   | { type: "credits.update"; data?: { remaining?: number; used?: number } }
+  // Sandbox events
+  | { type: "sandbox.status"; data?: { sessionId?: string; status?: string; sandboxId?: string } }
+  | { type: "sandbox.browser.frame"; data?: { frameId?: string; tabId?: string; url?: string; title?: string; frameType?: string; screenshot?: string; markdown?: string; elements?: unknown[]; viewport?: { width: number; height: number } } }
+  | { type: "sandbox.terminal.chunk"; data?: { sessionId?: string; terminalId?: string; output?: string } }
+  // Tool call progress
+  | { type: "tool_call.progress"; data?: { toolCallId?: string; progress?: number; message?: string } }
+  // File events
+  | { type: "file.uploaded"; data?: { file?: FileItem } }
+  | { type: "file.ready"; data?: { fileId?: string; url?: string; updates?: Partial<FileItem> } }
+  // Connector events
+  | { type: "connector.status"; data?: { connectionId?: string; status?: "idle" | "syncing" | "error"; errorMessage?: string } }
+  // Orchestrator error
+  | { type: "orchestrator.error"; data?: { sessionId?: string; message?: string; code?: string } }
+  // Task finished
+  | { type: "task.finished"; data?: { sessionId?: string; status?: string } }
+  // Message info/ask
+  | { type: "message.info"; data?: { sessionId?: string; messageId?: string; content?: string; metadata?: Record<string, unknown> } }
+  | { type: "message.ask"; data?: { sessionId?: string; messageId?: string; toolCallId?: string; toolName?: string; input?: unknown; content?: string } }
+  // Map-reduce events
+  | { type: "map_started"; data?: { jobId?: string; title?: string; totalSubtasks?: number } }
+  | { type: "map_subtask_complete"; data?: { jobId?: string; subtaskIndex?: number; result?: { id?: string; key?: string; value?: unknown } } }
+  | { type: "map_all_complete"; data?: { jobId?: string; results?: unknown[] } }
+  // WebDev events
+  | { type: "webdev_project_created"; data?: { project?: WebDevProject } }
+  // Context length warning
+  | { type: "context_length.warning"; data?: { status?: "normal" | "warning" | "critical" | "exceeded" } }
   | { type: "pong"; data?: { ts?: number } };
 
 // WebSocket middleware actions
@@ -292,7 +337,7 @@ export const websocketMiddleware: Middleware = (store) => (next) => (action) => 
             try {
               const data = JSON.parse(event.data);
               if (!data || typeof data.type !== "string") return;
-              handleWebSocketMessage(dispatch, data as WebSocketEvent);
+              handleWebSocketMessage(dispatch, data as WebSocketEvent, store.getState);
             } catch {
               // Silently ignore unparseable messages
             }
@@ -360,7 +405,7 @@ export const websocketMiddleware: Middleware = (store) => (next) => (action) => 
 
 // ─── Message handler ───────────────────────────────────────────────
 
-function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSocketEvent) {
+function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSocketEvent, getState: () => unknown) {
   switch (event.type) {
     // Connection events
     case "connected":
@@ -583,12 +628,284 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
       }
       break;
 
+    // Plan events — dispatch to timeline + clear error
     case "plan.update":
       dispatch(setLastError(null));
+      if (event.data?.planId) {
+        dispatch(
+          addSegmentEvent({
+            segmentId: "plan",
+            event: {
+              id: `plan_update_${Date.now()}`,
+              sessionId: "",
+              segmentId: "plan",
+              type: "status_change",
+              title: "Plan updated",
+              data: {
+                planId: event.data.planId,
+                phases: event.data.phases,
+                currentPhase: event.data.currentPhase,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+      }
       break;
 
     case "plan.advance":
       dispatch(setLastError(null));
+      if (event.data?.planId) {
+        dispatch(
+          addSegmentEvent({
+            segmentId: "plan",
+            event: {
+              id: `plan_advance_${Date.now()}`,
+              sessionId: "",
+              segmentId: "plan",
+              type: "status_change",
+              title: "Plan phase advanced",
+              data: {
+                planId: event.data.planId,
+                nextPhase: event.data.nextPhase,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      break;
+
+    // Sandbox events
+    case "sandbox.status":
+      if (event.data?.sessionId && event.data?.status) {
+        dispatch(
+          updateSession({
+            id: event.data.sessionId,
+            updates: {
+              metadata: {
+                sandboxStatus: event.data.status,
+                sandboxId: event.data.sandboxId,
+              },
+            },
+          })
+        );
+      }
+      break;
+
+    case "sandbox.browser.frame":
+      if (event.data?.frameId) {
+        dispatch(
+          setFrameMetadata({
+            frameId: event.data.frameId,
+            tabId: event.data.tabId ?? "default",
+            url: event.data.url ?? "",
+            title: event.data.title ?? "",
+            frameType: (event.data.frameType as BrowserFrameMetadata["frameType"]) ?? "main_frame",
+            isActive: true,
+            lastActiveAt: new Date().toISOString(),
+            viewport: event.data.viewport
+              ? { ...event.data.viewport, devicePixelRatio: 1 }
+              : undefined,
+            metadata: {
+              screenshot: event.data.screenshot,
+              markdown: event.data.markdown,
+              elements: event.data.elements,
+            },
+          })
+        );
+      }
+      break;
+
+    case "sandbox.terminal.chunk":
+      if (event.data?.sessionId) {
+        dispatch(
+          addSegmentEvent({
+            segmentId: event.data.terminalId ?? "terminal",
+            event: {
+              id: `term_${Date.now()}`,
+              sessionId: event.data.sessionId,
+              segmentId: event.data.terminalId ?? "terminal",
+              type: "shell_exec",
+              title: "Terminal output",
+              data: { output: event.data.output },
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      break;
+
+    // Tool call progress
+    case "tool_call.progress":
+      if (event.data?.toolCallId) {
+        dispatch(
+          updateToolCallMetadata({
+            correlationId: event.data.toolCallId,
+            metadata: {
+              progress: event.data.progress,
+              progressMessage: event.data.message,
+            },
+          })
+        );
+      }
+      break;
+
+    // File events
+    case "file.uploaded":
+      if (event.data?.file?.id) {
+        dispatch(addFile(event.data.file));
+      }
+      break;
+
+    case "file.ready":
+      if (event.data?.fileId) {
+        dispatch(
+          updateFile({
+            id: event.data.fileId,
+            updates: { ...event.data.updates, storageKey: event.data.url ?? undefined } as Partial<FileItem>,
+          })
+        );
+      }
+      break;
+
+    // Connector status
+    case "connector.status":
+      if (event.data?.connectionId && event.data?.status) {
+        dispatch(
+          setConnectorSyncStatus({
+            connectionId: event.data.connectionId,
+            status: event.data.status,
+            errorMessage: event.data.errorMessage,
+          })
+        );
+      }
+      break;
+
+    // Orchestrator error
+    case "orchestrator.error":
+      if (event.data?.message) {
+        dispatch(setChatError(event.data.message));
+        dispatch(setLastError(event.data.message));
+      }
+      break;
+
+    // Task finished — mark session complete + flag
+    case "task.finished":
+      dispatch(setTaskFinished(true));
+      if (event.data?.sessionId) {
+        dispatch(
+          updateSession({
+            id: event.data.sessionId,
+            updates: {
+              status: (event.data.status as AgentSession["status"]) ?? "completed",
+              completedAt: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      break;
+
+    // Message info (non-interactive agent notification)
+    case "message.info":
+      if (event.data?.sessionId && event.data?.messageId) {
+        dispatch(
+          addMessage({
+            id: event.data.messageId,
+            sessionId: event.data.sessionId,
+            role: "assistant",
+            content: event.data.content ?? "",
+            metadata: { ...event.data.metadata, type: "info" },
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+      break;
+
+    // Message ask (agent requests user input / tool approval)
+    case "message.ask":
+      if (event.data?.sessionId && event.data?.toolCallId && event.data?.toolName) {
+        dispatch(
+          addToolApproval({
+            id: `approval_${event.data.toolCallId}`,
+            toolCallId: event.data.toolCallId,
+            toolName: event.data.toolName,
+            input: event.data.input ?? {},
+            sessionId: event.data.sessionId,
+            messageId: event.data.messageId ?? "",
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+      if (event.data?.sessionId && event.data?.content) {
+        dispatch(
+          addMessage({
+            id: event.data.messageId ?? `ask_${Date.now()}`,
+            sessionId: event.data.sessionId,
+            role: "assistant",
+            content: event.data.content,
+            metadata: { type: "ask" },
+            createdAt: new Date().toISOString(),
+          })
+        );
+      }
+      break;
+
+    // Map-reduce events (orchestrator-worker pattern)
+    case "map_started":
+      if (event.data?.jobId && event.data?.title) {
+        dispatch(
+          startMapTask({
+            id: event.data.jobId,
+            name: event.data.title,
+            totalItems: event.data.totalSubtasks ?? 0,
+          })
+        );
+      }
+      break;
+
+    case "map_subtask_complete":
+      if (event.data?.jobId) {
+        const subtaskIndex = event.data.subtaskIndex ?? 0;
+        const totalSubtasks =
+          ((getState() as { mapReduce: { currentTask: { totalItems: number } | null } })
+            .mapReduce?.currentTask?.totalItems) ?? 1;
+        dispatch(
+          updateMapProgress({
+            processedItems: subtaskIndex + 1,
+            progress: Math.round(((subtaskIndex + 1) / totalSubtasks) * 100),
+          })
+        );
+        if (event.data.result) {
+          dispatch(
+            addMapResult({
+              id: event.data.result.id ?? `subtask_${subtaskIndex}`,
+              key: event.data.result.key ?? `subtask_${subtaskIndex}`,
+              value: event.data.result.value,
+            })
+          );
+        }
+      }
+      break;
+
+    case "map_all_complete":
+      if (event.data?.jobId) {
+        dispatch(completeMapTask());
+      }
+      break;
+
+    // WebDev project created
+    case "webdev_project_created":
+      if (event.data?.project) {
+        dispatch(setProject(event.data.project));
+      }
+      break;
+
+    // Context length warning
+    case "context_length.warning":
+      if (event.data?.status) {
+        dispatch(setContextLengthStatus(event.data.status));
+      }
       break;
 
     case "credits.update":

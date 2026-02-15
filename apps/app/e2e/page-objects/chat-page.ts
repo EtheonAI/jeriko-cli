@@ -1,5 +1,8 @@
-import { type Page, type Locator, type FilePayload } from "@playwright/test";
+import { type Page, type Locator } from "@playwright/test";
 import { BasePage } from "./base-page";
+
+/** Playwright FilePayload (not exported in all versions) */
+type FilePayload = { name: string; mimeType: string; buffer: Buffer };
 
 export class ChatPage extends BasePage {
   readonly promptInput: Locator;

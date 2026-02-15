@@ -131,6 +131,16 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   // Parallel tasks
   parallel_tasks: ProgressTool as ToolRenderer,
 
+  // WebDev IDE
+  webdev_init_project: DeployResult as ToolRenderer,
+  webdev_save_checkpoint: ProgressTool as ToolRenderer,
+  webdev_check_status: ProgressTool as ToolRenderer,
+  webdev_restart_server: ProgressTool as ToolRenderer,
+  webdev_rollback_checkpoint: ProgressTool as ToolRenderer,
+  webdev_execute_sql: ProgressTool as ToolRenderer,
+  webdev_push_schema: ProgressTool as ToolRenderer,
+  webdev_list_versions: ProgressTool as ToolRenderer,
+
   // Fallback for any unknown tool
   "*": GenericTool,
 };

@@ -9,6 +9,7 @@ done
 echo "sandbox-runtime is ready, starting code server..."
 CODE_SERVER_CONFIG='/home/ubuntu/.config/code-server/config.yaml'
 mkdir -p /home/ubuntu/.config/code-server
+chown -R ubuntu:ubuntu /home/ubuntu/.config
 CODE_SERVER_PORT=8329
 if ! grep -q "CODE_SERVER_PORT=" "/home/ubuntu/.env"; then
     echo "export CODE_SERVER_PORT=\"$CODE_SERVER_PORT\"" >> /home/ubuntu/.env

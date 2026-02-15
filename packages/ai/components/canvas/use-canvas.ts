@@ -169,6 +169,16 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
 
   // Slide present -> browser (generates viewable URL)
   slide_present: "browser",
+
+  // WebDev IDE tools
+  webdev_init_project: "webDevIDE",
+  webdev_save_checkpoint: "webDevIDE",
+  webdev_check_status: "webDevIDE",
+  webdev_restart_server: "webDevIDE",
+  webdev_rollback_checkpoint: "webDevIDE",
+  webdev_execute_sql: "webDevIDE",
+  webdev_push_schema: "webDevIDE",
+  webdev_list_versions: "webDevIDE",
 };
 
 // ============================================================================
@@ -273,6 +283,21 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
     type: "browsing",
     label: "Presenting slides",
   }),
+  // WebDev IDE tools
+  webdev_init_project: (args) => ({
+    type: "creating" as ToolActionType,
+    label: `Scaffolding ${(args.app_name as string) || "project"}`,
+  }),
+  webdev_save_checkpoint: (args) => ({
+    type: "creating" as ToolActionType,
+    label: `Saving: ${truncate((args.message as string) || "checkpoint", 25)}`,
+  }),
+  webdev_check_status: () => ({ type: "viewing" as ToolActionType, label: "Checking project status" }),
+  webdev_restart_server: () => ({ type: "creating" as ToolActionType, label: "Restarting dev server" }),
+  webdev_rollback_checkpoint: () => ({ type: "viewing" as ToolActionType, label: "Rolling back version" }),
+  webdev_execute_sql: () => ({ type: "searching" as ToolActionType, label: "Executing SQL query" }),
+  webdev_push_schema: () => ({ type: "creating" as ToolActionType, label: "Pushing database schema" }),
+  webdev_list_versions: () => ({ type: "viewing" as ToolActionType, label: "Listing versions" }),
 };
 
 // ============================================================================
@@ -290,13 +315,19 @@ function normalizeScreenshot(raw: string): string {
   for (const prefix of BASE64_IMAGE_PREFIXES) {
     if (raw.startsWith(prefix)) {
       // PNG starts with iVBOR, JPEG with /9j/, GIF with R0lGO, WebP with UklGR
-      const mime = raw.startsWith("/9j/") ? "image/jpeg" : "image/png";
+      const mime = raw.startsWith("/9j/")
+        ? "image/jpeg"
+        : raw.startsWith("UklGR")
+          ? "image/webp"
+          : raw.startsWith("R0lGO")
+            ? "image/gif"
+            : "image/png";
       return `data:${mime};base64,${raw}`;
     }
   }
-  // Fallback: assume PNG base64
+  // Fallback: assume WebP base64 (Manus default format)
   if (raw.length > 100 && /^[A-Za-z0-9+/=]+$/.test(raw.slice(0, 100))) {
-    return `data:image/png;base64,${raw}`;
+    return `data:image/webp;base64,${raw}`;
   }
   return raw;
 }
@@ -390,6 +421,9 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   const [nekoUrl, setNekoUrl] = useState<string | undefined>();
   // E2B stream URL — set from sandbox_info metadata (noVNC fallback)
   const [streamUrl, setStreamUrl] = useState<string | undefined>();
+
+  // WebDev IDE preview URL — extracted from webdev_init_project result
+  const [webdevPreviewUrl, setWebdevPreviewUrl] = useState<string | undefined>();
 
   // Pinned tool call — when set, canvas shows historical state instead of latest
   const [pinnedToolCallId, setPinnedToolCallId] = useState<string | undefined>();
@@ -667,6 +701,16 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         if (lastCmd === `$ ${cmd}`) return prev;
         return [...prev, `$ ${cmd}`, ...outputStr.split("\n")];
       });
+    }
+  }, [latestTool?.toolCallId, latestTool?.state]);
+
+  // Extract webdev preview URL from webdev_init_project results
+  useEffect(() => {
+    if (!latestTool || latestTool.viewType !== "webDevIDE") return;
+    if (latestTool.state !== "output-available") return;
+    const output = latestTool.output as Record<string, unknown> | undefined;
+    if (output?.previewUrl && typeof output.previewUrl === "string") {
+      setWebdevPreviewUrl(output.previewUrl);
     }
   }, [latestTool?.toolCallId, latestTool?.state]);
 
@@ -1117,6 +1161,34 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.activeFileContent = activeTool.args.content as string;
       state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
     }
+  }
+
+  // WebDev IDE view data — reuse file tree + add preview URL
+  if (effectiveViewType === "webDevIDE" || availableViews.has("webDevIDE")) {
+    if (Object.keys(fileContents).length > 0) {
+      const allPaths = Object.keys(fileContents);
+      const openPaths = allPaths.filter((p) => !closedTabs.has(p));
+      const activePath =
+        (userSelectedPath && fileContents[userSelectedPath] ? userSelectedPath : null) ??
+        (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
+        null;
+      if (activePath) {
+        state.activeFileContent = fileContents[activePath];
+        state.activeFileLanguage = getLanguage(activePath);
+      }
+      state.fileTree = buildFileTree(allPaths);
+      state.fileTabs = openPaths.map((p, i) => ({
+        id: String(i),
+        name: p.split("/").pop() || p,
+        path: p,
+        isActive: p === activePath,
+      }));
+      state.onSelectFile = onSelectFile;
+      state.onSelectTab = onSelectTab;
+      state.onCloseTab = onCloseTab;
+    }
+    state.previewUrl = webdevPreviewUrl;
+    state.fileContents = fileContents;
   }
 
   return state;

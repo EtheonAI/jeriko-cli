@@ -106,6 +106,10 @@ export function ChatClient({
   // Auto-send queued message from dashboard
   useInitialMessage({ sessionId, sendMessage });
 
+  // User control state — when user clicks "Take Control" in browser canvas,
+  // the prompt pauses and the canvas switches to live Neko WebRTC stream.
+  const [userControlActive, setUserControlActive] = useState(false);
+
   // File management panel
   const [filesPanelOpen, setFilesPanelOpen] = useState(false);
 
@@ -214,8 +218,9 @@ export function ChatClient({
               liveTerminalOutput={e2bTerminal.output}
               liveTerminalConnected={e2bTerminal.isConnected}
               onTerminalSendInput={e2bTerminal.sendInput}
-              nekoUrl={canvasState.nekoUrl ?? (e2bBrowser.isLiveStream ? e2bBrowser.streamUrl : undefined) ?? undefined}
-              streamUrl={canvasState.streamUrl ?? (e2bBrowser.isLiveStream ? e2bBrowser.streamUrl : undefined) ?? undefined}
+              nekoUrl={canvasState.nekoUrl}
+              streamUrl={canvasState.streamUrl}
+              onUserControlChange={setUserControlActive}
               sandboxId={canvasState.sandboxId}
               previewFileName={canvasState.previewFileName}
               previewContent={canvasState.previewContent}
@@ -273,9 +278,10 @@ export function ChatClient({
               onSubmit={(text, attachments, options) => handleSendMessage(text, attachments, options)}
               onCancel={stop}
               isStreaming={isStreaming}
+              disabled={userControlActive}
               showQuickActions={false}
               showAnimatedPlaceholder={messages.length === 0}
-              placeholder={messages.length > 0 ? "Ask anything..." : undefined}
+              placeholder={userControlActive ? "You have browser control — release to resume chat" : messages.length > 0 ? "Ask anything..." : undefined}
             />
           </div>
         </div>

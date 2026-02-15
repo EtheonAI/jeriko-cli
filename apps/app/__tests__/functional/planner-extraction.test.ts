@@ -108,7 +108,7 @@ function isToolUIPart(part: { type: string } & Record<string, unknown>): boolean
 
 function getToolName(part: { type: string } & Record<string, unknown>): string {
   if (part.type === "dynamic-tool") {
-    return (part as { toolName: string }).toolName;
+    return (part as unknown as { toolName: string }).toolName;
   }
   return part.type.slice(5); // Remove "tool-" prefix
 }

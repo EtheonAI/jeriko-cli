@@ -219,8 +219,8 @@ const chatSlice = createSlice({
       const messages = state.messages[sessionId];
       if (messages) {
         const index = messages.findIndex((m) => m.id === messageId);
-        if (index !== -1) {
-          messages[index] = { ...messages[index], ...updates };
+        if (index !== -1 && messages[index]) {
+          Object.assign(messages[index], updates);
         }
       }
     },
@@ -301,8 +301,8 @@ const chatSlice = createSlice({
     },
     updateChatFile: (state, action: PayloadAction<{ id: string; updates: Partial<ChatFile> }>) => {
       const index = state.files.findIndex((f) => f.id === action.payload.id);
-      if (index !== -1) {
-        state.files[index] = { ...state.files[index], ...action.payload.updates };
+      if (index !== -1 && state.files[index]) {
+        Object.assign(state.files[index], action.payload.updates);
       }
     },
     removeChatFile: (state, action: PayloadAction<string>) => {
@@ -445,8 +445,8 @@ const chatSlice = createSlice({
       const messages = state.uiMessages[sessionId];
       if (messages) {
         const index = messages.findIndex((m) => m.id === messageId);
-        if (index !== -1) {
-          messages[index] = { ...messages[index], ...updates };
+        if (index !== -1 && messages[index]) {
+          Object.assign(messages[index], updates);
         }
       }
     },

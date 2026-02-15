@@ -45,11 +45,13 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
     "deploy_apply_deployment",
     // Manus page (1)
     "make_manus_page",
+    // Slide present generates viewable URL (1)
+    "slide_present",
   ].sort();
 
-  it("should contain exactly 21 browser entries", () => {
+  it("should contain exactly 22 browser entries", () => {
     const browserKeys = keysForView("browser");
-    expect(browserKeys).toHaveLength(21);
+    expect(browserKeys).toHaveLength(22);
   });
 
   it("should map every expected browser tool to 'browser'", () => {
@@ -110,11 +112,12 @@ describe("TOOL_VIEW_MAP — code tools", () => {
     "file_str_replace",
     "file_find_in_content",
     "file_find_by_name",
+    "text_editor",
   ].sort();
 
-  it("should contain exactly 5 code entries", () => {
+  it("should contain exactly 6 code entries", () => {
     const codeKeys = keysForView("code");
-    expect(codeKeys).toHaveLength(5);
+    expect(codeKeys).toHaveLength(6);
   });
 
   it("should map every expected code tool to 'code'", () => {
@@ -130,7 +133,42 @@ describe("TOOL_VIEW_MAP — code tools", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Inline-only tools should NOT be in the map
+// 4. WebDev IDE tools -> "webDevIDE" (8 entries)
+// ---------------------------------------------------------------------------
+
+describe("TOOL_VIEW_MAP — webDevIDE tools", () => {
+  const EXPECTED_WEBDEVIDE_TOOLS = [
+    "webdev_init_project",
+    "webdev_save_checkpoint",
+    "webdev_check_status",
+    "webdev_restart_server",
+    "webdev_rollback_checkpoint",
+    "webdev_execute_sql",
+    "webdev_push_schema",
+    "webdev_list_versions",
+  ].sort();
+
+  it("should contain exactly 8 webDevIDE entries", () => {
+    const webdevKeys = keysForView("webDevIDE");
+    expect(webdevKeys).toHaveLength(8);
+  });
+
+  it("should map every expected webdev tool to 'webDevIDE'", () => {
+    for (const tool of EXPECTED_WEBDEVIDE_TOOLS) {
+      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "webDevIDE"`).toBe(
+        "webDevIDE"
+      );
+    }
+  });
+
+  it("should not have any extra webDevIDE entries beyond the expected set", () => {
+    const webdevKeys = keysForView("webDevIDE");
+    expect(webdevKeys).toEqual(EXPECTED_WEBDEVIDE_TOOLS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Inline-only tools should NOT be in the map
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
@@ -156,18 +194,19 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — total count", () => {
-  it("should have exactly 32 entries (21 browser + 6 terminal + 5 code)", () => {
+  it("should have exactly 42 entries (22 browser + 6 terminal + 6 code + 8 webDevIDE)", () => {
     const totalKeys = Object.keys(TOOL_VIEW_MAP);
-    expect(totalKeys).toHaveLength(32);
+    expect(totalKeys).toHaveLength(42);
   });
 
-  it("should have counts that add up: browser + terminal + code = total", () => {
+  it("should have counts that add up: browser + terminal + code + webDevIDE = total", () => {
     const browserCount = keysForView("browser").length;
     const terminalCount = keysForView("terminal").length;
     const codeCount = keysForView("code").length;
+    const webdevCount = keysForView("webDevIDE").length;
     const total = Object.keys(TOOL_VIEW_MAP).length;
 
-    expect(browserCount + terminalCount + codeCount).toBe(total);
+    expect(browserCount + terminalCount + codeCount + webdevCount).toBe(total);
   });
 });
 
@@ -176,9 +215,9 @@ describe("TOOL_VIEW_MAP — total count", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — no unexpected view types", () => {
-  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "code"];
+  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "code", "webDevIDE"];
 
-  it("every value should be one of: browser, terminal, code", () => {
+  it("every value should be one of: browser, terminal, code, webDevIDE", () => {
     const viewTypes = new Set(Object.values(TOOL_VIEW_MAP));
 
     for (const vt of viewTypes) {
@@ -189,8 +228,8 @@ describe("TOOL_VIEW_MAP — no unexpected view types", () => {
     }
   });
 
-  it("should use exactly the three expected view types", () => {
+  it("should use exactly the four expected view types", () => {
     const viewTypes = [...new Set(Object.values(TOOL_VIEW_MAP))].sort();
-    expect(viewTypes).toEqual(["browser", "code", "terminal"]);
+    expect(viewTypes).toEqual(["browser", "code", "terminal", "webDevIDE"]);
   });
 });

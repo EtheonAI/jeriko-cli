@@ -29,7 +29,7 @@ describe("groupSessionsByDate", () => {
       else label = "Older";
 
       if (!buckets[label]) buckets[label] = [];
-      buckets[label].push(session);
+      buckets[label]!.push(session);
     }
 
     const groups: { label: string; sessions: Session[] }[] = [];
@@ -48,8 +48,8 @@ describe("groupSessionsByDate", () => {
     ];
     const groups = groupSessionsByDate(sessions);
     expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("Today");
-    expect(groups[0].sessions).toHaveLength(1);
+    expect(groups[0]!.label).toBe("Today");
+    expect(groups[0]!.sessions).toHaveLength(1);
   });
 
   it("groups sessions into multiple buckets", () => {
@@ -102,8 +102,8 @@ describe("groupSessionsByDate", () => {
     ];
     const groups = groupSessionsByDate(sessions);
     expect(groups).toHaveLength(2);
-    expect(groups[0].label).toBe("Today");
-    expect(groups[1].label).toBe("Older");
+    expect(groups[0]!.label).toBe("Today");
+    expect(groups[1]!.label).toBe("Older");
   });
 
   it("handles string dates from database", () => {
@@ -117,6 +117,6 @@ describe("groupSessionsByDate", () => {
     ];
     const groups = groupSessionsByDate(sessions);
     expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("Today");
+    expect(groups[0]!.label).toBe("Today");
   });
 });

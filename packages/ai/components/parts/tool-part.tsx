@@ -23,13 +23,8 @@ export interface ToolPartProps {
   variant?: "auto" | "compact" | "expanded";
 }
 
-// Tools that keep their full custom renderers inline (no canvas view)
-const NON_CANVAS_FULL_RENDERERS = new Set([
-  "show_plan",
-  "message_notify_user",
-  "message_ask_user",
-  "schedule_recurring_task",
-  "check_outcomes",
+// Tools that get their full custom renderer (not pill)
+const FULL_RENDERER_TOOLS = new Set([
   "generate_image",
 ]);
 
@@ -101,7 +96,29 @@ export function ToolPart({
     );
   }
 
-  // Canvas-mapped tools → compact inline indicator (unless debug mode)
+  // show_plan — render with its own renderer (Manus-style inline plan)
+  if (toolName === "show_plan") {
+    const ToolRenderer = getRenderer(toolName);
+    return (
+      <div
+        data-testid="tool-card"
+        data-tool-name={toolName}
+        data-tool-state={part.state}
+        className={cn("my-1", className)}
+      >
+        <ToolRenderer
+          toolName={toolName}
+          toolCallId={part.toolCallId}
+          state={part.state}
+          input={part.input}
+          output={part.output}
+          errorText={part.errorText}
+        />
+      </div>
+    );
+  }
+
+  // Canvas-mapped tools → Manus-style pill (unless debug mode)
   if (hasCanvasView && !DEBUG_TOOLS && variant !== "expanded") {
     return (
       <div
@@ -139,64 +156,57 @@ export function ToolPart({
     );
   }
 
-  // Non-canvas tools with compact pills (message_notify_user, etc.)
-  const useCompactPill =
-    variant === "compact" ||
-    (variant === "auto" && NON_CANVAS_FULL_RENDERERS.has(toolName) &&
-      toolName !== "show_plan" && toolName !== "generate_image");
-
-  if (useCompactPill) {
-    const summary = getCompactSummary(toolName, part);
-    const title = (part as { title?: string }).title;
+  // Full renderer tools (generate_image) — keep their expanded UI
+  if (FULL_RENDERER_TOOLS.has(toolName) || variant === "expanded" || DEBUG_TOOLS) {
+    const ToolRenderer = getRenderer(toolName);
     return (
-      <ToolCompact
-        toolName={toolName}
-        state={part.state}
-        title={title}
-        summary={summary}
-        className={className}
-      />
+      <div
+        data-testid="tool-card"
+        data-tool-name={toolName}
+        data-tool-state={part.state}
+        className={cn("group/tool relative my-2", className)}
+      >
+        <ToolRenderer
+          toolName={toolName}
+          toolCallId={part.toolCallId}
+          state={part.state}
+          input={part.input}
+          output={part.output}
+          errorText={part.errorText}
+        />
+
+        {hasCanvasView && onViewInCanvas && part.state === "output-available" && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onViewInCanvas(part.toolCallId)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onViewInCanvas(part.toolCallId);
+              }
+            }}
+            title="View in canvas"
+            className="absolute right-2 top-2 flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted/80 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover/tool:opacity-100"
+          >
+            <MonitorIcon className="size-3.5" />
+          </div>
+        )}
+      </div>
     );
   }
 
-  // Full renderers — non-canvas tools (show_plan, generate_image) + debug mode
-  const ToolRenderer = getRenderer(toolName);
-
+  // Everything else → Manus-style compact pill
+  const summary = getCompactSummary(toolName, part);
+  const title = (part as { title?: string }).title;
   return (
-    <div
-      data-testid="tool-card"
-      data-tool-name={toolName}
-      data-tool-state={part.state}
-      className={cn("group/tool relative my-2", className)}
-    >
-      <ToolRenderer
-        toolName={toolName}
-        toolCallId={part.toolCallId}
-        state={part.state}
-        input={part.input}
-        output={part.output}
-        errorText={part.errorText}
-      />
-
-      {/* "View in Canvas" pin — only for tools with canvas views + completed output */}
-      {hasCanvasView && onViewInCanvas && part.state === "output-available" && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onViewInCanvas(part.toolCallId)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onViewInCanvas(part.toolCallId);
-            }
-          }}
-          title="View in canvas"
-          className="absolute right-2 top-2 flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted/80 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover/tool:opacity-100"
-        >
-          <MonitorIcon className="size-3.5" />
-        </div>
-      )}
-    </div>
+    <ToolCompact
+      toolName={toolName}
+      state={part.state}
+      title={title}
+      summary={summary}
+      className={className}
+    />
   );
 }
 

@@ -64,7 +64,7 @@ export async function executeSandboxTool(
     } else if (toolName === "code_execute") {
       result = await handleCodeExecute(baseUrl, params);
     } else if (toolName.startsWith("browser_")) {
-      result = await handleBrowser(baseUrl, toolName, params);
+      result = await handleBrowser(baseUrl, toolName, params, ctx.userId);
     } else if (toolName === "deploy_expose_port") {
       result = await handleDeployExposePort(ctx, params);
     } else if (toolName === "deploy_apply_deployment") {
@@ -286,28 +286,54 @@ async function handleShellExec(
   // Ensure terminal exists
   await ensureTerminal(baseUrl, id);
 
+  // Snapshot current output length BEFORE writing the command
+  // so we can return only the new output (delta)
+  const preView = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
+  const preOutput = ((preView.output ?? preView.content ?? "") as string);
+  const preLen = preOutput.length;
+
   // Build command — if exec_dir specified, cd first
   const fullCommand = execDir ? `cd ${JSON.stringify(execDir)} && ${command}` : command;
 
-  // Append \n to text so the command actually executes (sandbox reads text only)
+  // Write command to terminal
   await postJson(
     `${baseUrl}/terminal/${encodeURIComponent(id)}/write`,
-    {
-      text: fullCommand + "\n",
-    },
+    { text: fullCommand + "\n" },
     120000
   );
 
-  // Brief pause to let output accumulate
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Wait for output to accumulate — poll until stable (max 15s)
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  let lastOutput = "";
+  let stableCount = 0;
+  const pollStart = Date.now();
+  while (Date.now() - pollStart < 15000) {
+    const result = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
+    const currentOutput = (result.output ?? result.content ?? "") as string;
+    if (currentOutput === lastOutput) {
+      stableCount++;
+      if (stableCount >= 2) break;
+    } else {
+      stableCount = 0;
+      lastOutput = currentOutput;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 
-  // Read the terminal output
+  // Read final output and return only the NEW portion (after the pre-snapshot)
   const viewResult = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
+  const fullOutput = (viewResult.output ?? viewResult.content ?? "") as string;
+  const newOutput = fullOutput.length > preLen ? fullOutput.slice(preLen) : fullOutput.slice(-2000);
+
+  // Trim to last 100 lines if still too long
+  const outputLines = newOutput.split("\n");
+  const trimmedOutput = outputLines.length > 100
+    ? outputLines.slice(-100).join("\n")
+    : newOutput;
 
   return {
     status: "success",
-    output: viewResult.output ?? viewResult.content ?? "",
-    ...viewResult,
+    output: trimmedOutput,
   };
 }
 
@@ -318,11 +344,16 @@ async function handleShellView(
   const id = (params.id as string) || "default";
 
   const result = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
+  const fullOutput = (result.output ?? result.content ?? "") as string;
+  const outputLines = fullOutput.split("\n");
+  const trimmedOutput = outputLines.length > 100
+    ? outputLines.slice(-100).join("\n")
+    : fullOutput;
 
   return {
     status: "success",
-    output: result.output ?? result.content ?? "",
-    ...result,
+    output: trimmedOutput,
+    output_truncated: outputLines.length > 100,
   };
 }
 
@@ -346,7 +377,9 @@ async function handleShellWait(
     if (currentOutput === lastOutput) {
       stableCount++;
       if (stableCount >= 3) {
-        return { status: "success", completed: true, output: currentOutput, ...result };
+        const lines = currentOutput.split("\n");
+        const trimmed = lines.length > 100 ? lines.slice(-100).join("\n") : currentOutput;
+        return { status: "success", completed: true, output: trimmed, output_truncated: lines.length > 100 };
       }
     } else {
       stableCount = 0;
@@ -356,10 +389,13 @@ async function handleShellWait(
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
+  const lines = lastOutput.split("\n");
+  const trimmed = lines.length > 100 ? lines.slice(-100).join("\n") : lastOutput;
   return {
     status: "success",
     completed: false,
-    output: lastOutput,
+    output: trimmed,
+    output_truncated: lines.length > 100,
   };
 }
 
@@ -371,12 +407,22 @@ async function handleShellWriteToProcess(
   const input = params.input as string;
   const pressEnter = (params.press_enter as boolean) ?? false;
 
-  const result = await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/write`, {
+  await postJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/write`, {
     text: input,
     enter: pressEnter,
   });
 
-  return { status: "success", ...result };
+  // Wait briefly then return current terminal output so the agent can see the effect
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  const viewResult = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
+  const fullOutput = (viewResult.output ?? viewResult.content ?? "") as string;
+  const outputLines = fullOutput.split("\n");
+  const trimmedOutput = outputLines.length > 80
+    ? outputLines.slice(-80).join("\n")
+    : fullOutput;
+
+  return { status: "success", output: trimmedOutput };
 }
 
 async function handleShellKillProcess(
@@ -435,10 +481,26 @@ async function handleCodeExecute(
 
 // ── Browser tools (via /browser/action) ──────────────────────────────────────
 
+/**
+ * Upload a base64-encoded screenshot to S3 and return a presigned URL.
+ * Manus flow: sandbox → base64 → S3 upload → presigned URL → frontend.
+ */
+async function uploadScreenshotToS3(
+  base64Data: string,
+  userId: string
+): Promise<string> {
+  const { uploadFile, getPresignedUrl } = await import("@repo/storage");
+  const buffer = Buffer.from(base64Data, "base64");
+  const key = `screenshots/${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+  await uploadFile(key, buffer, "image/webp");
+  return getPresignedUrl(key, 86400, true);
+}
+
 async function handleBrowser(
   baseUrl: string,
   toolName: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  userId: string
 ): Promise<Record<string, unknown>> {
   // Strip 'browser_' prefix — sandbox expects bare action names
   const action = toolName.replace(/^browser_/, "");
@@ -490,6 +552,17 @@ async function handleBrowser(
     },
     45000
   );
+
+  // Upload screenshot base64 to S3 and replace with presigned URL (Manus parity)
+  if (typeof result.screenshot === "string" && result.screenshot.length > 200) {
+    try {
+      const screenshotUrl = await uploadScreenshotToS3(result.screenshot, userId);
+      result.screenshot = screenshotUrl;
+    } catch (error) {
+      console.error("Failed to upload screenshot to S3:", error);
+      // Keep base64 as fallback — frontend normalizeScreenshot() handles it
+    }
+  }
 
   return { status: "success", ...result };
 }

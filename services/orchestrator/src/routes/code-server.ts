@@ -22,6 +22,7 @@
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
 import { getSandboxInfo } from "../lib/e2b-manager.js";
+import { getRsaHeaders } from "../lib/rsa-auth.js";
 
 const logger = createLogger({ service: "code-server" });
 
@@ -72,9 +73,12 @@ async function callTerminalServer(
   }
 
   const url = `${baseUrl}${endpoint}`;
+  const body = typeof options.body === "string" ? options.body : "";
+  const rsaHeaders = getRsaHeaders(body);
   return fetch(url, {
     ...options,
-    signal: AbortSignal.timeout(15000),
+    headers: { ...options.headers, ...rsaHeaders },
+    signal: AbortSignal.timeout(30000),
   });
 }
 

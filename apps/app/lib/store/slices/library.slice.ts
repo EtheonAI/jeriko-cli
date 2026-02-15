@@ -199,11 +199,8 @@ const librarySlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<LibraryAttachment> }>
     ) => {
       const index = state.attachmentList.findIndex((a) => a.id === action.payload.id);
-      if (index !== -1) {
-        state.attachmentList[index] = {
-          ...state.attachmentList[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.attachmentList[index]) {
+        Object.assign(state.attachmentList[index], action.payload.updates);
       }
     },
 
@@ -246,11 +243,8 @@ const librarySlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<LibraryAttachmentGroup> }>
     ) => {
       const index = state.attachmentGroupList.findIndex((g) => g.id === action.payload.id);
-      if (index !== -1) {
-        state.attachmentGroupList[index] = {
-          ...state.attachmentGroupList[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.attachmentGroupList[index]) {
+        Object.assign(state.attachmentGroupList[index], action.payload.updates);
       }
     },
 
@@ -306,8 +300,8 @@ const librarySlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<FileItem> }>
     ) => {
       const index = state.files.findIndex((f) => f.id === action.payload.id);
-      if (index !== -1) {
-        state.files[index] = { ...state.files[index], ...action.payload.updates };
+      if (index !== -1 && state.files[index]) {
+        Object.assign(state.files[index], action.payload.updates);
       }
     },
 

@@ -138,8 +138,9 @@ export const experimentSlice = createSlice({
 
     // Toggle a feature flag
     toggleFeatureFlag: (state, action: PayloadAction<string>) => {
-      if (state.featureFlags[action.payload]) {
-        state.featureFlags[action.payload].enabled = !state.featureFlags[action.payload].enabled;
+      const flag = state.featureFlags[action.payload];
+      if (flag) {
+        flag.enabled = !flag.enabled;
       }
     },
 
@@ -159,12 +160,10 @@ export const experimentSlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<Experiment> }>
     ) => {
       const index = state.experiments.findIndex((e) => e.id === action.payload.id);
-      if (index !== -1) {
-        state.experiments[index] = {
-          ...state.experiments[index],
-          ...action.payload.updates,
+      if (index !== -1 && state.experiments[index]) {
+        Object.assign(state.experiments[index], action.payload.updates, {
           updatedAt: new Date().toISOString(),
-        };
+        });
       }
     },
 
@@ -201,32 +200,20 @@ export const experimentSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility
-    builder.addCase(
-      "experiment/setVariants",
-      (
-        state,
-        action: PayloadAction<{
-          frontendVariants?: Record<string, ExperimentVariant>;
-          backendVariants?: Record<string, ExperimentVariant>;
-          variants?: Record<string, ExperimentVariant>;
-        }>
-      ) => {
-        if (action.payload?.frontendVariants) {
-          state.frontendVariants = action.payload.frontendVariants;
-        } else if (action.payload?.variants) {
-          state.frontendVariants = action.payload.variants;
-        }
-        if (action.payload?.backendVariants) {
-          state.backendVariants = action.payload.backendVariants;
-        }
+    builder.addCase("experiment/setVariants", (state, action) => {
+      const payload = (action as any).payload;
+      if (payload?.frontendVariants) {
+        state.frontendVariants = payload.frontendVariants;
+      } else if (payload?.variants) {
+        state.frontendVariants = payload.variants;
       }
-    );
-    builder.addCase(
-      "experiment/setBackendVariants",
-      (state, action: PayloadAction<Record<string, ExperimentVariant>>) => {
-        state.backendVariants = action.payload ?? {};
+      if (payload?.backendVariants) {
+        state.backendVariants = payload.backendVariants;
       }
-    );
+    });
+    builder.addCase("experiment/setBackendVariants", (state, action) => {
+      state.backendVariants = (action as any).payload ?? {};
+    });
   },
 });
 

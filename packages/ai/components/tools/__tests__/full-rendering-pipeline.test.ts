@@ -4,7 +4,7 @@
  * Tests the complete flow: Agent SSE events → SSEProcessor → collectedParts
  * → normalizeParts → isToolUIPart → getToolName → registry lookup → correct renderer
  *
- * Covers ALL 33 agent tools + 5 aliases, ChainOfThought merge for show_plan + web_search,
+ * Covers ALL 41 agent tools + 5 aliases, ChainOfThought merge for show_plan + web_search,
  * DB loading path, canvas view mapping, and duplicate detection.
  */
 
@@ -64,8 +64,41 @@ const REGISTERED_TOOLS: Record<string, string> = {
   message_notify_user: "ProgressTool",
   message_ask_user: "ProgressTool",
   // Scheduling
+  schedule_task: "ProgressTool",
   schedule_recurring_task: "ProgressTool",
   check_outcomes: "ProgressTool",
+  track_analytics: "ProgressTool",
+  // Idle
+  idle: "ProgressTool",
+  // Text editor
+  text_editor: "FilePreview",
+  // Image utilities
+  image_rmbg: "ImageResult",
+  image_search_upload: "ImageResult",
+  // Email
+  gmail_send: "ProgressTool",
+  gmail_download: "ProgressTool",
+  outlook_send: "ProgressTool",
+  outlook_download: "ProgressTool",
+  // Skills
+  skills_sync: "ProgressTool",
+  skills_package: "ProgressTool",
+  // Slides
+  slide_init: "ProgressTool",
+  slide_modify: "ProgressTool",
+  slide_add_notes: "ProgressTool",
+  slide_present: "DeployResult",
+  // Parallel tasks
+  parallel_tasks: "ProgressTool",
+  // WebDev IDE
+  webdev_init_project: "DeployResult",
+  webdev_save_checkpoint: "ProgressTool",
+  webdev_check_status: "ProgressTool",
+  webdev_restart_server: "ProgressTool",
+  webdev_rollback_checkpoint: "ProgressTool",
+  webdev_execute_sql: "ProgressTool",
+  webdev_push_schema: "ProgressTool",
+  webdev_list_versions: "ProgressTool",
 };
 
 function getRenderer(toolName: string): string {
@@ -130,7 +163,7 @@ describe("Full Rendering Pipeline", () => {
   // 1. ALL 33 AGENT TOOLS: SSE → Parts → Renderer
   // ========================================================================
 
-  describe("All 33 agent tools produce correct parts and renderer mappings", () => {
+  describe("All 41 agent tools produce correct parts and renderer mappings", () => {
     const AGENT_TOOLS: Array<{
       name: string;
       input: Record<string, unknown>;
@@ -380,6 +413,63 @@ describe("Full Rendering Pipeline", () => {
         expectedRenderer: "ProgressTool",
         expectedCanvasView: undefined,
       },
+      // WebDev IDE
+      {
+        name: "webdev_init_project",
+        input: { template_id: "web-static", app_name: "my-app" },
+        result: { success: true, app_name: "my-app", directory: "/home/ubuntu/my-app", devServerPort: 3000, previewUrl: "https://3000-abc.e2b.dev" },
+        expectedRenderer: "DeployResult",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_save_checkpoint",
+        input: { message: "Initial commit" },
+        result: { success: true, versionId: "abc1234", commitHash: "abc1234" },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_check_status",
+        input: {},
+        result: { devServer: { status: "running", port: 3000 } },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_restart_server",
+        input: {},
+        result: { success: true, devServerStatus: "running", port: 3000 },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_rollback_checkpoint",
+        input: { version_id: "abc1234" },
+        result: { success: true, currentVersion: "abc1234" },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_execute_sql",
+        input: { query: "SELECT * FROM users" },
+        result: { success: true, data: [], rowCount: 0 },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_push_schema",
+        input: {},
+        result: { success: true, operation: "push", output: "Schema pushed" },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
+      {
+        name: "webdev_list_versions",
+        input: {},
+        result: { versions: [{ hash: "abc1234", message: "Initial", date: "2026-02-15" }] },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
     ];
 
     for (const tool of AGENT_TOOLS) {
@@ -458,7 +548,7 @@ describe("Full Rendering Pipeline", () => {
       expect(missingRenderers).toEqual([]);
     });
 
-    it("All 33 agent tools have explicit renderers", () => {
+    it("All 41 agent tools have explicit renderers", () => {
       const agentTools = [
         "show_plan", "message_notify_user", "message_ask_user",
         "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name",
@@ -470,6 +560,9 @@ describe("Full Rendering Pipeline", () => {
         "browser_console_exec", "browser_console_view", "browser_screenshot",
         "deploy_expose_port", "deploy_apply_deployment",
         "generate_image", "schedule_recurring_task", "check_outcomes",
+        "webdev_init_project", "webdev_save_checkpoint", "webdev_check_status",
+        "webdev_restart_server", "webdev_rollback_checkpoint", "webdev_execute_sql",
+        "webdev_push_schema", "webdev_list_versions",
       ];
 
       const missingRenderers: string[] = [];

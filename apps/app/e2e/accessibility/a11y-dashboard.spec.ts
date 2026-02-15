@@ -60,14 +60,14 @@ test.describe("Dashboard Accessibility", () => {
         "h1, h2, h3, h4, h5, h6",
       );
       return Array.from(headings).map((h) =>
-        Number.parseInt(h.tagName[1], 10),
+        Number.parseInt(h.tagName[1]!, 10),
       );
     });
 
     // Verify no level is skipped (e.g., h1 -> h3 without h2)
     for (let i = 1; i < headingLevels.length; i++) {
-      const current = headingLevels[i];
-      const previous = headingLevels[i - 1];
+      const current = headingLevels[i]!;
+      const previous = headingLevels[i - 1]!;
       // A heading can go deeper by 1, stay same, or go back to any level
       if (current > previous) {
         expect(current - previous).toBeLessThanOrEqual(1);

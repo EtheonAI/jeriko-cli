@@ -136,8 +136,9 @@ const knowledgeSlice = createSlice({
     ) => {
       const suggestions =
         state.suggestedKnowledgeMap[action.payload.sessionId];
-      if (suggestions && suggestions[action.payload.index]) {
-        suggestions[action.payload.index].accepted = true;
+      const item = suggestions?.[action.payload.index];
+      if (item) {
+        item.accepted = true;
       }
     },
 

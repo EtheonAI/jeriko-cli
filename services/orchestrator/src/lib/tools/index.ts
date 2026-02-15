@@ -16,6 +16,7 @@ import { createPlanTools } from "./plan-tools.js";
 import { createPageTools } from "./page-tools.js";
 import { createExtraTools } from "./extra-tools.js";
 import { createParallelTasksTool } from "./parallel-tasks.js";
+import { createWebdevTools } from "./webdev-tools.js";
 
 export type { ToolContext } from "./types.js";
 
@@ -86,8 +87,8 @@ export function createAllTools(ctx: ToolContext, mode: AgentMode = "browser"): T
     return browserTools as ToolSet;
   }
 
-  // Webdev mode: browser + all (same for now, extensible)
-  return browserTools as ToolSet;
+  // Webdev mode: browser + webdev tools
+  return { ...browserTools, ...createWebdevTools(ctx) } as ToolSet;
 }
 
 /**
@@ -156,5 +157,14 @@ export function getAllToolNames(): string[] {
     "slide_present",
     // Parallel tasks
     "parallel_tasks",
+    // Webdev
+    "webdev_init_project",
+    "webdev_save_checkpoint",
+    "webdev_check_status",
+    "webdev_restart_server",
+    "webdev_rollback_checkpoint",
+    "webdev_execute_sql",
+    "webdev_push_schema",
+    "webdev_list_versions",
   ];
 }

@@ -158,9 +158,9 @@ const connectorsSlice = createSlice({
     addInstalledConnector: (state, action: PayloadAction<InstalledConnector>) => {
       state.installedConnectors.push(action.payload);
       // Update available connector to show as installed
-      const availableIndex = state.availableConnectors.findIndex((c) => c.id === action.payload.id);
-      if (availableIndex !== -1) {
-        state.availableConnectors[availableIndex].isInstalled = true;
+      const available = state.availableConnectors.find((c) => c.id === action.payload.id);
+      if (available) {
+        available.isInstalled = true;
       }
       state.isInstalling = false;
     },
@@ -176,11 +176,8 @@ const connectorsSlice = createSlice({
       const index = state.installedConnectors.findIndex(
         (c) => c.connectionId === action.payload.connectionId
       );
-      if (index !== -1) {
-        state.installedConnectors[index] = {
-          ...state.installedConnectors[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.installedConnectors[index]) {
+        Object.assign(state.installedConnectors[index], action.payload.updates);
       }
     },
 
@@ -192,18 +189,18 @@ const connectorsSlice = createSlice({
       );
       // Update available connector to show as not installed
       if (connector) {
-        const availableIndex = state.availableConnectors.findIndex((c) => c.id === connector.id);
-        if (availableIndex !== -1) {
-          state.availableConnectors[availableIndex].isInstalled = false;
+        const available = state.availableConnectors.find((c) => c.id === connector.id);
+        if (available) {
+          available.isInstalled = false;
         }
       }
     },
 
     // Toggle connector enabled state
     toggleConnectorEnabled: (state, action: PayloadAction<string>) => {
-      const index = state.installedConnectors.findIndex((c) => c.connectionId === action.payload);
-      if (index !== -1) {
-        state.installedConnectors[index].isEnabled = !state.installedConnectors[index].isEnabled;
+      const conn = state.installedConnectors.find((c) => c.connectionId === action.payload);
+      if (conn) {
+        conn.isEnabled = !conn.isEnabled;
       }
     },
 
@@ -304,11 +301,12 @@ const connectorsSlice = createSlice({
       const index = state.installedConnectors.findIndex(
         (c) => c.connectionId === action.payload.connectionId
       );
-      if (index !== -1) {
-        state.installedConnectors[index].syncStatus = action.payload.status;
-        state.installedConnectors[index].errorMessage = action.payload.errorMessage;
+      const conn = state.installedConnectors[index];
+      if (index !== -1 && conn) {
+        conn.syncStatus = action.payload.status;
+        conn.errorMessage = action.payload.errorMessage;
         if (action.payload.status === "idle") {
-          state.installedConnectors[index].lastSyncedAt = new Date().toISOString();
+          conn.lastSyncedAt = new Date().toISOString();
         }
       }
     },
@@ -330,11 +328,8 @@ const connectorsSlice = createSlice({
       const index = state.composioEventMappings.findIndex(
         (m) => m.composioEvent === action.payload.composioEvent
       );
-      if (index !== -1) {
-        state.composioEventMappings[index] = {
-          ...state.composioEventMappings[index],
-          ...action.payload.updates,
-        };
+      if (index !== -1 && state.composioEventMappings[index]) {
+        Object.assign(state.composioEventMappings[index], action.payload.updates);
       }
     },
     removeComposioEventMapping: (state, action: PayloadAction<string>) => {

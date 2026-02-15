@@ -14,6 +14,9 @@ export interface SystemPromptContext {
   sessionId: string;
   sandboxId?: string;
   connectedApps?: string[];
+  selectedConnections?: { id: string; type?: string; name?: string }[];
+  activeSkills?: string[];
+  fileContext?: { name: string; type: string }[];
   currentDate: string;
   timezone?: string;
 }
@@ -195,6 +198,18 @@ SLIDES (4 tools)
   - slide_add_notes      Add or update speaker notes for a slide.
   - slide_present        Enter presentation mode and get a viewable URL.
 
+WEB DEVELOPMENT (8 tools)
+  - webdev_init_project       Scaffold a web project from a template
+                              (web-static or web-db-user). Installs deps,
+                              starts dev server, creates database if needed.
+  - webdev_save_checkpoint    Git commit the project for versioning.
+  - webdev_check_status       Check dev server, TS errors, build health.
+  - webdev_restart_server     Kill and restart the Vite dev server.
+  - webdev_rollback_checkpoint  Revert to a previous git checkpoint.
+  - webdev_execute_sql        Run a SQL query against the project's TiDB DB.
+  - webdev_push_schema        Push Drizzle schema to TiDB (drizzle-kit push).
+  - webdev_list_versions      List git checkpoint history.
+
 CONNECTED APPS (dynamic -- loaded per-user)
   - Composio-powered tools for Gmail, Google Calendar, Slack, Notion,
     GitHub, Linear, and other third-party services the user has connected.
@@ -331,7 +346,7 @@ GENERAL COMMUNICATION GUIDELINES
 
 function fileRules(): string {
   return `<file_rules>
-All file operations happen inside the sandbox at /home/user. The sandbox
+All file operations happen inside the sandbox at /home/ubuntu. The sandbox
 filesystem persists for the duration of the session.
 
 READING
@@ -370,7 +385,7 @@ BEST PRACTICES
     before making changes -- a misplaced comma can break the application.
   - For destructive operations (delete, overwrite), confirm with the user
     if the file is not one you created during this session.
-  - Use relative paths from /home/user when possible for readability, but
+  - Use relative paths from /home/ubuntu when possible for readability, but
     always resolve to absolute paths when calling tools.
 </file_rules>`;
 }
@@ -466,7 +481,7 @@ STATE PERSISTENCE
     state across all tool calls within the same session.
   - You can log into a service once and continue using it throughout
     the session without re-authenticating.
-  - Screenshots are saved in WebP format to /home/user/screenshots/
+  - Screenshots are saved in WebP format to /home/ubuntu/screenshots/
     with timestamped filenames.
 
 TROUBLESHOOTING
@@ -606,68 +621,61 @@ BEST PRACTICES
 
 function webdevRules(): string {
   return `<webdev_rules>
-You can build and deploy full web applications using the webdev system.
+You can build and deploy full web applications using the webdev tools.
 
-TEMPLATES
-  - Two templates are available:
-    • web-static  — Vite + React + TypeScript + Tailwind. No database.
-    • web-db-user — Vite + React + Express + Drizzle ORM + TiDB (MySQL).
-      Includes user authentication, a database, and a full-stack layout.
-  - Initialize a project with the webdev init command. This copies the
-    template into /home/user/<app-name>/, installs dependencies, and
-    injects a DATABASE_URL .env file when using web-db-user.
+CREATING A PROJECT
+  - Use the webdev_init_project tool to create web applications.
+  - Two templates available:
+    • web-static  — Vite + React + TypeScript + Tailwind + shadcn/ui
+    • web-db-user — Full-stack with Express + Drizzle ORM + TiDB (MySQL)
+  - Do NOT manually copy templates, run npm create, or scaffold manually.
+  - The tool handles everything: template copy, dependency install, git init,
+    dev server start, database creation (for web-db-user).
+  - After init, use file_write and file_str_replace to modify source code.
+  - IMPORTANT: Templates use client/src/ for React code (NOT src/).
+    Main entry point: client/src/App.tsx. Pages go in client/src/pages/.
 
 PROJECT LIFECYCLE
-  1. Init — Create the project from a template.
-  2. Write code — Add pages, components, API routes, database schema.
-  3. Push schema — For web-db-user projects, run drizzle-kit push to
-     sync the schema to TiDB. Each project gets its own isolated
-     database (rubic_<user>_<project>).
-  4. Start dev server — npm run dev (Vite on port 3000). The preview
-     URL is https://3000-<sandboxId>.e2b.dev.
-  5. Test — Use the browser tools to navigate to the preview URL and
-     verify the app works.
-  6. Save checkpoint — Git commit the project state for versioning.
-  7. Deploy — Package and deploy for permanent hosting.
+  1. webdev_init_project — Scaffold, install deps, start dev server
+  2. file_write / file_str_replace — Add pages, components, API routes
+  3. webdev_push_schema — For database projects, push schema to TiDB
+  4. webdev_check_status — Verify dev server + build health
+  5. webdev_save_checkpoint — Git commit project state for versioning
+  6. deploy_apply_deployment — Deploy for permanent hosting
 
 DATABASE (TiDB)
-  - Every web-db-user project gets a per-project MySQL database on TiDB
-    Cloud. DATABASE_URL is injected automatically.
-  - Use Drizzle ORM for all database operations. Schema lives in
-    drizzle/schema.ts.
-  - After modifying the schema, push it with: npx drizzle-kit push
-  - For queries, use drizzle-orm (e.g., db.select().from(users)).
-  - The database is isolated per project — no schema collisions.
+  - Every web-db-user project gets its own isolated MySQL database on TiDB.
+  - DATABASE_URL is injected automatically by webdev_init_project.
+  - Use Drizzle ORM for all database operations. Schema: drizzle/schema.ts.
+  - After modifying the schema, use webdev_push_schema to apply it.
+  - Use webdev_execute_sql to run raw SQL queries.
+
+SERVER MANAGEMENT
+  - Use webdev_restart_server if the dev server crashes or stops.
+  - Use webdev_check_status to diagnose build errors or TS issues.
+
+VERSIONING
+  - Use webdev_save_checkpoint to create git checkpoints.
+  - Use webdev_list_versions to see version history.
+  - Use webdev_rollback_checkpoint to revert to a previous version.
 
 CODE-SERVER (VS Code)
-  - A full VS Code instance (code-server) runs inside the sandbox on
-    port 8329.
-  - The user can view and edit code directly in the browser via the
-    Code Editor tab.
-  - It is started on-demand. The orchestrator handles pre-authentication.
-  - Do NOT install VS Code extensions programmatically unless the user
-    asks for it.
+  - A full VS Code instance (code-server) runs inside the sandbox.
+  - The user can view and edit code in the browser via the Code Editor tab.
+  - Do NOT install VS Code extensions unless the user asks for it.
 
 MEDIA ASSETS
-  - Upload images and media to the CDN using rubic-upload-file before
-    deploying. Replace local paths with CDN URLs in the source code.
-  - Move original media to /home/user/webdev-static-assets/ to keep
-    the project directory clean.
-
-GIT / VERSIONING
-  - Each project is initialized as a git repo.
-  - Use git commits as checkpoints. The user can view version history
-    via the orchestrator API.
-  - Before deploying, always commit the latest changes.
+  - Upload images to CDN before deploying. Replace local paths with CDN URLs.
+  - Move originals to /home/ubuntu/webdev-static-assets/.
 
 BEST PRACTICES
   - Use Vite's hot module replacement — the preview updates instantly.
-  - For full-stack apps, run both the Vite dev server and the Express
-    API server. Configure Vite to proxy API requests.
-  - When the user says "build me a website" or "create an app", use
-    the webdev system. Do not manually scaffold from scratch.
-  - Prefer the web-db-user template for anything involving users,
-    data, or CRUD operations.
+  - For full-stack apps, templates include both Vite + Express. They are
+    pre-configured to proxy API requests.
+  - When the user says "build me a website" or "create an app", ALWAYS use
+    webdev_init_project. Never scaffold manually with shell commands.
+  - Use web-static for landing pages, portfolios, and simple sites.
+  - Use web-db-user for apps with users, data, or CRUD operations.
 </webdev_rules>`;
 }
 
@@ -676,8 +684,7 @@ function slideRules(): string {
 You can create and modify slide presentations within the sandbox.
 
 CREATING SLIDES
-  - Initialize a slide project with the slides init command. This creates
-    an HTML/CSS/JS slide deck in the project directory.
+  - Use the slide_init tool to create a new slide presentation.
   - Slides use a simple HTML-based format with sections for each slide.
 
 MODIFYING SLIDES
@@ -722,11 +729,90 @@ BEST PRACTICES
 </image_rules>`;
 }
 
+// ── Skill definitions for system prompt injection ──
+const SKILL_DEFINITIONS: Record<string, { name: string; description: string }> = {
+  "web-search": {
+    name: "Web Search",
+    description: "Search the internet for current information, news, documentation, and real-time data. Use info_search_web tool.",
+  },
+  "code-interpreter": {
+    name: "Code Interpreter",
+    description: "Execute Python or Node.js code to perform calculations, data analysis, file processing, and generate visualizations. Use code_execute tool.",
+  },
+  "image-generation": {
+    name: "Image Generation",
+    description: "Generate images from text prompts using AI models. Use generate_image tool.",
+  },
+  "document-analysis": {
+    name: "Document Analysis",
+    description: "Read, analyze, and extract information from uploaded documents (PDF, DOCX, TXT, etc.). Use file_read tool on uploaded files.",
+  },
+  "data-analysis": {
+    name: "Data Analysis",
+    description: "Analyze datasets, create charts, compute statistics, and generate reports. Use code_execute with Python (pandas, matplotlib) or Node.js.",
+  },
+  "browser": {
+    name: "Browser",
+    description: "Browse websites, interact with web pages, fill forms, take screenshots, and scrape content. Use browser_* tools.",
+  },
+};
+
+function availableSkillsSection(ctx: SystemPromptContext): string | null {
+  if (!ctx.activeSkills || ctx.activeSkills.length === 0) return null;
+
+  const skillLines = ctx.activeSkills
+    .map((id) => {
+      const def = SKILL_DEFINITIONS[id];
+      if (!def) return `  - ${id}`;
+      return `  - ${def.name}: ${def.description}`;
+    })
+    .join("\n");
+
+  return `<available_skills>
+The user has activated the following skills for this session. Prioritize using
+these capabilities when they are relevant to the user's request:
+
+${skillLines}
+
+If the user's request naturally maps to an active skill, use it proactively.
+For example, if "Web Search" is active and the user asks about recent events,
+search the web rather than relying on training data.
+</available_skills>`;
+}
+
+function fileContextSection(ctx: SystemPromptContext): string | null {
+  if (!ctx.fileContext || ctx.fileContext.length === 0) return null;
+
+  const fileLines = ctx.fileContext
+    .map((f) => `  - ${f.name} (${f.type})`)
+    .join("\n");
+
+  return `<file_context>
+The user has uploaded the following files in this conversation:
+
+${fileLines}
+
+These files are available in the sandbox at /home/ubuntu/upload/ or as inline
+content in the message parts. When the user references "the file" or "my
+document", they likely mean one of these. Read and process them as needed.
+</file_context>`;
+}
+
 function connectedAppsRules(ctx: SystemPromptContext): string {
-  const appList =
-    ctx.connectedApps && ctx.connectedApps.length > 0
-      ? `\nThe user has authorized the following integrations:\n${ctx.connectedApps.map((a) => `  - ${a}`).join("\n")}`
-      : "\nNo third-party integrations are currently connected for this user.";
+  // Show selected connections with type info when available, fall back to connectedApps
+  let appList: string;
+  if (ctx.selectedConnections && ctx.selectedConnections.length > 0) {
+    const lines = ctx.selectedConnections.map((c) => {
+      const label = c.name || c.id;
+      const typeLabel = c.type === "device" ? "(Smart Home Device)" : "(App Integration)";
+      return `  - ${label} ${typeLabel}`;
+    });
+    appList = `\nThe user has selected the following integrations for this session:\n${lines.join("\n")}`;
+  } else if (ctx.connectedApps && ctx.connectedApps.length > 0) {
+    appList = `\nThe user has authorized the following integrations:\n${ctx.connectedApps.map((a) => `  - ${a}`).join("\n")}`;
+  } else {
+    appList = "\nNo third-party integrations are currently connected for this user.";
+  }
 
   return `<connected_apps_rules>
 You can perform actions on third-party services the user has connected
@@ -821,7 +907,7 @@ You operate inside an E2B cloud sandbox with the following specifications:
 SYSTEM
   - Ubuntu 22.04 LTS with XFCE desktop
   - Full root access (sudo without password)
-  - Persistent filesystem at /home/user (files survive across tool calls
+  - Persistent filesystem at /home/ubuntu (files survive across tool calls
     within the same session, but not across sessions)
   - Network access (outbound HTTP/HTTPS, DNS resolution)
   - D-Bus running (required for desktop services)
@@ -841,16 +927,16 @@ INSTALLED SOFTWARE
   - Desktop apps visible via Neko WebRTC stream
 
 DIRECTORY STRUCTURE
-  /home/user/                     Default working directory
-  /home/user/screenshots/         Browser screenshots (WebP format)
-  /home/user/Downloads/           Browser download target
-  /home/user/upload/              User-uploaded files
-  /home/user/skills/              Skill system files
-  /home/user/terminal_full_output/ Terminal session logs
-  /home/user/.secrets/            Session secrets (sandbox_api_token)
-  /home/user/.browser_data_dir/   Chromium profile data
-  /home/user/.search_cache/       Search image cache
-  /home/user/webdev-static-assets/ CDN-uploaded media (moved from projects)
+  /home/ubuntu/                     Default working directory
+  /home/ubuntu/screenshots/         Browser screenshots (WebP format)
+  /home/ubuntu/Downloads/           Browser download target
+  /home/ubuntu/upload/              User-uploaded files
+  /home/ubuntu/skills/              Skill system files
+  /home/ubuntu/terminal_full_output/ Terminal session logs
+  /home/ubuntu/.secrets/            Session secrets (sandbox_api_token)
+  /home/ubuntu/.browser_data_dir/   Chromium profile data
+  /home/ubuntu/.search_cache/       Search image cache
+  /home/ubuntu/webdev-static-assets/ CDN-uploaded media (moved from projects)
   /opt/.rubic/                    Platform runtime root
   /opt/.rubic/runtime/            Runtime scripts
   /opt/.rubic/deploy/templates/   Deployment templates
@@ -872,7 +958,7 @@ FILE UPLOAD TO CDN
     accessible externally, upload them with rubic-upload-file.
   - For webdev projects, upload media BEFORE checkpoint/deploy and replace
     local paths with CDN URLs in the code. Move originals to
-    /home/user/webdev-static-assets/ to keep the project directory clean.
+    /home/ubuntu/webdev-static-assets/ to keep the project directory clean.
 
 ENVIRONMENT
   - ~/.env contains static config (DISPLAY, PYTHONIOENCODING, etc.)
@@ -890,10 +976,10 @@ RESOURCE LIMITS
     deploy_expose_port)
 
 WORKING DIRECTORY
-  - Default working directory is /home/user.
-  - All user projects should be created under /home/user.
+  - Default working directory is /home/ubuntu.
+  - All user projects should be created under /home/ubuntu.
   - Temporary files go in /tmp.
-  - Screenshots are saved to /home/user/screenshots/.
+  - Screenshots are saved to /home/ubuntu/screenshots/.
 
 BROWSER
   - Chromium is available exclusively through the browser_* tools.
@@ -946,7 +1032,8 @@ function sessionMeta(ctx: SystemPromptContext): string {
 // ---------------------------------------------------------------------------
 
 export function buildManusSystemPrompt(ctx: SystemPromptContext): string {
-  const sections = [
+  // Core sections — always present
+  const sections: string[] = [
     agentIntro(ctx),
     languageRule(),
     formatRules(),
@@ -968,8 +1055,17 @@ export function buildManusSystemPrompt(ctx: SystemPromptContext): string {
     connectedAppsRules(ctx),
     errorHandling(),
     sandboxEnvironment(ctx),
-    sessionMeta(ctx),
   ];
+
+  // Conditional sections — only when skills/files are active
+  const skillsSection = availableSkillsSection(ctx);
+  if (skillsSection) sections.push(skillsSection);
+
+  const fileSection = fileContextSection(ctx);
+  if (fileSection) sections.push(fileSection);
+
+  // Always end with session metadata
+  sections.push(sessionMeta(ctx));
 
   return sections.join("\n\n");
 }

@@ -8,7 +8,7 @@ export const enableComposioAdapter = createFlag("enableComposioAdapter");
 
 // Phase 8 Cutover Flags
 export type OrchestratorVersion = "python" | "node" | "shadow";
-export const orchestratorVersion = createFlag<OrchestratorVersion>("orchestratorVersion");
-export const nodeOrchestratorRolloutPercentage = createFlag<number>(
+export const orchestratorVersion = createFlag("orchestratorVersion");
+export const nodeOrchestratorRolloutPercentage = createFlag(
   "nodeOrchestratorRolloutPercentage"
 );

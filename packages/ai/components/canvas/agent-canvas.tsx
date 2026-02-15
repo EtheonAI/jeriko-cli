@@ -103,6 +103,8 @@ export interface AgentCanvasProps {
   nekoUrl?: string;
   /** E2B stream URL (noVNC fallback for desktop streaming) */
   streamUrl?: string;
+  /** Called when user control mode changes (Take Control on/off) */
+  onUserControlChange?: (active: boolean) => void;
 
   // File preview
   previewFileName?: string;
@@ -330,6 +332,7 @@ export function AgentCanvas({
   onTerminalSendInput,
   nekoUrl,
   streamUrl,
+  onUserControlChange,
   previewFileName,
   previewContent,
   previewFileType,
@@ -468,6 +471,7 @@ export function AgentCanvas({
             onScreenshotUpdate={onBrowserScreenshotUpdate}
             nekoUrl={nekoUrl}
             streamUrl={streamUrl}
+            onUserControlChange={onUserControlChange}
           />
         )}
         {viewType === "code" && (

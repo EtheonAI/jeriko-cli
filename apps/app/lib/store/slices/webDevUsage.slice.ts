@@ -159,11 +159,9 @@ export const webDevUsageSlice = createSlice({
       state,
       action: PayloadAction<{ projectId: string; status: Partial<ProjectUsageStatus> }>
     ) => {
-      if (state.projectUsageStatus && state.projectUsageStatus[action.payload.projectId]) {
-        state.projectUsageStatus[action.payload.projectId] = {
-          ...state.projectUsageStatus[action.payload.projectId],
-          ...action.payload.status,
-        };
+      const existing = state.projectUsageStatus?.[action.payload.projectId];
+      if (state.projectUsageStatus && existing) {
+        Object.assign(existing, action.payload.status);
       }
     },
 

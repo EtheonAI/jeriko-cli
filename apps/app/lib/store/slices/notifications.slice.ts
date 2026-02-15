@@ -440,9 +440,8 @@ const notificationsSlice = createSlice({
         (pa) => pa.notificationId === notificationId && pa.action.label === actionLabel
       );
 
-      if (pendingIndex !== -1) {
-        const pending = state.pendingActions[pendingIndex];
-
+      const pending = state.pendingActions[pendingIndex];
+      if (pendingIndex !== -1 && pending) {
         // Add to history
         state.actionHistory.unshift({
           notificationId: pending.notificationId,
@@ -480,30 +479,18 @@ const notificationsSlice = createSlice({
   },
   extraReducers: (builder) => {
     // Manus compatibility (notification slice name)
-    builder.addCase(
-      "notification/setConnectStatus",
-      (state, action: { payload: "default" | "connecting" | "connected" | "error" }) => {
-        state.connectStatus = action.payload;
-      }
-    );
-    builder.addCase(
-      "notification/setFetchNotificationListLoading",
-      (state, action: { payload: boolean }) => {
-        state.fetchNotificationLoading = action.payload;
-      }
-    );
-    builder.addCase(
-      "notification/setHasMoreNotification",
-      (state, action: { payload?: Record<string, boolean> }) => {
-        state.categoryHasMore = action.payload ?? state.categoryHasMore;
-      }
-    );
-    builder.addCase(
-      "notification/setCategoryNotificationList",
-      (state, action: { payload?: Record<string, Notification[]> }) => {
-        state.categoryNotifications = action.payload ?? state.categoryNotifications;
-      }
-    );
+    builder.addCase("notification/setConnectStatus", (state, action) => {
+      state.connectStatus = (action as any).payload ?? state.connectStatus;
+    });
+    builder.addCase("notification/setFetchNotificationListLoading", (state, action) => {
+      state.fetchNotificationLoading = (action as any).payload ?? false;
+    });
+    builder.addCase("notification/setHasMoreNotification", (state, action) => {
+      state.categoryHasMore = (action as any).payload ?? state.categoryHasMore;
+    });
+    builder.addCase("notification/setCategoryNotificationList", (state, action) => {
+      state.categoryNotifications = (action as any).payload ?? state.categoryNotifications;
+    });
   },
 });
 

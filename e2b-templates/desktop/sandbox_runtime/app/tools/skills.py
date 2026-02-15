@@ -38,9 +38,14 @@ async def sync_skills(request: Request) -> dict[str, Any]:
                     shell=True, timeout=10,
                 )
         else:
+            # Copy all skills (including dotfiles like .skill_versions.json)
             subprocess.run(
                 f"cp -r /opt/.rubic/skills/* {HOME}/skills/ 2>/dev/null || true",
                 shell=True, timeout=10,
+            )
+            subprocess.run(
+                f"cp -r /opt/.rubic/skills/.skill_versions.json {HOME}/skills/ 2>/dev/null || true",
+                shell=True, timeout=5,
             )
     except Exception:
         pass

@@ -184,7 +184,7 @@ export function FilesPageClient() {
     (uploadedFiles: File[]) => {
       for (const file of uploadedFiles) {
         const id = crypto.randomUUID();
-        dispatch(addToUploadQueue({ id, file: file.name }));
+        dispatch(addToUploadQueue({ id, file: file.name, fileName: file.name, fileSize: file.size }));
 
         const formData = new FormData();
         formData.append("file", file);

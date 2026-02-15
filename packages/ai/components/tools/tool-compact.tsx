@@ -1,12 +1,15 @@
 "use client";
 
+/**
+ * ToolCompact — Manus-style compact pill for non-canvas tools.
+ *
+ * Used for message_notify_user, message_ask_user, schedule_recurring_task, etc.
+ * Matches the same pill styling as ToolInlineCompact for visual consistency.
+ */
+
 import * as React from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import {
-  CheckIcon,
-  LoaderIcon,
-  AlertCircleIcon,
-  XIcon,
   SearchIcon,
   GlobeIcon,
   FileTextIcon,
@@ -18,6 +21,7 @@ import {
   BarChart3Icon,
   ListTodoIcon,
   ClockIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 import type { ToolInvocationState } from "../../lib/types/ui-message";
 
@@ -64,8 +68,8 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   shell_kill_process: TerminalIcon,
   code_execute: CodeIcon,
   generate_image: ImageIcon,
-  message_notify_user: BellIcon,
-  message_ask_user: BellIcon,
+  message_notify_user: MessageSquareIcon,
+  message_ask_user: MessageSquareIcon,
   schedule_recurring_task: ClockIcon,
   check_outcomes: SearchIcon,
   track_analytics: BarChart3Icon,
@@ -75,7 +79,7 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 };
 
 // ============================================================================
-// Component
+// Component — Manus-style pill (same design as ToolInlineCompact)
 // ============================================================================
 
 export function ToolCompact({
@@ -86,48 +90,55 @@ export function ToolCompact({
   className,
 }: ToolCompactProps) {
   const ToolIcon = TOOL_ICONS[toolName] ?? CodeIcon;
-  const { StatusIcon, statusColor, animate, label } = getCompactStateInfo(state);
   const displayName = title ?? formatToolName(toolName);
+  const isActive = state === "input-streaming" || state === "input-available" || state === "approval-responded";
 
   return (
     <div
       data-testid="tool-compact"
       data-tool-name={toolName}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5",
-        "transition-colors duration-200",
-        state === "input-streaming" && "border-blue-500/20 bg-blue-500/[0.03]",
-        state === "input-available" && "border-yellow-500/20 bg-yellow-500/[0.03]",
-        state === "output-available" && "border-green-500/15 bg-green-500/[0.02]",
-        state === "output-error" && "border-destructive/20 bg-destructive/[0.03]",
-        state === "output-denied" && "border-orange-500/20 bg-orange-500/[0.03]",
-        !["input-streaming", "input-available", "output-available", "output-error", "output-denied"].includes(state) &&
-          "border-border/40",
-        className
-      )}
+      className={cn("flex items-center group/pill gap-2 w-full", className)}
     >
-      {/* Tool icon */}
-      <ToolIcon className="size-3.5 text-muted-foreground/60" />
-
-      {/* Tool name */}
-      <span className="text-sm text-foreground/80">{displayName}</span>
-
-      {/* Summary (if provided) */}
-      {summary && state === "output-available" && (
-        <span className="max-w-[200px] truncate text-xs text-muted-foreground/50">
-          {summary}
-        </span>
-      )}
-
-      {/* Status indicator */}
-      <div className={cn("flex items-center gap-1", statusColor)}>
-        <StatusIcon
+      <div className="flex-1 min-w-0 h-7">
+        <div
           className={cn(
-            "size-3.5",
-            animate && "animate-spin"
+            "rounded-[15px] px-2.5 py-[3px]",
+            "border border-white/[0.06] bg-black/20",
+            "inline-flex max-w-full gap-1 items-center",
+            "relative h-full overflow-hidden",
+            "cursor-pointer select-none",
+            "hover:bg-white/[0.02]",
+            "transition-colors duration-150",
+            isActive && "border-blue-500/20 bg-blue-500/[0.05]",
           )}
-        />
-        <span className="text-xs">{label}</span>
+        >
+          {/* Icon */}
+          <div className="w-[21px] inline-flex items-center flex-shrink-0 text-muted-foreground">
+            <ToolIcon className={cn("size-[18px]", isActive && "text-blue-400")} />
+          </div>
+
+          {/* Label */}
+          <div className="text-[13px] text-muted-foreground max-w-full truncate">
+            {displayName}
+          </div>
+
+          {/* Summary text */}
+          {summary && state === "output-available" && (
+            <div className="text-[13px] text-muted-foreground/50 max-w-[200px] truncate ml-0.5">
+              — {summary}
+            </div>
+          )}
+
+          {/* Active pulse dot */}
+          {isActive && (
+            <div className="flex-shrink-0 ml-0.5">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-blue-400" />
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -136,61 +147,6 @@ export function ToolCompact({
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function getCompactStateInfo(state: ToolInvocationState) {
-  switch (state) {
-    case "input-streaming":
-      return {
-        StatusIcon: LoaderIcon,
-        statusColor: "text-blue-500",
-        animate: true,
-        label: "",
-      };
-    case "input-available":
-    case "approval-responded":
-      return {
-        StatusIcon: LoaderIcon,
-        statusColor: "text-blue-500",
-        animate: true,
-        label: "",
-      };
-    case "approval-requested":
-      return {
-        StatusIcon: AlertCircleIcon,
-        statusColor: "text-orange-500",
-        animate: false,
-        label: "Approval",
-      };
-    case "output-available":
-      return {
-        StatusIcon: CheckIcon,
-        statusColor: "text-green-500/70",
-        animate: false,
-        label: "",
-      };
-    case "output-error":
-      return {
-        StatusIcon: AlertCircleIcon,
-        statusColor: "text-destructive",
-        animate: false,
-        label: "Error",
-      };
-    case "output-denied":
-      return {
-        StatusIcon: XIcon,
-        statusColor: "text-orange-500",
-        animate: false,
-        label: "Denied",
-      };
-    default:
-      return {
-        StatusIcon: LoaderIcon,
-        statusColor: "text-muted-foreground",
-        animate: false,
-        label: "",
-      };
-  }
-}
 
 function formatToolName(name: string): string {
   return name

@@ -9,6 +9,7 @@ export interface SessionSettings {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
+  skillIds?: string[];
   connectorIds?: string[];
   knowledgeBaseIds?: string[];
 }
@@ -209,12 +210,10 @@ const sessionsSlice = createSlice({
       action: PayloadAction<{ id: string; updates: Partial<AgentSession> }>
     ) => {
       const index = state.sessions.findIndex((s) => s.id === action.payload.id);
-      if (index !== -1) {
-        state.sessions[index] = {
-          ...state.sessions[index],
-          ...action.payload.updates,
+      if (index !== -1 && state.sessions[index]) {
+        Object.assign(state.sessions[index], action.payload.updates, {
           updatedAt: new Date().toISOString(),
-        };
+        });
       }
     },
 
@@ -299,8 +298,8 @@ const sessionsSlice = createSlice({
 
     updateGroup: (state, action: PayloadAction<{ id: string; updates: Partial<SessionGroup> }>) => {
       const index = state.groups.findIndex((g) => g.id === action.payload.id);
-      if (index !== -1) {
-        state.groups[index] = { ...state.groups[index], ...action.payload.updates };
+      if (index !== -1 && state.groups[index]) {
+        Object.assign(state.groups[index], action.payload.updates);
       }
     },
 
@@ -461,6 +460,30 @@ const sessionsSlice = createSlice({
     setSharingSessionUid: (state, action: PayloadAction<string | null>) => {
       state.sharingSessionUid = action.payload;
     },
+
+    updateSessionSkills: (
+      state,
+      action: PayloadAction<{ id: string; skillIds: string[] }>
+    ) => {
+      const session = state.sessions.find((s) => s.id === action.payload.id);
+      if (session) {
+        if (!session.settings) session.settings = {};
+        session.settings.skillIds = action.payload.skillIds;
+        session.updatedAt = new Date().toISOString();
+      }
+    },
+
+    updateSessionConnectors: (
+      state,
+      action: PayloadAction<{ id: string; connectorIds: string[] }>
+    ) => {
+      const session = state.sessions.find((s) => s.id === action.payload.id);
+      if (session) {
+        if (!session.settings) session.settings = {};
+        session.settings.connectorIds = action.payload.connectorIds;
+        session.updatedAt = new Date().toISOString();
+      }
+    },
   },
   extraReducers: (builder) => {
     // Manus compatibility
@@ -530,6 +553,8 @@ export const {
   addScheduledTaskSession,
   removeScheduledTaskSession,
   setSharingSessionUid,
+  updateSessionSkills,
+  updateSessionConnectors,
 } = sessionsSlice.actions;
 
 export default sessionsSlice.reducer;

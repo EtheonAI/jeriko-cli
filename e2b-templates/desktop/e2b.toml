@@ -11,6 +11,8 @@
 # const sandbox = await Sandbox.create('rubic-desktop')
 
 team_id = "52ceba0c-d90f-4a24-bf34-17c5e562bba6"
+memory_mb = 4_096
+cpu_count = 4
 start_cmd = "/home/ubuntu/start_command.sh"
 dockerfile = "Dockerfile"
 template_name = "rubic-desktop"

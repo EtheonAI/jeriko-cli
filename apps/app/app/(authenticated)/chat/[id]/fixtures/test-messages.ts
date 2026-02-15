@@ -37,8 +37,7 @@ export const TEST_MESSAGES: UIMessage[] = [
     id: "msg-user-1",
     role: "user",
     parts: [{ type: "text", text: "Search for React 19 features, then build me a demo app with a todo list. Deploy it when done." }],
-    createdAt: new Date("2026-02-08T10:00:00Z"),
-  },
+  } as UIMessage,
 
   // ──────────────── Assistant: plan + tools ────────────────
   {
@@ -308,6 +307,5 @@ export const TEST_MESSAGES: UIMessage[] = [
       // Final text
       { type: "text", text: "\n\nYour React 19 todo app is live! The demo includes all the latest features including `useActionState` and the new compiler optimizations. You can access it at https://react-todo.rubic.app" },
     ] as any[],
-    createdAt: new Date("2026-02-08T10:00:05Z"),
-  },
+  } as UIMessage,
 ];
