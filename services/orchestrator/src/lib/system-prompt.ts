@@ -21,6 +21,8 @@ export interface SystemPromptContext {
   timezone?: string;
   /** Dynamic Composio tools grouped by app — e.g. { "github": ["github_create_issue", ...] } */
   composioToolsByApp?: Record<string, string[]>;
+  /** Enabled MCP server names — injected into sandbox via ENABLED_MCP_SERVERS */
+  enabledMcpServers?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +213,7 @@ WEB DEVELOPMENT (8 tools)
   - webdev_execute_sql        Run a SQL query against the project's TiDB DB.
   - webdev_push_schema        Push Drizzle schema to TiDB (drizzle-kit push).
   - webdev_list_versions      List git checkpoint history.
+  - webdev_add_feature         Add a feature (web-db-user or stripe) to existing project.
 
 CONNECTED APPS (dynamic -- loaded per-user)
   - Composio-powered tools for Gmail, Google Calendar, Slack, Notion,
@@ -248,8 +251,10 @@ You follow a strict plan-act-observe loop.
 
 5. DELIVER
    After all steps are done, send the final result to the user via
-   message_notify_user. Include files, URLs, or code snippets as
-   appropriate.
+   message_notify_user. ALWAYS attach any files you created or modified
+   using the attachments parameter -- the user cannot access sandbox
+   files directly, so every file you produce MUST be delivered as an
+   attachment. Never just describe where a file is; always attach it.
 
 SIMPLE Q&A
    For simple greetings or factual questions from your training data,
@@ -318,8 +323,11 @@ message_notify_user
     and important status changes.
   - Format messages in Markdown. Use headings, lists, code blocks, and
     links where they improve readability.
-  - Attach files when the user would benefit from downloading them
-    (e.g., generated images, exported CSVs, built artifacts).
+  - MANDATORY: When you create or modify files for the user, you MUST
+    call message_notify_user with the file paths in the attachments
+    parameter. The user CANNOT access sandbox files directly -- the
+    only way they can download files is through attachments. Never tell
+    the user "the file is at /home/ubuntu/..." without attaching it.
   - Keep messages concise. Avoid repeating information the user already
     has.
   - One message per meaningful milestone is sufficient -- do not spam
@@ -379,6 +387,17 @@ LARGE FILES
     relevant section, then read with start_line/end_line parameters.
   - Shell output is also truncated to prevent context overflow. Redirect
     verbose output to a file and read the relevant section.
+
+DELIVERING FILES TO THE USER
+  - The user CANNOT access files in the sandbox directly. The ONLY way to
+    give the user a file is through message_notify_user with the file
+    path(s) in the attachments parameter.
+  - After creating or modifying a file that the user requested, you MUST
+    call message_notify_user with attachments=["/path/to/file"]. This
+    uploads the file to CDN and renders a downloadable file card in chat.
+  - NEVER just say "the file is at /home/ubuntu/..." -- always attach it.
+  - For documents (reports, PDFs, slides), convert first then attach the
+    converted file (e.g., .pdf, .docx, .pptx), not the raw .md source.
 
 BEST PRACTICES
   - Never overwrite files without reading them first.
@@ -640,10 +659,11 @@ CREATING A PROJECT
 PROJECT LIFECYCLE
   1. webdev_init_project — Scaffold, install deps, start dev server
   2. file_write / file_str_replace — Add pages, components, API routes
-  3. webdev_push_schema — For database projects, push schema to TiDB
-  4. webdev_check_status — Verify dev server + build health
-  5. webdev_save_checkpoint — Git commit project state for versioning
-  6. deploy_apply_deployment — Deploy for permanent hosting
+  3. webdev_add_feature — Add database/backend (web-db-user) or payments (stripe)
+  4. webdev_push_schema — For database projects, push schema to TiDB
+  5. webdev_check_status — Verify dev server + build health
+  6. webdev_save_checkpoint — Git commit project state for versioning
+  7. deploy_apply_deployment — Deploy for permanent hosting
 
 DATABASE (TiDB)
   - Every web-db-user project gets its own isolated MySQL database on TiDB.
@@ -729,6 +749,48 @@ BEST PRACTICES
   - When the user asks for "a logo" or "an icon", generate multiple
     variations and let them choose.
 </image_rules>`;
+}
+
+function utilitiesSection(): string {
+  return `<utilities>
+Available command-line utilities in the sandbox:
+
+  rubic-upload-file <path> [path2 ...]
+    Upload one or more files to the CDN. Prints a public URL per file.
+
+  rubic-md-to-pdf <input.md> [-o output] [--format pdf|docx|html]
+    Convert Markdown to PDF (default), DOCX, or HTML using pandoc.
+    PDF uses wkhtmltopdf for CSS-aware rendering.
+
+  rubic-export-slides <input.md> [-o output.pptx]
+    Convert Markdown with --- slide separators to a PPTX presentation.
+
+  rubic-mcp-cli tool call <name> --server <srv> --input '{json}'
+    Execute a connected MCP tool directly from the sandbox.
+
+DOCUMENT GENERATION WORKFLOW
+  When the user requests a document (report, PDF, slides, etc.):
+  1. Write content as Markdown to a file using file_write.
+  2. Convert: rubic-md-to-pdf report.md -o report.pdf (via shell_exec)
+  3. Deliver: message_notify_user with attachments=["/home/ubuntu/report.pdf"]
+     The orchestrator auto-uploads to CDN and renders a file card.
+
+  For presentations:
+  1. Write slides as Markdown with --- separators.
+  2. Convert: rubic-export-slides slides.md -o presentation.pptx (via shell_exec)
+  3. Deliver: message_notify_user with attachments=["/home/ubuntu/presentation.pptx"]
+
+  For simple text/Markdown files (no conversion needed):
+  1. Write content using file_write.
+  2. Deliver: message_notify_user with attachments=["/home/ubuntu/file.md"]
+     ALWAYS attach the file -- never just tell the user where it is.
+
+  Alternative tools also available:
+  - pandoc (direct): pandoc input.md -o output.pdf
+  - wkhtmltopdf: wkhtmltopdf input.html output.pdf
+  - LibreOffice: libreoffice --headless --convert-to pdf input.docx
+  - Python: python-docx, python-pptx, reportlab for programmatic generation
+</utilities>`;
 }
 
 // ── Skill definitions for system prompt injection ──
@@ -838,6 +900,20 @@ ${sections.join("\n\n")}`;
   outlook_send, outlook_download.`;
   }
 
+  // MCP server listing (Manus parity)
+  let mcpListing = "";
+  const mcpServers = ctx.enabledMcpServers ?? (
+    ctx.composioToolsByApp ? Object.keys(ctx.composioToolsByApp) : []
+  );
+  if (mcpServers.length > 0) {
+    mcpListing = `\n\nMCP SERVERS CONFIGURED
+  The following MCP server names are configured: ${mcpServers.join(", ")}
+  Tools from these servers are available as first-class tools (call them
+  directly by name). Additionally, sandbox code can access them via:
+    rubic-mcp-cli tool call <tool_name> --server <server_name> --input '{json}'
+  Results are saved to /tmp/rubic-mcp/mcp_result_*.json for large outputs.`;
+  }
+
   return `<connected_apps_rules>
 You can perform actions on third-party services the user has connected
 through the Rubic integrations marketplace (powered by Composio).
@@ -850,7 +926,7 @@ AUTHORIZATION
   - If the user requests an action on a service that is not connected,
     inform them and provide instructions to connect it in Settings >
     Integrations.
-${toolListing}
+${toolListing}${mcpListing}
 
 API USAGE
   - Use ONLY the tools listed above. Do NOT hallucinate tool names that
@@ -1076,6 +1152,7 @@ export function buildManusSystemPrompt(ctx: SystemPromptContext): string {
     webdevRules(),
     slideRules(),
     imageRules(),
+    utilitiesSection(),
     connectedAppsRules(ctx),
     errorHandling(),
     sandboxEnvironment(ctx),

@@ -90,6 +90,14 @@ export interface CanvasState {
 
   // Terminal view
   terminalOutput?: string[];
+  /** Per-session terminal output (session ID → output lines) */
+  terminalSessions?: Record<string, string[]>;
+  /** Currently displayed terminal session ID */
+  activeTerminalSession?: string;
+  /** All available terminal session IDs (in order of first use) */
+  terminalSessionIds?: string[];
+  /** Switch the displayed terminal session */
+  onSelectTerminalSession?: (sessionId: string) => void;
 
   // File preview view
   previewFileName?: string;
@@ -104,7 +112,7 @@ export interface CanvasState {
   previewUrl?: string;
 
   // All file contents map (for preview rendering)
-  fileContents?: Record<string, string>;
+  allFileContents?: Record<string, string>;
 
   // Timeline
   timelinePercentage?: number;
@@ -142,12 +150,12 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   shell_write_to_process: "terminal",
   shell_kill_process: "terminal",
 
-  // File tools
-  file_read: "code",
-  file_write: "code",
-  file_str_replace: "code",
-  file_find_in_content: "code",
-  file_find_by_name: "code",
+  // File tools — terminal view (shows ubuntu@sandbox output like Manus)
+  file_read: "terminal",
+  file_write: "terminal",
+  file_str_replace: "terminal",
+  file_find_in_content: "terminal",
+  file_find_by_name: "terminal",
 
   // Code execution
   code_execute: "terminal",
@@ -164,8 +172,8 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   // Manus page -> browser
   make_manus_page: "browser",
 
-  // Text editor -> code (operates on files)
-  text_editor: "code",
+  // Text editor -> terminal (operates on files, shows terminal output)
+  text_editor: "terminal",
 
   // Slide present -> browser (generates viewable URL)
   slide_present: "browser",
@@ -179,6 +187,7 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   webdev_execute_sql: "webDevIDE",
   webdev_push_schema: "webDevIDE",
   webdev_list_versions: "webDevIDE",
+  webdev_add_feature: "webDevIDE",
 };
 
 // ============================================================================
@@ -298,6 +307,7 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
   webdev_execute_sql: () => ({ type: "searching" as ToolActionType, label: "Executing SQL query" }),
   webdev_push_schema: () => ({ type: "creating" as ToolActionType, label: "Pushing database schema" }),
   webdev_list_versions: () => ({ type: "viewing" as ToolActionType, label: "Listing versions" }),
+  webdev_add_feature: (args) => ({ type: "creating" as ToolActionType, label: `Adding ${(args.feature as string) || "feature"}` }),
 };
 
 // ============================================================================
@@ -376,24 +386,56 @@ function extractBrowserTitle(output: Record<string, unknown> | undefined): strin
   return undefined;
 }
 
-/** Extract search results from tool output */
+/** Extract search results from tool output (handles string/object/array formats) */
 function extractSearchResults(
-  output: Record<string, unknown> | undefined
+  output: Record<string, unknown> | string | unknown[] | undefined
 ): Array<{ title: string; url: string; snippet: string }> | undefined {
   if (!output) return undefined;
-  const results = output.results;
+
+  // Handle stringified JSON output (double-serialization from SSE)
+  let parsed: Record<string, unknown> | unknown[];
+  if (typeof output === "string") {
+    try {
+      parsed = JSON.parse(output);
+    } catch {
+      return undefined;
+    }
+  } else {
+    parsed = output as Record<string, unknown> | unknown[];
+  }
+
+  // Handle direct array of results (e.g. searchProvider returns array directly)
+  // Also check nested: { results: [...] }, { data: { results: [...] } }, { result: [...] }
+  let results: unknown[] | undefined;
+  if (Array.isArray(parsed)) {
+    results = parsed;
+  } else {
+    const obj = parsed as Record<string, unknown>;
+    results = Array.isArray(obj.results)
+      ? obj.results
+      : Array.isArray(obj.result)
+        ? obj.result
+        : Array.isArray(obj.data)
+          ? obj.data
+          : Array.isArray((obj.data as Record<string, unknown> | undefined)?.results)
+            ? (obj.data as Record<string, unknown>).results as unknown[]
+            : undefined;
+  }
+
   if (!Array.isArray(results) || results.length === 0) return undefined;
   return results
     .filter(
       (r: unknown): r is Record<string, unknown> =>
         typeof r === "object" &&
         r !== null &&
-        typeof (r as Record<string, unknown>).title === "string"
+        (typeof (r as Record<string, unknown>).title === "string" ||
+         typeof (r as Record<string, unknown>).url === "string" ||
+         typeof (r as Record<string, unknown>).link === "string")
     )
     .map((r) => ({
-      title: String(r.title || ""),
-      url: String(r.url || r.link || ""),
-      snippet: String(r.snippet || ""),
+      title: String(r.title || r.name || ""),
+      url: String(r.url || r.link || r.href || ""),
+      snippet: String(r.snippet || r.description || r.abstract || ""),
     }));
 }
 
@@ -402,8 +444,10 @@ function extractSearchResults(
 // ============================================================================
 
 export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasState {
-  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
-  const [fileContents, setFileContents] = useState<Record<string, string>>({});
+  // Per-session terminal output (Manus parity: each shell session has its own PTY)
+  const [terminalSessions, setTerminalSessions] = useState<Record<string, string[]>>({});
+  const [terminalSessionOrder, setTerminalSessionOrder] = useState<string[]>([]);
+  const [activeTerminalSession, setActiveTerminalSession] = useState<string>("default");
 
   // User-selected file path (overrides agent's active file)
   const [userSelectedPath, setUserSelectedPath] = useState<string | null>(null);
@@ -415,15 +459,67 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   const [viewOverride, setViewOverride] = useState<CanvasViewType | null>(null);
   const prevAutoView = useRef<CanvasViewType | null>(null);
 
-  // Sandbox ID — set from agent stream metadata
-  const [sandboxId, setSandboxId] = useState<string | undefined>();
-  // Neko WebRTC URL — set from sandbox_info metadata (Desktop template with Neko)
-  const [nekoUrl, setNekoUrl] = useState<string | undefined>();
-  // E2B stream URL — set from sandbox_info metadata (noVNC fallback)
-  const [streamUrl, setStreamUrl] = useState<string | undefined>();
+  // ── Metadata extracted via useMemo (NO useEffect+setState on [messages]) ──
+  // CRITICAL: During streaming, `messages` gets a new ref on every SSE chunk
+  // (~60/sec). useEffect([messages]) + setState caused "Maximum update depth
+  // exceeded" in React 19 + Compiler. Pure useMemo avoids setState entirely.
 
-  // WebDev IDE preview URL — extracted from webdev_init_project result
-  const [webdevPreviewUrl, setWebdevPreviewUrl] = useState<string | undefined>();
+  const messageMeta = useMemo(() => {
+    let sandboxId: string | undefined;
+    let nekoUrl: string | undefined;
+    let streamUrl: string | undefined;
+    let browserFrame: { screenshot?: string; url?: string; title?: string } | undefined;
+
+    for (const msg of messages) {
+      const meta = msg.metadata as Record<string, unknown> | undefined;
+      if (!meta) continue;
+      if (typeof meta.sandboxId === "string" && meta.sandboxId) sandboxId = meta.sandboxId;
+      if (typeof meta.nekoUrl === "string" && meta.nekoUrl) nekoUrl = meta.nekoUrl;
+      if (typeof meta.streamUrl === "string" && meta.streamUrl) {
+        streamUrl = meta.streamUrl;
+      } else if (typeof meta.vncUrl === "string" && meta.vncUrl) {
+        streamUrl = meta.vncUrl;
+      }
+      const frame = meta.browserFrame as
+        | { screenshot?: string; url?: string; title?: string }
+        | undefined;
+      if (frame?.screenshot) browserFrame = frame;
+    }
+
+    return { sandboxId, nekoUrl, streamUrl, browserFrame };
+  }, [messages]);
+
+  const sandboxId = messageMeta.sandboxId;
+  const nekoUrl = messageMeta.nekoUrl;
+  const streamUrl = messageMeta.streamUrl;
+
+  // WebDev IDE preview URL — computed from messages (no effect)
+  const webdevPreviewUrlFromMessages = useMemo(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant" || !msg.parts) continue;
+      for (const part of msg.parts) {
+        if (!part || !isToolUIPart(part)) continue;
+        const toolPart = part as StaticToolUIPart | DynamicToolUIPart;
+        if (toolPart.state !== "output-available") continue;
+        const toolName = getToolName(toolPart);
+        const output = toolPart.output as Record<string, unknown> | undefined;
+        if (!output) continue;
+        if (TOOL_VIEW_MAP[toolName] === "webDevIDE") {
+          const url = (output.previewUrl as string) ?? (output.preview_url as string) ?? (output.url as string) ?? null;
+          if (url && typeof url === "string") return url;
+        }
+        if (toolName === "deploy_expose_port") {
+          const url = (output.url as string) ?? (output.proxyUrl as string) ?? (output.proxy_url as string) ?? null;
+          if (url && typeof url === "string") return url;
+        }
+      }
+    }
+    return undefined;
+  }, [messages]);
+
+  // WebDev preview URL — latestTool result overrides, messages fallback
+  const [webdevPreviewUrlOverride, setWebdevPreviewUrl] = useState<string | undefined>();
+  const webdevPreviewUrl = webdevPreviewUrlOverride ?? webdevPreviewUrlFromMessages;
 
   // Pinned tool call — when set, canvas shows historical state instead of latest
   const [pinnedToolCallId, setPinnedToolCallId] = useState<string | undefined>();
@@ -457,42 +553,20 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   const historyIndexRef = useRef(historyIndex);
   historyIndexRef.current = historyIndex;
 
-  // Extract sandboxId and live browser frames from message metadata
+  // Sync browser frame from metadata (only fires when screenshot changes)
+  const processedScreenshotRef = useRef("");
   useEffect(() => {
-    for (const msg of messages) {
-      const meta = msg.metadata as Record<string, unknown> | undefined;
-      if (!meta) continue;
+    const frame = messageMeta.browserFrame;
+    if (!frame?.screenshot || frame.screenshot === processedScreenshotRef.current) return;
+    processedScreenshotRef.current = frame.screenshot;
+    setBrowserScreenshot(normalizeScreenshot(frame.screenshot));
+    if (frame.url) setBrowserUrl(frame.url);
+    if (frame.title) setBrowserTitle(frame.title);
+  }, [messageMeta.browserFrame?.screenshot]); // primitive dep — stable during streaming
 
-      // Pick up sandbox ID
-      if (typeof meta.sandboxId === "string" && meta.sandboxId) {
-        setSandboxId(meta.sandboxId);
-      }
-      // Pick up Neko WebRTC URL (Desktop template sandbox with Neko)
-      if (typeof meta.nekoUrl === "string" && meta.nekoUrl) {
-        setNekoUrl(meta.nekoUrl);
-      }
-      // Pick up E2B stream URL (noVNC fallback) or legacy vncUrl
-      if (typeof meta.streamUrl === "string" && meta.streamUrl) {
-        setStreamUrl(meta.streamUrl);
-      } else if (typeof meta.vncUrl === "string" && meta.vncUrl) {
-        // Backwards compat: old sandbox_info events may still send vncUrl
-        setStreamUrl(meta.vncUrl);
-      }
-
-      // Pick up live browser frame
-      const frame = meta.browserFrame as
-        | { screenshot?: string; url?: string; title?: string }
-        | undefined;
-      if (frame?.screenshot) {
-        setBrowserScreenshot(normalizeScreenshot(frame.screenshot));
-        if (frame.url) setBrowserUrl(frame.url);
-        if (frame.title) setBrowserTitle(frame.title);
-      }
-    }
-  }, [messages]);
-
-  // Accumulate ALL file contents from ALL messages — runs on mount + message changes
-  // This ensures file contents survive page reloads with initial messages
+  // Accumulate ALL file contents from ALL messages — pure useMemo (no effect)
+  // CRITICAL: This used to be useMemo→useEffect→setState which caused infinite
+  // re-renders during streaming. Now it's a single useMemo.
   const allFileContents = useMemo(() => {
     const contents: Record<string, string> = {};
     for (const msg of messages) {
@@ -533,21 +607,6 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     }
     return contents;
   }, [messages]);
-
-  // Merge accumulated file contents into state (on mount / message change)
-  useEffect(() => {
-    setFileContents((prev) => {
-      const merged = { ...prev };
-      let changed = false;
-      for (const [path, content] of Object.entries(allFileContents)) {
-        if (merged[path] !== content) {
-          merged[path] = content;
-          changed = true;
-        }
-      }
-      return changed ? merged : prev;
-    });
-  }, [allFileContents]);
 
   // Collect ALL tool call IDs for timeline scrubbing
   const allToolCallIds = useMemo(() => {
@@ -590,11 +649,6 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
         // Skip tools that don't map to a canvas view (but still count them)
         if (!viewType) continue;
-
-        // Only return the first match (which is the latest)
-        if (toolCount === 1 || !TOOL_VIEW_MAP[toolName]) {
-          // keep counting but we found the latest
-        }
 
         const args = (toolPart.input ?? {}) as Record<string, unknown>;
         const output = toolPart.output as Record<string, unknown> | undefined;
@@ -659,6 +713,11 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     setViewOverride(view);
   }, []);
 
+  // Terminal session select callback
+  const onSelectTerminalSession = useCallback((sessionId: string) => {
+    setActiveTerminalSession(sessionId);
+  }, []);
+
   // Timeline scrubber → pin to a specific tool call by percentage
   const onTimelineChange = useCallback(
     (percentage: number) => {
@@ -678,49 +737,133 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     [allToolCallIds]
   );
 
-  // Accumulate terminal output from shell_exec results
+  // Accumulate terminal output from shell_exec AND file tools — per-session (Manus parity)
+  // Shell tools use the `id` param for session; file tools use "default" session.
+  // File operations render as ubuntu@sandbox terminal commands (Manus style).
   // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
   useEffect(() => {
     if (!latestTool) return;
-    if (
-      latestTool.toolName === "shell_exec" &&
-      latestTool.state === "output-available" &&
-      latestTool.output
-    ) {
+    if (latestTool.state !== "output-available" || !latestTool.output) return;
+
+    const output = latestTool.output as Record<string, unknown>;
+
+    if (latestTool.toolName === "shell_exec") {
+      const sessionId = (latestTool.args?.id as string) || "default";
       const cmd = (latestTool.args?.command as string) ?? "";
       const rawOutput =
         typeof latestTool.output === "string"
           ? latestTool.output
-          : ((latestTool.output as Record<string, unknown>)?.stdout ??
-            JSON.stringify(latestTool.output, null, 2));
+          : ((output.stdout ?? output.output ?? JSON.stringify(latestTool.output, null, 2)) as string);
       const outputStr = typeof rawOutput === "string" ? rawOutput : String(rawOutput);
 
-      setTerminalHistory((prev) => {
-        // Avoid duplicates
-        const lastCmd = prev.findLast((l) => l.startsWith("$"));
+      setTerminalSessions((prev) => {
+        const sessionLines = prev[sessionId] ?? [];
+        const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
         if (lastCmd === `$ ${cmd}`) return prev;
-        return [...prev, `$ ${cmd}`, ...outputStr.split("\n")];
+        return {
+          ...prev,
+          [sessionId]: [...sessionLines, `$ ${cmd}`, ...outputStr.split("\n")],
+        };
       });
+
+      setTerminalSessionOrder((prev) => {
+        if (prev.includes(sessionId)) return prev;
+        return [...prev, sessionId];
+      });
+
+      setActiveTerminalSession(sessionId);
+    } else if (
+      latestTool.toolName === "file_write" ||
+      latestTool.toolName === "file_read" ||
+      latestTool.toolName === "file_str_replace" ||
+      latestTool.toolName === "file_find_in_content" ||
+      latestTool.toolName === "file_find_by_name"
+    ) {
+      // File tools → terminal output styled as ubuntu@sandbox commands
+      const filePath = ((latestTool.args?.path ?? latestTool.args?.file) as string) ?? "";
+      const fileName = filePath.split("/").pop() || filePath;
+      let cmd = "";
+      let result = "";
+
+      if (latestTool.toolName === "file_write") {
+        const bytes = (output.bytesWritten as number) || (output.size as number) || 0;
+        cmd = `cat > ${filePath}`;
+        result = `\x1b[32m✓\x1b[0m Wrote ${fileName} (${bytes} bytes)`;
+      } else if (latestTool.toolName === "file_read") {
+        cmd = `cat ${filePath}`;
+        const content = (output.content as string) ?? "";
+        const lines = content.split("\n");
+        result = lines.length > 20 ? lines.slice(0, 20).join("\n") + `\n... (${lines.length} lines)` : content;
+      } else if (latestTool.toolName === "file_str_replace") {
+        cmd = `sed -i 's/.../.../g' ${filePath}`;
+        result = `\x1b[32m✓\x1b[0m Edited ${fileName}`;
+      } else if (latestTool.toolName === "file_find_in_content") {
+        const regex = (latestTool.args?.regex as string) ?? "";
+        cmd = `grep -rn '${regex}' ${filePath}`;
+        result = (output.matches as string) ?? (output.output as string) ?? "";
+      } else if (latestTool.toolName === "file_find_by_name") {
+        const glob = (latestTool.args?.glob as string) ?? "*";
+        cmd = `find ${filePath} -name '${glob}'`;
+        result = (output.files as string) ?? (output.output as string) ?? "";
+      }
+
+      if (cmd) {
+        const sessionId = "default";
+        setTerminalSessions((prev) => {
+          const sessionLines = prev[sessionId] ?? [];
+          const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
+          if (lastCmd === `$ ${cmd}`) return prev;
+          return {
+            ...prev,
+            [sessionId]: [...sessionLines, `$ ${cmd}`, ...result.split("\n")],
+          };
+        });
+
+        setTerminalSessionOrder((prev) => {
+          if (prev.includes(sessionId)) return prev;
+          return [...prev, sessionId];
+        });
+
+        setActiveTerminalSession(sessionId);
+      }
     }
   }, [latestTool?.toolCallId, latestTool?.state]);
 
-  // Extract webdev preview URL from webdev_init_project results
-  useEffect(() => {
-    if (!latestTool || latestTool.viewType !== "webDevIDE") return;
-    if (latestTool.state !== "output-available") return;
-    const output = latestTool.output as Record<string, unknown> | undefined;
-    if (output?.previewUrl && typeof output.previewUrl === "string") {
-      setWebdevPreviewUrl(output.previewUrl);
-    }
-  }, [latestTool?.toolCallId, latestTool?.state]);
-
-  // Track file contents from file_read/file_write
-  // Also auto-follow the agent's file operations (clear user selection)
-  // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
+  // Extract webdev preview URL from webdev tool results and deploy_expose_port
   useEffect(() => {
     if (!latestTool) return;
+    if (latestTool.state !== "output-available") return;
+    const output = latestTool.output as Record<string, unknown> | undefined;
+    if (!output) return;
 
-    // Auto-follow: when agent opens a new file, clear user override
+    // Extract from webdev tools
+    if (latestTool.viewType === "webDevIDE") {
+      const url =
+        (output.previewUrl as string) ??
+        (output.preview_url as string) ??
+        (output.url as string) ??
+        null;
+      if (url && typeof url === "string") {
+        setWebdevPreviewUrl(url);
+      }
+    }
+
+    // Extract from deploy_expose_port (sets up port forwarding → returns URL)
+    if (latestTool.toolName === "deploy_expose_port") {
+      const url =
+        (output.url as string) ??
+        (output.proxyUrl as string) ??
+        (output.proxy_url as string) ??
+        null;
+      if (url && typeof url === "string") {
+        setWebdevPreviewUrl(url);
+      }
+    }
+  }, [latestTool?.toolCallId, latestTool?.state]);
+
+  // Auto-follow: when agent opens a new file, clear user selection override
+  useEffect(() => {
+    if (!latestTool) return;
     const agentFilePath = (latestTool.args?.path ?? latestTool.args?.file) as string | undefined;
     if (
       agentFilePath &&
@@ -730,45 +873,6 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     ) {
       setUserSelectedPath(null);
     }
-
-    if (
-      latestTool.toolName === "file_read" &&
-      latestTool.state === "output-available" &&
-      latestTool.output
-    ) {
-      const path = ((latestTool.args?.path ?? latestTool.args?.file) as string) ?? "unknown";
-      const content =
-        typeof latestTool.output === "string"
-          ? latestTool.output
-          : ((latestTool.output as Record<string, unknown>)?.content ??
-            JSON.stringify(latestTool.output));
-      setFileContents((prev) => ({
-        ...prev,
-        [path]: typeof content === "string" ? content : String(content),
-      }));
-    }
-    if (latestTool.toolName === "file_write") {
-      const path = ((latestTool.args?.path ?? latestTool.args?.file) as string) ?? "unknown";
-      const content = (latestTool.args?.content as string) ?? "";
-      setFileContents((prev) => ({ ...prev, [path]: content }));
-    }
-    if (
-      latestTool.toolName === "file_str_replace" &&
-      latestTool.state === "output-available" &&
-      latestTool.output
-    ) {
-      const path = ((latestTool.args?.path ?? latestTool.args?.file) as string) ?? "unknown";
-      const oldStr = (latestTool.args?.old_str as string) ?? "";
-      const newStr = (latestTool.args?.new_str as string) ?? "";
-      const output = latestTool.output as Record<string, unknown>;
-      if (output.success && oldStr) {
-        setFileContents((prev) => {
-          const existing = prev[path];
-          if (!existing) return prev;
-          return { ...prev, [path]: existing.replace(oldStr, newStr) };
-        });
-      }
-    }
   }, [latestTool?.toolCallId, latestTool?.state]);
 
   // Persist browser URL and screenshot across all browser tool calls
@@ -776,6 +880,24 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   // Uses historyIndexRef to avoid circular dep (effect sets historyIndex)
   useEffect(() => {
     if (!latestTool || latestTool.viewType !== "browser") return;
+
+    // Detect if this is a search tool (not a browser tool that produces screenshots)
+    const isSearchTool =
+      latestTool.toolName === "info_search_web" ||
+      latestTool.toolName === "web_search" ||
+      latestTool.toolName === "search_web";
+
+    // DEBUG: trace browser effect execution during streaming
+    if (process.env.NODE_ENV === "development") {
+      console.log("[canvas:browser-effect]", {
+        toolName: latestTool.toolName,
+        state: latestTool.state,
+        isSearchTool,
+        hasOutput: !!latestTool.output,
+        args: latestTool.args,
+        outputKeys: latestTool.output ? Object.keys(latestTool.output) : null,
+      });
+    }
 
     // Extract URL — update if found
     const url = extractBrowserUrl(latestTool.output, latestTool.args);
@@ -794,20 +916,56 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       }
     }
 
-    // Extract screenshot — update if found (persists from previous otherwise)
+    // When a search tool is active but hasn't returned results yet, show loading state
+    // immediately so the user sees activity during streaming (not just after)
+    if (isSearchTool && !latestTool.output) {
+      const query = (latestTool.args?.query as string) ?? "";
+      if (query) {
+        setBrowserUrl(`search://${query}`);
+      }
+      setBrowserLoading(true);
+      // Clear stale screenshot/content so search results area is ready
+      setBrowserScreenshot(undefined);
+      setBrowserContent(undefined);
+      return;
+    }
+
     if (latestTool.output) {
-      const shot = extractScreenshot(latestTool.output);
-      if (shot) setBrowserScreenshot((prev) => (prev === shot ? prev : shot));
-
-      // Extract content, title, and search results for display without screenshots
-      const content = extractBrowserContent(latestTool.output);
-      if (content) setBrowserContent(content);
-
-      const title = extractBrowserTitle(latestTool.output);
-      if (title) setBrowserTitle(title);
-
-      const results = extractSearchResults(latestTool.output);
-      if (results) setBrowserSearchResults(results);
+      if (isSearchTool) {
+        // Search tools: extract results, clear stale screenshot/content
+        setBrowserLoading(false);
+        setBrowserScreenshot(undefined);
+        setBrowserContent(undefined);
+        const results = extractSearchResults(latestTool.output);
+        if (process.env.NODE_ENV === "development") {
+          console.log("[canvas:search-results]", {
+            outputType: typeof latestTool.output,
+            output: latestTool.output,
+            extractedCount: results?.length ?? 0,
+          });
+        }
+        // Always set results — empty array shows "No results found" in BrowserView
+        setBrowserSearchResults(results && results.length > 0 ? results : []);
+        const title = extractBrowserTitle(latestTool.output);
+        if (title) setBrowserTitle(title);
+        // Set URL to search query for display
+        const query = (latestTool.args?.query as string) ?? "";
+        if (query) {
+          setBrowserUrl(`search://${query}`);
+        }
+      } else {
+        // Non-search browser tools: extract screenshot, content, title
+        const shot = extractScreenshot(latestTool.output);
+        if (shot) {
+          setBrowserScreenshot((prev) => (prev === shot ? prev : shot));
+          // Clear search results when a real screenshot arrives (agent moved past search)
+          setBrowserSearchResults(undefined);
+        }
+        const content = extractBrowserContent(latestTool.output);
+        if (content) setBrowserContent(content);
+        const title = extractBrowserTitle(latestTool.output);
+        if (title) setBrowserTitle(title);
+      }
     }
   }, [latestTool?.toolCallId, latestTool?.state]);
 
@@ -836,18 +994,18 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   const onSelectTab = useCallback(
     (tabId: string) => {
       // Tab IDs are indexes into open paths (excluding closed tabs)
-      const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
+      const openPaths = Object.keys(allFileContents).filter((p) => !closedTabs.has(p));
       const idx = Number(tabId);
       if (!Number.isNaN(idx) && openPaths[idx]) {
         setUserSelectedPath(openPaths[idx]);
       }
     },
-    [fileContents, closedTabs]
+    [allFileContents, closedTabs]
   );
 
   const onCloseTab = useCallback(
     (tabId: string) => {
-      const openPaths = Object.keys(fileContents).filter((p) => !closedTabs.has(p));
+      const openPaths = Object.keys(allFileContents).filter((p) => !closedTabs.has(p));
       const idx = Number(tabId);
       const closedPath = openPaths[idx];
       if (!closedPath) return;
@@ -865,7 +1023,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         return remaining.length > 0 ? remaining[remaining.length - 1]! : null;
       });
     },
-    [fileContents, closedTabs]
+    [allFileContents, closedTabs]
   );
 
   // Browser navigation callbacks
@@ -873,6 +1031,8 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     async (url: string) => {
       setBrowserUrl(url);
       setBrowserLoading(true);
+      // Clear search results — user is navigating away from search
+      setBrowserSearchResults(undefined);
       setBrowserHistory((prev) => {
         const trimmed = prev.slice(0, historyIndex + 1);
         return [...trimmed, { url }];
@@ -1039,7 +1199,16 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         : undefined,
     currentStep,
     totalSteps: totalToolCalls,
-    timelinePercentage: pinnedTool ? 100 : latestTool?.isWorking ? undefined : 100,
+    timelinePercentage: pinnedToolCallId
+      ? (() => {
+          const idx = allToolCallIds.indexOf(pinnedToolCallId);
+          return idx >= 0 && allToolCallIds.length > 0
+            ? Math.round(((idx + 1) / allToolCallIds.length) * 100)
+            : 100;
+        })()
+      : latestTool?.isWorking
+        ? undefined
+        : 100,
     onTimelineChange,
     sandboxId,
     nekoUrl,
@@ -1082,20 +1251,28 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }
 
   // Terminal view data — populate when terminal is available (for view switching)
+  // Per-session: Manus uses named PTY sessions; we track each session separately.
   if (effectiveViewType === "terminal" || availableViews.has("terminal")) {
     if (pinnedTool && pinnedTool.viewType === "terminal" && pinnedTool.output) {
       // Pinned: extract terminal output from the pinned tool
       const pinOutput = pinnedTool.output as Record<string, unknown>;
       const cmd = (pinnedTool.args?.command as string) ?? "";
+      const pinSessionId = (pinnedTool.args?.id as string) || "default";
       const rawOut =
         typeof pinnedTool.output === "string"
           ? pinnedTool.output
           : (pinOutput.stdout ?? JSON.stringify(pinnedTool.output, null, 2));
       const outStr = typeof rawOut === "string" ? rawOut : String(rawOut);
       state.terminalOutput = cmd ? [`$ ${cmd}`, ...outStr.split("\n")] : outStr.split("\n");
+      state.activeTerminalSession = pinSessionId;
     } else {
-      state.terminalOutput = terminalHistory;
+      // Live: show the active session's output
+      state.terminalOutput = terminalSessions[activeTerminalSession] ?? [];
+      state.activeTerminalSession = activeTerminalSession;
     }
+    state.terminalSessions = terminalSessions;
+    state.terminalSessionIds = terminalSessionOrder;
+    state.onSelectTerminalSession = onSelectTerminalSession;
   }
 
   // Code view data — populate when code is available (for view switching)
@@ -1125,18 +1302,18 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
           state.fileTree = buildFileTree([pinnedPath]);
         }
       }
-    } else if (Object.keys(fileContents).length > 0) {
+    } else if (Object.keys(allFileContents).length > 0) {
       // Determine active file: user selection > agent's current file > last file
-      const allPaths = Object.keys(fileContents);
+      const allPaths = Object.keys(allFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
       const activePath =
-        (userSelectedPath && fileContents[userSelectedPath] ? userSelectedPath : null) ??
-        (agentPath && fileContents[agentPath] ? agentPath : null) ??
+        (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        (agentPath && allFileContents[agentPath] ? agentPath : null) ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
         null;
 
       if (activePath) {
-        state.activeFileContent = fileContents[activePath];
+        state.activeFileContent = allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
 
@@ -1155,7 +1332,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.onSelectFile = onSelectFile;
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
-      state.fileContents = fileContents;
+      state.allFileContents = allFileContents;
     } else if (activeTool?.toolName === "file_write" && activeTool?.args?.content) {
       // Show content being written even before output
       state.activeFileContent = activeTool.args.content as string;
@@ -1165,15 +1342,15 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // WebDev IDE view data — reuse file tree + add preview URL
   if (effectiveViewType === "webDevIDE" || availableViews.has("webDevIDE")) {
-    if (Object.keys(fileContents).length > 0) {
-      const allPaths = Object.keys(fileContents);
+    if (Object.keys(allFileContents).length > 0) {
+      const allPaths = Object.keys(allFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
       const activePath =
-        (userSelectedPath && fileContents[userSelectedPath] ? userSelectedPath : null) ??
+        (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
         null;
       if (activePath) {
-        state.activeFileContent = fileContents[activePath];
+        state.activeFileContent = allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
       state.fileTree = buildFileTree(allPaths);
@@ -1188,7 +1365,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.onCloseTab = onCloseTab;
     }
     state.previewUrl = webdevPreviewUrl;
-    state.fileContents = fileContents;
+    state.allFileContents = allFileContents;
   }
 
   return state;

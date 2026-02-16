@@ -51,6 +51,15 @@ const completionBodySchema = z.object({
       name: z.string().optional(),
     })
   ).optional(),
+  fileContext: z.array(
+    z.object({
+      name: z.string(),
+      type: z.string(),
+      url: z.string().optional(),
+    })
+  ).optional(),
+  /** Session metadata from DB — contains sandboxId for resume, skills/connections from previous runs */
+  sessionMeta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const completionRoutes: FastifyPluginAsync = async (fastify) => {
@@ -72,6 +81,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       maxSteps,
       skills,
       connections,
+      fileContext,
+      sessionMeta,
     } = parsed.data;
 
     // Create abort controller for this session
@@ -87,6 +98,8 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         maxSteps,
         skills,
         connections,
+        fileContext,
+        sessionMeta,
         abortSignal: abortController.signal,
       });
 

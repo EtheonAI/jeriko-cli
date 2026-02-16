@@ -1,9 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { ChevronDownIcon, CheckIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  CheckCircle2Icon,
+  CircleDotIcon,
+  CircleIcon,
+  XCircleIcon,
+} from "lucide-react";
 import type { UIMessage } from "ai";
 import {
   TextPartRenderer,
@@ -37,13 +43,7 @@ import {
 // Constants
 // ============================================================================
 
-/** Tools that should be auto-hidden when preceded by a sibling in the same category */
-const REDUNDANT_TOOLS = new Set([
-  "browser_view", // Agent checking page state after another browser action
-  "shell_view", // Agent viewing terminal after shell_exec
-]);
-
-/** Tools that indicate a plan — render grouped under plan steps */
+const REDUNDANT_TOOLS = new Set(["browser_view", "shell_view"]);
 const PLAN_TOOL_NAMES = new Set(["show_plan"]);
 
 // ============================================================================
@@ -53,6 +53,7 @@ const PLAN_TOOL_NAMES = new Set(["show_plan"]);
 interface PlanStep {
   id: string;
   label: string;
+  description?: string;
   status: "pending" | "in_progress" | "completed" | "error";
 }
 
@@ -81,13 +82,8 @@ function extractPlanSteps(part: StaticToolUIPart | DynamicToolUIPart): PlanStep[
     | undefined;
 
   if (!data) return [];
-  const todos = (data.todos ?? data.steps ?? data.phases) as
-    | Array<{
-        id?: string;
-        label?: string;
-        title?: string;
-        status?: string;
-      }>
+  const todos = (data.plan ?? data.todos ?? data.steps ?? data.phases) as
+    | Array<{ id?: string; label?: string; title?: string; description?: string; status?: string }>
     | undefined;
 
   if (!todos || !Array.isArray(todos) || todos.length === 0) return [];
@@ -95,6 +91,7 @@ function extractPlanSteps(part: StaticToolUIPart | DynamicToolUIPart): PlanStep[
   return todos.map((t, i) => ({
     id: t.id || `step-${i + 1}`,
     label: t.label || t.title || `Step ${i + 1}`,
+    description: t.description,
     status: normalizeStepStatus(t.status),
   }));
 }
@@ -110,24 +107,18 @@ function normalizeStepStatus(status: string | undefined): PlanStep["status"] {
 
 function shouldHideTool(toolName: string, index: number, parts: UIMessagePart[]): boolean {
   if (!REDUNDANT_TOOLS.has(toolName)) return false;
-
-  // Look backwards for the previous tool call
-  const category = toolName.split("_")[0]; // "browser" or "shell"
+  const category = toolName.split("_")[0];
   for (let i = index - 1; i >= 0; i--) {
     const prev = parts[i];
     if (!prev || typeof prev !== "object" || !("type" in prev)) continue;
-
-    // Skip text parts — they don't break the chain
     if (isTextUIPart(prev)) continue;
-
     if (isToolUIPart(prev)) {
       const prevName = getToolName(prev as StaticToolUIPart | DynamicToolUIPart);
-      if (prevName === toolName) return true; // Consecutive same tool → hide
-      if (prevName.startsWith(category + "_") && prevName !== toolName) return true; // Same category predecessor → hide
-      return false; // Different category → don't hide
+      if (prevName === toolName) return true;
+      if (prevName.startsWith(category + "_") && prevName !== toolName) return true;
+      return false;
     }
-
-    break; // Non-text, non-tool part → stop searching
+    break;
   }
   return false;
 }
@@ -143,7 +134,6 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
   let flatParts: UIMessagePart[] = [];
   let flatIndices: number[] = [];
 
-  // Flush flat parts to a flat section
   const flushFlat = () => {
     if (flatParts.length > 0) {
       sections.push({ type: "flat", parts: flatParts, partIndices: flatIndices });
@@ -152,7 +142,6 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
     }
   };
 
-  // Flush current plan step to a grouped section
   const flushStep = () => {
     if (
       currentPlanSteps &&
@@ -176,7 +165,6 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
     if (isStepStartUIPart(part)) continue;
     if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) continue;
 
-    // Detect show_plan tool — switch to grouped mode
     if (isToolUIPart(part)) {
       const toolPart = part as StaticToolUIPart | DynamicToolUIPart;
       const toolName = getToolName(toolPart);
@@ -184,76 +172,79 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
       if (PLAN_TOOL_NAMES.has(toolName)) {
         const steps = extractPlanSteps(toolPart);
         if (steps.length > 0) {
-          // Flush any pending flat parts
           flushFlat();
-          // Flush any pending step parts from previous plan
-          flushStep();
 
-          currentPlanSteps = steps;
-          currentStepIndex = 0;
-
-          // Add empty section for first step — tool calls will populate it
-          // Also push the plan overview as a special plan-header section
-          // Find the first in_progress or pending step
           const activeIdx = steps.findIndex((s) => s.status === "in_progress");
-          currentStepIndex = activeIdx >= 0 ? activeIdx : 0;
+          const newStepIndex = activeIdx >= 0 ? activeIdx : 0;
 
-          // Create sections for all completed steps before the active one
-          for (let s = 0; s < currentStepIndex; s++) {
-            sections.push({
-              type: "plan-step",
-              step: steps[s]!,
-              parts: [],
-              partIndices: [],
-            });
+          if (currentPlanSteps) {
+            if (currentStepParts.length > 0) {
+              const updatedStep =
+                currentStepIndex < steps.length
+                  ? steps[currentStepIndex]!
+                  : currentPlanSteps[currentStepIndex]!;
+              sections.push({
+                type: "plan-step",
+                step: updatedStep,
+                parts: currentStepParts,
+                partIndices: currentStepIndices,
+              });
+            }
+            currentStepParts = [];
+            currentStepIndices = [];
+
+            for (let s = currentStepIndex + 1; s < newStepIndex; s++) {
+              sections.push({
+                type: "plan-step",
+                step: steps[s]!,
+                parts: [],
+                partIndices: [],
+              });
+            }
+          } else {
+            for (let s = 0; s < newStepIndex; s++) {
+              sections.push({
+                type: "plan-step",
+                step: steps[s]!,
+                parts: [],
+                partIndices: [],
+              });
+            }
           }
 
+          currentPlanSteps = steps;
+          currentStepIndex = newStepIndex;
           continue;
         }
       }
 
-      // Auto-hide redundant tools
       if (shouldHideTool(toolName, i, parts)) continue;
     }
 
-    // If we're in plan mode, add parts to current step
     if (currentPlanSteps) {
-      // Check if we should advance to next step:
-      // When we encounter a text part after tool calls, it often signals
-      // the agent finishing one step and transitioning to the next
       if (
         isTextUIPart(part) &&
         currentStepParts.length > 0 &&
         currentStepParts.some((p) => isToolUIPart(p))
       ) {
-        // Flush current step
         flushStep();
-
-        // Advance to next step (if available)
         if (currentStepIndex < currentPlanSteps.length - 1) {
           currentStepIndex++;
         }
-
-        // Add this text to the new step
         currentStepParts.push(part);
         currentStepIndices.push(i);
         continue;
       }
-
       currentStepParts.push(part);
       currentStepIndices.push(i);
     } else {
-      // Flat mode
       flatParts.push(part);
       flatIndices.push(i);
     }
   }
 
-  // Flush remaining
   if (currentPlanSteps) {
     flushStep();
-
-    // Add remaining steps that weren't populated
     for (let s = currentStepIndex + 1; s < currentPlanSteps.length; s++) {
       sections.push({
         type: "plan-step",
@@ -269,7 +260,112 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
 }
 
 // ============================================================================
-// Plan Step Section Component (Manus-style)
+// Collapsible Section — shared between PlanStep and AutoGrouped
+// ============================================================================
+
+function CollapsibleSection({
+  icon,
+  title,
+  description,
+  badge,
+  isLast,
+  defaultOpen,
+  lineColor,
+  titleClassName,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  badge?: React.ReactNode;
+  isLast: boolean;
+  defaultOpen: boolean;
+  lineColor: string;
+  titleClassName?: string;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const hasChildren = React.Children.count(children) > 0;
+
+  const toggle = useCallback(() => {
+    if (hasChildren) setIsOpen((v) => !v);
+  }, [hasChildren]);
+
+  return (
+    <div className="flex gap-3 group/section">
+      {/* Timeline column — icon + connector line */}
+      <div className="flex flex-col items-center w-5 shrink-0">
+        <div className="flex size-5 shrink-0 items-center justify-center">
+          {icon}
+        </div>
+        {!isLast && (
+          <div className={cn("mt-0.5 w-px flex-1 min-h-[8px]", lineColor)} />
+        )}
+      </div>
+
+      {/* Content column */}
+      <div className={cn("min-w-0 flex-1", !isLast && "pb-2")}>
+        {/* Header row */}
+        <button
+          type="button"
+          onClick={toggle}
+          className={cn(
+            "flex items-center gap-2 w-full text-left rounded-md -ml-1 px-1 py-0.5",
+            hasChildren && "cursor-pointer hover:bg-muted/30",
+            !hasChildren && "cursor-default",
+            "transition-colors duration-150",
+          )}
+        >
+          <span
+            className={cn(
+              "flex-1 text-sm font-medium truncate",
+              titleClassName ?? "text-foreground/70",
+            )}
+          >
+            {title}
+          </span>
+
+          {badge}
+
+          {hasChildren && (
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
+                isOpen && "rotate-90",
+              )}
+            />
+          )}
+        </button>
+
+        {/* Description */}
+        {description && (
+          <p className="text-xs leading-relaxed mt-0.5 ml-1 text-muted-foreground/60">
+            {description}
+          </p>
+        )}
+
+        {/* Collapsible body */}
+        {hasChildren && (
+          <div
+            className={cn(
+              "grid transition-all duration-300 ease-in-out",
+              isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+            )}
+          >
+            <div className="overflow-hidden">
+              <div className="flex flex-col gap-0.5 pt-1.5">
+                {children}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Plan Step Section — wraps CollapsibleSection with plan-specific styling
 // ============================================================================
 
 function PlanStepSection({
@@ -277,129 +373,216 @@ function PlanStepSection({
   children,
   isLast,
   defaultOpen,
+  toolCount,
 }: {
   step: PlanStep;
   children: React.ReactNode;
   isLast: boolean;
   defaultOpen: boolean;
+  toolCount: number;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const hasChildren = React.Children.count(children) > 0;
+  const lineColor =
+    step.status === "completed"
+      ? "bg-green-500/20"
+      : step.status === "in_progress"
+        ? "bg-blue-500/20"
+        : "bg-border/50";
+
+  const titleColor =
+    step.status === "completed"
+      ? "text-foreground/70"
+      : step.status === "in_progress"
+        ? "text-foreground"
+        : step.status === "error"
+          ? "text-destructive"
+          : "text-muted-foreground/40";
 
   return (
-    <div className="flex flex-col">
-      {/* Step header */}
-      <button
-        type="button"
-        onClick={() => hasChildren && setIsOpen(!isOpen)}
-        className={cn(
-          "text-sm w-full flex gap-2 justify-between items-center truncate py-1",
-          hasChildren && "cursor-pointer hover:opacity-80",
-          !hasChildren && "cursor-default"
-        )}
-      >
-        <div className="flex flex-row gap-2 items-center truncate">
-          {/* Status icon */}
-          <StepStatusIcon status={step.status} />
-
-          {/* Step title */}
-          <span
-            className={cn(
-              "truncate font-medium text-sm",
-              step.status === "completed" && "text-muted-foreground",
-              step.status === "in_progress" && "shimmer",
-              step.status === "pending" && "text-muted-foreground/60",
-              step.status === "error" && "text-destructive"
-            )}
-          >
-            {step.label}
+    <CollapsibleSection
+      icon={<StepStatusIcon status={step.status} />}
+      title={step.label}
+      description={step.description}
+      badge={
+        toolCount > 0 ? (
+          <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">
+            {toolCount}
           </span>
-        </div>
-
-        {/* Chevron */}
-        {hasChildren && (
-          <ChevronDownIcon
-            className={cn(
-              "size-4 flex-shrink-0 text-muted-foreground/50 transition-transform duration-300",
-              isOpen && "rotate-180"
-            )}
-          />
-        )}
-      </button>
-
-      {/* Nested content with vertical dashed line */}
-      {hasChildren && (
-        <div
-          className={cn(
-            "transition-[max-height,opacity] duration-150 ease-in-out overflow-hidden",
-            isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0"
-          )}
-        >
-          <div className="flex">
-            {/* Vertical dashed line column */}
-            {!isLast && (
-              <div className="w-6 relative flex-shrink-0">
-                <div className="border-l border-dashed border-border/40 absolute left-2 top-0 bottom-0" />
-              </div>
-            )}
-            {isLast && <div className="w-6 flex-shrink-0" />}
-
-            {/* Nested content */}
-            <div className="flex flex-col gap-1.5 flex-1 min-w-0 pb-2">{children}</div>
-          </div>
-        </div>
-      )}
-    </div>
+        ) : undefined
+      }
+      isLast={isLast}
+      defaultOpen={defaultOpen}
+      lineColor={lineColor}
+      titleClassName={titleColor}
+    >
+      {children}
+    </CollapsibleSection>
   );
 }
 
 // ============================================================================
-// Step Status Icon (Manus-style)
+// Step Status Icon
 // ============================================================================
 
 function StepStatusIcon({ status }: { status: PlanStep["status"] }) {
   if (status === "completed") {
-    return (
-      <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded-full bg-muted-foreground/20 dark:bg-white/10">
-        <CheckIcon className="size-2.5 text-muted-foreground" strokeWidth={3} />
-      </div>
-    );
+    return <CheckCircle2Icon className="size-4 text-green-500" />;
   }
-
   if (status === "in_progress") {
-    return (
-      <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded-full border border-blue-500/50 bg-blue-500/10">
-        <span className="relative flex size-1.5">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-400 opacity-75" />
-          <span className="relative inline-flex size-1.5 rounded-full bg-blue-400" />
-        </span>
-      </div>
-    );
+    return <CircleDotIcon className="size-4 text-blue-500 animate-pulse" />;
   }
-
   if (status === "error") {
-    return (
-      <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded-full border border-destructive/50 bg-destructive/10">
-        <span className="size-1.5 rounded-full bg-destructive" />
-      </div>
-    );
+    return <XCircleIcon className="size-4 text-destructive" />;
   }
-
   // Pending
+  return <CircleIcon className="size-4 text-muted-foreground/30" />;
+}
+
+// ============================================================================
+// Auto-grouped tool rendering — Manus-style visual without show_plan
+// ============================================================================
+
+function getToolGroupLabel(toolNames: string[]): string {
+  const categories = new Set(toolNames.map((n) => {
+    if (n.includes("search") || n === "info_search_web") return "search";
+    if (n.startsWith("browser_")) return "browser";
+    if (n.startsWith("shell_") || n === "code_execute") return "terminal";
+    if (n.startsWith("file_")) return "code";
+    if (n.startsWith("deploy_")) return "deploy";
+    if (n === "generate_image") return "image";
+    return "other";
+  }));
+
+  if (categories.has("search") && categories.size === 1) return "Researching";
+  if (categories.has("browser") && categories.size === 1) return "Browsing";
+  if (categories.has("terminal") && categories.size === 1) return "Running commands";
+  if (categories.has("code") && categories.size === 1) return "Editing files";
+  if (categories.has("deploy")) return "Deploying";
+  if (categories.has("image")) return "Creating";
+  if (categories.has("search")) return "Researching & browsing";
+  return "Working";
+}
+
+function AutoGroupedToolRendering({
+  parts,
+  messageId,
+  onViewInCanvas,
+  timestamp,
+}: {
+  parts: UIMessagePart[];
+  messageId: string;
+  onViewInCanvas?: (toolCallId: string) => void;
+  timestamp?: string;
+}) {
+  const { leading, grouped, trailing, toolNames } = useMemo(() => {
+    const leadingParts: { part: UIMessagePart; idx: number }[] = [];
+    const groupedParts: { part: UIMessagePart; idx: number }[] = [];
+    const trailingParts: { part: UIMessagePart; idx: number }[] = [];
+    const names: string[] = [];
+
+    let firstToolIdx = -1;
+    let lastToolIdx = -1;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]!;
+      if (!p || typeof p !== "object" || !("type" in p)) continue;
+      if (!isToolUIPart(p)) continue;
+      const tn = getToolName(p as StaticToolUIPart | DynamicToolUIPart);
+      if (PLAN_TOOL_NAMES.has(tn)) continue;
+      if (shouldHideTool(tn, i, parts)) continue;
+      if (firstToolIdx === -1) firstToolIdx = i;
+      lastToolIdx = i;
+      names.push(tn);
+    }
+
+    if (firstToolIdx === -1) {
+      for (let i = 0; i < parts.length; i++) {
+        leadingParts.push({ part: parts[i]!, idx: i });
+      }
+      return { leading: leadingParts, grouped: groupedParts, trailing: trailingParts, toolNames: names };
+    }
+
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]!;
+      if (!p || typeof p !== "object" || !("type" in p)) continue;
+      if (isStepStartUIPart(p)) continue;
+      if (isSourceUrlUIPart(p) || isSourceDocumentUIPart(p)) continue;
+
+      if (i < firstToolIdx) {
+        leadingParts.push({ part: p, idx: i });
+      } else if (i <= lastToolIdx) {
+        if (isToolUIPart(p)) {
+          const tn = getToolName(p as StaticToolUIPart | DynamicToolUIPart);
+          if (shouldHideTool(tn, i, parts)) continue;
+        }
+        groupedParts.push({ part: p, idx: i });
+      } else {
+        trailingParts.push({ part: p, idx: i });
+      }
+    }
+
+    return { leading: leadingParts, grouped: groupedParts, trailing: trailingParts, toolNames: names };
+  }, [parts]);
+
+  const toolCount = toolNames.length;
+  const groupLabel = getToolGroupLabel(toolNames);
+  const allToolsDone = useMemo(() => {
+    return grouped.every(({ part: p }) => {
+      if (!isToolUIPart(p)) return true;
+      const tp = p as StaticToolUIPart | DynamicToolUIPart;
+      return tp.state === "output-available" || tp.state === "output-error" || tp.state === "output-denied";
+    });
+  }, [grouped]);
+
   return (
-    <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded-full border border-border/60 bg-card" />
+    <>
+      {/* Leading text — before tools */}
+      {leading.map(({ part, idx }) =>
+        renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+      )}
+
+      {/* Tool group — collapsible section */}
+      {grouped.length > 0 && (
+        <CollapsibleSection
+          icon={
+            allToolsDone
+              ? <CheckCircle2Icon className="size-4 text-green-500" />
+              : <CircleDotIcon className="size-4 text-blue-500 animate-pulse" />
+          }
+          title={groupLabel}
+          badge={
+            toolCount > 0 ? (
+              <span className="text-[11px] text-muted-foreground/50 tabular-nums shrink-0">
+                {toolCount}
+              </span>
+            ) : undefined
+          }
+          isLast={trailing.length === 0}
+          defaultOpen={true}
+          lineColor={allToolsDone ? "bg-green-500/20" : "bg-blue-500/20"}
+        >
+          {grouped.map(({ part, idx }) =>
+            renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+          )}
+        </CollapsibleSection>
+      )}
+
+      {/* Trailing text — the "answer" */}
+      {trailing.map(({ part, idx }) =>
+        renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+      )}
+    </>
   );
 }
 
 // ============================================================================
-// Part Renderer (renders individual parts — shared between flat and grouped)
+// Part Renderer
 // ============================================================================
 
 function renderPart(
   part: UIMessagePart,
   index: number,
-  messageId: string,
-  onViewInCanvas?: (toolCallId: string) => void
+  _messageId: string,
+  onViewInCanvas?: (toolCallId: string) => void,
+  timestamp?: string
 ) {
   if (!part || typeof part !== "object" || !("type" in part)) return null;
   if (isStepStartUIPart(part)) return null;
@@ -411,7 +594,7 @@ function renderPart(
     return <TextPartRenderer key={`text-${index}`} part={part as TextUIPart} />;
   }
 
-  // Reasoning
+  // Reasoning — renders as collapsible pill
   if (isReasoningUIPart(part)) {
     return <ReasoningPartRenderer key={`reasoning-${index}`} part={part as ReasoningUIPart} />;
   }
@@ -421,12 +604,12 @@ function renderPart(
     return <FilePartRenderer key={`file-${index}`} part={part as FileUIPart} />;
   }
 
-  // Tool parts — render as Manus-style pills (never show_plan, it's handled by grouping)
+  // Tool parts — render as clickable pills
   if (isToolUIPart(part)) {
     const toolPart = part as StaticToolUIPart | DynamicToolUIPart;
     const toolName = getToolName(toolPart);
 
-    // Skip show_plan — handled by plan step grouping above
+    // Skip show_plan — handled by plan step grouping
     if (PLAN_TOOL_NAMES.has(toolName)) return null;
 
     return (
@@ -434,6 +617,7 @@ function renderPart(
         key={`tool-${toolPart.toolCallId}`}
         part={toolPart}
         onViewInCanvas={onViewInCanvas}
+        timestamp={timestamp}
       />
     );
   }
@@ -457,15 +641,20 @@ export function MessageRenderer(props: MessageRendererProps) {
   const { message, onViewSources, onViewInCanvas } = props;
   const parts = message.parts as unknown as UIMessagePart[];
 
-  // Collect native source parts for grouped display at the bottom
+  // Format timestamp for tool pill hover
+  const timestamp = useMemo(() => {
+    const createdAt = (message as unknown as Record<string, unknown>).createdAt as string | undefined;
+    if (!createdAt) return undefined;
+    return formatHoverTimestamp(createdAt);
+  }, [message]);
+
+  // Collect source parts
   const sources = useMemo(() => {
     if (!parts || !Array.isArray(parts)) return [];
     const collected: (SourceUrlUIPart | SourceDocumentUIPart)[] = [];
     const seenUrls = new Set<string>();
-
     for (const part of parts) {
       if (!part || typeof part !== "object" || !("type" in part)) continue;
-
       if (isSourceUrlUIPart(part)) {
         if (!seenUrls.has(part.url)) {
           seenUrls.add(part.url);
@@ -489,43 +678,50 @@ export function MessageRenderer(props: MessageRendererProps) {
     });
   }, [parts]);
 
-  // Build sections — group tool calls under plan steps when plan exists
+  // Build sections
   const sections = useMemo(() => {
     if (!parts || !Array.isArray(parts)) return [];
-    if (!hasPlan) return []; // Will use flat rendering path
+    if (!hasPlan) return [];
     return buildSections(parts);
   }, [parts, hasPlan]);
 
-  // Flat rendering — no plan, just render parts sequentially with auto-hide
-  // Groups consecutive file parts into a grid for Manus-style display
+  // Check if message has any tools (for auto-grouping)
+  const hasTools = useMemo(() => {
+    if (!parts || !Array.isArray(parts)) return false;
+    return parts.some((p) => {
+      if (!p || typeof p !== "object" || !("type" in p)) return false;
+      return isToolUIPart(p);
+    });
+  }, [parts]);
+
+  // Flat rendering — no plan
   if (!hasPlan) {
-    const flatElements: React.ReactNode[] = [];
     const allParts = parts ?? [];
+
+    // If tools are present, use auto-grouping for Manus-style visual
+    if (hasTools) {
+      return (
+        <>
+          <AutoGroupedToolRendering
+            parts={allParts}
+            messageId={message.id}
+            onViewInCanvas={onViewInCanvas}
+            timestamp={timestamp}
+          />
+          {sources.length > 0 && <SourcesGroup sources={sources} onViewSources={onViewSources} />}
+        </>
+      );
+    }
+
+    // No tools — simple flat rendering
+    const flatElements: React.ReactNode[] = [];
     let i = 0;
 
     while (i < allParts.length) {
       const part = allParts[i]!;
-      if (!part || typeof part !== "object" || !("type" in part)) {
-        i++;
-        continue;
-      }
-      if (isStepStartUIPart(part)) {
-        i++;
-        continue;
-      }
-      if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) {
-        i++;
-        continue;
-      }
-
-      // Auto-hide redundant tools
-      if (isToolUIPart(part)) {
-        const toolName = getToolName(part as StaticToolUIPart | DynamicToolUIPart);
-        if (shouldHideTool(toolName, i, allParts)) {
-          i++;
-          continue;
-        }
-      }
+      if (!part || typeof part !== "object" || !("type" in part)) { i++; continue; }
+      if (isStepStartUIPart(part)) { i++; continue; }
+      if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) { i++; continue; }
 
       // Group consecutive file parts into a grid
       if (isFileUIPart(part)) {
@@ -537,10 +733,9 @@ export function MessageRenderer(props: MessageRendererProps) {
 
         if (fileGroup.length === 1) {
           flatElements.push(
-            renderPart(fileGroup[0]!.part, fileGroup[0]!.index, message.id, onViewInCanvas)
+            renderPart(fileGroup[0]!.part, fileGroup[0]!.index, message.id, onViewInCanvas, timestamp)
           );
         } else {
-          // Multiple files — render in a responsive grid
           flatElements.push(
             <div key={`file-group-${fileGroup[0]!.index}`} className="grid grid-cols-2 gap-2">
               {fileGroup.map(({ part: fp, index: fi }) => (
@@ -552,7 +747,7 @@ export function MessageRenderer(props: MessageRendererProps) {
         continue;
       }
 
-      flatElements.push(renderPart(part, i, message.id, onViewInCanvas));
+      flatElements.push(renderPart(part, i, message.id, onViewInCanvas, timestamp));
       i++;
     }
 
@@ -564,34 +759,55 @@ export function MessageRenderer(props: MessageRendererProps) {
     );
   }
 
-  // Grouped rendering — plan steps with nested tool pills
+  // Grouped rendering — plan steps with timeline
+  const planStepSections = sections.filter(
+    (s): s is GroupedSection => s.type === "plan-step"
+  );
+  const completedSteps = planStepSections.filter(
+    (s) => s.step.status === "completed"
+  ).length;
+  const totalSteps = planStepSections.length;
+  const lastPlanStepIdx = sections.reduce(
+    (acc, s, i) => (s.type === "plan-step" ? i : acc),
+    -1
+  );
+
   return (
     <>
+      {totalSteps > 0 && (
+        <div className="flex items-center gap-1.5 text-[11px] text-[var(--rubic-text-tertiary)] mb-1 ml-8">
+          <span className="tabular-nums">
+            {completedSteps}/{totalSteps}
+          </span>
+        </div>
+      )}
+
       {sections.map((section, sIdx) => {
         if (section.type === "flat") {
           return (
             <React.Fragment key={`flat-${sIdx}`}>
               {section.parts.map((part, pIdx) =>
-                renderPart(part, section.partIndices[pIdx]!, message.id, onViewInCanvas)
+                renderPart(part, section.partIndices[pIdx]!, message.id, onViewInCanvas, timestamp)
               )}
             </React.Fragment>
           );
         }
 
-        // Plan step section
         const { step, parts: stepParts, partIndices } = section;
-        const isLast = sIdx === sections.length - 1;
-        const isActive = step.status === "in_progress" || step.status === "pending";
+        const isLastPlanStep = sIdx === lastPlanStepIdx;
+        const isActive = step.status === "in_progress";
+        const toolCount = stepParts.filter((p) => isToolUIPart(p)).length;
 
         return (
           <PlanStepSection
             key={step.id}
             step={step}
-            isLast={isLast}
+            isLast={isLastPlanStep}
             defaultOpen={isActive || stepParts.length > 0}
+            toolCount={toolCount}
           >
             {stepParts.map((part, pIdx) =>
-              renderPart(part, partIndices[pIdx]!, message.id, onViewInCanvas)
+              renderPart(part, partIndices[pIdx]!, message.id, onViewInCanvas, timestamp)
             )}
           </PlanStepSection>
         );
@@ -600,4 +816,24 @@ export function MessageRenderer(props: MessageRendererProps) {
       {sources.length > 0 && <SourcesGroup sources={sources} onViewSources={onViewSources} />}
     </>
   );
+}
+
+// ============================================================================
+// Timestamp helper
+// ============================================================================
+
+function formatHoverTimestamp(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) {
+    return date.toLocaleDateString(undefined, { weekday: "long" });
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

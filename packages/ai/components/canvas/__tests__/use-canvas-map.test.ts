@@ -15,7 +15,7 @@ function keysForView(view: CanvasViewType): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Browser tools -> "browser" (21 entries)
+// 1. Browser tools -> "browser" (22 entries)
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — browser tools", () => {
@@ -69,22 +69,31 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Terminal tools -> "terminal" (6 entries)
+// 2. Terminal tools -> "terminal" (12 entries: 6 shell + 5 file + 1 text_editor)
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — terminal tools", () => {
   const EXPECTED_TERMINAL_TOOLS = [
+    // Shell tools (6)
     "shell_exec",
     "shell_view",
     "shell_wait",
     "shell_write_to_process",
     "shell_kill_process",
     "code_execute",
+    // File tools — terminal view shows ubuntu@sandbox output (5)
+    "file_read",
+    "file_write",
+    "file_str_replace",
+    "file_find_in_content",
+    "file_find_by_name",
+    // Text editor (1)
+    "text_editor",
   ].sort();
 
-  it("should contain exactly 6 terminal entries", () => {
+  it("should contain exactly 12 terminal entries", () => {
     const terminalKeys = keysForView("terminal");
-    expect(terminalKeys).toHaveLength(6);
+    expect(terminalKeys).toHaveLength(12);
   });
 
   it("should map every expected terminal tool to 'terminal'", () => {
@@ -102,38 +111,7 @@ describe("TOOL_VIEW_MAP — terminal tools", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Code tools -> "code" (5 entries)
-// ---------------------------------------------------------------------------
-
-describe("TOOL_VIEW_MAP — code tools", () => {
-  const EXPECTED_CODE_TOOLS = [
-    "file_read",
-    "file_write",
-    "file_str_replace",
-    "file_find_in_content",
-    "file_find_by_name",
-    "text_editor",
-  ].sort();
-
-  it("should contain exactly 6 code entries", () => {
-    const codeKeys = keysForView("code");
-    expect(codeKeys).toHaveLength(6);
-  });
-
-  it("should map every expected code tool to 'code'", () => {
-    for (const tool of EXPECTED_CODE_TOOLS) {
-      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "code"`).toBe("code");
-    }
-  });
-
-  it("should not have any extra code entries beyond the expected set", () => {
-    const codeKeys = keysForView("code");
-    expect(codeKeys).toEqual(EXPECTED_CODE_TOOLS);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. WebDev IDE tools -> "webDevIDE" (8 entries)
+// 3. WebDev IDE tools -> "webDevIDE" (9 entries)
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — webDevIDE tools", () => {
@@ -146,11 +124,12 @@ describe("TOOL_VIEW_MAP — webDevIDE tools", () => {
     "webdev_execute_sql",
     "webdev_push_schema",
     "webdev_list_versions",
+    "webdev_add_feature",
   ].sort();
 
-  it("should contain exactly 8 webDevIDE entries", () => {
+  it("should contain exactly 9 webDevIDE entries", () => {
     const webdevKeys = keysForView("webDevIDE");
-    expect(webdevKeys).toHaveLength(8);
+    expect(webdevKeys).toHaveLength(9);
   });
 
   it("should map every expected webdev tool to 'webDevIDE'", () => {
@@ -168,7 +147,7 @@ describe("TOOL_VIEW_MAP — webDevIDE tools", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Inline-only tools should NOT be in the map
+// 4. Inline-only tools should NOT be in the map
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
@@ -194,19 +173,18 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — total count", () => {
-  it("should have exactly 42 entries (22 browser + 6 terminal + 6 code + 8 webDevIDE)", () => {
+  it("should have exactly 43 entries (22 browser + 12 terminal + 9 webDevIDE)", () => {
     const totalKeys = Object.keys(TOOL_VIEW_MAP);
-    expect(totalKeys).toHaveLength(42);
+    expect(totalKeys).toHaveLength(43);
   });
 
-  it("should have counts that add up: browser + terminal + code + webDevIDE = total", () => {
+  it("should have counts that add up: browser + terminal + webDevIDE = total", () => {
     const browserCount = keysForView("browser").length;
     const terminalCount = keysForView("terminal").length;
-    const codeCount = keysForView("code").length;
     const webdevCount = keysForView("webDevIDE").length;
     const total = Object.keys(TOOL_VIEW_MAP).length;
 
-    expect(browserCount + terminalCount + codeCount + webdevCount).toBe(total);
+    expect(browserCount + terminalCount + webdevCount).toBe(total);
   });
 });
 
@@ -215,9 +193,9 @@ describe("TOOL_VIEW_MAP — total count", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — no unexpected view types", () => {
-  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "code", "webDevIDE"];
+  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "webDevIDE"];
 
-  it("every value should be one of: browser, terminal, code, webDevIDE", () => {
+  it("every value should be one of: browser, terminal, webDevIDE", () => {
     const viewTypes = new Set(Object.values(TOOL_VIEW_MAP));
 
     for (const vt of viewTypes) {
@@ -228,8 +206,8 @@ describe("TOOL_VIEW_MAP — no unexpected view types", () => {
     }
   });
 
-  it("should use exactly the four expected view types", () => {
+  it("should use exactly the three expected view types", () => {
     const viewTypes = [...new Set(Object.values(TOOL_VIEW_MAP))].sort();
-    expect(viewTypes).toEqual(["browser", "code", "terminal", "webDevIDE"]);
+    expect(viewTypes).toEqual(["browser", "terminal", "webDevIDE"]);
   });
 });

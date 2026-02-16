@@ -18,6 +18,14 @@ export interface TerminalViewProps {
   liveConnected?: boolean;
   /** Send keyboard input to the PTY */
   onSendInput?: (data: string) => void;
+  /** Per-session terminal output (session ID → output lines) */
+  sessions?: Record<string, string[]>;
+  /** Currently active session ID */
+  activeSession?: string;
+  /** All session IDs in order */
+  sessionIds?: string[];
+  /** Callback to switch sessions */
+  onSelectSession?: (sessionId: string) => void;
 }
 
 // ============================================================================
@@ -29,6 +37,10 @@ export function TerminalView({
   liveOutput,
   liveConnected,
   onSendInput,
+  sessions,
+  activeSession,
+  sessionIds,
+  onSelectSession,
 }: TerminalViewProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +48,9 @@ export function TerminalView({
 
   // Use live output when connected, otherwise fall back to static output
   const displayOutput = liveConnected && liveOutput ? liveOutput : output;
+
+  // Determine if we have multiple sessions to show tabs
+  const hasMultipleSessions = sessionIds && sessionIds.length > 1;
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -79,12 +94,35 @@ export function TerminalView({
       {/* Terminal header */}
       <div className="flex items-center gap-2 border-b border-border/10 bg-canvas-surface px-3 py-1.5">
         <TerminalIcon className="size-3.5 text-green-400" />
-        <span className="text-xs font-medium text-muted-foreground/70">
-          Terminal
-        </span>
-        <span className="font-mono text-xs text-muted-foreground/40">
-          bash
-        </span>
+        {/* Session tabs — Manus shows named PTY tabs when multiple sessions exist */}
+        {hasMultipleSessions ? (
+          <div className="flex items-center gap-0.5">
+            {sessionIds.map((sid) => (
+              <button
+                key={sid}
+                type="button"
+                onClick={() => onSelectSession?.(sid)}
+                className={cn(
+                  "rounded px-2 py-0.5 font-mono text-[11px] transition-colors",
+                  sid === activeSession
+                    ? "bg-muted/30 text-foreground/80"
+                    : "text-muted-foreground/50 hover:bg-muted/15 hover:text-muted-foreground/70",
+                )}
+              >
+                {sid}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <>
+            <span className="text-xs font-medium text-muted-foreground/70">
+              Terminal
+            </span>
+            <span className="font-mono text-xs text-muted-foreground/40">
+              {activeSession && activeSession !== "default" ? activeSession : "bash"}
+            </span>
+          </>
+        )}
         <div className="flex-1" />
         {/* Live connection indicator */}
         {liveConnected !== undefined && (

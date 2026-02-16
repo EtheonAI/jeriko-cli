@@ -88,25 +88,25 @@ export function Suggestions({ suggestions, onSelect, className }: SuggestionsPro
               "cursor-pointer select-none",
               "relative",
               "transition-all duration-150",
-              "hover:bg-muted/50 hover:rounded-[10px]",
-              // Bottom separator — hidden on hover
+              "hover:bg-[var(--rubic-fill-gray)] hover:rounded-[10px]",
+              // Bottom separator — hidden on hover (Manus style)
               i < suggestions.length - 1 && [
                 "after:content-[''] after:absolute after:bottom-0 after:left-3 after:right-3",
-                "after:h-px after:bg-border/60",
+                "after:h-px after:bg-[var(--rubic-border-main)]",
                 "hover:after:hidden",
               ]
             )}
           >
             {/* Left: icon + text */}
             <div className="flex items-center gap-2 min-w-0">
-              <Icon className="size-4 flex-shrink-0 text-muted-foreground/60" />
-              <span className="text-sm text-muted-foreground flex-1 min-w-0">
+              <Icon className="size-4 flex-shrink-0 text-[var(--rubic-text-tertiary)]" />
+              <span className="text-sm text-[var(--rubic-text-secondary)] flex-1 min-w-0">
                 {suggestion.text}
               </span>
             </div>
 
             {/* Right: arrow */}
-            <ArrowRightIcon className="size-4 flex-shrink-0 text-muted-foreground/30 transition-transform group-hover/suggestion:translate-x-0.5 group-hover/suggestion:text-muted-foreground/50" />
+            <ArrowRightIcon className="size-4 flex-shrink-0 text-[var(--rubic-icon-disable)] transition-transform group-hover/suggestion:translate-x-0.5 group-hover/suggestion:text-[var(--rubic-text-tertiary)]" />
           </button>
         );
       })}

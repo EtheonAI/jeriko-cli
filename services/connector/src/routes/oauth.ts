@@ -9,10 +9,12 @@ const authConfigCache = new Map<string, string>();
 
 /**
  * Get or create a Composio auth config for a given toolkit.
- * Uses env-var overrides for white-label (custom OAuth apps),
- * falls back to Composio managed auth.
+ * Accepts an optional pre-fetched definition to avoid redundant DB queries.
  */
-async function getAuthConfigId(toolkit: string): Promise<string> {
+async function getAuthConfigId(
+  toolkit: string,
+  prefetchedDefinition?: { oauthConfig: unknown; id: string } | null
+): Promise<string> {
   // 1. Check env override for white-label: COMPOSIO_AUTH_CONFIG_GITHUB=ac_xxxx
   const envKey = `COMPOSIO_AUTH_CONFIG_${toolkit.toUpperCase()}`;
   const envValue = process.env[envKey];
@@ -22,12 +24,14 @@ async function getAuthConfigId(toolkit: string): Promise<string> {
   const cached = authConfigCache.get(toolkit);
   if (cached) return cached;
 
-  // 3. Check DB (stored in connector_definitions.oauthConfig)
-  const [definition] = await db
-    .select()
-    .from(connectorDefinitions)
-    .where(eq(connectorDefinitions.type, toolkit))
-    .limit(1);
+  // 3. Check DB (stored in connector_definitions.oauthConfig) — reuse prefetched if available
+  const definition = prefetchedDefinition ?? (
+    await db
+      .select({ oauthConfig: connectorDefinitions.oauthConfig, id: connectorDefinitions.id })
+      .from(connectorDefinitions)
+      .where(eq(connectorDefinitions.type, toolkit))
+      .limit(1)
+  )[0];
 
   const oauthConfig = definition?.oauthConfig as Record<string, unknown> | null;
   if (oauthConfig?.composioAuthConfigId) {
@@ -43,10 +47,8 @@ async function getAuthConfigId(toolkit: string): Promise<string> {
   const existing = await composio.authConfigs.list({ toolkit: toolkit.toUpperCase() });
   const items = (existing as { items?: Array<{ id: string }> }).items ?? [];
   if (items.length > 0) {
-    // Use the first existing auth config
     authConfigId = items[0]!.id;
   } else {
-    // No auth config exists — create a managed one
     const authConfig = await composio.authConfigs.create(toolkit.toUpperCase(), {
       type: "use_composio_managed_auth",
     });
@@ -56,14 +58,14 @@ async function getAuthConfigId(toolkit: string): Promise<string> {
   // Cache in memory
   authConfigCache.set(toolkit, authConfigId);
 
-  // Persist to DB for future restarts
+  // Persist to DB for future restarts (fire-and-forget)
   if (definition) {
-    await db
-      .update(connectorDefinitions)
+    db.update(connectorDefinitions)
       .set({
         oauthConfig: { ...(oauthConfig ?? {}), composioAuthConfigId: authConfigId } as typeof connectorDefinitions.$inferInsert.oauthConfig,
       })
-      .where(eq(connectorDefinitions.id, definition.id));
+      .where(eq(connectorDefinitions.id, definition.id))
+      .catch(() => {});
   }
 
   return authConfigId;
@@ -76,69 +78,91 @@ export async function oauthRoutes(app: FastifyInstance) {
       const userId = getUserId(request);
       const { type } = request.params;
 
-      // Look up the connector definition
-      const [definition] = await db
-        .select()
-        .from(connectorDefinitions)
-        .where(eq(connectorDefinitions.type, type))
-        .limit(1);
+      // Parallel: look up definition + existing user connector at the same time
+      const [[definition], [existing]] = await Promise.all([
+        db
+          .select()
+          .from(connectorDefinitions)
+          .where(eq(connectorDefinitions.type, type))
+          .limit(1),
+        db
+          .select()
+          .from(userConnectors)
+          .innerJoin(
+            connectorDefinitions,
+            eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
+          )
+          .where(
+            and(
+              eq(userConnectors.userId, userId),
+              eq(connectorDefinitions.type, type)
+            )
+          )
+          .limit(1),
+      ]);
 
       if (!definition) {
         return reply.status(404).send({ error: `Connector type '${type}' not found` });
       }
 
-      // Upsert a pending user_connector record
-      const [existing] = await db
-        .select()
-        .from(userConnectors)
-        .where(
-          and(
-            eq(userConnectors.userId, userId),
-            eq(userConnectors.connectorDefinitionId, definition.id)
-          )
-        )
-        .limit(1);
-
-      let connectorId: string;
-      if (existing) {
-        connectorId = existing.id;
-        // Reset to pending for re-auth
-        await db
-          .update(userConnectors)
-          .set({ status: "pending" })
-          .where(eq(userConnectors.id, existing.id));
-      } else {
-        connectorId = createId();
-        await db.insert(userConnectors).values({
-          id: connectorId,
-          userId,
-          connectorDefinitionId: definition.id,
-          status: "pending",
+      // Reject non-OAuth connectors — they should use the API key or credentials flow
+      if (definition.authType !== "oauth2") {
+        return reply.status(400).send({
+          error: `${definition.name} uses ${definition.authType} authentication, not OAuth. Please provide your API key directly.`,
+          authType: definition.authType,
         });
       }
 
-      // Get or create a Composio auth config for this toolkit
-      const authConfigId = await getAuthConfigId(type);
+      // Upsert user_connector + get auth config ID in parallel
+      const existingConnector = existing?.user_connectors;
+      let connectorId: string;
 
-      // Initiate OAuth via Composio (new SDK API)
+      const authConfigPromise = getAuthConfigId(type, definition);
+
+      if (existingConnector) {
+        connectorId = existingConnector.id;
+        await Promise.all([
+          db
+            .update(userConnectors)
+            .set({ status: "pending" })
+            .where(eq(userConnectors.id, existingConnector.id)),
+          authConfigPromise,
+        ]);
+      } else {
+        connectorId = createId();
+        await Promise.all([
+          db.insert(userConnectors).values({
+            id: connectorId,
+            userId,
+            connectorDefinitionId: definition.id,
+            status: "pending",
+          }),
+          authConfigPromise,
+        ]);
+      }
+
+      const authConfigId = await authConfigPromise;
+
+      // Initiate OAuth via Composio
       const composio = getComposioClient();
       const appUrl = getEnv("APP_URL", "http://localhost:3000");
       const callbackUrl = `${appUrl}/api/connectors/callback?type=${type}`;
 
       const connRequest = await composio.connectedAccounts.initiate(userId, authConfigId, {
         callbackUrl,
+        allowMultiple: true,
       });
 
-      // Store Composio connection request ID in metadata
-      await db
-        .update(userConnectors)
+      // Store Composio connection request ID (fire-and-forget — don't block response)
+      db.update(userConnectors)
         .set({
           metadata: {
-            ...((existing?.metadata as Record<string, unknown>) ?? {}),
+            ...((existingConnector?.metadata as Record<string, unknown>) ?? {}),
             composioConnectionId: connRequest.id,
           },
         })
-        .where(eq(userConnectors.id, connectorId));
+        .where(eq(userConnectors.id, connectorId))
+        .catch(() => {});
 
       logger.info({ userId, type, connectorId, authConfigId }, "OAuth flow initiated");
 
@@ -150,61 +174,101 @@ export async function oauthRoutes(app: FastifyInstance) {
     }
   });
 
-  // Check connection status — called by frontend after popup closes
+  // Check connection status — called by frontend after popup closes.
+  // Uses Composio waitForConnection for pending connections (polls up to 15s).
   app.get<{ Params: { type: string } }>("/connectors/:type/status", async (request, reply) => {
     try {
       const userId = getUserId(request);
       const { type } = request.params;
 
-      const [definition] = await db
-        .select()
-        .from(connectorDefinitions)
-        .where(eq(connectorDefinitions.type, type))
-        .limit(1);
-
-      if (!definition) {
-        return reply.status(404).send({ error: "Connector type not found" });
-      }
-
-      const [connector] = await db
-        .select()
+      // Single join query instead of two separate queries
+      const [result] = await db
+        .select({
+          connector: userConnectors,
+        })
         .from(userConnectors)
+        .innerJoin(
+          connectorDefinitions,
+          eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
+        )
         .where(
           and(
             eq(userConnectors.userId, userId),
-            eq(userConnectors.connectorDefinitionId, definition.id)
+            eq(connectorDefinitions.type, type)
           )
         )
         .limit(1);
 
-      if (!connector) {
+      if (!result) {
         return { status: "not_found" };
       }
 
-      // If still pending, check Composio for status update
+      const connector = result.connector;
+
+      // If still pending, wait for Composio to confirm the connection
       if (connector.status === "pending") {
         const metadata = connector.metadata as Record<string, unknown> | null;
         const composioConnectionId = metadata?.composioConnectionId as string | undefined;
 
         if (composioConnectionId) {
+          const composio = getComposioClient();
+
           try {
-            const composio = getComposioClient();
-            const account = await composio.connectedAccounts.get(composioConnectionId);
-            const isActive = account.status === "ACTIVE";
+            // waitForConnection polls Composio until status is ACTIVE (max 15s)
+            const account = await composio.connectedAccounts.waitForConnection(
+              composioConnectionId,
+              15_000
+            );
 
-            if (isActive) {
-              await db
-                .update(userConnectors)
-                .set({
-                  status: "connected",
-                  metadata: { ...metadata, composioStatus: account.status },
-                })
-                .where(eq(userConnectors.id, connector.id));
+            // Update DB — connection is active
+            await db
+              .update(userConnectors)
+              .set({
+                status: "connected",
+                metadata: {
+                  ...metadata,
+                  composioStatus: account.status,
+                  composioConnectionId,
+                },
+              })
+              .where(eq(userConnectors.id, connector.id));
 
-              return { status: "connected" };
-            }
+            logger.info({ userId, type, composioConnectionId }, "Connector connected via waitForConnection");
+            return { status: "connected" };
           } catch {
-            // Composio check failed — keep current status
+            // waitForConnection timed out or failed — try a single get() check
+            try {
+              const account = await composio.connectedAccounts.get(composioConnectionId);
+              const composioStatus = (account as { status?: string }).status;
+
+              if (composioStatus === "ACTIVE") {
+                await db
+                  .update(userConnectors)
+                  .set({
+                    status: "connected",
+                    metadata: { ...metadata, composioStatus, composioConnectionId },
+                  })
+                  .where(eq(userConnectors.id, connector.id));
+                return { status: "connected" };
+              }
+
+              if (composioStatus === "FAILED" || composioStatus === "EXPIRED") {
+                await db
+                  .update(userConnectors)
+                  .set({
+                    status: "error",
+                    metadata: { ...metadata, composioStatus, composioConnectionId },
+                  })
+                  .where(eq(userConnectors.id, connector.id));
+                return { status: "error" };
+              }
+
+              // Still INITIATED or INITIALIZING — keep pending
+              return { status: "pending" };
+            } catch {
+              // Composio unreachable — keep current status
+              return { status: connector.status };
+            }
           }
         }
       }

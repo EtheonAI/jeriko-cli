@@ -201,14 +201,6 @@ export function ChatMessages({
   const thinking = useThinkingState(messages, status, isStreaming);
   const endOfChat = useEndOfChatState(messages, isStreaming);
 
-  // Get the last assistant message ID for rating
-  const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.role === "assistant") return messages[i]!.id;
-    }
-    return null;
-  }, [messages]);
-
   // Detect if the last assistant message has file parts (for "View all files" link)
   const hasFileParts = useMemo(() => {
     if (isStreaming || messages.length === 0) return false;
@@ -232,8 +224,10 @@ export function ChatMessages({
                 message={message}
                 isLastMessage={index === messages.length - 1}
                 isStreaming={isStreaming}
+                rating={message.role === "assistant" ? feedback[message.id] : undefined}
                 onCopy={handleCopy}
                 onRegenerate={onRegenerate}
+                onRate={message.role === "assistant" ? onFeedback : undefined}
                 onViewSources={onViewSources}
                 onViewInCanvas={onViewInCanvas}
               />
@@ -247,12 +241,6 @@ export function ChatMessages({
               <div className="mt-4 mb-2">
                 <EndOfChat
                   taskCompleted={endOfChat.usedTools}
-                  rating={lastAssistantId ? feedback[lastAssistantId] : undefined}
-                  onRate={
-                    endOfChat.usedTools && lastAssistantId
-                      ? (rating) => onFeedback(lastAssistantId, rating)
-                      : undefined
-                  }
                   onViewFiles={hasFileParts ? onViewFiles : undefined}
                   suggestions={endOfChat.suggestions}
                   onSelectSuggestion={onSendMessage}

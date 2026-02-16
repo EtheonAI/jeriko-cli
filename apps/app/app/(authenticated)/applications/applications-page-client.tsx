@@ -70,24 +70,46 @@ export function ApplicationsPageClient() {
         setConnectingDefId(null);
         return;
       }
-      // Poll for popup close + listen for postMessage from callback page
+
+      // Poll for popup close, then check status with retries + backoff
       const check = setInterval(async () => {
         if (popup.closed) {
           clearInterval(check);
-          // Check connection status via connector service
+
           const def = definitions?.find((d) => d.id === connectingDefId);
           if (def) {
-            try {
-              const result = await checkConnection.mutateAsync({ type: def.type });
-              if (result.status === "connected") {
-                toast.success(`${def.name} connected successfully!`);
-              } else {
-                toast.info("Connection pending. It may take a moment to complete.");
+            // Retry status check with backoff: the connector service uses
+            // waitForConnection (up to 15s) so we give it multiple chances
+            let connected = false;
+            const maxAttempts = 3;
+            const delays = [1000, 3000, 5000]; // backoff: 1s, 3s, 5s
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+              try {
+                const result = await checkConnection.mutateAsync({ type: def.type });
+                if (result.status === "connected") {
+                  toast.success(`${def.name} connected successfully!`);
+                  connected = true;
+                  break;
+                }
+                if (result.status === "error") {
+                  toast.error(`Failed to connect ${def.name}. Please try again.`);
+                  break;
+                }
+              } catch {
+                // Network error — retry
               }
-            } catch {
-              // Ignore — just refresh
+              // Wait before next attempt (unless last attempt)
+              if (attempt < maxAttempts - 1) {
+                await new Promise((r) => setTimeout(r, delays[attempt]));
+              }
+            }
+
+            if (!connected) {
+              toast.info("Connection pending. Check Applications page for status.");
             }
           }
+
           setConnectingDefId(null);
           utils.connectors.list.invalidate();
           utils.connectors.listDefinitions.invalidate();
@@ -103,7 +125,14 @@ export function ApplicationsPageClient() {
   // Listen for postMessage from the OAuth callback popup
   useEffect(() => {
     const handler = (event: MessageEvent) => {
+      // Only accept messages from our own origin
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "composio-oauth-callback") {
+        // Composio sends status: "success" or "failed"
+        if (event.data.status === "failed") {
+          toast.error("OAuth authorization was denied or failed.");
+          setConnectingDefId(null);
+        }
         utils.connectors.list.invalidate();
         utils.connectors.listDefinitions.invalidate();
       }

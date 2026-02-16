@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { UIMessage } from "ai";
 import type { SourceUrlUIPart, SourceDocumentUIPart } from "@repo/ai/lib/types";
+import { cn } from "@repo/design-system/lib/utils";
+import { StarIcon } from "lucide-react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { MessageRenderer } from "./message-renderer";
 import { MessageActionsBar } from "./message-actions-bar";
@@ -32,12 +34,64 @@ function formatRelativeTime(date: Date | string): string {
   }).format(new Date(then));
 }
 
+// ============================================================================
+// Inline Rating Stars — per-message, no label text
+// ============================================================================
+
+function InlineRating({
+  rating,
+  onRate,
+}: {
+  rating?: number;
+  onRate: (rating: number) => void;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  return (
+    <div
+      className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity"
+      onMouseLeave={() => setHovered(null)}
+    >
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isFilled =
+          hovered !== null ? star <= hovered : rating !== undefined && star <= rating;
+
+        return (
+          <button
+            key={star}
+            type="button"
+            className="p-[2px] cursor-pointer select-none"
+            onMouseEnter={() => setHovered(star)}
+            onClick={() => onRate(star)}
+            aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+          >
+            <StarIcon
+              className={cn(
+                "size-3.5 transition-colors",
+                isFilled
+                  ? "text-yellow-500 fill-yellow-500"
+                  : "text-[var(--rubic-icon-disable)] fill-[var(--rubic-icon-disable)]"
+              )}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================================
+// ChatMessage
+// ============================================================================
+
 interface ChatMessageProps {
   message: UIMessage;
   isLastMessage: boolean;
   isStreaming: boolean;
+  rating?: number;
   onCopy: (text: string) => void;
   onRegenerate: () => void;
+  onRate?: (messageId: string, rating: number) => void;
   onViewSources?: (sources: (SourceUrlUIPart | SourceDocumentUIPart)[]) => void;
   onViewInCanvas?: (toolCallId: string) => void;
 }
@@ -47,8 +101,10 @@ export const ChatMessage = React.memo(
     message,
     isLastMessage,
     isStreaming,
+    rating,
     onCopy,
     onRegenerate,
+    onRate,
     onViewSources,
     onViewInCanvas,
   }: ChatMessageProps) {
@@ -92,6 +148,12 @@ export const ChatMessage = React.memo(
               onCopy={onCopy}
               onRegenerate={onRegenerate}
             />
+            {onRate && (
+              <InlineRating
+                rating={rating}
+                onRate={(r) => onRate(message.id, r)}
+              />
+            )}
             {createdAt && (
               <span className="text-xs text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity select-none">
                 {formatRelativeTime(createdAt)}
@@ -107,6 +169,7 @@ export const ChatMessage = React.memo(
     prev.message.parts === next.message.parts &&
     prev.isLastMessage === next.isLastMessage &&
     prev.isStreaming === next.isStreaming &&
+    prev.rating === next.rating &&
     prev.onViewSources === next.onViewSources &&
     prev.onViewInCanvas === next.onViewInCanvas
 );

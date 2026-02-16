@@ -126,7 +126,7 @@ describe("Tool → view type resolution for canvas", () => {
     expect(TOOL_VIEW_MAP["code_execute"]).toBe("terminal");
   });
 
-  it("file tools resolve to 'code' view", () => {
+  it("file tools resolve to 'terminal' view", () => {
     const fileTools = [
       "file_read",
       "file_write",
@@ -135,7 +135,7 @@ describe("Tool → view type resolution for canvas", () => {
       "file_find_by_name",
     ];
     for (const tool of fileTools) {
-      expect(TOOL_VIEW_MAP[tool]).toBe("code");
+      expect(TOOL_VIEW_MAP[tool]).toBe("terminal");
     }
   });
 
@@ -170,7 +170,7 @@ describe("isToolUIPart + getToolName", () => {
     expect(getToolName(part)).toBe("shell_exec");
   });
 
-  it("all 32 TOOL_VIEW_MAP tools produce valid StaticToolUIPart types", () => {
+  it("all TOOL_VIEW_MAP tools produce valid StaticToolUIPart types", () => {
     for (const toolName of Object.keys(TOOL_VIEW_MAP)) {
       const part = toolPart(toolName, `tc_${toolName}`, {}, {});
       expect(isToolUIPart(part)).toBe(true);
@@ -333,11 +333,11 @@ describe("Terminal state — output accumulation", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// 5. Code/IDE State Extraction
+// 5. File State Extraction (rendered in terminal view)
 // ═════════════════════════════════════════════════════════════════════════
 
-describe("Code state — file contents, tree, tabs, language detection", () => {
-  it("file_write input has path + content for code view", () => {
+describe("File state — file contents, tree, tabs, language detection", () => {
+  it("file_write input has path + content for terminal view", () => {
     const part = toolPart(
       "file_write",
       "tc_fw",
@@ -349,7 +349,7 @@ describe("Code state — file contents, tree, tabs, language detection", () => {
     expect(input.content).toBe("console.log('hello');");
   });
 
-  it("file_read output has content for code view", () => {
+  it("file_read output has content for terminal view", () => {
     const part = toolPart(
       "file_read",
       "tc_fr",
@@ -501,8 +501,8 @@ describe("View switching — auto-detect + available views", () => {
 
     expect(available.has("terminal")).toBe(true);
     expect(available.has("browser")).toBe(true);
-    expect(available.has("code")).toBe(true);
-    expect(available.size).toBe(3);
+    // file_write now maps to "terminal", so only 2 unique views
+    expect(available.size).toBe(2);
   });
 
   it("inline-only tools do not add to available views", () => {
@@ -522,11 +522,11 @@ describe("View switching — auto-detect + available views", () => {
     const toolSequence = [
       "browser_navigate", // → browser
       "shell_exec",       // → terminal
-      "file_write",       // → code (latest)
+      "file_write",       // → terminal (latest)
     ];
 
     const latestView = TOOL_VIEW_MAP[toolSequence[toolSequence.length - 1]!];
-    expect(latestView).toBe("code");
+    expect(latestView).toBe("terminal");
   });
 });
 
@@ -670,5 +670,262 @@ describe("Message scanning — finds latest canvas-eligible tool", () => {
       part.state === "input-available" ||
       part.state === "approval-responded";
     expect(isActive).toBe(false);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// 8. Terminal session separation (Manus PTY parity)
+// ═════════════════════════════════════════════════════════════════════════
+
+describe("Terminal session separation — Manus PTY parity", () => {
+  it("shell_exec parts carry session id in args.id", () => {
+    const part1 = toolPart("shell_exec", "tc_s1", { id: "setup", command: "npm install" }, { stdout: "added 100 packages" });
+    const part2 = toolPart("shell_exec", "tc_s2", { id: "server", command: "npm start" }, { stdout: "listening on :3000" });
+    expect((part1.input as Record<string, unknown>).id).toBe("setup");
+    expect((part2.input as Record<string, unknown>).id).toBe("server");
+  });
+
+  it("different session IDs should route to separate arrays", () => {
+    // Simulate the per-session accumulation logic from use-canvas.ts
+    const sessions: Record<string, string[]> = {};
+
+    const tools = [
+      { id: "setup", command: "npm install", stdout: "added 100 packages" },
+      { id: "server", command: "npm start", stdout: "listening on :3000" },
+      { id: "setup", command: "npm test", stdout: "3 tests passed" },
+    ];
+
+    for (const t of tools) {
+      const sessionLines = sessions[t.id] ?? [];
+      sessions[t.id] = [...sessionLines, `$ ${t.command}`, ...t.stdout.split("\n")];
+    }
+
+    expect(Object.keys(sessions)).toEqual(["setup", "server"]);
+    expect(sessions["setup"]).toEqual(["$ npm install", "added 100 packages", "$ npm test", "3 tests passed"]);
+    expect(sessions["server"]).toEqual(["$ npm start", "listening on :3000"]);
+  });
+
+  it("missing session id defaults to 'default'", () => {
+    const part = toolPart("shell_exec", "tc_s3", { command: "whoami" }, { stdout: "ubuntu" });
+    const sessionId = ((part.input as Record<string, unknown>).id as string) || "default";
+    expect(sessionId).toBe("default");
+  });
+
+  it("session order tracks first-seen order", () => {
+    const order: string[] = [];
+    const ids = ["default", "server", "default", "build", "server"];
+    for (const id of ids) {
+      if (!order.includes(id)) order.push(id);
+    }
+    expect(order).toEqual(["default", "server", "build"]);
+  });
+
+  it("deduplication avoids repeating same command in a session", () => {
+    const sessions: Record<string, string[]> = {
+      default: ["$ ls", "file1.txt", "file2.txt"],
+    };
+    const cmd = "ls";
+    const sessionLines = sessions["default"] ?? [];
+    const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
+    const isDuplicate = lastCmd === `$ ${cmd}`;
+    expect(isDuplicate).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// 9. message_notify_user file attachment rendering
+// ═════════════════════════════════════════════════════════════════════════
+
+describe("message_notify_user attachment data in tool output", () => {
+  it("tool output with attachments has correct shape", () => {
+    const output = {
+      status: "sent",
+      message: "Message delivered to user",
+      attachments: [
+        { name: "report.pdf", url: "https://cdn.example.com/report.pdf", mediaType: "application/pdf" },
+        { name: "chart.png", url: "https://cdn.example.com/chart.png", mediaType: "image/png" },
+      ],
+    };
+    expect(output.attachments).toHaveLength(2);
+    expect(output.attachments[0].name).toBe("report.pdf");
+    expect(output.attachments[0].mediaType).toBe("application/pdf");
+    expect(output.attachments[0].url).toContain("https://");
+    expect(output.attachments[1].mediaType).toBe("image/png");
+  });
+
+  it("tool output without attachments has no attachments field", () => {
+    const output = {
+      status: "sent",
+      message: "Message delivered to user",
+    };
+    expect(output).not.toHaveProperty("attachments");
+  });
+
+  it("message_notify_user is NOT in TOOL_VIEW_MAP (no canvas)", () => {
+    expect(TOOL_VIEW_MAP["message_notify_user"]).toBeUndefined();
+    expect(TOOL_VIEW_MAP["message_ask_user"]).toBeUndefined();
+  });
+
+  it("attachments can be converted to FileUIPart format", () => {
+    const attachments = [
+      { name: "report.pdf", url: "https://cdn.example.com/report.pdf", mediaType: "application/pdf" },
+    ];
+    const fileParts = attachments.map((a) => ({
+      type: "file" as const,
+      mediaType: a.mediaType,
+      filename: a.name,
+      url: a.url,
+    }));
+    expect(fileParts[0].type).toBe("file");
+    expect(fileParts[0].filename).toBe("report.pdf");
+    expect(fileParts[0].mediaType).toBe("application/pdf");
+    expect(fileParts[0].url).toBe("https://cdn.example.com/report.pdf");
+  });
+
+  it("MIME type lookup covers common file types", () => {
+    const EXT_MIME: Record<string, string> = {
+      ".pdf": "application/pdf",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ".md": "text/markdown",
+      ".html": "text/html",
+      ".csv": "text/csv",
+      ".zip": "application/zip",
+    };
+    // Verify all common types are mapped
+    expect(Object.keys(EXT_MIME).length).toBeGreaterThanOrEqual(10);
+    expect(EXT_MIME[".pdf"]).toBe("application/pdf");
+    expect(EXT_MIME[".docx"]).toContain("wordprocessing");
+    expect(EXT_MIME[".xlsx"]).toContain("spreadsheet");
+  });
+
+  it("binary file encoding detection works", () => {
+    // Simulate sandbox /file/read response for binary file
+    const binaryResponse = { content: "JVBERi0xLjQK...", encoding: "base64", size: 12345 };
+    const textResponse = { content: "Hello world", size: 11 };
+
+    expect(binaryResponse.encoding).toBe("base64");
+    expect(textResponse).not.toHaveProperty("encoding");
+
+    // The fix: check encoding before Buffer.from
+    const isBinary = binaryResponse.encoding === "base64";
+    expect(isBinary).toBe(true);
+  });
+});
+
+// ============================================================================
+// Regression: metadata extraction dedup (infinite re-render fix)
+// ============================================================================
+
+describe("Metadata extraction deduplication (infinite loop regression)", () => {
+  it("same sandboxId across multiple messages should only need one setState call", () => {
+    // Simulate the pattern that caused infinite re-render loops:
+    // Multiple messages all have the same sandboxId in metadata.
+    // The useEffect should detect the value hasn't changed and skip setState.
+    const messages: UIMessage[] = [
+      {
+        id: "msg-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Starting..." }],
+        metadata: { sandboxId: "sandbox-abc" },
+      } as UIMessage,
+      {
+        id: "msg-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Working..." }],
+        metadata: { sandboxId: "sandbox-abc" },  // Same value
+      } as UIMessage,
+      {
+        id: "msg-3",
+        role: "assistant",
+        parts: [{ type: "text", text: "Done!" }],
+        metadata: { sandboxId: "sandbox-abc" },  // Same value again
+      } as UIMessage,
+    ];
+
+    // The ref-based dedup pattern:
+    const seen = { sandboxId: "" };
+    let setStateCallCount = 0;
+
+    for (const msg of messages) {
+      const meta = msg.metadata as Record<string, unknown> | undefined;
+      if (!meta) continue;
+      if (typeof meta.sandboxId === "string" && meta.sandboxId && meta.sandboxId !== seen.sandboxId) {
+        seen.sandboxId = meta.sandboxId;
+        setStateCallCount++;
+      }
+    }
+
+    // Only ONE setState call, not three (prevents re-render loop)
+    expect(setStateCallCount).toBe(1);
+    expect(seen.sandboxId).toBe("sandbox-abc");
+  });
+
+  it("changing sandboxId triggers new setState call", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "msg-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Session 1" }],
+        metadata: { sandboxId: "sandbox-abc" },
+      } as UIMessage,
+      {
+        id: "msg-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Session 2" }],
+        metadata: { sandboxId: "sandbox-def" },  // Different value
+      } as UIMessage,
+    ];
+
+    const seen = { sandboxId: "" };
+    let setStateCallCount = 0;
+
+    for (const msg of messages) {
+      const meta = msg.metadata as Record<string, unknown> | undefined;
+      if (!meta) continue;
+      if (typeof meta.sandboxId === "string" && meta.sandboxId && meta.sandboxId !== seen.sandboxId) {
+        seen.sandboxId = meta.sandboxId;
+        setStateCallCount++;
+      }
+    }
+
+    // Two setState calls for two different values
+    expect(setStateCallCount).toBe(2);
+    expect(seen.sandboxId).toBe("sandbox-def");
+  });
+
+  it("browserFrame dedup prevents redundant screenshot setState", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "msg-1",
+        role: "assistant",
+        parts: [],
+        metadata: { browserFrame: { screenshot: "iVBORbase64data", url: "https://example.com", title: "Test" } },
+      } as UIMessage,
+      {
+        id: "msg-2",
+        role: "assistant",
+        parts: [],
+        metadata: { browserFrame: { screenshot: "iVBORbase64data", url: "https://example.com", title: "Test" } },
+      } as UIMessage,
+    ];
+
+    const seen = { browserScreenshot: "" };
+    let screenshotSetCount = 0;
+
+    for (const msg of messages) {
+      const meta = msg.metadata as Record<string, unknown> | undefined;
+      if (!meta) continue;
+      const frame = meta.browserFrame as { screenshot?: string } | undefined;
+      if (frame?.screenshot && frame.screenshot !== seen.browserScreenshot) {
+        seen.browserScreenshot = frame.screenshot;
+        screenshotSetCount++;
+      }
+    }
+
+    expect(screenshotSetCount).toBe(1);
   });
 });

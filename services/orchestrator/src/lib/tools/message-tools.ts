@@ -43,9 +43,19 @@ export function createMessageNotifyUserTool(ctx: ToolContext) {
         timestamp: Date.now(),
       });
 
+      // Include attachment data in tool output so it flows to the frontend
+      // via the SSE stream (tool-output-available event).
+      // Manus delivers files via WebSocket; we deliver via tool output.
       return {
         status: 'sent',
         message: 'Message delivered to user',
+        ...(uploadedAttachments.length > 0 && {
+          attachments: uploadedAttachments.map((a) => ({
+            name: a.name,
+            url: a.url,
+            mediaType: a.mediaType,
+          })),
+        }),
       };
     },
   });
@@ -98,6 +108,13 @@ export function createMessageAskUserTool(ctx: ToolContext) {
       return {
         status: 'waiting_for_user',
         message: 'Question sent. Awaiting user response.',
+        ...(uploadedAttachments.length > 0 && {
+          attachments: uploadedAttachments.map((a) => ({
+            name: a.name,
+            url: a.url,
+            mediaType: a.mediaType,
+          })),
+        }),
       };
     },
   });

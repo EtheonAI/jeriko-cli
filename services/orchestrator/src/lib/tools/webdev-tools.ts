@@ -1,5 +1,5 @@
 /**
- * WebDev agent tools — 8 tools for web application development.
+ * WebDev agent tools — 9 tools for web application development.
  *
  * Each tool calls the orchestrator's own /api/webdev/* routes via localhost HTTP.
  * This is the same pattern test-ide uses (proven to work).
@@ -7,7 +7,7 @@
  * Manus equivalent tools:
  *   webdev_init_project, webdev_save_checkpoint, webdev_check_status,
  *   webdev_restart_server, webdev_rollback_checkpoint, webdev_execute_sql,
- *   webdev_push_schema, webdev_list_versions
+ *   webdev_push_schema, webdev_list_versions, webdev_add_feature
  */
 
 import { tool } from "ai";
@@ -60,7 +60,10 @@ function createWebdevInitProjectTool(ctx: ToolContext) {
         app_name: params.app_name,
         directory: `/home/ubuntu/${params.app_name}`,
       });
-      const previewUrl = `https://3000-${ctx.e2bSandboxId}.${process.env.SANDBOX_DOMAIN || "e2b.dev"}`;
+      // Use devServerPort from init response (set in vite.config.ts), fallback to 3000
+      const port = (result.devServerPort as number) || 3000;
+      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
+      const previewUrl = `https://${port}-${ctx.e2bSandboxId}.${domain}`;
       return { ...result, previewUrl };
     },
   });
@@ -228,6 +231,33 @@ function createWebdevListVersionsTool(ctx: ToolContext) {
   });
 }
 
+function createWebdevAddFeatureTool(ctx: ToolContext) {
+  return tool({
+    description:
+      "Add a feature to an existing web project. " +
+      "Supported features: 'web-db-user' (upgrade to full-stack with Express + Drizzle + TiDB) " +
+      "and 'stripe' (add Stripe payment SDK, webhook endpoint, and client helpers). " +
+      "Installs deps, writes boilerplate files, and restarts dev server.",
+    inputSchema: z.object({
+      feature: z
+        .enum(["web-db-user", "stripe"])
+        .describe("Feature to add: 'web-db-user' for database/backend, 'stripe' for payments."),
+      project_path: z
+        .string()
+        .optional()
+        .describe("Absolute path to the project directory. Defaults to /home/ubuntu/my-app."),
+    }),
+    execute: async (params) => {
+      return callWebdevRoute("/api/webdev/add-feature", {
+        sandboxId: ctx.sandboxId,
+        userId: ctx.userId,
+        feature: params.feature,
+        projectPath: params.project_path,
+      });
+    },
+  });
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function createWebdevTools(ctx: ToolContext) {
@@ -240,5 +270,6 @@ export function createWebdevTools(ctx: ToolContext) {
     webdev_execute_sql: createWebdevExecuteSqlTool(ctx),
     webdev_push_schema: createWebdevPushSchemaTool(ctx),
     webdev_list_versions: createWebdevListVersionsTool(ctx),
+    webdev_add_feature: createWebdevAddFeatureTool(ctx),
   } as const;
 }

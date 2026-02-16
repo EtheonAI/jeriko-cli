@@ -11,6 +11,7 @@ import {
   LoaderIcon,
   MousePointerIcon,
   MonitorIcon,
+  SearchIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 
@@ -78,9 +79,10 @@ function BrowserUrlBar({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync input when url prop changes (from agent navigation)
+  // Display search queries nicely (search://query → "Searching: query")
   React.useEffect(() => {
     if (url && document.activeElement !== inputRef.current) {
-      setInputValue(url);
+      setInputValue(url.startsWith("search://") ? `Searching: ${url.slice(9)}` : url);
     }
   }, [url]);
 
@@ -146,7 +148,11 @@ function BrowserUrlBar({
       <form onSubmit={handleSubmit} className="flex flex-1">
         <div className="flex flex-1 items-center gap-2 truncate rounded-md bg-canvas-deep px-3 py-1 font-mono text-xs text-muted-foreground">
           {loading && !isLiveStream && (
-            <LoaderIcon className="size-3 flex-shrink-0 animate-spin text-blue-400" />
+            url?.startsWith("search://") ? (
+              <SearchIcon className="size-3 flex-shrink-0 animate-pulse text-blue-400" />
+            ) : (
+              <LoaderIcon className="size-3 flex-shrink-0 animate-spin text-blue-400" />
+            )
           )}
           {isLiveStream ? (
             <span className="flex-1 truncate text-muted-foreground/50">
@@ -239,7 +245,8 @@ export function BrowserView({
   const toggleUserControl = useCallback(() => {
     setUserControlActive((prev) => {
       const next = !prev;
-      onUserControlChange?.(next);
+      // Defer parent callback to avoid setState-during-render error
+      queueMicrotask(() => onUserControlChange?.(next));
       return next;
     });
   }, [onUserControlChange]);
@@ -388,8 +395,55 @@ export function BrowserView({
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
             referrerPolicy="no-referrer"
           />
+        ) : searchResults ? (
+          /* Priority 2: Search results — always shown above screenshot so E2B polling
+             doesn't hide search results with stale screenshots */
+          <div className="h-full overflow-y-auto p-4">
+            {searchResults.length > 0 ? (
+              <>
+                {title && (
+                  <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
+                )}
+                <div className="space-y-3">
+                  {searchResults.map((result, i) => (
+                    <div
+                      key={`${result.url}-${i}`}
+                      className="rounded-lg border border-border/20 bg-background/50 p-3 transition-colors hover:bg-background/80"
+                    >
+                      <a
+                        href={result.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-blue-400 hover:underline"
+                      >
+                        {result.title}
+                      </a>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground/50">
+                        {result.url}
+                      </p>
+                      {result.snippet && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
+                          {result.snippet}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center text-muted-foreground/50">
+                <SearchIcon className="mb-3 size-10 opacity-40" />
+                <p className="text-sm">No results found</p>
+                {url?.startsWith("search://") && (
+                  <p className="mt-1 text-xs text-muted-foreground/30">
+                    &ldquo;{url.slice(9)}&rdquo;
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         ) : screenshot ? (
-          /* Priority 2: Screenshot (from agent tool results or polling) */
+          /* Priority 3: Screenshot (from agent tool results or polling) */
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={screenshot}
@@ -401,38 +455,6 @@ export function BrowserView({
             onClick={userControlActive ? handleScreenshotClick : undefined}
             draggable={false}
           />
-        ) : searchResults && searchResults.length > 0 ? (
-          /* Priority 3: Search results */
-          <div className="h-full overflow-y-auto p-4">
-            {title && (
-              <h3 className="mb-3 text-sm font-medium text-foreground/80">{title}</h3>
-            )}
-            <div className="space-y-3">
-              {searchResults.map((result, i) => (
-                <div
-                  key={`${result.url}-${i}`}
-                  className="rounded-lg border border-border/20 bg-background/50 p-3 transition-colors hover:bg-background/80"
-                >
-                  <a
-                    href={result.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-blue-400 hover:underline"
-                  >
-                    {result.title}
-                  </a>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground/50">
-                    {result.url}
-                  </p>
-                  {result.snippet && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground/70">
-                      {result.snippet}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
         ) : content ? (
           /* Priority 4: Page content text */
           <div className="h-full overflow-y-auto p-4">
@@ -447,7 +469,15 @@ export function BrowserView({
           /* Priority 5: Placeholder */
           <div className="flex h-full items-center justify-center text-muted-foreground/40">
             <div className="text-center">
-              {loading ? (
+              {loading && url?.startsWith("search://") ? (
+                <>
+                  <SearchIcon className="mx-auto mb-3 size-12 animate-pulse opacity-50" />
+                  <p className="text-sm">Searching the web...</p>
+                  <p className="mt-1 text-xs text-muted-foreground/30">
+                    {url.slice("search://".length)}
+                  </p>
+                </>
+              ) : loading ? (
                 <>
                   <GlobeIcon className="mx-auto mb-3 size-12 animate-pulse opacity-50" />
                   <p className="text-sm">Navigating...</p>

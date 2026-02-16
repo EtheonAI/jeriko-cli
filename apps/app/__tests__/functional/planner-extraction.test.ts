@@ -17,6 +17,7 @@ type PlanStepStatus = "pending" | "in_progress" | "completed" | "error";
 interface PlanStep {
   id: string;
   title: string;
+  description?: string;
   status: PlanStepStatus;
 }
 
@@ -35,11 +36,13 @@ interface RawPlanTodo {
   id?: string;
   label?: string;
   title?: string;
+  description?: string;
   status?: string;
 }
 
 interface RawPlanData {
   title?: string;
+  plan?: RawPlanTodo[];
   todos?: RawPlanTodo[];
   steps?: RawPlanTodo[];
   goal?: string;
@@ -148,15 +151,16 @@ function extractPlannerState(
   // No plan tool was called
   if (!latestPlan) return EMPTY_STATE;
 
-  // Extract todos from various possible field names
+  // Extract todos from various possible field names (plan first — matches orchestrator output)
   const rawTodos =
-    latestPlan.todos ?? latestPlan.steps ?? latestPlan.phases ?? [];
+    latestPlan.plan ?? latestPlan.todos ?? latestPlan.steps ?? latestPlan.phases ?? [];
   if (rawTodos.length === 0) return EMPTY_STATE;
 
   // Build steps
   const steps: PlanStep[] = rawTodos.map((todo, i) => ({
     id: todo.id || `step-${i + 1}`,
     title: todo.label || todo.title || `Step ${i + 1}`,
+    description: todo.description,
     status: mapStatus(todo.status),
   }));
 
@@ -593,5 +597,141 @@ describe("Planner State Extraction", () => {
 
     const state = extractPlannerState(messages);
     expect(state).toEqual(EMPTY_STATE);
+  });
+
+  // -----------------------------------------------------------------------
+  // 13. REAL ORCHESTRATOR FORMAT — input uses "steps", output uses "plan"
+  // -----------------------------------------------------------------------
+  // The orchestrator's plan-tools.ts defines:
+  //   inputSchema: z.object({ steps: z.array(stepSchema) })
+  //   execute returns: { status: 'success', plan: params.steps }
+  // This is different from the legacy "todos" format.
+  // -----------------------------------------------------------------------
+
+  it("extracts plan from real orchestrator INPUT format (steps field, title not label)", () => {
+    // This is what the LLM generates as tool input
+    const part: ToolPart = {
+      type: "tool-show_plan",
+      toolCallId: "tc_real_1",
+      state: "input-available",
+      input: {
+        steps: [
+          { id: "step-1", title: "Research the topic", description: "Search the web for information", status: "in_progress" },
+          { id: "step-2", title: "Write the code", status: "pending" },
+          { id: "step-3", title: "Test and deploy", status: "pending" },
+        ],
+      },
+    };
+
+    const messages: TestMessage[] = [
+      makeAssistantMessage([part as unknown as { type: string } & Record<string, unknown>]),
+    ];
+
+    const state = extractPlannerState(messages, true);
+
+    expect(state.hasSteps).toBe(true);
+    expect(state.totalSteps).toBe(3);
+    // "title" field should be used (not "label" which doesn't exist here)
+    expect(state.steps[0]!.title).toBe("Research the topic");
+    expect(state.steps[0]!.description).toBe("Search the web for information");
+    expect(state.steps[0]!.status).toBe("in_progress");
+    expect(state.steps[1]!.title).toBe("Write the code");
+    expect(state.steps[2]!.title).toBe("Test and deploy");
+    expect(state.currentStepIndex).toBe(0); // in_progress step
+  });
+
+  it("extracts plan from real orchestrator OUTPUT format (plan field, not todos)", () => {
+    // This is what the orchestrator returns after tool execution
+    const part: ToolPart = {
+      type: "tool-show_plan",
+      toolCallId: "tc_real_2",
+      state: "output-available",
+      input: {
+        steps: [
+          { id: "step-1", title: "Research", status: "in_progress" },
+          { id: "step-2", title: "Code", status: "pending" },
+        ],
+      },
+      output: {
+        status: "success",
+        plan: [
+          { id: "step-1", title: "Research", description: "Web search + browse", status: "in_progress" },
+          { id: "step-2", title: "Code", status: "pending" },
+        ],
+      },
+    };
+
+    const messages: TestMessage[] = [
+      makeAssistantMessage([part as unknown as { type: string } & Record<string, unknown>]),
+    ];
+
+    const state = extractPlannerState(messages, true);
+
+    expect(state.hasSteps).toBe(true);
+    expect(state.totalSteps).toBe(2);
+    // Output should be preferred over input
+    expect(state.steps[0]!.title).toBe("Research");
+    expect(state.steps[0]!.description).toBe("Web search + browse");
+    expect(state.steps[0]!.status).toBe("in_progress");
+    expect(state.isActive).toBe(true);
+  });
+
+  it("handles updated plan output with completed steps", () => {
+    // First plan: step 1 in progress
+    const plan1: ToolPart = {
+      type: "tool-show_plan",
+      toolCallId: "tc_upd_1",
+      state: "output-available",
+      input: {
+        steps: [
+          { id: "s1", title: "Research", status: "in_progress" },
+          { id: "s2", title: "Build", status: "pending" },
+        ],
+      },
+      output: {
+        status: "success",
+        plan: [
+          { id: "s1", title: "Research", status: "in_progress" },
+          { id: "s2", title: "Build", status: "pending" },
+        ],
+      },
+    };
+
+    // Updated plan: step 1 completed, step 2 in progress
+    const plan2: ToolPart = {
+      type: "tool-show_plan",
+      toolCallId: "tc_upd_2",
+      state: "output-available",
+      input: {
+        steps: [
+          { id: "s1", title: "Research", status: "completed" },
+          { id: "s2", title: "Build", status: "in_progress" },
+        ],
+      },
+      output: {
+        status: "success",
+        plan: [
+          { id: "s1", title: "Research", status: "completed" },
+          { id: "s2", title: "Build", status: "in_progress" },
+        ],
+      },
+    };
+
+    const messages: TestMessage[] = [
+      makeAssistantMessage([
+        plan1 as unknown as { type: string } & Record<string, unknown>,
+        { type: "tool-web_search", toolCallId: "ws1", state: "output-available", input: {}, output: {} },
+        plan2 as unknown as { type: string } & Record<string, unknown>,
+      ]),
+    ];
+
+    const state = extractPlannerState(messages, true);
+
+    // Should use the LATEST plan (plan2)
+    expect(state.steps[0]!.status).toBe("completed");
+    expect(state.steps[1]!.status).toBe("in_progress");
+    expect(state.completedSteps).toBe(1);
+    expect(state.currentStepIndex).toBe(1); // step 2 is in_progress
+    expect(state.progress).toBe(50);
   });
 });

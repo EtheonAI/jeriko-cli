@@ -218,6 +218,10 @@ export function ChatClient({
               liveTerminalOutput={e2bTerminal.output}
               liveTerminalConnected={e2bTerminal.isConnected}
               onTerminalSendInput={e2bTerminal.sendInput}
+              terminalSessions={canvasState.terminalSessions}
+              activeTerminalSession={canvasState.activeTerminalSession}
+              terminalSessionIds={canvasState.terminalSessionIds}
+              onSelectTerminalSession={canvasState.onSelectTerminalSession}
               nekoUrl={canvasState.nekoUrl}
               streamUrl={canvasState.streamUrl}
               onUserControlChange={setUserControlActive}

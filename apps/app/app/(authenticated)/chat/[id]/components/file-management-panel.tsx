@@ -83,11 +83,15 @@ export function FileManagementPanel({
             });
           }
         }
-        // Check tool results for file outputs
-        if (part.type === "tool-invocation" && "toolInvocation" in part) {
-          const invocation = part.toolInvocation as { result?: { files?: Array<{ name: string; url: string; mimeType?: string; size?: number }> } };
-          if (invocation.result?.files) {
-            for (const file of invocation.result.files) {
+        // Check tool results for file outputs (handles both normalized and AI SDK formats)
+        const p = part as unknown as Record<string, unknown>;
+        const isToolPart = (typeof p.type === "string" && p.type.startsWith("tool-")) || p.type === "dynamic-tool";
+        if (isToolPart) {
+          // Normalized format: output at top level; AI SDK format: nested in toolInvocation
+          const inv = (p.toolInvocation ?? p) as Record<string, unknown>;
+          const result = (inv.result ?? p.output) as { files?: Array<{ name: string; url: string; mimeType?: string; size?: number }> } | undefined;
+          if (result?.files) {
+            for (const file of result.files) {
               const id = file.url ?? file.name;
               if (!seen.has(id)) {
                 seen.add(id);

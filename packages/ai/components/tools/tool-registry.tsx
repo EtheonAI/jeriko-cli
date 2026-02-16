@@ -16,6 +16,7 @@ import { TerminalOutputEnhanced } from "./renderers/terminal-output-enhanced";
 import { BrowserViewerEnhanced } from "./renderers/browser-viewer-enhanced";
 import { ShowPlanRenderer } from "./renderers/show-plan";
 import { DeviceCommandRenderer } from "./renderers/device-command";
+import { MessageNotifyRenderer } from "./renderers/message-notify-renderer";
 
 export interface ToolRendererProps<TInput = unknown, TOutput = unknown> {
   toolName: string;
@@ -92,9 +93,9 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   // Planning
   show_plan: ShowPlanRenderer as ToolRenderer,
 
-  // Communication
-  message_notify_user: ProgressTool as ToolRenderer,
-  message_ask_user: ProgressTool as ToolRenderer,
+  // Communication — Manus-style: shows text + file cards for attachments
+  message_notify_user: MessageNotifyRenderer as ToolRenderer,
+  message_ask_user: MessageNotifyRenderer as ToolRenderer,
 
   // Scheduling & Analytics
   schedule_task: ProgressTool as ToolRenderer,
@@ -140,6 +141,7 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   webdev_execute_sql: ProgressTool as ToolRenderer,
   webdev_push_schema: ProgressTool as ToolRenderer,
   webdev_list_versions: ProgressTool as ToolRenderer,
+  webdev_add_feature: ProgressTool as ToolRenderer,
 
   // Fallback for any unknown tool
   "*": GenericTool,

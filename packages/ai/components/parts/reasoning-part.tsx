@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { ChevronDownIcon, BrainIcon, LoaderIcon } from "lucide-react";
+import { ChevronUpIcon, BrainIcon } from "lucide-react";
 import type { ReasoningUIPart } from "../../lib/types/ui-message";
 
 export interface ReasoningPartProps {
@@ -12,6 +12,11 @@ export interface ReasoningPartProps {
   defaultOpen?: boolean;
 }
 
+/**
+ * ReasoningPart — Manus-style collapsible pill.
+ * Renders as an inline pill badge "Thinking..." or "Thought process (N words)"
+ * with a chevron to expand/collapse the reasoning content.
+ */
 export function ReasoningPart({
   part,
   className,
@@ -41,90 +46,60 @@ export function ReasoningPart({
   }, [isStreaming, isOpen, part.text]);
 
   const wordCount = part.text.split(/\s+/).filter(Boolean).length;
-  const seconds = Math.max(1, Math.round(wordCount / 4));
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border border-border/40",
-        isStreaming && "border-violet-500/20 bg-violet-500/[0.02]",
-        !isStreaming && "bg-muted/10",
-        className
-      )}
-    >
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
+    <div className={cn("flex flex-col gap-1", className)}>
+      {/* Pill trigger — same rounded pill style as tool labels */}
+      <div
         className={cn(
-          "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
-          "hover:bg-muted/30"
+          "rounded-[15px] inline-flex px-2.5 py-[3px]",
+          "border border-[var(--rubic-border-light)] bg-[var(--rubic-fill-gray)]",
+          "flex-col items-start gap-0 w-max max-w-full",
+          isStreaming && "border-blue-500/20 bg-blue-500/[0.03]"
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-1 text-[14px] text-[var(--rubic-text-secondary)] cursor-pointer select-none"
+        >
+          <BrainIcon className={cn("size-[18px] flex-shrink-0", isStreaming && "text-blue-400")} />
+          <span>
+            {isStreaming
+              ? "Thinking..."
+              : `Thought process${wordCount > 0 ? ` (${wordCount})` : ""}`}
+          </span>
+          <ChevronUpIcon
+            className={cn(
+              "size-4 transition-transform duration-300",
+              !isOpen && "rotate-180"
+            )}
+          />
+        </button>
+      </div>
+
+      {/* Expanded content — shows below the pill */}
+      <div
+        className={cn(
+          "transition-[max-height,opacity] duration-150 ease-in-out overflow-hidden",
+          isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <div
+          ref={contentRef}
           className={cn(
-            "flex size-6 items-center justify-center rounded-lg",
-            isStreaming
-              ? "bg-violet-500/15"
-              : "bg-muted/60"
+            "pl-3 border-l-2 border-[var(--rubic-border-light)] ml-3",
+            isStreaming && "max-h-60 overflow-y-auto"
           )}
         >
-          {isStreaming ? (
-            <LoaderIcon className="size-3.5 animate-spin text-violet-500" />
-          ) : (
-            <BrainIcon className="size-3.5 text-violet-500/70" />
-          )}
-        </div>
-
-        <span className="flex-1 text-sm font-medium text-foreground/80">
-          {isStreaming ? "Thinking..." : "Thought process"}
-        </span>
-
-        {!isStreaming && (
-          <span className="text-xs text-muted-foreground/60">
-            {seconds}s
-          </span>
-        )}
-
-        <ChevronDownIcon
-          className={cn(
-            "size-4 text-muted-foreground/50 transition-transform duration-200",
-            isOpen && "rotate-180"
-          )}
-        />
-      </button>
-
-      {/* Content */}
-      <div
-        className={cn(
-          "grid transition-all duration-300 ease-in-out",
-          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-        )}
-      >
-        <div className="overflow-hidden">
-          <div
-            ref={contentRef}
-            className={cn(
-              "border-t border-border/30 px-3 py-3",
-              isStreaming && "max-h-60 overflow-y-auto"
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--rubic-text-secondary)]">
+            {part.text}
+            {isStreaming && (
+              <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse rounded-full bg-blue-400/60 align-text-bottom" />
             )}
-          >
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground/80">
-              {part.text}
-              {isStreaming && (
-                <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse rounded-full bg-violet-400/60 align-text-bottom" />
-              )}
-            </p>
-          </div>
+          </p>
         </div>
       </div>
-
-      {/* Streaming progress bar */}
-      {isStreaming && (
-        <div className="h-[1px] w-full overflow-hidden bg-violet-500/10">
-          <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-violet-500/30 to-transparent" />
-        </div>
-      )}
     </div>
   );
 }

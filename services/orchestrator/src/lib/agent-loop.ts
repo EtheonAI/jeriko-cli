@@ -16,6 +16,7 @@ import {
 } from "./tools/index.js";
 import { buildManusSystemPrompt, type SystemPromptContext } from "./system-prompt.js";
 import { getOrCreateSandbox } from "./e2b-manager.js";
+import { getRsaHeaders } from "./rsa-auth.js";
 
 export interface AgentLoopInput {
   sessionId: string;
@@ -25,6 +26,9 @@ export interface AgentLoopInput {
   maxSteps?: number;
   skills?: string[];
   connections?: { id: string; type?: string; name?: string }[];
+  fileContext?: { name: string; type: string; url?: string }[];
+  /** Session metadata from DB — used for sandbox recovery (contains sandboxId from previous runs) */
+  sessionMeta?: Record<string, unknown>;
   abortSignal?: AbortSignal;
 }
 
@@ -71,6 +75,8 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     maxSteps = 25,
     skills,
     connections,
+    fileContext: inputFileContext,
+    sessionMeta,
     abortSignal,
   } = input;
 
@@ -81,11 +87,13 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
 
   // Create sandbox (lazy — won't block if sandbox service is down)
+  // Passes sessionMeta so e2b-manager can try to resume an existing sandbox
+  // from DB-stored sandboxId (Manus: hibernate/wake pattern).
   let sandboxId: string | null = null;
   let e2bSandboxId: string | null = null;
   let nekoUrl: string | null = null;
   try {
-    const sandbox = await getOrCreateSandbox(sessionId, userId);
+    const sandbox = await getOrCreateSandbox(sessionId, userId, sessionMeta);
     sandboxId = sandbox.sandboxId;
     e2bSandboxId = sandbox.e2bSandboxId;
     nekoUrl = sandbox.nekoUrl;
@@ -119,6 +127,47 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     imageProvider: createDefaultImageProvider(),
   };
 
+  // ── Download uploaded files to sandbox ~/upload/ ───────────────────────
+  // If the user attached files and a sandbox is available, download them
+  // so the agent can read them with file_read.
+  const filesToDownload = inputFileContext?.filter((f) => f.url) ?? [];
+  if (filesToDownload.length > 0 && terminalServerUrl && terminalServerUrl !== "no-sandbox") {
+    await Promise.allSettled(
+      filesToDownload.map(async (f) => {
+        const safeName = (f.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+        try {
+          await fetch(`${terminalServerUrl}/shell/exec`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              command: `mkdir -p ~/upload && curl -sL -o ~/upload/${safeName} "${f.url}"`,
+              timeout: 30,
+            }),
+            signal: AbortSignal.timeout(35_000),
+          });
+        } catch {
+          // Non-critical — agent can still access files via URL
+        }
+      })
+    );
+  }
+
+  // ── Auto-sync skills to sandbox ──────────────────────────────────────
+  // If skills are active and sandbox is available, sync skill files
+  // so the agent can read skill definitions from ~/skills/.
+  if (skills && skills.length > 0 && terminalServerUrl && terminalServerUrl !== "no-sandbox") {
+    try {
+      await fetch(`${terminalServerUrl}/skills/sync-skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skill_ids: skills, user_id: userId, session_id: sessionId }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      // Non-critical — built-in skill definitions still injected via system prompt
+    }
+  }
+
   // ── Dynamic Composio tools ──────────────────────────────────────────────
   // Fetch user's connected Composio tools from connector service.
   // Runs in parallel with sandbox creation — gracefully returns [] if unavailable.
@@ -139,7 +188,62 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // Group tool names by app for system prompt injection
   const composioToolsByApp = composioSpecs.length > 0 ? groupToolsByApp(composioSpecs) : undefined;
 
+  // ── Manus-parity: Inject MCP config into sandbox ──────────────────────
+  // Write builtin_tools.json + set ENABLED_MCP_SERVERS so rubic-mcp-cli
+  // and sandbox code can discover and use connected tools.
+  if (composioSpecs.length > 0 && terminalServerUrl && terminalServerUrl !== "no-sandbox") {
+    const enabledApps = [...new Set(composioSpecs.map((s) => s.appName.toLowerCase()))];
+    const builtinTools = {
+      generated_at: new Date().toISOString(),
+      tool_names: composioSpecs.map((s) => (s.name || "").toLowerCase()),
+      servers: Object.entries(composioToolsByApp ?? {}).map(([app, _toolNames]) => ({
+        name: app,
+        description: `${app.charAt(0).toUpperCase() + app.slice(1)} tools.`,
+        tools: composioSpecs
+          .filter((s) => s.appName.toLowerCase() === app)
+          .map((s) => ({
+            name: (s.name || "").toLowerCase(),
+            description: s.description || "",
+            parameters: s.parameters || {},
+          })),
+      })),
+    };
+
+    // Fire-and-forget: write builtin_tools.json + set env vars in sandbox
+    // Both calls need RSA signing for the rubic-desktop sandbox runtime.
+    const fileBody = JSON.stringify({
+      path: "/tmp/rubic-mcp/builtin_tools.json",
+      content: JSON.stringify(builtinTools, null, 2),
+    });
+    const envBody = JSON.stringify({
+      enabledBuiltInMCP: enabledApps,
+    });
+
+    Promise.allSettled([
+      // Write builtin_tools.json via /file/write endpoint (Manus pattern)
+      fetch(`${terminalServerUrl}/file/write`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getRsaHeaders(fileBody) },
+        body: fileBody,
+        signal: AbortSignal.timeout(12_000),
+      }),
+      // Set ENABLED_MCP_SERVERS env var (Manus pattern)
+      fetch(`${terminalServerUrl}/config/set-env`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getRsaHeaders(envBody) },
+        body: envBody,
+        signal: AbortSignal.timeout(10_000),
+      }),
+    ]).catch(() => {
+      // Non-critical — first-class AI SDK tools still work
+    });
+  }
+
   // Build system prompt — thread skills, connections, and dynamic tool names
+  const enabledMcpServers = composioSpecs.length > 0
+    ? [...new Set(composioSpecs.map((s) => s.appName.toLowerCase()))]
+    : undefined;
+
   const promptCtx: SystemPromptContext = {
     userName,
     sessionId,
@@ -149,8 +253,9 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     activeSkills: skills,
     connectedApps: connections?.map((c) => c.name || c.id),
     selectedConnections: connections,
-    fileContext: extractFileContext(messages),
+    fileContext: inputFileContext?.length ? inputFileContext : extractFileContext(messages),
     composioToolsByApp,
+    enabledMcpServers,
   };
 
   // Create all tools — webdev mode + dynamic Composio tools
@@ -305,10 +410,12 @@ function createStorageClient(): ToolContext["storage"] {
         // Download file from sandbox, upload to S3
         const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
         const fileUrl = `https://8330-${sandboxId}.${domain}/file/read`;
+        const body = JSON.stringify({ path });
+        const rsaHeaders = getRsaHeaders(body);
         const response = await fetch(fileUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path }),
+          headers: { "Content-Type": "application/json", ...rsaHeaders },
+          body,
           signal: AbortSignal.timeout(30000),
         });
         if (!response.ok) return path;
@@ -316,11 +423,28 @@ function createStorageClient(): ToolContext["storage"] {
         const content = data.content as string;
         if (!content) return path;
 
+        // Sandbox /file/read returns encoding: "base64" for binary files,
+        // no encoding field (or "utf-8") for text files.
+        const encoding = data.encoding as string | undefined;
+        const buffer = encoding === "base64"
+          ? Buffer.from(content, "base64")
+          : Buffer.from(content, "utf-8");
+
         const fileName = path.split("/").pop() || "file";
+        const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
+        const mimeMap: Record<string, string> = {
+          ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+          ".svg": "image/svg+xml", ".mp4": "video/mp4", ".mp3": "audio/mpeg",
+          ".zip": "application/zip", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        };
+        const contentType = mimeMap[ext] || "application/octet-stream";
         const key = `uploads/${userId}/sandbox/${Date.now()}_${fileName}`;
 
         const { uploadFile, getPresignedUrl } = await import("@repo/storage");
-        await uploadFile(key, Buffer.from(content, "utf-8"));
+        await uploadFile(key, buffer, contentType);
         return await getPresignedUrl(key, 86400, true);
       } catch (error) {
         console.error("Storage uploadFromSandbox failed, returning path:", error);
@@ -330,42 +454,71 @@ function createStorageClient(): ToolContext["storage"] {
   };
 }
 
-// ── Default search provider (DuckDuckGo HTML scraping) ──
+// ── Default search provider (Bing HTML scraping) ──
+// DuckDuckGo blocks server-side requests with CAPTCHA (HTTP 202) as of Feb 2026.
+// Bing is used as the fallback — returns real results without bot detection.
 
 function createDefaultSearchProvider(): ToolContext["searchProvider"] {
   return {
     search: async (params) => {
       try {
-        const query = encodeURIComponent(params.query);
-        const response = await fetch(`https://html.duckduckgo.com/html/?q=${query}`, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; RubicBot/1.0)" },
-          signal: AbortSignal.timeout(10000),
-        });
+        const response = await fetch(
+          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10`,
+          {
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml",
+              "Accept-Language": "en-US,en;q=0.9",
+            },
+            signal: AbortSignal.timeout(12000),
+          }
+        );
+
+        if (!response.ok) return [];
         const html = await response.text();
 
-        // Extract search results from DuckDuckGo HTML
+        // Bing organic results: <li class="b_algo">
+        //   <h2><a href="...">Title</a></h2>
+        //   <cite>display-url</cite>
+        //   <p>Snippet</p>
+        const items = html.split(/<li[^>]*class="b_algo"[^>]*>/i).slice(1);
         const results: Array<{ title: string; url: string; snippet: string }> = [];
-        const resultRegex = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi;
-        const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([^<]*)<\/a>/gi;
 
-        let match;
-        while ((match = resultRegex.exec(html)) !== null) {
-          const url =
-            decodeURIComponent(match[1] ?? "")
-              .replace(/^\/\/duckduckgo\.com\/l\/\?uddg=/, "")
-              .split("&")[0] ?? "";
-          const title = match[2] ?? "";
-          const snippetMatch = snippetRegex.exec(html);
-          results.push({
-            title,
-            url,
-            snippet: snippetMatch?.[1] ?? "",
-          });
+        for (const item of items) {
+          // Title from <h2><a>
+          const titleMatch = item.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
+          if (!titleMatch) continue;
+          const title = (titleMatch[1] ?? "").replace(/<[^>]*>/g, "").trim();
+
+          // URL from <cite> — Bing shows display URLs like "site.com › path"
+          const citeMatch = item.match(/<cite[^>]*>([\s\S]*?)<\/cite>/i);
+          let url = "";
+          if (citeMatch) {
+            url = (citeMatch[1] ?? "").replace(/<[^>]*>/g, "").trim();
+            // Convert Bing display format: "site.com › path › sub" → "site.com/path/sub"
+            url = url.replace(/\s*›\s*/g, "/");
+            if (url && !url.startsWith("http")) url = "https://" + url;
+          }
+
+          // Snippet from paragraph or description span
+          const snippetMatch =
+            item.match(/<p[^>]*>([\s\S]*?)<\/p>/i) ??
+            item.match(/<span[^>]*class="[^"]*b_(?:lineclamp|paractl|descript)[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
+          const snippet = snippetMatch
+            ? (snippetMatch[1] ?? "").replace(/<[^>]*>/g, "").trim()
+            : "";
+
+          if (url && title) {
+            results.push({ title, url, snippet });
+          }
           if (results.length >= 10) break;
         }
 
+        console.log(`[search] Bing query="${params.query}" status=${response.status} results=${results.length}`);
         return results;
-      } catch {
+      } catch (err) {
+        console.error("[search] Error:", err);
         return [];
       }
     },

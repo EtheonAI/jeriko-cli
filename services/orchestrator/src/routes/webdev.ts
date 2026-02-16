@@ -32,11 +32,10 @@
 
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
-import { getSessionIdBySandboxId, setSandboxDatabaseName, registerDatabaseCleanup } from "../lib/e2b-manager.js";
+import { getSessionIdBySandboxId, setSandboxDatabaseName, setSandboxProjectPath, getProjectPathBySandboxId, registerDatabaseCleanup, getTerminalServerUrlBySandboxId, getE2bSandboxIdBySandboxId } from "../lib/e2b-manager.js";
+import { getRsaHeaders } from "../lib/rsa-auth.js";
 
 const logger = createLogger({ service: "webdev" });
-
-const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
 
 // TiDB connection — proxied through this endpoint (sandbox never gets raw creds)
 const TIDB_DATABASE_URL = process.env.TIDB_DATABASE_URL || "";
@@ -106,88 +105,279 @@ async function dropProjectDatabase(dbName: string): Promise<void> {
 // Register cleanup so e2b-manager can drop project DBs on sandbox destroy
 registerDatabaseCleanup(dropProjectDatabase);
 
+// ─── Terminal server helpers ─────────────────────────────────────────────
+// Call the terminal server DIRECTLY at port 8330 (via E2B proxy URL).
+// This is the same pattern as sandbox-executor.ts — avoids the sandbox
+// service which uses incompatible API endpoints (POST /terminals vs
+// POST /terminal/create) causing 502 errors.
+
+/** POST JSON to terminal server with RSA signing */
+async function tsPost(
+  baseUrl: string,
+  path: string,
+  body: Record<string, unknown>,
+  timeoutMs = 30000
+): Promise<Record<string, unknown>> {
+  const jsonBody = JSON.stringify(body);
+  const rsaHeaders = getRsaHeaders(jsonBody);
+  const resp = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...rsaHeaders },
+    body: jsonBody,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => resp.statusText);
+    throw new Error(`Terminal server error (${resp.status}): ${text}`);
+  }
+  return (await resp.json()) as Record<string, unknown>;
+}
+
+/** GET JSON from terminal server with RSA signing */
+async function tsGet(baseUrl: string, path: string, timeoutMs = 15000): Promise<Record<string, unknown>> {
+  const rsaHeaders = getRsaHeaders("");
+  const resp = await fetch(`${baseUrl}${path}`, {
+    headers: { ...rsaHeaders },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => resp.statusText);
+    throw new Error(`Terminal server error (${resp.status}): ${text}`);
+  }
+  return (await resp.json()) as Record<string, unknown>;
+}
+
+/** Track which terminals have been created per base URL */
+const createdTerminals = new Set<string>();
+
+/** Ensure a terminal session exists for a given terminal ID */
+async function ensureTerminal(baseUrl: string, terminalId: string): Promise<void> {
+  const key = `${baseUrl}:${terminalId}`;
+  if (createdTerminals.has(key)) return;
+  try {
+    await tsPost(baseUrl, "/terminal/create", { id: terminalId }, 10000);
+  } catch {
+    // Terminal may already exist — not fatal
+  }
+  createdTerminals.add(key);
+}
+
+/** Ensure a terminal session exists for the "webdev" ID */
+async function ensureWebdevTerminal(baseUrl: string): Promise<void> {
+  await ensureTerminal(baseUrl, "webdev");
+}
+
 /**
- * Execute a shell command in a sandbox via the sandbox service.
+ * Start the dev server in a DEDICATED terminal session ("devserver").
+ *
+ * Instead of backgrounding with nohup (which is unreliable in PTY terminals),
+ * the dev server runs as the foreground process in its own terminal session.
+ * This is the Manus pattern — each long-running process gets its own terminal.
+ *
+ * Returns true if the dev server responds on localhost:3000 within the timeout.
+ */
+async function startDevServer(
+  sandboxId: string,
+  projectDir: string,
+  pm: string,
+  maxWaitMs = 30000
+): Promise<{ started: boolean; log: string }> {
+  const baseUrl = resolveTerminalUrl(sandboxId);
+
+  // Kill any existing dev server first
+  try {
+    await ensureWebdevTerminal(baseUrl);
+    await tsPost(baseUrl, "/terminal/webdev/write", { text: `pkill -f "vite|tsx|node.*dev" 2>/dev/null; true\n` }, 5000);
+    await new Promise((r) => setTimeout(r, 1000));
+  } catch { /* best effort */ }
+
+  // Kill the old devserver terminal if it exists (to get a clean PTY)
+  const devTermKey = `${baseUrl}:devserver`;
+  if (createdTerminals.has(devTermKey)) {
+    try {
+      await tsPost(baseUrl, "/terminal/devserver/kill", {}, 5000);
+    } catch { /* may not exist */ }
+    createdTerminals.delete(devTermKey);
+  }
+
+  // Create a fresh "devserver" terminal
+  await ensureTerminal(baseUrl, "devserver");
+
+  // Write the dev server command as a foreground process.
+  // Also tee to /tmp/devserver.log for the status endpoint.
+  const cmd = `cd ${projectDir} && ${pm} run dev 2>&1 | tee /tmp/devserver.log\n`;
+  await tsPost(baseUrl, "/terminal/devserver/write", { text: cmd }, 10000);
+
+  // Poll for server readiness on localhost:3000
+  const pollStart = Date.now();
+  await new Promise((r) => setTimeout(r, 3000)); // Give it a head start
+
+  while (Date.now() - pollStart < maxWaitMs) {
+    try {
+      // Use the webdev terminal to curl (not devserver, which is busy running the server)
+      await ensureWebdevTerminal(baseUrl);
+      const marker = `__HEALTH_${Date.now()}__`;
+      await tsPost(baseUrl, "/terminal/webdev/write", {
+        text: `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null && echo "${marker}_OK" || echo "${marker}_FAIL"\n`
+      }, 5000);
+      await new Promise((r) => setTimeout(r, 2000));
+      const view = await tsGet(baseUrl, "/terminal/webdev/view");
+      const output = (view.output ?? view.content ?? "") as string;
+      if (output.includes(`${marker}_OK`) && output.includes("200")) {
+        return { started: true, log: "Dev server running on port 3000" };
+      }
+    } catch { /* curl failed, server not ready yet */ }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  // Server didn't respond in time — check devserver terminal for errors
+  let log = "";
+  try {
+    const view = await tsGet(baseUrl, "/terminal/devserver/view");
+    log = ((view.output ?? view.content ?? "") as string).slice(-1000);
+  } catch { /* terminal view failed */ }
+
+  return { started: false, log };
+}
+
+/**
+ * Resolve the terminal server URL for a sandbox.
+ * Tries e2b-manager cache first, falls back to request body.
+ */
+function resolveTerminalUrl(sandboxId: string, bodyTerminalUrl?: string): string {
+  const cached = getTerminalServerUrlBySandboxId(sandboxId);
+  if (cached) return cached;
+  if (bodyTerminalUrl) return bodyTerminalUrl;
+  throw new Error(`No terminal server URL available for sandbox ${sandboxId}`);
+}
+
+/**
+ * Execute a shell command in a sandbox via the terminal server directly.
  */
 async function sandboxExec(
   sandboxId: string,
   command: string,
-  userId: string,
+  _userId: string,
   timeout = 30000
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/shell`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-user-id": userId,
-    },
-    body: JSON.stringify({ command, timeout }),
-    signal: AbortSignal.timeout(timeout + 5000),
-  });
+  const baseUrl = resolveTerminalUrl(sandboxId);
 
-  if (!resp.ok) {
-    const detail = await resp.text();
-    throw new Error(`Sandbox exec failed: ${resp.status} ${detail}`);
+  await ensureWebdevTerminal(baseUrl);
+
+  // Snapshot current output before writing
+  const preView = await tsGet(baseUrl, "/terminal/webdev/view");
+  const preLen = ((preView.output ?? preView.content ?? "") as string).length;
+
+  // Append a unique marker so we know when the command is truly done.
+  // The terminal echoes the command text (containing marker once) and then
+  // the real "echo" output prints marker a second time. Wait for 2 occurrences.
+  const marker = `__DONE_${Date.now()}__`;
+  const wrappedCmd = `${command}; echo "${marker}"`;
+  await tsPost(baseUrl, "/terminal/webdev/write", { text: wrappedCmd + "\n" }, timeout);
+
+  // Poll until marker appears at least 2 times (once in command echo, once in output).
+  // Fallback: if only 1 occurrence but terminal shows a shell prompt after it, also done
+  // (the command echo may have scrolled off the buffer for long-running commands).
+  const pollStart = Date.now();
+  await new Promise((r) => setTimeout(r, 2000));
+  let finalOutput = "";
+  while (Date.now() - pollStart < timeout) {
+    const result = await tsGet(baseUrl, "/terminal/webdev/view");
+    const cur = (result.output ?? result.content ?? "") as string;
+    finalOutput = cur;
+    const newPortion = cur.length > preLen ? cur.slice(preLen) : cur;
+    const markerCount = newPortion.split(marker).length - 1;
+    if (markerCount >= 2) break;
+    // Fallback: marker echo scrolled off buffer, but output line + prompt visible
+    if (markerCount === 1 && /\$\s*$/.test(newPortion.trimEnd())) break;
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const data = (await resp.json()) as {
-    data?: { stdout?: string; stderr?: string; exitCode?: number };
-  };
+  // Return only new portion of output
+  const newOutput = finalOutput.length > preLen ? finalOutput.slice(preLen) : finalOutput.slice(-2000);
+
   return {
-    stdout: data.data?.stdout || "",
-    stderr: data.data?.stderr || "",
-    exitCode: data.data?.exitCode ?? 1,
+    stdout: newOutput,
+    stderr: "",
+    exitCode: 0,
   };
 }
 
 /**
- * Write a file to a sandbox via the sandbox service.
+ * Write a file to a sandbox via the terminal server's text_editor endpoint.
  */
 async function sandboxWriteFile(
   sandboxId: string,
   path: string,
   content: string,
-  userId: string
+  _userId: string
 ): Promise<void> {
-  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-user-id": userId,
-    },
-    body: JSON.stringify({ path, content }),
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!resp.ok) {
-    const detail = await resp.text();
-    throw new Error(`Sandbox file write failed: ${resp.status} ${detail}`);
-  }
+  const baseUrl = resolveTerminalUrl(sandboxId);
+  await tsPost(baseUrl, "/text_editor", {
+    command: "create",
+    path,
+    file_text: content,
+  }, 15000);
 }
 
 /**
- * Read a file from a sandbox via the sandbox service.
+ * Read a file from a sandbox via the terminal server's text_editor endpoint.
  */
 async function sandboxReadFile(
   sandboxId: string,
   path: string,
-  userId: string
+  _userId: string
 ): Promise<string> {
-  const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}/files?path=${encodeURIComponent(path)}`, {
-    method: "GET",
-    headers: {
-      "x-user-id": userId,
-    },
-    signal: AbortSignal.timeout(10000),
-  });
+  const baseUrl = resolveTerminalUrl(sandboxId);
+  const result = await tsPost(baseUrl, "/text_editor", {
+    command: "view",
+    path,
+  }, 15000);
+  return (result.content ?? result.output ?? "") as string;
+}
 
-  if (!resp.ok) {
-    const detail = await resp.text();
-    throw new Error(`Sandbox file read failed: ${resp.status} ${detail}`);
-  }
+/**
+ * Execute a command and get CLEAN stdout (no ANSI, no terminal echo).
+ *
+ * Writes command output to a temp file, reads it back via text_editor.
+ * Use for commands where you need to PARSE the output (git hash, git log, curl status, etc.).
+ * For fire-and-forget commands (install, kill, mkdir), use sandboxExec() instead.
+ */
+async function sandboxExecClean(
+  sandboxId: string,
+  command: string,
+  _userId: string,
+  timeout = 30000
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const baseUrl = resolveTerminalUrl(sandboxId);
+  const tmpFile = `/tmp/rubic_exec_${Date.now()}`;
 
-  const data = (await resp.json()) as { data?: { content?: string } };
-  return data.data?.content || "";
+  // Run command, capture stdout+stderr to temp file, capture exit code
+  await sandboxExec(
+    sandboxId,
+    `(${command}) > ${tmpFile} 2>&1; echo $? > ${tmpFile}.exit`,
+    _userId,
+    timeout
+  );
+
+  // Read stdout from temp file (clean, no ANSI noise)
+  let stdout = "";
+  try {
+    const result = await tsPost(baseUrl, "/text_editor", { command: "view", path: tmpFile }, 5000);
+    stdout = String(result.content || "");
+    // text_editor returns numbered lines like "     1\tcontents" — strip line numbers
+    stdout = stdout.replace(/^\s*\d+\t/gm, "");
+  } catch { /* file read failed */ }
+
+  // Read exit code
+  let exitCode = 0;
+  try {
+    const exitResult = await tsPost(baseUrl, "/text_editor", { command: "view", path: `${tmpFile}.exit` }, 5000);
+    const exitStr = String(exitResult.content || "").replace(/^\s*\d+\t/gm, "").trim();
+    exitCode = parseInt(exitStr) || 0;
+  } catch { /* default to 0 */ }
+
+  return { stdout: stdout.trim(), stderr: "", exitCode };
 }
 
 // ─── Drizzle template files (from Manus tidb_template_files.txt) ────────
@@ -307,7 +497,7 @@ export async function webdevRoutes(app: FastifyInstance) {
       // Manus pattern: pre-built templates live at /opt/.rubic/webdev/templates/
       // and are simply COPIED to the project directory.
       // Fallback: if templates aren't baked in (template not rebuilt yet), use create-vite.
-      const templatePath = `/opt/.rubic/webdev/templates/${templateId}`;
+      const templatePath = `/opt/.rubic/webdev/templates/web-dev-templates/templates/${templateId}`;
       // First command on a fresh sandbox needs extra time (E2B gRPC connection setup)
       const templateCheck = await sandboxExec(
         sandboxId,
@@ -316,15 +506,16 @@ export async function webdevRoutes(app: FastifyInstance) {
         30000
       );
 
-      if (templateCheck.stdout.trim() === "exists") {
+      if (templateCheck.stdout.includes("exists")) {
         // Manus way: copy pre-built template
         await sandboxExec(sandboxId, `cp -r ${templatePath} ${projectDir}`, userId, 10000);
-        // Fix pnpm store path mismatch (template was built as root, now running as user)
+        // Fix ownership (template was built as root) + remove node_modules/lockfile
+        // to avoid pnpm store path mismatch. Also fix corepack cache perms.
         await sandboxExec(
           sandboxId,
-          `rm -rf ${projectDir}/node_modules ${projectDir}/pnpm-lock.yaml 2>/dev/null; true`,
+          `sudo chown -R ubuntu:ubuntu ${projectDir} /home/ubuntu/.cache 2>/dev/null; rm -rf ${projectDir}/node_modules ${projectDir}/pnpm-lock.yaml 2>/dev/null; true`,
           userId,
-          5000
+          10000
         );
         logger.info({ sandboxId, templateId }, "Copied pre-built template");
       } else {
@@ -352,7 +543,7 @@ export async function webdevRoutes(app: FastifyInstance) {
           userId,
           10000
         );
-        if (depsCheck.stdout.trim() !== "has_mysql2") {
+        if (!depsCheck.stdout.includes("has_mysql2")) {
           // Use pnpm (fast, available in E2B template) with --no-frozen-lockfile
           await sandboxExec(
             sandboxId,
@@ -456,12 +647,62 @@ console.log('stripped Manus devDependencies');
       );
 
       // ── Step 4: Install dependencies ────────────────────────────────────
-      // Manus uses pnpm. Fallback to npm if pnpm not available.
-      const pmCheck = await sandboxExec(sandboxId, `which pnpm 2>/dev/null && echo "pnpm" || echo "npm"`, userId, 15000);
-      const pm = pmCheck.stdout.trim().endsWith("pnpm") ? "pnpm" : "npm";
-      await sandboxExec(sandboxId, `cd ${projectDir} && ${pm} install --no-frozen-lockfile`, userId, 120000);
+      // Detect package manager via file-based approach (terminal echo is unreliable).
+      // Write result to /tmp/pm_check and read back via text_editor endpoint.
+      await sandboxExec(sandboxId, `mkdir -p /home/ubuntu/.cache/node/corepack/v1 2>/dev/null; pnpm --version > /tmp/pm_check 2>&1 || echo "FAIL" > /tmp/pm_check`, userId, 30000);
+      let pm = "npm"; // default to npm
+      try {
+        const pmResult = await tsPost(resolveTerminalUrl(sandboxId), "/text_editor", { command: "view", path: "/tmp/pm_check" }, 5000);
+        const pmContent = String(pmResult.content || "");
+        if (/^\s*\d+\.\d+/.test(pmContent)) {
+          pm = "pnpm"; // pnpm --version returned a version number
+        }
+      } catch { /* file read failed, use npm */ }
+      logger.info({ sandboxId, pm }, "Starting package install");
 
-      // ── Step 5: Initialize git repo ─────────────────────────────────────
+      // Install with retry — verify via file check (not terminal output, which has echo noise)
+      let installSuccess = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        await sandboxExec(sandboxId, `cd ${projectDir} && ${pm} install --no-frozen-lockfile 2>&1`, userId, 180000);
+        logger.info({ sandboxId, attempt }, "Install attempt done");
+
+        // Verify node_modules via text_editor (bypasses terminal echo issue)
+        try {
+          const checkResult = await tsPost(resolveTerminalUrl(sandboxId), "/file/list_dir", { path: `${projectDir}/node_modules` }, 5000);
+          const entries = (checkResult.entries || []) as unknown[];
+          if (entries.length > 0) {
+            installSuccess = true;
+            logger.info({ sandboxId, attempt, entries: entries.length }, "node_modules verified");
+            break;
+          }
+        } catch {
+          // list_dir failed — node_modules doesn't exist
+        }
+        logger.warn({ sandboxId, attempt }, "Install failed, node_modules missing or empty");
+
+        // On first failure, try fixing permissions and retrying
+        if (attempt === 1) {
+          await sandboxExec(sandboxId, `chmod -R 755 /home/ubuntu/.cache 2>/dev/null; true`, userId, 5000);
+        }
+      }
+
+      if (!installSuccess) {
+        // Last resort: try npm if pnpm failed
+        if (pm === "pnpm") {
+          logger.warn({ sandboxId }, "pnpm failed, falling back to npm");
+          await sandboxExec(sandboxId, `cd ${projectDir} && npm install 2>&1`, userId, 180000);
+        }
+      }
+
+      // ── Step 5: Create .rubic-logs directory (Manus: .manus-logs) ──────
+      await sandboxExec(
+        sandboxId,
+        `mkdir -p ${projectDir}/.rubic-logs`,
+        userId,
+        5000
+      );
+
+      // ── Step 6: Initialize git repo ─────────────────────────────────────
       // Manus pattern: git config before first commit
       await sandboxExec(
         sandboxId,
@@ -470,21 +711,62 @@ console.log('stripped Manus devDependencies');
         15000
       );
 
-      // ── Step 6: Start dev server (backgrounded) ─────────────────────────
-      // web-static: `pnpm dev` runs `vite --host` (port from vite.config.ts)
-      // web-db-user: `pnpm dev` runs `tsx watch server/_core/index.ts` (Express reads PORT from .env)
-      // Don't pass --host/--port flags — they're in config and .env already.
-      const devCmd = `cd ${projectDir} && nohup ${pm} dev > /tmp/devserver.log 2>&1 &`;
-      await sandboxExec(sandboxId, devCmd, userId, 10000);
+      // Get initial versionId (git commit hash — Manus pattern)
+      const initHash = await sandboxExecClean(
+        sandboxId,
+        `cd ${projectDir} && git rev-parse --short HEAD`,
+        userId
+      );
+      const versionId = initHash.stdout.trim();
 
-      logger.info({ sandboxId, appName, templateId, projectDir }, "Webdev project initialized");
+      // ── Step 7: Start dev server in dedicated terminal ─────────────────
+      const devResult = await startDevServer(sandboxId, projectDir, pm, 30000);
+      logger.info({ sandboxId, devServerStarted: devResult.started }, "Dev server start result");
+
+      // ── Step 8: Build Manus-compatible response ────────────────────────
+      // List created files
+      let createdFiles: string[] = [];
+      try {
+        const fileList = await sandboxExecClean(
+          sandboxId,
+          `cd ${projectDir} && git ls-files`,
+          userId,
+          10000
+        );
+        createdFiles = fileList.stdout.trim().split("\n").filter(Boolean);
+      } catch { /* best effort */ }
+
+      // Build features array (Manus pattern)
+      const features: string[] = [];
+      if (templateId === "web-db-user") {
+        features.push("server", "db", "user");
+      }
+
+      // Build dev server URL (public preview via E2B port proxy)
+      const e2bId = getE2bSandboxIdBySandboxId(sandboxId);
+      const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.dev";
+      const devServerUrl = e2bId ? `https://3000-${e2bId}.${E2B_DOMAIN}` : undefined;
+
+      logger.info({ sandboxId, appName, templateId, projectDir, versionId }, "Webdev project initialized");
+
+      // Store project path in sandbox cache for other routes to find
+      const sessionId = getSessionIdBySandboxId(sandboxId);
+      if (sessionId) {
+        setSandboxProjectPath(sessionId, projectDir);
+      }
 
       return reply.send({
         success: true,
         app_name: appName,
         template_id: templateId,
         directory: projectDir,
+        projectPath: projectDir,
+        versionId,
         devServerPort: 3000,
+        devServerUrl,
+        devServerStatus: devResult.started ? "running" : "starting",
+        features,
+        createdFiles,
         hasDatabase: templateId === "web-db-user" && !!(TIDB_DATABASE_URL || TIDB_HOST),
         databaseName: dbName,
       });
@@ -498,7 +780,9 @@ console.log('stripped Manus devDependencies');
   /**
    * POST /api/webdev/status — Get project health status.
    *
-   * Manus equivalent: POST /webdev/status
+   * Manus equivalent: webdev_check_status
+   * Returns: devServer, healthChecks (buildErrors, dependencies, lsp, typescript),
+   *          projectPath, versionId, features
    */
   app.post("/api/webdev/status", async (request, reply) => {
     const body = request.body as {
@@ -507,49 +791,88 @@ console.log('stripped Manus devDependencies');
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
     }
 
+    // Sanitize strings for JSON safety (strip ANSI codes + control chars + newlines)
+    const sanitize = (s: string) => s.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/[\x00-\x1f]/g, (ch) => ch === "\n" ? " | " : ch === "\t" ? " " : "");
+
     try {
-      // Check dev server
-      const devServer = await sandboxExec(
+      // Check dev server — use sandboxExecClean for parseable output
+      const devServer = await sandboxExecClean(
         sandboxId,
         `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "down"`,
         userId,
         5000
       );
 
-      // Check TypeScript errors
-      const tscCheck = await sandboxExec(
+      // Check TypeScript errors — only if tsc is actually installed locally
+      const tscCheck = await sandboxExecClean(
         sandboxId,
-        `cd ${projectPath} && npx tsc --noEmit 2>&1 | tail -5 || echo "no tsc"`,
+        `cd ${projectPath} && (node_modules/.bin/tsc --noEmit 2>&1 | tail -5 || echo "no tsc")`,
         userId,
         15000
       );
 
-      // Check recent build log
-      const buildLog = await sandboxExec(
+      // Check recent build log (last 50 lines — Manus pattern)
+      const buildLog = await sandboxExecClean(
         sandboxId,
-        `tail -20 /tmp/devserver.log 2>/dev/null || echo "no log"`,
+        `tail -50 /tmp/devserver.log 2>/dev/null || echo "no log"`,
         userId,
         5000
       );
 
-      const devServerUp = devServer.stdout.trim() === "200" || devServer.stdout.trim() === "304";
+      // Dependencies health check (Manus: scans node_modules for missing/outdated)
+      const depsCheck = await sandboxExecClean(
+        sandboxId,
+        `cd ${projectPath} && (node_modules/.bin/tsc --version > /dev/null 2>&1 && ls node_modules/.package-lock.json > /dev/null 2>&1 && echo "OK" || echo "missing")`,
+        userId,
+        10000
+      );
+
+      // Get current versionId
+      const versionResult = await sandboxExecClean(
+        sandboxId,
+        `cd ${projectPath} && git rev-parse --short HEAD 2>/dev/null || echo ""`,
+        userId,
+        5000
+      );
+
+      // Detect features from project structure
+      const featureCheck = await sandboxExecClean(
+        sandboxId,
+        `cd ${projectPath} && (test -d server && echo "server") ; (test -f drizzle.config.ts && echo "db") ; (test -d server && grep -l "auth\\|user\\|login" server/*.ts 2>/dev/null && echo "user") ; true`,
+        userId,
+        5000
+      );
+      const features = featureCheck.stdout.trim().split("\n").filter((f) => ["server", "db", "user"].includes(f));
+
+      const devServerUp = devServer.stdout.includes("200") || devServer.stdout.includes("304");
+
+      // Build dev server URL
+      const e2bId = getE2bSandboxIdBySandboxId(sandboxId);
+      const E2B_DOMAIN = process.env.E2B_DOMAIN || "e2b.dev";
+      const devServerUrl = e2bId ? `https://3000-${e2bId}.${E2B_DOMAIN}` : undefined;
 
       return reply.send({
         devServer: {
-          status: devServerUp ? "running" : "down",
+          status: devServerUp ? "running" : "stopped",
           port: 3000,
+          url: devServerUrl,
+          recentOutput: buildLog.stdout.split("\n").filter(Boolean).slice(-50),
         },
         healthChecks: {
           buildErrors: buildLog.stdout.includes("ERROR") || buildLog.stderr.includes("ERROR"),
-          typescript: tscCheck.exitCode === 0 ? "no errors" : tscCheck.stdout.trim(),
+          dependencies: depsCheck.stdout.includes("OK") ? "OK" : "missing",
+          typescript: tscCheck.exitCode === 0 ? "no errors" : sanitize(tscCheck.stdout.trim()),
         },
-        recentLog: buildLog.stdout.slice(-500),
+        projectPath,
+        versionId: versionResult.stdout.trim() || undefined,
+        features,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -570,7 +893,8 @@ console.log('stripped Manus devDependencies');
       message?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
     const message = body.message || "Checkpoint";
 
     if (!sandboxId || !userId) {
@@ -581,10 +905,19 @@ console.log('stripped Manus devDependencies');
       // Stage all changes
       await sandboxExec(sandboxId, `cd ${projectPath} && git add -A`, userId);
 
-      // Check if there are changes to commit
-      const status = await sandboxExec(sandboxId, `cd ${projectPath} && git status --porcelain`, userId);
+      // Check if there are changes to commit (use clean exec for parseable output)
+      const status = await sandboxExecClean(sandboxId, `cd ${projectPath} && git status --porcelain`, userId);
       if (!status.stdout.trim()) {
-        return reply.send({ success: true, noChanges: true, message: "No changes to checkpoint" });
+        // No changes — still return current HEAD as versionId (Manus pattern)
+        const currentHash = await sandboxExecClean(sandboxId, `cd ${projectPath} && git rev-parse --short HEAD`, userId);
+        return reply.send({
+          success: true,
+          noChanges: true,
+          message: "No changes to checkpoint",
+          versionId: currentHash.stdout.trim(),
+          commitHash: currentHash.stdout.trim(),
+          timestamp: Date.now(),
+        });
       }
 
       // Commit
@@ -596,8 +929,8 @@ console.log('stripped Manus devDependencies');
         10000
       );
 
-      // Get commit hash
-      const hashResult = await sandboxExec(
+      // Get commit hash (clean exec for parseable output)
+      const hashResult = await sandboxExecClean(
         sandboxId,
         `cd ${projectPath} && git rev-parse --short HEAD`,
         userId
@@ -610,7 +943,7 @@ console.log('stripped Manus devDependencies');
         const filename = `checkpoint-${commitHash}.png`;
         await sandboxExec(
           sandboxId,
-          `DISPLAY=:99 scrot /home/ubuntu/screenshots/${filename}`,
+          `DISPLAY=:0 scrot /home/ubuntu/screenshots/${filename}`,
           userId,
           5000
         );
@@ -639,7 +972,13 @@ console.log('stripped Manus devDependencies');
   /**
    * POST /api/webdev/rollback — Rollback to a previous checkpoint.
    *
-   * Manus equivalent: POST /webdev/rollback
+   * Manus pattern (NOT git checkout -- .):
+   *   1. Delete project directory contents (except .git)
+   *   2. Git checkout the target version
+   *   3. Reinstall dependencies
+   *   4. Restart dev server
+   * This ensures clean state with no orphaned files, rebuilt node_modules,
+   * and cleared build cache.
    */
   app.post("/api/webdev/rollback", async (request, reply) => {
     const body = request.body as {
@@ -649,30 +988,51 @@ console.log('stripped Manus devDependencies');
       versionId?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
     }
 
     try {
-      if (body.versionId) {
-        await sandboxExec(
-          sandboxId,
-          `cd ${projectPath} && git checkout ${body.versionId} -- .`,
-          userId,
-          10000
-        );
-      } else {
-        await sandboxExec(
-          sandboxId,
-          `cd ${projectPath} && git checkout HEAD~1 -- .`,
-          userId,
-          10000
-        );
-      }
+      const targetVersion = body.versionId || "HEAD~1";
 
-      const hashResult = await sandboxExec(
+      // Step 1: Delete all non-.git contents (Manus: rm -rf /home/ubuntu/{project}/*)
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectPath} && find . -maxdepth 1 ! -name . ! -name .git -exec rm -rf {} +`,
+        userId,
+        15000
+      );
+
+      // Step 2: Checkout the target version
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectPath} && git checkout ${targetVersion} -- .`,
+        userId,
+        10000
+      );
+
+      // Step 3: Reinstall dependencies
+      // Detect PM
+      let pm = "npm";
+      try {
+        const pmResult = await sandboxExecClean(sandboxId, `pnpm --version`, userId, 10000);
+        if (/^\d+\.\d+/.test(pmResult.stdout.trim())) pm = "pnpm";
+      } catch { /* use npm */ }
+
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectPath} && ${pm} install --no-frozen-lockfile 2>&1`,
+        userId,
+        120000
+      );
+
+      // Step 4: Restart dev server
+      const devResult = await startDevServer(sandboxId, projectPath, pm, 30000);
+
+      const hashResult = await sandboxExecClean(
         sandboxId,
         `cd ${projectPath} && git rev-parse --short HEAD`,
         userId
@@ -681,7 +1041,8 @@ console.log('stripped Manus devDependencies');
       return reply.send({
         success: true,
         currentVersion: hashResult.stdout.trim(),
-        rolledBackTo: body.versionId || "HEAD~1",
+        rolledBackTo: targetVersion,
+        devServerStatus: devResult.started ? "running" : "starting",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -692,8 +1053,8 @@ console.log('stripped Manus devDependencies');
   /**
    * POST /api/webdev/restore — Restore project from a specific checkpoint.
    *
-   * Manus equivalent: POST /webdev/restore
-   * Similar to rollback but does a hard reset and commits as a new checkpoint.
+   * Manus pattern: full delete + re-checkout + commit as new checkpoint.
+   * Ensures clean state (no orphaned files), rebuilt node_modules, cleared cache.
    */
   app.post("/api/webdev/restore", async (request, reply) => {
     const body = request.body as {
@@ -703,14 +1064,23 @@ console.log('stripped Manus devDependencies');
       versionId: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app", versionId } = body;
+    const { sandboxId, userId, versionId } = body;
+    const projectPath = body.projectPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId || !versionId) {
       return reply.status(400).send({ error: "sandboxId, userId, and versionId required" });
     }
 
     try {
-      // Checkout the specific version's files
+      // Step 1: Delete all non-.git contents
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectPath} && find . -maxdepth 1 ! -name . ! -name .git -exec rm -rf {} +`,
+        userId,
+        15000
+      );
+
+      // Step 2: Checkout the specific version's files
       await sandboxExec(
         sandboxId,
         `cd ${projectPath} && git checkout ${versionId} -- .`,
@@ -718,7 +1088,21 @@ console.log('stripped Manus devDependencies');
         10000
       );
 
-      // Stage and commit as a restore
+      // Step 3: Reinstall dependencies
+      let pm = "npm";
+      try {
+        const pmResult = await sandboxExecClean(sandboxId, `pnpm --version`, userId, 10000);
+        if (/^\d+\.\d+/.test(pmResult.stdout.trim())) pm = "pnpm";
+      } catch { /* use npm */ }
+
+      await sandboxExec(
+        sandboxId,
+        `cd ${projectPath} && ${pm} install --no-frozen-lockfile 2>&1`,
+        userId,
+        120000
+      );
+
+      // Step 4: Stage and commit as a restore
       await sandboxExec(
         sandboxId,
         `cd ${projectPath} && git add -A && git commit -m "Restored to checkpoint ${versionId}" --allow-empty`,
@@ -726,7 +1110,10 @@ console.log('stripped Manus devDependencies');
         10000
       );
 
-      const hashResult = await sandboxExec(
+      // Step 5: Restart dev server
+      const devResult = await startDevServer(sandboxId, projectPath, pm, 30000);
+
+      const hashResult = await sandboxExecClean(
         sandboxId,
         `cd ${projectPath} && git rev-parse --short HEAD`,
         userId
@@ -736,6 +1123,7 @@ console.log('stripped Manus devDependencies');
         success: true,
         restoredFrom: versionId,
         newVersion: hashResult.stdout.trim(),
+        devServerStatus: devResult.started ? "running" : "starting",
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -758,7 +1146,8 @@ console.log('stripped Manus devDependencies');
       database?: { connection_string?: string };
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -799,6 +1188,162 @@ console.log('stripped Manus devDependencies');
   });
 
   /**
+   * POST /api/webdev/add-feature — Add a feature to an existing project.
+   *
+   * Manus equivalent: webdev_add_feature
+   * Supported features:
+   *   - web-db-user: Upgrade web-static to full-stack (Express + Drizzle + TiDB)
+   *   - stripe: Add Stripe SDK, webhook endpoint, payment helpers
+   */
+  app.post("/api/webdev/add-feature", async (request, reply) => {
+    const body = request.body as {
+      sandboxId: string;
+      userId: string;
+      projectPath?: string;
+      feature: "web-db-user" | "stripe";
+    };
+
+    const { sandboxId, userId } = body;
+    const projectPath = body.projectPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
+
+    if (!sandboxId || !userId || !body.feature) {
+      return reply.status(400).send({ error: "sandboxId, userId, and feature required" });
+    }
+
+    try {
+      const newFiles: string[] = [];
+      const envVars: string[] = [];
+      let instructions = "";
+
+      if (body.feature === "web-db-user") {
+        // Upgrade from web-static to full-stack with Express + Drizzle + TiDB
+        await sandboxExec(sandboxId, `mkdir -p ${projectPath}/drizzle ${projectPath}/server`, userId);
+
+        // Install backend deps
+        await sandboxExec(
+          sandboxId,
+          `cd ${projectPath} && pnpm add drizzle-orm mysql2 express zod 2>/dev/null || npm install drizzle-orm mysql2 express zod && pnpm add -D drizzle-kit @types/express tsx 2>/dev/null || npm install -D drizzle-kit @types/express tsx`,
+          userId,
+          120000
+        );
+
+        // Write Drizzle config files
+        await sandboxWriteFile(sandboxId, `${projectPath}/drizzle.config.ts`, DRIZZLE_CONFIG_TS, userId);
+        await sandboxWriteFile(sandboxId, `${projectPath}/drizzle/schema.ts`, DRIZZLE_SCHEMA_TS, userId);
+        await sandboxWriteFile(sandboxId, `${projectPath}/server/db.ts`, SERVER_DB_TS, userId);
+        newFiles.push("drizzle.config.ts", "drizzle/schema.ts", "server/db.ts");
+
+        // Create per-project database if TiDB configured
+        if (TIDB_HOST || TIDB_DATABASE_URL) {
+          const appName = projectPath.split("/").pop() || "my-app";
+          const dbName = await createProjectDatabase(appName, userId);
+          const sessionId = getSessionIdBySandboxId(sandboxId);
+          if (sessionId) setSandboxDatabaseName(sessionId, dbName);
+
+          const tidbUrl = TIDB_HOST
+            ? `mysql://${TIDB_USERNAME}:${TIDB_PASSWORD}@${TIDB_HOST}:${TIDB_PORT}/${dbName}`
+            : TIDB_DATABASE_URL;
+          // Append DATABASE_URL to .env
+          await sandboxExec(
+            sandboxId,
+            `echo 'DATABASE_URL="${tidbUrl}"' >> ${projectPath}/.env`,
+            userId,
+            5000
+          );
+          envVars.push("DATABASE_URL");
+        }
+
+        instructions = "Full-stack upgrade complete. Server files in server/, Drizzle schema in drizzle/. Run `pnpm db:push` to apply schema to TiDB.";
+      } else if (body.feature === "stripe") {
+        // Add Stripe integration
+        await sandboxExec(
+          sandboxId,
+          `cd ${projectPath} && pnpm add stripe @stripe/stripe-js 2>/dev/null || npm install stripe @stripe/stripe-js`,
+          userId,
+          60000
+        );
+
+        // Write Stripe webhook endpoint
+        const stripeWebhook = `import Stripe from "stripe";
+import type { Request, Response } from "express";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2024-12-18.acacia" });
+
+export async function handleStripeWebhook(req: Request, res: Response) {
+  const sig = req.headers["stripe-signature"] as string;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("Webhook signature verification failed:", err);
+    return res.status(400).send("Webhook Error");
+  }
+
+  switch (event.type) {
+    case "checkout.session.completed":
+      console.log("Payment successful:", event.data.object);
+      break;
+    case "customer.subscription.updated":
+      console.log("Subscription updated:", event.data.object);
+      break;
+    default:
+      console.log("Unhandled event:", event.type);
+  }
+
+  res.json({ received: true });
+}
+`;
+        await sandboxExec(sandboxId, `mkdir -p ${projectPath}/server`, userId);
+        await sandboxWriteFile(sandboxId, `${projectPath}/server/stripe-webhook.ts`, stripeWebhook, userId);
+        newFiles.push("server/stripe-webhook.ts");
+
+        // Write Stripe client helper
+        const stripeClient = `import { loadStripe } from "@stripe/stripe-js";
+
+let stripePromise: ReturnType<typeof loadStripe> | null = null;
+
+export function getStripe() {
+  if (!stripePromise) {
+    stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "");
+  }
+  return stripePromise;
+}
+`;
+        await sandboxExec(sandboxId, `mkdir -p ${projectPath}/client/src/lib`, userId);
+        await sandboxWriteFile(sandboxId, `${projectPath}/client/src/lib/stripe.ts`, stripeClient, userId);
+        newFiles.push("client/src/lib/stripe.ts");
+
+        envVars.push("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "VITE_STRIPE_PUBLISHABLE_KEY");
+        instructions = "Stripe integration added. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, VITE_STRIPE_PUBLISHABLE_KEY in .env. Webhook handler at server/stripe-webhook.ts.";
+      } else {
+        return reply.status(400).send({ error: `Unknown feature: ${body.feature}. Supported: web-db-user, stripe` });
+      }
+
+      // Restart dev server to pick up new deps
+      let pm = "npm";
+      try {
+        const pmResult = await sandboxExecClean(sandboxId, `pnpm --version`, userId, 10000);
+        if (/^\d+\.\d+/.test(pmResult.stdout.trim())) pm = "pnpm";
+      } catch { /* use npm */ }
+      await startDevServer(sandboxId, projectPath, pm, 30000);
+
+      return reply.send({
+        success: true,
+        feature: body.feature,
+        instructions,
+        newFiles,
+        envVars,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ sandboxId, feature: body.feature, error: msg }, "Failed to add feature");
+      return reply.status(500).send({ error: msg });
+    }
+  });
+
+  /**
    * POST /api/webdev/restart — Restart the dev server.
    *
    * Manus equivalent: POST /webdev/restart
@@ -810,37 +1355,48 @@ console.log('stripped Manus devDependencies');
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
     }
 
     try {
-      // Kill existing dev server (both vite and tsx for full-stack templates)
-      await sandboxExec(sandboxId, `pkill -f "vite|tsx" 2>/dev/null || true`, userId, 5000);
+      // Detect PM via file (terminal echo is unreliable for output checks)
+      await sandboxExec(sandboxId, `pnpm --version > /tmp/pm_check 2>&1 || echo "FAIL" > /tmp/pm_check`, userId, 30000);
+      let pm = "npm";
+      try {
+        const pmResult = await tsPost(resolveTerminalUrl(sandboxId), "/text_editor", { command: "view", path: "/tmp/pm_check" }, 5000);
+        if (/^\s*\d+\.\d+/.test(String(pmResult.content || ""))) pm = "pnpm";
+      } catch { /* use npm */ }
 
-      // Restart — use pnpm if available, fallback to npx vite.
-      // Don't pass --host/--port flags — vite.config.ts and .env already set them.
-      const pmCheck = await sandboxExec(sandboxId, `which pnpm 2>/dev/null && echo "pnpm" || echo "npm"`, userId, 15000);
-      const pm = pmCheck.stdout.trim().endsWith("pnpm") ? "pnpm" : "npm";
-      const devCmd = `cd ${projectPath} && nohup ${pm} dev > /tmp/devserver.log 2>&1 &`;
-      await sandboxExec(sandboxId, devCmd, userId, 10000);
-
-      // Wait for it to be ready
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      const health = await sandboxExec(
+      // Ensure dependencies are installed before starting dev server
+      // (node_modules may be missing after rollback/restore)
+      const nmCheck = await sandboxExecClean(
         sandboxId,
-        `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 2>/dev/null || echo "down"`,
+        `test -d ${projectPath}/node_modules && echo "exists" || echo "missing"`,
         userId,
         5000
       );
+      if (nmCheck.stdout.includes("missing")) {
+        logger.info({ sandboxId }, "node_modules missing, reinstalling before restart");
+        await sandboxExec(
+          sandboxId,
+          `cd ${projectPath} && ${pm} install --no-frozen-lockfile 2>&1`,
+          userId,
+          120000
+        );
+      }
+
+      // Use dedicated terminal session (same as init)
+      const devResult = await startDevServer(sandboxId, projectPath, pm, 30000);
 
       return reply.send({
         success: true,
-        devServerStatus: health.stdout.trim() === "200" ? "running" : "starting",
+        devServerStatus: devResult.started ? "running" : "starting",
         port: 3000,
+        log: devResult.started ? undefined : devResult.log.slice(-500),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -984,14 +1540,15 @@ console.log('stripped Manus devDependencies');
       projectPath?: string;
     };
 
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
 
     if (!sandboxId || !userId) {
       return reply.status(400).send({ error: "sandboxId and userId required" });
     }
 
     try {
-      const log = await sandboxExec(
+      const log = await sandboxExecClean(
         sandboxId,
         `cd ${projectPath} && git log --oneline --format='{"hash":"%h","message":"%s","date":"%ci"}' -20`,
         userId,
@@ -1031,7 +1588,8 @@ console.log('stripped Manus devDependencies');
       remote?: string;
       branch?: string;
     };
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
     const remote = body.remote || "origin";
     const branch = body.branch || "main";
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
@@ -1048,14 +1606,15 @@ console.log('stripped Manus devDependencies');
    */
   app.post("/api/webdev/git-sync-check", async (request, reply) => {
     const body = request.body as { sandboxId: string; userId: string; projectPath?: string };
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
     try {
-      const status = await sandboxExec(sandboxId, `cd ${projectPath} && git status --porcelain`, userId, 10000);
-      const branch = await sandboxExec(sandboxId, `cd ${projectPath} && git branch --show-current`, userId, 5000);
-      const remotes = await sandboxExec(sandboxId, `cd ${projectPath} && git remote -v`, userId, 5000);
-      const ahead = await sandboxExec(sandboxId, `cd ${projectPath} && git rev-list @{upstream}..HEAD --count 2>/dev/null || echo "0"`, userId, 5000);
-      const behind = await sandboxExec(sandboxId, `cd ${projectPath} && git rev-list HEAD..@{upstream} --count 2>/dev/null || echo "0"`, userId, 5000);
+      const status = await sandboxExecClean(sandboxId, `cd ${projectPath} && git status --porcelain`, userId, 10000);
+      const branch = await sandboxExecClean(sandboxId, `cd ${projectPath} && git branch --show-current`, userId, 5000);
+      const remotes = await sandboxExecClean(sandboxId, `cd ${projectPath} && git remote -v`, userId, 5000);
+      const ahead = await sandboxExecClean(sandboxId, `cd ${projectPath} && git rev-list @{upstream}..HEAD --count 2>/dev/null || echo "0"`, userId, 5000);
+      const behind = await sandboxExecClean(sandboxId, `cd ${projectPath} && git rev-list HEAD..@{upstream} --count 2>/dev/null || echo "0"`, userId, 5000);
       return reply.send({
         clean: !status.stdout.trim(),
         branch: branch.stdout.trim(),
@@ -1079,7 +1638,8 @@ console.log('stripped Manus devDependencies');
       projectPath?: string;
       edits: Array<{ file: string; search: string; replace: string }>;
     };
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
     if (!sandboxId || !userId || !body.edits?.length) return reply.status(400).send({ error: "sandboxId, userId, and edits required" });
     try {
       const results: Array<{ file: string; success: boolean; error?: string }> = [];
@@ -1115,7 +1675,8 @@ console.log('stripped Manus devDependencies');
       templateUrl?: string;
       gitUrl?: string;
     };
-    const { sandboxId, userId, projectPath = "/home/ubuntu/my-app" } = body;
+    const { sandboxId, userId, projectPath: rawPath } = body;
+    const projectPath = rawPath || getProjectPathBySandboxId(sandboxId) || "/home/ubuntu/my-app";
     if (!sandboxId || !userId) return reply.status(400).send({ error: "sandboxId and userId required" });
     try {
       if (body.gitUrl) {

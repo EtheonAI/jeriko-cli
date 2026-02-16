@@ -27,7 +27,7 @@ Shared AI components: chat message list, tool renderers, canvas system, planner,
 
 ### Canvas System (P0)
 - `TOOL_VIEW_MAP` must be tested for ALL tool→view mappings
-- Browser tools (19) → "browser", Terminal tools (6) → "terminal", Code tools (5) → "code"
+- Browser tools (22) → "browser", Terminal tools (12) → "terminal", WebDev IDE tools (9) → "webDevIDE"
 - `show_plan`, `message_notify_user`, `generate_image`, etc. → no canvas (undefined)
 - Test view switching, state accumulation, screenshot extraction
 

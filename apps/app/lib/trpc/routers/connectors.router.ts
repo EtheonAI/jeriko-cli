@@ -784,6 +784,72 @@ export const connectorsRouter = createTRPCRouter({
       return data;
     }),
 
+  // Connect with API key (for api_key auth type connectors)
+  connectWithApiKey: protectedProcedure
+    .input(
+      z.object({
+        type: z.string(),
+        apiKey: z.string().min(1, "API key is required"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Look up definition
+      const [definition] = await db
+        .select()
+        .from(connectorDefinitions)
+        .where(eq(connectorDefinitions.type, input.type))
+        .limit(1);
+
+      if (!definition) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Connector type not found" });
+      }
+
+      if (definition.authType !== "api_key") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This connector requires OAuth, not API key",
+        });
+      }
+
+      // Upsert userConnector
+      const [existing] = await db
+        .select()
+        .from(userConnectors)
+        .where(
+          and(
+            eq(userConnectors.userId, ctx.user.id),
+            eq(userConnectors.connectorDefinitionId, definition.id)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        const [updated] = await db
+          .update(userConnectors)
+          .set({
+            apiKey: input.apiKey,
+            status: "connected",
+          })
+          .where(eq(userConnectors.id, existing.id))
+          .returning();
+        return updated;
+      }
+
+      const id = createId();
+      const [connector] = await db
+        .insert(userConnectors)
+        .values({
+          id,
+          userId: ctx.user.id,
+          connectorDefinitionId: definition.id,
+          apiKey: input.apiKey,
+          status: "connected",
+        })
+        .returning();
+
+      return connector;
+    }),
+
   // Check connection status after OAuth popup closes
   checkConnection: protectedProcedure
     .input(z.object({ type: z.string() }))

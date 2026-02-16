@@ -914,5 +914,53 @@ export async function sandboxRuntimeRoutes(app: FastifyInstance): Promise<void> 
     }
   });
 
+  // =========================================================================
+  // File Listing — List files in a sandbox directory via terminal server
+  // Uses POST /file/list_dir endpoint on the sandbox runtime (Python FastAPI)
+  // =========================================================================
+
+  app.post("/api/file/list", async (request, reply) => {
+    const { sandboxId, path: dirPath } = request.body as {
+      sandboxId: string;
+      path?: string;
+    };
+
+    if (!sandboxId) {
+      return reply.status(400).send({ error: "sandboxId is required" });
+    }
+
+    const targetPath = dirPath || "/home/ubuntu";
+
+    try {
+      const result = await terminalServerPost(sandboxId, "/file/list_dir", {
+        path: targetPath,
+      });
+
+      // Terminal server returns { entries: [{name, type, size, modified}], path }
+      const entries = (result.entries || []) as {
+        name: string;
+        type: string;
+        size?: number;
+        modified?: number;
+      }[];
+
+      const files = entries.map((e) => ({
+        name: e.name,
+        path: `${targetPath}/${e.name}`,
+        size: e.size || 0,
+        lastModified: e.modified ? new Date(e.modified * 1000).toISOString() : new Date().toISOString(),
+        type: (e.type === "directory" ? "directory" : "file") as "file" | "directory",
+      }));
+
+      return reply.send({ files, path: targetPath });
+    } catch (err) {
+      logger.error({ sandboxId, path: targetPath, err }, "File listing failed");
+      return reply.status(500).send({
+        error: "File listing failed",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
   logger.info("Sandbox runtime routes registered");
 }

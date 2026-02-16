@@ -32,6 +32,7 @@ export type PlanStepStatus = "pending" | "in_progress" | "completed" | "error";
 export interface PlanStep {
   id: string;
   title: string;
+  description?: string;
   status: PlanStepStatus;
 }
 
@@ -104,6 +105,7 @@ interface RawPlanTodo {
   id?: string;
   label?: string;
   title?: string;
+  description?: string;
   status?: string;
 }
 
@@ -113,6 +115,7 @@ interface RawPlanData {
   steps?: RawPlanTodo[];
   goal?: string;
   phases?: RawPlanTodo[];
+  plan?: RawPlanTodo[];
 }
 
 /**
@@ -154,13 +157,14 @@ export function usePlannerState(messages: UIMessage[], isStreaming = false): Pla
 
     // Extract todos from various possible field names
     const rawTodos =
-      latestPlan.todos ?? latestPlan.steps ?? latestPlan.phases ?? [];
+      latestPlan.plan ?? latestPlan.todos ?? latestPlan.steps ?? latestPlan.phases ?? [];
     if (rawTodos.length === 0) return EMPTY_STATE;
 
     // Build steps
     const steps: PlanStep[] = rawTodos.map((todo, i) => ({
       id: todo.id || `step-${i + 1}`,
       title: todo.label || todo.title || `Step ${i + 1}`,
+      description: todo.description,
       status: mapStatus(todo.status),
     }));
 

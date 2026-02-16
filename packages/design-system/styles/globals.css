@@ -49,6 +49,19 @@
   --canvas-surface: oklch(0.98 0 0);
   --canvas-deep: oklch(0.955 0 0);
   --canvas-header: oklch(0.975 0 0);
+
+  /* Manus-style chat variables */
+  --rubic-text-primary: #34322d;
+  --rubic-text-secondary: #5e5e5b;
+  --rubic-text-tertiary: #858481;
+  --rubic-border-light: #0000000a;
+  --rubic-border-main: #0000000f;
+  --rubic-fill-gray: #37352f0a;
+  --rubic-fill-gray-dark: #37352f14;
+  --rubic-icon-stroke: #535350;
+  --rubic-icon-border: #b9b9b7;
+  --rubic-function-success: #25ba3b;
+  --rubic-icon-disable: #d0d0ce;
 }
 
 .dark {
@@ -93,6 +106,19 @@
   --canvas-surface: oklch(0.18 0 0);
   --canvas-deep: oklch(0.10 0 0);
   --canvas-header: oklch(0.16 0 0);
+
+  /* Manus-style chat variables (dark mode) */
+  --rubic-text-primary: #dadada;
+  --rubic-text-secondary: #acacac;
+  --rubic-text-tertiary: #858481;
+  --rubic-border-light: #ffffff0f;
+  --rubic-border-main: #ffffff14;
+  --rubic-fill-gray: #00000033;
+  --rubic-fill-gray-dark: #00000044;
+  --rubic-icon-stroke: #acacac;
+  --rubic-icon-border: #5f5f5f;
+  --rubic-function-success: #25ba3b;
+  --rubic-icon-disable: #505050;
 }
 
 @theme inline {

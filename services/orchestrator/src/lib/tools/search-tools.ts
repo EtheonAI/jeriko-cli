@@ -1,12 +1,11 @@
 /**
- * Web search tool
+ * Web search tool — uses Bing HTML scraping.
+ * DuckDuckGo blocks server-side requests with CAPTCHA (HTTP 202) as of Feb 2026.
  */
 
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { ToolContext } from './types.js';
-
-const SEARCH_FALLBACK_URL = 'https://html.duckduckgo.com/html/';
 
 export function createSearchWebTool(ctx: ToolContext) {
   return tool({
@@ -19,62 +18,71 @@ export function createSearchWebTool(ctx: ToolContext) {
         .describe('Time range filter for search results.'),
     }),
     execute: async (params) => {
+      // Try configured search provider first
       if (ctx.searchProvider) {
         try {
           const results = await ctx.searchProvider.search({
             query: params.query,
             dateRange: params.date_range,
           });
-          return { status: 'success' as const, results };
+          if (results.length > 0) {
+            return { status: 'success' as const, results };
+          }
+          // Provider returned empty — fall through to Bing
         } catch {
-          // Fall through to DuckDuckGo fallback
+          // Fall through to Bing fallback
         }
       }
 
-      // DuckDuckGo HTML fallback
+      // Bing HTML fallback — reliable, no CAPTCHA
       try {
-        const resp = await fetch(SEARCH_FALLBACK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `q=${encodeURIComponent(params.query)}`,
-          signal: AbortSignal.timeout(15000),
-        });
+        const resp = await fetch(
+          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10`,
+          {
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+            signal: AbortSignal.timeout(12000),
+          }
+        );
+        if (!resp.ok) {
+          return { status: 'error' as const, error: `Search failed (${resp.status})` };
+        }
+
         const html = await resp.text();
-
+        const items = html.split(/<li[^>]*class="b_algo"[^>]*>/i).slice(1);
         const results: Array<{ title: string; url: string; snippet: string }> = [];
-        const linkRegex = /<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
-        const snippetRegex = /<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
 
-        const links: Array<{ url: string; title: string }> = [];
-        let linkMatch: RegExpExecArray | null;
-        while ((linkMatch = linkRegex.exec(html)) !== null) {
-          let url = linkMatch[1] ?? '';
-          if (url.includes('uddg=')) {
-            const uddg = new URL(url, 'https://duckduckgo.com').searchParams.get('uddg');
-            if (uddg) url = uddg;
+        for (const item of items) {
+          const titleMatch = item.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
+          if (!titleMatch) continue;
+          const title = (titleMatch[1] ?? '').replace(/<[^>]*>/g, '').trim();
+
+          const citeMatch = item.match(/<cite[^>]*>([\s\S]*?)<\/cite>/i);
+          let url = '';
+          if (citeMatch) {
+            url = (citeMatch[1] ?? '').replace(/<[^>]*>/g, '').trim();
+            url = url.replace(/\s*›\s*/g, '/');
+            if (url && !url.startsWith('http')) url = 'https://' + url;
           }
-          const title = (linkMatch[2] ?? '').replace(/<[^>]*>/g, '').trim();
-          links.push({ url, title });
-        }
 
-        const snippets: string[] = [];
-        let snippetMatch: RegExpExecArray | null;
-        while ((snippetMatch = snippetRegex.exec(html)) !== null) {
-          snippets.push((snippetMatch[1] ?? '').replace(/<[^>]*>/g, '').trim());
-        }
+          const snippetMatch =
+            item.match(/<p[^>]*>([\s\S]*?)<\/p>/i) ??
+            item.match(/<span[^>]*class="[^"]*b_(?:lineclamp|paractl|descript)[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
+          const snippet = snippetMatch
+            ? (snippetMatch[1] ?? '').replace(/<[^>]*>/g, '').trim()
+            : '';
 
-        const maxCount = Math.min(links.length, 5);
-        for (let i = 0; i < maxCount; i++) {
-          const link = links[i];
-          if (link) {
-            results.push({
-              title: link.title,
-              url: link.url,
-              snippet: snippets[i] ?? '',
-            });
+          if (url && title) {
+            results.push({ title, url, snippet });
           }
+          if (results.length >= 10) break;
         }
 
+        console.log(`[search-fallback] Bing query="${params.query}" status=${resp.status} results=${results.length}`);
         return { status: 'success' as const, results };
       } catch {
         return { status: 'error' as const, error: 'Search failed' };

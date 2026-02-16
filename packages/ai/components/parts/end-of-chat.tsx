@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { StarIcon, FileSearchIcon } from "lucide-react";
+import { FileSearchIcon } from "lucide-react";
 import { Suggestions, type Suggestion } from "./suggestions";
 
 // ============================================================================
@@ -13,10 +12,6 @@ import { Suggestions, type Suggestion } from "./suggestions";
 export interface EndOfChatProps {
   /** Whether the task completed (shows "Task completed" badge) */
   taskCompleted?: boolean;
-  /** Current star rating (1-5), undefined = no rating yet */
-  rating?: number;
-  /** Called when user clicks a star */
-  onRate?: (rating: number) => void;
   /** Called when user clicks "View all files" — shows link when provided */
   onViewFiles?: () => void;
   /** Follow-up suggestions */
@@ -51,50 +46,11 @@ function CheckmarkIcon({ className }: { className?: string }) {
 }
 
 // ============================================================================
-// Rating Stars
-// ============================================================================
-
-function RatingStars({ rating, onRate }: { rating?: number; onRate?: (rating: number) => void }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-
-  return (
-    <div className="flex items-center" onMouseLeave={() => setHovered(null)}>
-      {[1, 2, 3, 4, 5].map((star) => {
-        const isFilled =
-          hovered !== null ? star <= hovered : rating !== undefined && star <= rating;
-
-        return (
-          <button
-            key={star}
-            type="button"
-            className="p-0.5 cursor-pointer select-none transition-colors"
-            onMouseEnter={() => setHovered(star)}
-            onClick={() => onRate?.(star)}
-            aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
-          >
-            <StarIcon
-              className={cn(
-                "size-4 transition-colors",
-                isFilled
-                  ? "text-yellow-500 fill-yellow-500"
-                  : "text-muted-foreground/30 fill-muted-foreground/30"
-              )}
-            />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ============================================================================
 // EndOfChat Component — Manus-style
 // ============================================================================
 
 export function EndOfChat({
   taskCompleted = true,
-  rating,
-  onRate,
   onViewFiles,
   suggestions,
   onSelectSuggestion,
@@ -102,45 +58,34 @@ export function EndOfChat({
 }: EndOfChatProps) {
   return (
     <div className={cn("w-full space-y-5 mt-1", className)}>
-      {/* Row 1: Task completed badge + Rating pill */}
-      <div className="flex items-center flex-wrap justify-between gap-2">
-        {/* Task completed badge */}
-        {taskCompleted && (
-          <div className="flex items-center gap-1.5 text-sm text-emerald-500">
-            <CheckmarkIcon />
-            Task completed
-          </div>
-        )}
-
-        {/* Rating pill */}
-        {onRate && (
-          <div className="flex items-center gap-2 py-1.5 ps-4 pe-3 bg-muted/50 rounded-lg">
-            <span className="text-sm text-muted-foreground">How was this result?</span>
-            <RatingStars rating={rating} onRate={onRate} />
-          </div>
-        )}
-      </div>
+      {/* Task completed badge */}
+      {taskCompleted && (
+        <div className="flex items-center gap-1.5 text-sm text-[var(--rubic-function-success)]">
+          <CheckmarkIcon />
+          Task completed
+        </div>
+      )}
 
       {/* View all files link */}
       {onViewFiles && (
         <button
           type="button"
           onClick={onViewFiles}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-sm text-[var(--rubic-text-secondary)] hover:text-[var(--rubic-text-primary)] transition-colors"
         >
           <FileSearchIcon className="size-4" />
           View all files
         </button>
       )}
 
-      {/* Divider */}
+      {/* Divider — Manus style */}
       {suggestions && suggestions.length > 0 && (
         <>
-          <hr className="border-t border-border/60" />
+          <hr className="border-t border-[var(--rubic-border-main)]" />
 
           {/* Suggested follow-ups */}
           <div>
-            <div className="text-muted-foreground/60 text-[13px] leading-[18px] font-medium mb-1">
+            <div className="text-[var(--rubic-text-tertiary)] text-[13px] leading-[18px] font-medium mb-1">
               Suggested follow-ups
             </div>
             <Suggestions suggestions={suggestions} onSelect={onSelectSuggestion ?? (() => {})} />

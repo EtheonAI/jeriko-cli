@@ -610,37 +610,99 @@ async function handleDeployApplyDeployment(
 
 // ── Upload attachments ───────────────────────────────────────────────────────
 
+/** MIME type lookup from file extension — matches Manus CDN content-type detection */
+const EXT_MIME: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "application/javascript",
+  ".ts": "text/typescript",
+  ".json": "application/json",
+  ".csv": "text/csv",
+  ".zip": "application/zip",
+  ".tar": "application/x-tar",
+  ".gz": "application/gzip",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+function guessMimeType(filePath: string): string {
+  const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
+  return EXT_MIME[ext] || "application/octet-stream";
+}
+
+export interface UploadedAttachment {
+  path: string;
+  url: string;
+  name: string;
+  mediaType: string;
+}
+
 export async function uploadAttachments(
   ctx: ToolContext,
   attachments: string[]
-): Promise<Array<{ path: string; url: string }>> {
+): Promise<UploadedAttachment[]> {
   if (!attachments || attachments.length === 0) return [];
 
   const baseUrl = ctx.terminalServerUrl;
-  const uploaded: Array<{ path: string; url: string }> = [];
+  const uploaded: UploadedAttachment[] = [];
 
   for (const filePath of attachments) {
     try {
+      const name = filePath.split("/").pop() || "file";
+      const mediaType = guessMimeType(filePath);
+      let url: string | undefined;
+
+      // Primary path: sandbox runtime → rubic-upload-file → S3
       if (baseUrl && baseUrl !== "no-sandbox") {
-        // Use sandbox runtime's file upload endpoint
-        const result = await postJson(`${baseUrl}/file/upload`, {
-          file_path: filePath,
-          user_id: ctx.userId,
-        });
-        if (result.url) {
-          uploaded.push({ path: filePath, url: result.url as string });
-          continue;
+        try {
+          const result = await postJson(`${baseUrl}/file/upload`, {
+            file_path: filePath,
+            user_id: ctx.userId,
+          });
+          if (result.url) {
+            url = result.url as string;
+          }
+        } catch (primaryErr) {
+          console.error(`[uploadAttachments] Primary upload failed for ${filePath}, trying fallback:`, primaryErr);
         }
       }
-      // Fallback to storage client
-      const url = await ctx.storage.uploadFromSandbox(
-        ctx.e2bSandboxId || ctx.sandboxId,
-        filePath,
-        ctx.userId
-      );
-      uploaded.push({ path: filePath, url });
+
+      // Fallback: read file from sandbox → upload to S3 from orchestrator
+      if (!url) {
+        try {
+          url = await ctx.storage.uploadFromSandbox(
+            ctx.e2bSandboxId || ctx.sandboxId,
+            filePath,
+            ctx.userId
+          );
+        } catch (fallbackErr) {
+          console.error(`[uploadAttachments] Fallback upload failed for ${filePath}:`, fallbackErr);
+        }
+      }
+
+      if (url) {
+        uploaded.push({ path: filePath, url, name, mediaType });
+      } else {
+        console.error(`[uploadAttachments] All upload paths failed for ${filePath}`);
+      }
     } catch (error) {
-      console.error(`Failed to upload attachment ${filePath}:`, error);
+      console.error(`[uploadAttachments] Unexpected error for ${filePath}:`, error);
     }
   }
 

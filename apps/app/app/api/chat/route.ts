@@ -392,7 +392,31 @@ export const POST = async (req: Request) => {
         ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("") ?? "";
-    if (!lastUserText.trim()) {
+    // Extract file/image references from ALL user messages for orchestrator context.
+    // Includes historical files so that if the sandbox dies and is recreated,
+    // all previously uploaded files are re-downloaded to ~/upload/ (session recovery).
+    const fileContext: { name: string; type: string; url?: string }[] = [];
+    const seenUrls = new Set<string>();
+    for (const m of messages) {
+      if (m.role !== "user") continue;
+      for (const p of m.parts ?? []) {
+        const part = p as unknown as Record<string, unknown>;
+        if (part.type === "file" || part.type === "image") {
+          const url = part.url as string | undefined;
+          // Deduplicate by URL to avoid redundant downloads
+          if (url && seenUrls.has(url)) continue;
+          if (url) seenUrls.add(url);
+          fileContext.push({
+            name: (part.filename as string) || (part.name as string) || "unnamed",
+            type: (part.mediaType as string) || (part.mimeType as string) || "application/octet-stream",
+            url,
+          });
+        }
+      }
+    }
+
+    // Allow empty text if files are attached
+    if (!lastUserText.trim() && fileContext.length === 0) {
       return new Response(JSON.stringify({ error: "Last user message is empty" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -405,7 +429,9 @@ export const POST = async (req: Request) => {
       : null;
 
     // Ensure session exists in DB (creates if missing — idempotent)
-    // Persist skills/connections in session metadata for resume
+    // Persist skills/connections in session metadata for resume.
+    // Also read existing metadata (sandboxId, nekoUrl) for sandbox recovery.
+    let sessionMeta: Record<string, unknown> = {};
     if (sessionId) {
       try {
         const [existing] = await db
@@ -414,25 +440,29 @@ export const POST = async (req: Request) => {
           .where(eq(agentSessions.id, sessionId))
           .limit(1);
         if (!existing) {
-          const sessionMeta: Record<string, unknown> = {};
-          if (skills?.length) sessionMeta.skills = skills;
-          if (connections?.length) sessionMeta.connections = connections;
+          const newMeta: Record<string, unknown> = {};
+          if (skills?.length) newMeta.skills = skills;
+          if (connections?.length) newMeta.connections = connections;
           await db.insert(agentSessions).values({
             id: sessionId,
             userId,
             status: "active",
-            ...(Object.keys(sessionMeta).length > 0 ? { metadata: sessionMeta } : {}),
+            ...(Object.keys(newMeta).length > 0 ? { metadata: newMeta } : {}),
           });
-        } else if (skills?.length || connections?.length) {
-          // Update existing session metadata with latest skills/connections
-          const existingMeta = (existing.metadata ?? {}) as Record<string, unknown>;
-          const updatedMeta = { ...existingMeta };
-          if (skills?.length) updatedMeta.skills = skills;
-          if (connections?.length) updatedMeta.connections = connections;
-          await db
-            .update(agentSessions)
-            .set({ metadata: updatedMeta, updatedAt: new Date() })
-            .where(eq(agentSessions.id, sessionId));
+          sessionMeta = newMeta;
+        } else {
+          // Carry forward existing metadata (includes sandboxId for resume)
+          sessionMeta = (existing.metadata ?? {}) as Record<string, unknown>;
+          if (skills?.length || connections?.length) {
+            const updatedMeta = { ...sessionMeta };
+            if (skills?.length) updatedMeta.skills = skills;
+            if (connections?.length) updatedMeta.connections = connections;
+            await db
+              .update(agentSessions)
+              .set({ metadata: updatedMeta, updatedAt: new Date() })
+              .where(eq(agentSessions.id, sessionId));
+            sessionMeta = updatedMeta;
+          }
         }
       } catch {
         // Non-critical — session may already exist
@@ -440,18 +470,25 @@ export const POST = async (req: Request) => {
     }
 
     // Convert UIMessages to CoreMessages for the orchestrator.
-    // Include text content from parts. For assistant messages with tool results,
-    // include a summary of tool calls so the orchestrator has full context.
+    // Include text content from parts. For user messages, also include file
+    // references so the LLM knows about attached files.
     const coreMessages = messages.map((m) => {
-      const textContent =
-        m.parts
-          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join("") ?? "";
+      const textParts: string[] = [];
+
+      for (const p of m.parts ?? []) {
+        const part = p as unknown as Record<string, unknown>;
+        if (part.type === "text" && typeof part.text === "string") {
+          textParts.push(part.text);
+        } else if (m.role === "user" && (part.type === "file" || part.type === "image")) {
+          const name = (part.filename as string) || (part.name as string) || "file";
+          const mime = (part.mediaType as string) || (part.mimeType as string) || "";
+          textParts.push(`[Attached: ${name}${mime ? ` (${mime})` : ""}]`);
+        }
+      }
 
       return {
         role: m.role as "user" | "assistant" | "system",
-        content: textContent,
+        content: textParts.join(""),
       };
     });
 
@@ -487,6 +524,9 @@ export const POST = async (req: Request) => {
         model: metadata?.model,
         skills,
         connections,
+        ...(fileContext.length > 0 ? { fileContext } : {}),
+        // Forward session metadata (sandboxId, nekoUrl) for sandbox resume/recovery
+        ...(sessionMeta.sandboxId ? { sessionMeta } : {}),
       }),
       signal: combinedSignal,
     });

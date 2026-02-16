@@ -27,8 +27,13 @@ logger = get_logger("server")
 _initialized = False
 _init_data: dict[str, Any] = {}
 
-# Paths that skip RSA auth (health/version/docs)
-_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json", "/neko/pre-auth", "/vnc/pre-auth"}
+# Paths that skip RSA auth (health/version/docs + user-facing pre-auth endpoints)
+# Manus pattern: /code-server/auth and /cs/* are "frontend direct-sends, no [RSA] auth"
+# They use token-based auth (pre_auth_token) + cookie injection instead.
+_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json", "/neko/pre-auth", "/vnc/pre-auth", "/code-server/auth"}
+
+# Path prefixes that skip RSA auth (browser iframe loads /cs/* directly)
+_SKIP_AUTH_PREFIXES = ("/cs/",)
 
 
 async def rsa_auth_dependency(request: Request) -> None:
@@ -38,7 +43,10 @@ async def rsa_auth_dependency(request: Request) -> None:
     Starlette caches request.body() in request._body after the first call,
     so downstream handlers can call request.json() / request.body() without issue.
     """
-    if request.url.path in _SKIP_AUTH_PATHS:
+    path = request.url.path
+    if path in _SKIP_AUTH_PATHS:
+        return
+    if any(path.startswith(p) for p in _SKIP_AUTH_PREFIXES):
         return
     if not is_rsa_enabled():
         return

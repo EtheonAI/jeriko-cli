@@ -14,19 +14,29 @@
  * Now centralized here for single-source-of-truth maintenance.
  */
 
+import { getE2bSandboxIdBySandboxId } from "./e2b-manager.js";
+import { getRsaHeaders } from "./rsa-auth.js";
+
 const SANDBOX_SERVICE_URL =
   process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
 const SANDBOX_DOMAIN = process.env.SANDBOX_DOMAIN || "e2b.dev";
 
 /**
  * Get the E2B port proxy URL for a sandbox at a specific port.
- * Same logic as code-server.ts getPortProxyUrl.
+ * Tries e2b-manager cache first (fast), falls back to sandbox service.
  */
 async function getPortProxyUrl(
   sandboxId: string,
   userId: string,
   port: number,
 ): Promise<string | null> {
+  // Try e2b-manager cache first (avoids sandbox service roundtrip)
+  const cachedE2bId = getE2bSandboxIdBySandboxId(sandboxId);
+  if (cachedE2bId) {
+    return `https://${port}-${cachedE2bId}.${SANDBOX_DOMAIN}`;
+  }
+
+  // Fall back to sandbox service
   try {
     const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${sandboxId}`, {
       headers: { "x-user-id": userId },
@@ -41,7 +51,6 @@ async function getPortProxyUrl(
     const e2bId = data.data?.e2bSandboxId;
     if (!e2bId) return null;
 
-    // E2B port proxy format: {port}-{sandboxId}.e2b.dev (port FIRST)
     return `https://${port}-${e2bId}.${SANDBOX_DOMAIN}`;
   } catch {
     return null;
@@ -61,6 +70,7 @@ export async function getTerminalServerUrl(
 
 /**
  * POST JSON to terminal server (inside sandbox).
+ * Includes RSA signature headers for terminal server auth.
  */
 export async function terminalServerPost(
   sandboxId: string,
@@ -74,10 +84,12 @@ export async function terminalServerPost(
     throw new Error("Could not resolve terminal server URL");
   }
   const url = `${baseUrl}${path}`;
+  const bodyStr = JSON.stringify(body);
+  const rsaHeaders = getRsaHeaders(bodyStr);
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", ...rsaHeaders },
+    body: bodyStr,
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!resp.ok) {
@@ -91,6 +103,7 @@ export async function terminalServerPost(
 
 /**
  * GET JSON from terminal server (inside sandbox).
+ * Includes RSA signature headers for terminal server auth.
  */
 export async function terminalServerGet(
   sandboxId: string,
@@ -103,7 +116,9 @@ export async function terminalServerGet(
     throw new Error("Could not resolve terminal server URL");
   }
   const url = `${baseUrl}${path}`;
+  const rsaHeaders = getRsaHeaders("");
   const resp = await fetch(url, {
+    headers: rsaHeaders,
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!resp.ok) {

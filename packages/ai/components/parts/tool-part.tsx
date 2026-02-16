@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { ShieldXIcon, MonitorIcon } from "lucide-react";
+import { ShieldXIcon } from "lucide-react";
 import type { StaticToolUIPart, DynamicToolUIPart } from "../../lib/types/ui-message";
 import { getToolName } from "../../lib/types/ui-message";
 import { ToolCompact } from "../tools/tool-compact";
@@ -21,14 +21,18 @@ export interface ToolPartProps {
   onApproval?: (toolCallId: string, approved: boolean, reason?: string) => void;
   onViewInCanvas?: (toolCallId: string) => void;
   variant?: "auto" | "compact" | "expanded";
+  /** Timestamp text to show on hover */
+  timestamp?: string;
 }
 
 // Tools that get their full custom renderer (not pill)
 const FULL_RENDERER_TOOLS = new Set([
   "generate_image",
+  "message_notify_user",
+  "message_ask_user",
 ]);
 
-// Debug mode — set NEXT_PUBLIC_DEBUG_TOOLS=true to restore full inline rendering
+// Debug mode
 const DEBUG_TOOLS = typeof window !== "undefined"
   && (globalThis as Record<string, unknown>).__NEXT_DATA__
   ? process.env.NEXT_PUBLIC_DEBUG_TOOLS === "true"
@@ -44,16 +48,16 @@ export function ToolPart({
   onApproval,
   onViewInCanvas,
   variant = "auto",
+  timestamp,
 }: ToolPartProps) {
   const { getRenderer } = useToolRegistry();
 
-  // Safety: skip rendering if part is malformed (missing required fields)
   if (!part || !part.toolCallId || !part.state) return null;
 
   const toolName = getToolName(part);
   const hasCanvasView = !!TOOL_VIEW_MAP[toolName];
 
-  // Approval requested — always show approval card regardless of variant
+  // Approval requested — always show approval card
   if (part.state === "approval-requested") {
     return (
       <div
@@ -74,7 +78,7 @@ export function ToolPart({
     );
   }
 
-  // Denied — always show denied message
+  // Denied
   if (part.state === "output-denied") {
     return (
       <div
@@ -96,7 +100,7 @@ export function ToolPart({
     );
   }
 
-  // show_plan — render with its own renderer (Manus-style inline plan)
+  // show_plan — render with its own renderer
   if (toolName === "show_plan") {
     const ToolRenderer = getRenderer(toolName);
     return (
@@ -118,45 +122,28 @@ export function ToolPart({
     );
   }
 
-  // Canvas-mapped tools → Manus-style pill (unless debug mode)
+  // Canvas-mapped tools → clickable pill that opens canvas
   if (hasCanvasView && !DEBUG_TOOLS && variant !== "expanded") {
     return (
       <div
         data-testid="tool-card"
         data-tool-name={toolName}
         data-tool-state={part.state}
-        className={cn("group/tool relative my-0.5", className)}
+        className={cn("my-0.5", className)}
       >
         <ToolInlineCompact
           toolName={toolName}
           state={part.state}
           input={part.input as Record<string, unknown> | undefined}
           output={part.output as Record<string, unknown> | undefined}
+          onClick={onViewInCanvas ? () => onViewInCanvas(part.toolCallId) : undefined}
+          timestamp={timestamp}
         />
-
-        {/* "View in Canvas" pin — hover to reveal */}
-        {onViewInCanvas && part.state === "output-available" && (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => onViewInCanvas(part.toolCallId)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onViewInCanvas(part.toolCallId);
-              }
-            }}
-            title="View in canvas"
-            className="absolute right-0 top-0.5 flex size-6 cursor-pointer items-center justify-center rounded-md bg-muted/80 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover/tool:opacity-100"
-          >
-            <MonitorIcon className="size-3" />
-          </div>
-        )}
       </div>
     );
   }
 
-  // Full renderer tools (generate_image) — keep their expanded UI
+  // Full renderer tools (generate_image)
   if (FULL_RENDERER_TOOLS.has(toolName) || variant === "expanded" || DEBUG_TOOLS) {
     const ToolRenderer = getRenderer(toolName);
     return (
@@ -164,7 +151,7 @@ export function ToolPart({
         data-testid="tool-card"
         data-tool-name={toolName}
         data-tool-state={part.state}
-        className={cn("group/tool relative my-2", className)}
+        className={cn("my-2", className)}
       >
         <ToolRenderer
           toolName={toolName}
@@ -174,29 +161,11 @@ export function ToolPart({
           output={part.output}
           errorText={part.errorText}
         />
-
-        {hasCanvasView && onViewInCanvas && part.state === "output-available" && (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => onViewInCanvas(part.toolCallId)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onViewInCanvas(part.toolCallId);
-              }
-            }}
-            title="View in canvas"
-            className="absolute right-2 top-2 flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted/80 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover/tool:opacity-100"
-          >
-            <MonitorIcon className="size-3.5" />
-          </div>
-        )}
       </div>
     );
   }
 
-  // Everything else → Manus-style compact pill
+  // Everything else → compact pill (also clickable if canvas-mapped)
   const summary = getCompactSummary(toolName, part);
   const title = (part as { title?: string }).title;
   return (

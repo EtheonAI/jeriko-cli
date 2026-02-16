@@ -347,13 +347,13 @@ export const ChatPrompt = forwardRef<ChatPromptRef, ChatPromptProps>(function Ch
         {/* Bottom Panel — connect devices (dashboard only) */}
         {showConfigBar && showPanel && (
           <div
-            className="
-                bg-[rgba(55,53,47,0.02)] dark:bg-[rgba(255,255,255,0.02)]
-                hover:bg-[rgba(240,239,237,1)] dark:hover:bg-[rgba(255,255,255,0.04)]
-                border-x border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.1)]
-                rounded-b-[22px] pb-[7px] px-5 pt-[29px] -mt-[22px]
-                transition-colors cursor-pointer select-none
-              "
+            className={cn(
+              "bg-[rgba(55,53,47,0.02)] dark:bg-[rgba(255,255,255,0.02)]",
+              "hover:bg-[rgba(240,239,237,1)] dark:hover:bg-[rgba(255,255,255,0.04)]",
+              "border-x border-b border-[rgba(0,0,0,0.06)] dark:border-[rgba(255,255,255,0.1)]",
+              "rounded-b-[22px] pb-[7px] px-5 pt-[29px] -mt-[22px]",
+              "transition-colors cursor-pointer select-none"
+            )}
             onClick={() => setShowConnectorsDialog(true)}
           >
             <div className="flex items-center gap-2">

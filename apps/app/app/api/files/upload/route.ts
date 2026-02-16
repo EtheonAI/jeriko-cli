@@ -1,7 +1,6 @@
 import { auth } from "@repo/auth";
 import { headers } from "next/headers";
-
-const FILE_SERVICE_URL = process.env.FILE_SERVICE_URL || "http://localhost:4005";
+import { uploadFile, getPresignedUrl } from "@repo/storage";
 
 export const POST = async (req: Request) => {
   try {
@@ -15,33 +14,34 @@ export const POST = async (req: Request) => {
       });
     }
 
+    const userId = session.user.id;
     const formData = await req.formData();
-    const path = formData.get("path") as string | null;
+    const file = formData.get("file") as File | null;
 
-    const response = await fetch(`${FILE_SERVICE_URL}/upload`, {
-      method: "POST",
-      headers: {
-        "x-user-id": session.user.id,
-        ...(path ? { "x-path": path } : {}),
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      return new Response(JSON.stringify({ error: error || "Upload failed" }), {
-        status: response.status,
+    if (!file) {
+      return new Response(JSON.stringify({ error: "No file provided" }), {
+        status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
-    return new Response(JSON.stringify(data), {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const timestamp = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const key = `uploads/${userId}/${timestamp}_${safeName}`;
+
+    await uploadFile(key, buffer, file.type || "application/octet-stream");
+
+    // Get a presigned download URL (24h expiry, prefer CDN if configured)
+    const url = await getPresignedUrl(key, 86400, true);
+
+    return new Response(JSON.stringify({ url }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    console.error("File upload error:", error);
+    return new Response(JSON.stringify({ error: "Upload failed" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });

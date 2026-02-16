@@ -2,13 +2,22 @@
  * E2B Sandbox lifecycle manager.
  * Creates, caches, and cleans up sandbox instances per session.
  *
- * Follows the Manus pattern exactly:
+ * Follows the Manus pattern:
+ * - One sandbox per task (session). Sandbox hibernates on inactivity, wakes on demand.
+ * - Retention: Free users = 7 days, Pro users = 21 days (Manus parity).
+ * - On sandbox death/recycle, a new sandbox is created and files restored from S3 / message history.
  * - Each sandbox gets a unique proxy token with sk- prefix (mimics OpenAI key format)
  * - Token is set as OPENAI_API_KEY inside the sandbox
  * - OPENAI_BASE_URL points to our LLM proxy (never directly to OpenAI)
  * - The real OPENAI_API_KEY NEVER enters the sandbox
  * - Token is also written to ~/.secrets/sandbox_api_token
  * - The LLM proxy validates the token and forwards to OpenAI with the server-side real key
+ *
+ * Recovery flow (Manus parity):
+ * 1. Check in-memory cache → if healthy, return
+ * 2. Check session metadata for stored sandboxId → try resume via sandbox service
+ * 3. If resume succeeds (sandbox still alive at E2B), cache and return (filesystem intact)
+ * 4. If resume fails (sandbox recycled), create new sandbox → file restore handled by agent-loop
  */
 
 import crypto from "node:crypto";
@@ -48,6 +57,7 @@ interface SandboxInfo {
   proxyToken: string | null;
   codeServerPassword: string | null;
   databaseName: string | null;
+  projectPath: string | null;
   createdAt: number;
   lastUsedAt: number;
 }
@@ -61,8 +71,29 @@ const proxyTokenMap = new Map<
   { sandboxId: string; userId: string; sessionId: string; createdAt: number }
 >();
 
-// Sandbox idle timeout: 15 minutes
+// Sandbox idle timeout for orchestrator cache eviction (15 minutes).
+// NOTE: The E2B sandbox itself lives longer (SANDBOX_TIMEOUT_MS) — it auto-hibernates
+// and can be resumed via the sandbox service's /resume endpoint.
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
+// Health check interval: only ping /healthz if sandbox hasn't been used in >2 min
+const HEALTH_CHECK_INTERVAL_MS = 2 * 60 * 1000;
+
+// E2B sandbox timeout (Manus: hibernation-based, survives for days).
+// Default 1 hour of active compute. E2B auto-hibernates on inactivity and
+// can be resumed later if within the retention window.
+// Free users: 7 days retention. Pro users: 21 days retention.
+const SANDBOX_TIMEOUT_MS = parseInt(
+  process.env.SANDBOX_TIMEOUT_MS || String(60 * 60 * 1000),
+  10
+);
+
+// Retention periods (Manus parity: Free=7d, Pro=21d)
+// These control how long session sandbox data persists for recovery.
+export const SANDBOX_RETENTION = {
+  free: 7 * 24 * 60 * 60 * 1000,  // 7 days
+  pro: 21 * 24 * 60 * 60 * 1000,  // 21 days
+};
 
 export interface SandboxResult {
   sandboxId: string;
@@ -96,6 +127,12 @@ export function validateProxyToken(
  * Get or create a sandbox for a session.
  * Returns the sandbox ID and Neko WebRTC stream URL (if desktop template).
  *
+ * Recovery flow (Manus parity):
+ * 1. Check in-memory cache → if healthy, return
+ * 2. If cache miss + sessionMeta has sandboxId → try resume via sandbox service
+ * 3. If resume succeeds, filesystem intact (E2B hibernate/wake). Cache and return.
+ * 4. If resume fails, create new sandbox. File restore handled by agent-loop (fileContext).
+ *
  * Proxy token flow:
  * - Generates a unique proxy token per sandbox
  * - Passes it as OPENAI_API_KEY in config.env to sandbox service
@@ -104,16 +141,40 @@ export function validateProxyToken(
  */
 export async function getOrCreateSandbox(
   sessionId: string,
-  userId: string
+  userId: string,
+  sessionMeta?: Record<string, unknown>
 ): Promise<SandboxResult> {
   const cached = sandboxCache.get(sessionId);
   if (cached) {
-    cached.lastUsedAt = Date.now();
-    return {
-      sandboxId: cached.sandboxId,
-      e2bSandboxId: cached.e2bSandboxId,
-      nekoUrl: cached.nekoUrl,
-    };
+    // Health check for sandboxes that haven't been used recently.
+    // Detects dead E2B sandboxes (timeout, crash) and evicts so a new one is created.
+    const timeSinceLastUse = Date.now() - cached.lastUsedAt;
+    if (timeSinceLastUse > HEALTH_CHECK_INTERVAL_MS && cached.e2bSandboxId) {
+      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
+      const healthUrl = `https://8330-${cached.e2bSandboxId}.${domain}/healthz`;
+      try {
+        const resp = await fetch(healthUrl, { signal: AbortSignal.timeout(3000) });
+        if (!resp.ok) throw new Error("unhealthy");
+      } catch {
+        // Sandbox is dead — evict from cache and fall through to resume/create
+        console.log(
+          `[e2b-manager] Dead sandbox detected for session=${sessionId} (sandbox=${cached.sandboxId}), will try resume/recreate`
+        );
+        if (cached.proxyToken) proxyTokenMap.delete(cached.proxyToken);
+        sandboxCache.delete(sessionId);
+      }
+    }
+
+    // Re-check cache (may have been evicted by health check)
+    const stillCached = sandboxCache.get(sessionId);
+    if (stillCached) {
+      stillCached.lastUsedAt = Date.now();
+      return {
+        sandboxId: stillCached.sandboxId,
+        e2bSandboxId: stillCached.e2bSandboxId,
+        nekoUrl: stillCached.nekoUrl,
+      };
+    }
   }
 
   // LOCAL_SANDBOX_URL shortcut — skip E2B entirely, use local Docker container.
@@ -129,6 +190,7 @@ export async function getOrCreateSandbox(
       proxyToken,
       codeServerPassword: null,
       databaseName: null,
+      projectPath: null,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     });
@@ -138,48 +200,77 @@ export async function getOrCreateSandbox(
     return { sandboxId: localId, e2bSandboxId: null, nekoUrl: null };
   }
 
-  // Generate proxy token for this sandbox (Manus pattern: sk- prefix)
-  // The real OPENAI_API_KEY NEVER enters the sandbox.
+  // ── Step 2: Try to resume existing sandbox from session metadata ──
+  // When the orchestrator restarts or the cache is evicted, the sandboxId
+  // is still stored in agentSessions.metadata. Try to reconnect to the
+  // E2B sandbox — if it's still alive (hibernated), the filesystem is intact.
+  const storedSandboxId = sessionMeta?.sandboxId as string | undefined;
+  if (storedSandboxId) {
+    try {
+      const resumeResp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes/${storedSandboxId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (resumeResp.ok) {
+        const resumeData = (await resumeResp.json()) as {
+          data?: {
+            id?: string;
+            sandboxId?: string;
+            e2bSandboxId?: string;
+            nekoUrl?: string;
+            status?: string;
+          };
+        };
+
+        const resumedId = resumeData.data?.sandboxId || resumeData.data?.id || storedSandboxId;
+        const resumedE2bId = resumeData.data?.e2bSandboxId || null;
+        const resumedNekoUrl = resumeData.data?.nekoUrl || null;
+
+        // Generate new proxy token for resumed sandbox
+        const proxyToken = generateProxyToken();
+        proxyTokenMap.set(proxyToken, { sandboxId: resumedId, userId, sessionId, createdAt: Date.now() });
+
+        sandboxCache.set(sessionId, {
+          sandboxId: resumedId,
+          e2bSandboxId: resumedE2bId,
+          nekoUrl: resumedNekoUrl,
+          proxyToken,
+          codeServerPassword: null,
+          databaseName: null,
+          projectPath: null,
+          createdAt: Date.now(),
+          lastUsedAt: Date.now(),
+        });
+
+        console.log(
+          `[e2b-manager] Resumed existing sandbox for session=${sessionId} (sandbox=${resumedId})`
+        );
+
+        // Re-initialize with new proxy token
+        if (resumedE2bId) {
+          const env = buildSandboxEnv(proxyToken);
+          initializeSandbox(resumedE2bId, sessionId, userId, proxyToken, env).catch((err) =>
+            console.warn("[e2b-manager] reinit after resume failed:", err)
+          );
+        }
+
+        return { sandboxId: resumedId, e2bSandboxId: resumedE2bId, nekoUrl: resumedNekoUrl };
+      }
+      // Resume failed (410 terminated, 404 not found, etc.) — fall through to create new
+      console.log(
+        `[e2b-manager] Resume failed for sandbox=${storedSandboxId} (${resumeResp.status}), creating new`
+      );
+    } catch {
+      // Resume failed — sandbox service unreachable or sandbox gone
+      console.log(`[e2b-manager] Resume request failed for sandbox=${storedSandboxId}, creating new`);
+    }
+  }
+
+  // ── Step 3: Create new sandbox ──
   const proxyToken = generateProxyToken();
-
-  // Build env vars to inject into sandbox — exactly like Manus Layer 4
-  const env: Record<string, string> = {};
-  env.OPENAI_API_KEY = proxyToken;
-  if (LLM_PROXY_URL) {
-    env.OPENAI_BASE_URL = LLM_PROXY_URL;
-    env.OPENAI_API_BASE = LLM_PROXY_URL; // Legacy compat (OpenAI Python SDK v0.x)
-    // Derive upload URL from LLM proxy URL (same host, /api/upload/presign path)
-    const uploadUrl = LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/upload/presign");
-    env.RUBIC_UPLOAD_URL = uploadUrl;
-  }
-
-  // Orchestrator URL — for apiproxy and upload calls from inside the sandbox
-  if (ORCHESTRATOR_URL) {
-    env.ORCHESTRATOR_URL = ORCHESTRATOR_URL;
-  }
-
-  // Sandbox API token as secret file path (Manus pattern)
-  env.SANDBOX_API_TOKEN = proxyToken;
-
-  // Code-server password — generated per sandbox (Manus pattern: random per session)
-  const codeServerPassword = crypto.randomBytes(8).toString("hex");
-  env.CODE_SERVER_PASSWORD = codeServerPassword;
-  env.CODE_SERVER_PORT = "8329";
-  if (CODE_SERVER_DOMAIN) {
-    env.CODE_SERVER_DOMAIN = CODE_SERVER_DOMAIN;
-  }
-
-  // Forge API keys for webdev projects (separate from sandbox LLM proxy)
-  if (FORGE_API_KEY) {
-    env.BUILT_IN_FORGE_API_KEY = FORGE_API_KEY;
-    env.BUILT_IN_FORGE_API_URL =
-      FORGE_API_URL || LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/forge");
-  }
-  if (FORGE_FRONTEND_API_KEY) {
-    env.VITE_FRONTEND_FORGE_API_KEY = FORGE_FRONTEND_API_KEY;
-    env.VITE_FRONTEND_FORGE_API_URL =
-      FORGE_API_URL || LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/forge");
-  }
+  const env = buildSandboxEnv(proxyToken);
 
   // Create via sandbox service — defaults to 'desktop' template (Neko WebRTC)
   const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes`, {
@@ -191,7 +282,7 @@ export async function getOrCreateSandbox(
     body: JSON.stringify({
       sessionId,
       template: process.env.E2B_TEMPLATE || "desktop",
-      config: { env, timeout: 30 * 60 * 1000 },
+      config: { env, timeout: SANDBOX_TIMEOUT_MS },
     }),
     signal: AbortSignal.timeout(30000),
   });
@@ -226,6 +317,8 @@ export async function getOrCreateSandbox(
     createdAt: Date.now(),
   });
 
+  const codeServerPassword = env.CODE_SERVER_PASSWORD || crypto.randomBytes(8).toString("hex");
+
   sandboxCache.set(sessionId, {
     sandboxId,
     e2bSandboxId,
@@ -233,6 +326,7 @@ export async function getOrCreateSandbox(
     proxyToken,
     codeServerPassword,
     databaseName: null,
+    projectPath: null,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
   });
@@ -246,6 +340,53 @@ export async function getOrCreateSandbox(
   }
 
   return { sandboxId, e2bSandboxId, nekoUrl };
+}
+
+/**
+ * Build sandbox env vars (Manus Layer 4 pattern).
+ * Extracted to a function so it can be reused for both create and resume flows.
+ */
+function buildSandboxEnv(proxyToken: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  env.OPENAI_API_KEY = proxyToken;
+  if (LLM_PROXY_URL) {
+    env.OPENAI_BASE_URL = LLM_PROXY_URL;
+    env.OPENAI_API_BASE = LLM_PROXY_URL;
+    const uploadUrl = LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/upload/presign");
+    env.RUBIC_UPLOAD_URL = uploadUrl;
+  }
+  if (ORCHESTRATOR_URL) {
+    env.ORCHESTRATOR_URL = ORCHESTRATOR_URL;
+  }
+
+  // S3 credentials for in-sandbox presign (rubic-upload-file).
+  // When ORCHESTRATOR_URL is unreachable from E2B sandboxes (e.g. local dev),
+  // the sandbox runtime handles presign locally using these credentials.
+  const s3Vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "S3_BUCKET", "S3_ENDPOINT"];
+  for (const v of s3Vars) {
+    if (process.env[v]) env[v] = process.env[v]!;
+  }
+  env.SANDBOX_API_TOKEN = proxyToken;
+
+  const codeServerPassword = crypto.randomBytes(8).toString("hex");
+  env.CODE_SERVER_PASSWORD = codeServerPassword;
+  env.CODE_SERVER_PORT = "8329";
+  if (CODE_SERVER_DOMAIN) {
+    env.CODE_SERVER_DOMAIN = CODE_SERVER_DOMAIN;
+  }
+
+  if (FORGE_API_KEY) {
+    env.BUILT_IN_FORGE_API_KEY = FORGE_API_KEY;
+    env.BUILT_IN_FORGE_API_URL =
+      FORGE_API_URL || LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/forge");
+  }
+  if (FORGE_FRONTEND_API_KEY) {
+    env.VITE_FRONTEND_FORGE_API_KEY = FORGE_FRONTEND_API_KEY;
+    env.VITE_FRONTEND_FORGE_API_URL =
+      FORGE_API_URL || LLM_PROXY_URL.replace(/\/llm-proxy\/v1$/, "/forge");
+  }
+
+  return env;
 }
 
 /**
@@ -299,12 +440,56 @@ export function getSandboxDatabaseName(sessionId: string): string | null {
 }
 
 /**
+ * Set the project path for a sandbox session.
+ */
+export function setSandboxProjectPath(sessionId: string, projectPath: string): void {
+  const cached = sandboxCache.get(sessionId);
+  if (cached) cached.projectPath = projectPath;
+}
+
+/**
+ * Get the project path for a sandbox, looking up by sandboxId.
+ */
+export function getProjectPathBySandboxId(sandboxId: string): string | null {
+  for (const [, info] of sandboxCache) {
+    if (info.sandboxId === sandboxId) return info.projectPath;
+  }
+  return null;
+}
+
+/**
  * Reverse lookup: find session ID by sandbox ID.
  * Used by webdev init to associate database name with session.
  */
 export function getSessionIdBySandboxId(sandboxId: string): string | null {
   for (const [sessionId, info] of sandboxCache) {
     if (info.sandboxId === sandboxId) return sessionId;
+  }
+  return null;
+}
+
+/**
+ * Get the terminal server URL for a sandbox (by sandboxId).
+ * Used by webdev routes to call the terminal server directly instead of
+ * going through the sandbox service (which uses different API endpoints).
+ */
+export function getTerminalServerUrlBySandboxId(sandboxId: string): string | null {
+  for (const [, info] of sandboxCache) {
+    if (info.sandboxId === sandboxId && info.e2bSandboxId) {
+      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
+      return `https://8330-${info.e2bSandboxId}.${domain}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get the E2B sandbox ID for a given orchestrator sandbox ID.
+ * Used by webdev tools to construct preview URLs.
+ */
+export function getE2bSandboxIdBySandboxId(sandboxId: string): string | null {
+  for (const [, info] of sandboxCache) {
+    if (info.sandboxId === sandboxId) return info.e2bSandboxId;
   }
   return null;
 }

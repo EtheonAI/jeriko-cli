@@ -38,8 +38,9 @@ RUN yes | unminimize || true && \
 # Node.js 22 + supervisor
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs supervisor && \
+    npm install -g corepack@latest && \
     corepack enable && \
-    corepack prepare pnpm@latest --activate && \
+    corepack install -g pnpm@latest-10 && \
     npm install -g yarn --force && \
     apt-get clean
 
@@ -106,6 +107,11 @@ RUN cd /tmp/rubic-upload-file-src && \
     GOOS=linux GOARCH=amd64 go build -o /usr/local/bin/rubic-upload-file . && \
     chmod +x /usr/local/bin/rubic-upload-file && \
     rm -rf /tmp/rubic-upload-file-src
+
+# Conversion utility scripts
+COPY rubic-files/bin/rubic-md-to-pdf /usr/local/bin/rubic-md-to-pdf
+COPY rubic-files/bin/rubic-export-slides /usr/local/bin/rubic-export-slides
+RUN chmod +x /usr/local/bin/rubic-md-to-pdf /usr/local/bin/rubic-export-slides
 
 # rubic-mcp-cli (matches manus-mcp-cli Go binary)
 COPY rubic-mcp-cli/ /tmp/rubic-mcp-cli-src/
@@ -179,7 +185,9 @@ RUN chmod +x /usr/local/bin/pip /usr/local/bin/pip3
 
 # Set permissions
 # CRITICAL: sandbox_runtime/ must stay ubuntu-owned so Python can create __pycache__
-RUN chown -R ubuntu:ubuntu /home/ubuntu && \
+# Pre-create corepack cache dir to avoid EACCES when pnpm runs as ubuntu at runtime
+RUN mkdir -p /home/ubuntu/.cache/node/corepack/v1 && \
+    chown -R ubuntu:ubuntu /home/ubuntu && \
     chown -R root:root /opt/.rubic && \
     chown -R ubuntu:ubuntu /opt/.rubic/runtime/sandbox_runtime && \
     chmod -R 755 /opt/.rubic

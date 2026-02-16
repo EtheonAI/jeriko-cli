@@ -61,8 +61,8 @@ const REGISTERED_TOOLS: Record<string, string> = {
   // Plan
   show_plan: "ShowPlanRenderer",
   // Communication
-  message_notify_user: "ProgressTool",
-  message_ask_user: "ProgressTool",
+  message_notify_user: "MessageNotifyRenderer",
+  message_ask_user: "MessageNotifyRenderer",
   // Scheduling
   schedule_task: "ProgressTool",
   schedule_recurring_task: "ProgressTool",
@@ -99,6 +99,7 @@ const REGISTERED_TOOLS: Record<string, string> = {
   webdev_execute_sql: "ProgressTool",
   webdev_push_schema: "ProgressTool",
   webdev_list_versions: "ProgressTool",
+  webdev_add_feature: "ProgressTool",
 };
 
 function getRenderer(toolName: string): string {
@@ -184,51 +185,51 @@ describe("Full Rendering Pipeline", () => {
         name: "message_notify_user",
         input: { text: "Hello user" },
         result: { sent: true },
-        expectedRenderer: "ProgressTool",
+        expectedRenderer: "MessageNotifyRenderer",
         expectedCanvasView: undefined,
       },
       {
         name: "message_ask_user",
         input: { text: "What do you prefer?" },
         result: { response: "Option A" },
-        expectedRenderer: "ProgressTool",
+        expectedRenderer: "MessageNotifyRenderer",
         expectedCanvasView: undefined,
       },
-      // File System
+      // File System (mapped to terminal view)
       {
         name: "file_read",
         input: { file: "/home/user/test.py" },
         result: { content: "print('hello')" },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "code",
+        expectedCanvasView: "terminal",
       },
       {
         name: "file_write",
         input: { file: "/home/user/test.py", content: "print('hello')" },
         result: { success: true, path: "/home/user/test.py" },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "code",
+        expectedCanvasView: "terminal",
       },
       {
         name: "file_str_replace",
         input: { file: "/home/user/test.py", old_str: "hello", new_str: "world" },
         result: { success: true },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "code",
+        expectedCanvasView: "terminal",
       },
       {
         name: "file_find_in_content",
         input: { file: "/home/user/test.py", regex: "def\\s+" },
         result: { matches: ["def main():"] },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "code",
+        expectedCanvasView: "terminal",
       },
       {
         name: "file_find_by_name",
         input: { path: "/home/user", glob: "*.py" },
         result: { files: ["/home/user/test.py", "/home/user/main.py"] },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "code",
+        expectedCanvasView: "terminal",
       },
       // Shell
       {
@@ -470,6 +471,13 @@ describe("Full Rendering Pipeline", () => {
         expectedRenderer: "ProgressTool",
         expectedCanvasView: "webDevIDE",
       },
+      {
+        name: "webdev_add_feature",
+        input: { feature: "auth", description: "Add authentication" },
+        result: { success: true, feature: "auth" },
+        expectedRenderer: "ProgressTool",
+        expectedCanvasView: "webDevIDE",
+      },
     ];
 
     for (const tool of AGENT_TOOLS) {
@@ -562,7 +570,7 @@ describe("Full Rendering Pipeline", () => {
         "generate_image", "schedule_recurring_task", "check_outcomes",
         "webdev_init_project", "webdev_save_checkpoint", "webdev_check_status",
         "webdev_restart_server", "webdev_rollback_checkpoint", "webdev_execute_sql",
-        "webdev_push_schema", "webdev_list_versions",
+        "webdev_push_schema", "webdev_list_versions", "webdev_add_feature",
       ];
 
       const missingRenderers: string[] = [];
@@ -946,7 +954,7 @@ describe("Full Rendering Pipeline", () => {
       expect(canvasViews).toEqual([
         undefined, // show_plan — no canvas
         "browser", // web_search
-        "code", // file_write
+        "terminal", // file_write
         "terminal", // shell_exec
         "browser", // browser_navigate
         undefined, // show_plan — no canvas
@@ -1074,11 +1082,10 @@ describe("Full Rendering Pipeline", () => {
     const terminalTools = [
       "shell_exec", "shell_view", "shell_wait", "shell_write_to_process",
       "shell_kill_process", "code_execute",
-    ];
-
-    const codeTools = [
+      // File tools + text_editor now map to terminal (not code)
       "file_read", "file_write", "file_str_replace",
       "file_find_in_content", "file_find_by_name",
+      "text_editor",
     ];
 
     const noCanvasTools = [
@@ -1098,16 +1105,270 @@ describe("Full Rendering Pipeline", () => {
       });
     }
 
-    for (const tool of codeTools) {
-      it(`${tool} → code canvas`, () => {
-        expect(TOOL_VIEW_MAP[tool]).toBe("code");
-      });
-    }
-
     for (const tool of noCanvasTools) {
       it(`${tool} → no canvas view`, () => {
         expect(TOOL_VIEW_MAP[tool]).toBeUndefined();
       });
     }
+  });
+
+  // ========================================================================
+  // 11. REAL ORCHESTRATOR DATA SHAPES — show_plan
+  // ========================================================================
+
+  describe("Real orchestrator show_plan data shapes", () => {
+    // The orchestrator's plan-tools.ts uses:
+    //   Input schema: { steps: [{ id, title, description?, status }] }
+    //   Output: { status: 'success', plan: [{ id, title, description?, status }] }
+    // This is DIFFERENT from the legacy "todos" format used in older tests.
+
+    it("Processes show_plan with real orchestrator input format (steps, not todos)", () => {
+      const realInput = {
+        steps: [
+          { id: "step-1", title: "Search for templates", description: "Find modern HTML5 templates", status: "in_progress" },
+          { id: "step-2", title: "Create project structure", status: "pending" },
+          { id: "step-3", title: "Deploy to production", status: "pending" },
+        ],
+      };
+
+      processor.process(makeToolStartSSE("show_plan", realInput, "plan-real-1"));
+
+      const { parts } = processor.finalize();
+      const planPart = parts.find(isToolPart);
+
+      expect(planPart).toBeDefined();
+      expect(getToolNameFromPart(planPart!)).toBe("show_plan");
+      expect(planPart!.state).toBe("input-available");
+      expect(planPart!.input).toEqual(realInput);
+
+      // Verify extractPlanSteps-compatible: data.steps should be found
+      const data = planPart!.input as Record<string, unknown>;
+      const extracted = (data.plan ?? data.todos ?? data.steps ?? data.phases) as
+        | Array<{ id?: string; title?: string; label?: string; status?: string; description?: string }>
+        | undefined;
+      expect(extracted).toBeDefined();
+      expect(extracted!.length).toBe(3);
+      expect(extracted![0]!.title).toBe("Search for templates");
+      expect(extracted![0]!.description).toBe("Find modern HTML5 templates");
+      expect(extracted![0]!.status).toBe("in_progress");
+    });
+
+    it("Processes show_plan with real orchestrator output format (plan, not todos)", () => {
+      const realInput = {
+        steps: [
+          { id: "step-1", title: "Search for templates", status: "in_progress" },
+          { id: "step-2", title: "Create project structure", status: "pending" },
+        ],
+      };
+      const realOutput = {
+        status: "success",
+        plan: [
+          { id: "step-1", title: "Search for templates", status: "in_progress" },
+          { id: "step-2", title: "Create project structure", status: "pending" },
+        ],
+      };
+
+      processor.process(makeToolStartSSE("show_plan", realInput, "plan-real-2"));
+      processor.process(makeToolResultSSE("show_plan", realOutput, "plan-real-2"));
+
+      const { parts } = processor.finalize();
+      const planPart = parts.find(isToolPart);
+
+      expect(planPart).toBeDefined();
+      expect(planPart!.state).toBe("output-available");
+
+      // When output is available, extractPlanSteps prefers output over input
+      const data = planPart!.output as Record<string, unknown>;
+      const extracted = (data.plan ?? data.todos ?? data.steps ?? data.phases) as
+        | Array<{ id?: string; title?: string; status?: string }>
+        | undefined;
+      expect(extracted).toBeDefined();
+      expect(extracted!.length).toBe(2);
+      expect(extracted![0]!.title).toBe("Search for templates");
+      // "plan" field is found FIRST in the fallback chain
+      expect(data.plan).toBeDefined();
+      expect(data.todos).toBeUndefined();
+    });
+
+    it("Full session with real orchestrator format: plan → tools → updated plan", () => {
+      // 1. Initial plan (input uses 'steps', output uses 'plan')
+      processor.process(makeToolStartSSE("show_plan", {
+        steps: [
+          { id: "s1", title: "Research topic", description: "Search the web for information", status: "in_progress" },
+          { id: "s2", title: "Write code", status: "pending" },
+          { id: "s3", title: "Test and deploy", status: "pending" },
+        ],
+      }, "plan-r1"));
+      processor.process(makeToolResultSSE("show_plan", {
+        status: "success",
+        plan: [
+          { id: "s1", title: "Research topic", description: "Search the web for information", status: "in_progress" },
+          { id: "s2", title: "Write code", status: "pending" },
+          { id: "s3", title: "Test and deploy", status: "pending" },
+        ],
+      }, "plan-r1"));
+
+      // 2. Tool calls under step 1
+      processor.process(makeToolStartSSE("web_search", { query: "AI trends 2026" }, "ws-1"));
+      processor.process(makeToolResultSSE("web_search", {
+        results: [{ title: "AI in 2026", url: "https://example.com", snippet: "..." }],
+      }, "ws-1"));
+
+      processor.process(makeToolStartSSE("browser_navigate", { url: "https://example.com" }, "bn-1"));
+      processor.process(makeToolResultSSE("browser_navigate", {
+        url: "https://example.com", title: "AI in 2026",
+      }, "bn-1"));
+
+      // 3. Updated plan (step 1 completed, step 2 in progress)
+      processor.process(makeToolStartSSE("show_plan", {
+        steps: [
+          { id: "s1", title: "Research topic", description: "Search the web for information", status: "completed" },
+          { id: "s2", title: "Write code", status: "in_progress" },
+          { id: "s3", title: "Test and deploy", status: "pending" },
+        ],
+      }, "plan-r2"));
+      processor.process(makeToolResultSSE("show_plan", {
+        status: "success",
+        plan: [
+          { id: "s1", title: "Research topic", description: "Search the web for information", status: "completed" },
+          { id: "s2", title: "Write code", status: "in_progress" },
+          { id: "s3", title: "Test and deploy", status: "pending" },
+        ],
+      }, "plan-r2"));
+
+      // 4. Tool calls under step 2
+      processor.process(makeToolStartSSE("file_write", {
+        file: "/home/user/app.py", content: "print('hello')",
+      }, "fw-1"));
+      processor.process(makeToolResultSSE("file_write", {
+        success: true, path: "/home/user/app.py",
+      }, "fw-1"));
+
+      processor.process(makeContentSSE("Done! I've completed all the tasks."));
+
+      const { parts } = processor.finalize();
+
+      // Verify part counts
+      const textParts = parts.filter((p) => p.type === "text");
+      const toolParts = parts.filter(isToolPart);
+
+      expect(textParts.length).toBe(1);
+      // Tools: show_plan(plan-r1), web_search(ws-1), browser_navigate(bn-1),
+      //        show_plan(plan-r2), file_write(fw-1) = 5
+      expect(toolParts.length).toBe(5);
+
+      // Verify correct tool names
+      const toolNames = toolParts.map(getToolNameFromPart);
+      expect(toolNames).toEqual([
+        "show_plan", "web_search", "browser_navigate", "show_plan", "file_write",
+      ]);
+
+      // Verify canvas views: show_plan has NO canvas view
+      const canvasViews = toolParts.map((p) => TOOL_VIEW_MAP[getToolNameFromPart(p)]);
+      expect(canvasViews).toEqual([
+        undefined, "browser", "browser", undefined, "terminal",
+      ]);
+
+      // Verify the updated plan part has output with 'plan' field
+      const updatedPlan = toolParts[3]!;
+      expect(updatedPlan.state).toBe("output-available");
+      const output = updatedPlan.output as Record<string, unknown>;
+      expect(output.status).toBe("success");
+      expect(Array.isArray(output.plan)).toBe(true);
+      const planSteps = output.plan as Array<{ id: string; title: string; status: string; description?: string }>;
+      expect(planSteps[0]!.status).toBe("completed");
+      expect(planSteps[0]!.description).toBe("Search the web for information");
+      expect(planSteps[1]!.status).toBe("in_progress");
+    });
+  });
+
+  // ========================================================================
+  // message_notify_user file attachment rendering
+  // ========================================================================
+
+  describe("message_notify_user with file attachments", () => {
+    it("maps to MessageNotifyRenderer (not ProgressTool)", () => {
+      expect(getRenderer("message_notify_user")).toBe("MessageNotifyRenderer");
+      expect(getRenderer("message_ask_user")).toBe("MessageNotifyRenderer");
+    });
+
+    it("is in FULL_RENDERER_TOOLS (not compact pill)", () => {
+      // message_notify_user and message_ask_user should render full, not compact
+      // This is validated by tool-part.tsx FULL_RENDERER_TOOLS set
+      const fullRendererTools = ["generate_image", "message_notify_user", "message_ask_user"];
+      for (const tool of fullRendererTools) {
+        const renderer = getRenderer(tool);
+        expect(renderer).toBeDefined();
+        expect(renderer).not.toBe("GenericTool");
+      }
+    });
+
+    it("tool output with attachments has files for FilePart rendering", () => {
+      // Use SSEProcessor to create tool part (matching file's test patterns)
+      processor.process(makeToolStartSSE("message_notify_user", {
+        text: "Here is your report",
+        attachments: ["/home/ubuntu/report.pdf"],
+      }, "tc_notify_file"));
+      processor.process(makeToolResultSSE("message_notify_user", {
+        status: "sent",
+        message: "Message delivered to user",
+        attachments: [
+          { name: "report.pdf", url: "https://cdn.example.com/report.pdf", mediaType: "application/pdf" },
+        ],
+      }, "tc_notify_file"));
+
+      const toolParts = processor.collectedParts.filter(isToolPart);
+      expect(toolParts).toHaveLength(1);
+      expect(toolParts[0]!.state).toBe("output-available");
+
+      const output = toolParts[0]!.output as Record<string, unknown>;
+      const attachments = output.attachments as Array<{ name: string; url: string; mediaType: string }>;
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].name).toBe("report.pdf");
+      expect(attachments[0].url).toContain("https://");
+      expect(attachments[0].mediaType).toBe("application/pdf");
+    });
+
+    it("tool output without attachments has text-only rendering", () => {
+      processor.process(makeToolStartSSE("message_notify_user", {
+        text: "Task completed successfully",
+      }, "tc_notify_text"));
+      processor.process(makeToolResultSSE("message_notify_user", {
+        status: "sent",
+        message: "Message delivered to user",
+      }, "tc_notify_text"));
+
+      const toolParts = processor.collectedParts.filter(isToolPart);
+      expect(toolParts).toHaveLength(1);
+
+      const output = toolParts[0]!.output as Record<string, unknown>;
+      expect(output).not.toHaveProperty("attachments");
+    });
+
+    it("multiple attachments produce multiple file entries", () => {
+      const output = {
+        status: "sent",
+        attachments: [
+          { name: "report.pdf", url: "https://cdn.example.com/a.pdf", mediaType: "application/pdf" },
+          { name: "chart.png", url: "https://cdn.example.com/b.png", mediaType: "image/png" },
+          { name: "data.csv", url: "https://cdn.example.com/c.csv", mediaType: "text/csv" },
+        ],
+      };
+      const fileParts = output.attachments.map((a) => ({
+        type: "file" as const,
+        mediaType: a.mediaType,
+        filename: a.name,
+        url: a.url,
+      }));
+      expect(fileParts).toHaveLength(3);
+      expect(fileParts[0].mediaType).toBe("application/pdf");
+      expect(fileParts[1].mediaType).toBe("image/png");
+      expect(fileParts[2].mediaType).toBe("text/csv");
+    });
+
+    it("is excluded from TOOL_VIEW_MAP (no canvas view)", () => {
+      expect(TOOL_VIEW_MAP["message_notify_user"]).toBeUndefined();
+      expect(TOOL_VIEW_MAP["message_ask_user"]).toBeUndefined();
+    });
   });
 });

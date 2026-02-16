@@ -32,3 +32,8 @@ export { default as useChat } from "./useChat";
 // Sessions integration (WebSocket + RTK Query)
 export { useSessionsIntegration } from "./useSessions";
 export { default as useSessions } from "./useSessions";
+
+// Data integration hooks (WebSocket-synced slices)
+export { useAgentsData } from "./useAgentsData";
+export { useDevicesData } from "./useDevicesData";
+export { useScheduledTasksData } from "./useScheduledTasksData";

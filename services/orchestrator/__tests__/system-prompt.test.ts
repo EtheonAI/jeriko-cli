@@ -219,12 +219,12 @@ describe("buildManusSystemPrompt", () => {
       expect(prompt).not.toContain("<file_context>");
     });
 
-    it("should mention upload directory /home/user/upload/", () => {
+    it("should mention upload directory /home/ubuntu/upload/", () => {
       const prompt = buildManusSystemPrompt(makeContext({
         fileContext: [{ name: "test.txt", type: "text/plain" }],
       }));
 
-      expect(prompt).toContain("/home/user/upload/");
+      expect(prompt).toContain("/home/ubuntu/upload/");
     });
   });
 

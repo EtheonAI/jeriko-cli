@@ -58,26 +58,26 @@ export function ConnectionsModal({
         <button
           type="button"
           disabled={disabled}
-          className="
-            flex items-center gap-[4px] p-[8px]
-            cursor-pointer rounded-[100px]
-            border border-[#e5e5e5] dark:border-[#333]
-            hover:bg-[rgba(0,0,0,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)]
-            transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed
-          "
+          className={cn(
+            "flex items-center gap-[4px] p-[8px]",
+            "cursor-pointer rounded-[100px]",
+            "border border-[#e5e5e5] dark:border-[#333]",
+            "hover:bg-[rgba(0,0,0,0.04)] dark:hover:bg-[rgba(255,255,255,0.08)]",
+            "transition-colors",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
         >
           <div className="flex items-center gap-[4px]">
             {selectedCount > 0 && (
               <span
-                className="
-                  flex items-center justify-center
-                  text-[10px] leading-[10px]
-                  h-[16px] min-w-[16px] px-[4px]
-                  bg-[#f0f0f0] dark:bg-[#333]
-                  rounded-full font-medium
-                  text-[#666] dark:text-[#999]
-                "
+                className={cn(
+                  "flex items-center justify-center",
+                  "text-[10px] leading-[10px]",
+                  "h-[16px] min-w-[16px] px-[4px]",
+                  "bg-[#f0f0f0] dark:bg-[#333]",
+                  "rounded-full font-medium",
+                  "text-[#666] dark:text-[#999]"
+                )}
               >
                 +{selectedCount}
               </span>

@@ -27,6 +27,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow OAuth callback route (Composio redirects here after OAuth popup completes)
+  if (pathname.startsWith("/api/connectors/callback")) {
+    return NextResponse.next();
+  }
+
   // Allow static files and images
   if (
     pathname.startsWith("/_next") ||

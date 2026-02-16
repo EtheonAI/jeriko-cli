@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   MonitorIcon,
@@ -97,6 +97,14 @@ export interface AgentCanvasProps {
   liveTerminalConnected?: boolean;
   /** Send keyboard input to the live PTY */
   onTerminalSendInput?: (data: string) => void;
+  /** Per-session terminal output (Manus-style named PTY sessions) */
+  terminalSessions?: Record<string, string[]>;
+  /** Currently active terminal session ID */
+  activeTerminalSession?: string;
+  /** All terminal session IDs in order */
+  terminalSessionIds?: string[];
+  /** Switch displayed terminal session */
+  onSelectTerminalSession?: (sessionId: string) => void;
 
   // Live browser streaming
   /** Neko WebRTC URL for live desktop streaming */
@@ -220,31 +228,36 @@ function TimelineScrubber({
   onChange?: (percentage: number) => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
-  const handleTrackInteraction = (clientX: number) => {
-    if (!trackRef.current || !onChange) return;
+  const handleTrackInteraction = useCallback((clientX: number) => {
+    if (!trackRef.current || !onChangeRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const pct = Math.round((x / rect.width) * 100);
-    onChange(pct);
-  };
+    onChangeRef.current(pct);
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingRef.current) handleTrackInteraction(e.clientX);
+      handleTrackInteraction(e.clientX);
     };
     const handleMouseUp = () => {
-      isDraggingRef.current = false;
+      setIsDragging(false);
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  });
+
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isDragging, handleTrackInteraction]);
 
   return (
     <div className="flex items-center gap-2 border-t border-border/10 bg-canvas-surface px-3 py-1.5">
@@ -268,18 +281,29 @@ function TimelineScrubber({
       </button>
       <div
         ref={trackRef}
-        className="group relative h-1 flex-1 cursor-pointer rounded-full bg-muted/20"
+        className="group relative h-4 flex-1 cursor-pointer flex items-center"
         onMouseDown={(e) => {
-          isDraggingRef.current = true;
+          setIsDragging(true);
           handleTrackInteraction(e.clientX);
         }}
       >
+        {/* Track background */}
+        <div className="absolute inset-x-0 h-1 rounded-full bg-muted/20" />
+        {/* Fill */}
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all"
+          className={cn(
+            "absolute h-1 left-0 rounded-full bg-blue-500",
+            !isDragging && "transition-[width] duration-200"
+          )}
           style={{ width: `${percentage}%` }}
         />
+        {/* Knob — visible on hover and always visible when dragging */}
         <div
-          className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-blue-500 opacity-0 transition-opacity group-hover:opacity-100"
+          className={cn(
+            "absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-blue-500 shadow-sm",
+            isDragging ? "opacity-100 scale-110" : "opacity-0 group-hover:opacity-100",
+            "transition-opacity"
+          )}
           style={{ left: `${percentage}%`, marginLeft: "-6px" }}
         />
       </div>
@@ -330,6 +354,10 @@ export function AgentCanvas({
   liveTerminalOutput,
   liveTerminalConnected,
   onTerminalSendInput,
+  terminalSessions,
+  activeTerminalSession,
+  terminalSessionIds,
+  onSelectTerminalSession,
   nekoUrl,
   streamUrl,
   onUserControlChange,
@@ -370,63 +398,65 @@ export function AgentCanvas({
       )}
     >
       {/* ================================================================= */}
-      {/* Header                                                            */}
+      {/* Header — hidden when webDevIDE is active (IDE has its own header) */}
       {/* ================================================================= */}
-      <div className="flex items-center justify-between border-b border-border/20 bg-canvas-header px-4 py-3">
-        <div className="flex flex-col gap-1">
-          {/* Title */}
-          <div className="flex items-center gap-2">
-            <MonitorIcon className="size-4 text-muted-foreground/60" />
-            <h2 className="text-sm font-semibold text-foreground">
-              Rubic&apos;s Computer
-            </h2>
-          </div>
+      {viewType !== "webDevIDE" && (
+        <div className="flex items-center justify-between border-b border-border/20 bg-canvas-header px-4 py-3">
+          <div className="flex flex-col gap-1">
+            {/* Title */}
+            <div className="flex items-center gap-2">
+              <MonitorIcon className="size-4 text-muted-foreground/60" />
+              <h2 className="text-sm font-semibold text-foreground">
+                Rubic&apos;s Computer
+              </h2>
+            </div>
 
-          {/* Status line */}
-          <div className="flex flex-wrap items-center gap-2">
-            {viewType !== "empty" && (
-              <span className="text-xs text-muted-foreground/60">
-                Using{" "}
-                <span className={cn("font-medium", viewInfo.color)}>
-                  {viewInfo.label}
+            {/* Status line */}
+            <div className="flex flex-wrap items-center gap-2">
+              {viewType !== "empty" && (
+                <span className="text-xs text-muted-foreground/60">
+                  Using{" "}
+                  <span className={cn("font-medium", viewInfo.color)}>
+                    {viewInfo.label}
+                  </span>
                 </span>
-              </span>
-            )}
-            {currentAction && <ActionBadge action={currentAction} />}
+              )}
+              {currentAction && <ActionBadge action={currentAction} />}
+            </div>
           </div>
-        </div>
 
-        {/* Header buttons */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted/20"
-            onClick={onToggleFullscreen}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? (
-              <Minimize2Icon className="size-4" />
-            ) : (
-              <Maximize2Icon className="size-4" />
-            )}
-          </button>
-          {onClose && (
+          {/* Header buttons */}
+          <div className="flex items-center gap-1">
             <button
               type="button"
               className="rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted/20"
-              onClick={onClose}
-              title="Close"
+              onClick={onToggleFullscreen}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
             >
-              <XIcon className="size-4" />
+              {isFullscreen ? (
+                <Minimize2Icon className="size-4" />
+              ) : (
+                <Maximize2Icon className="size-4" />
+              )}
             </button>
-          )}
+            {onClose && (
+              <button
+                type="button"
+                className="rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted/20"
+                onClick={onClose}
+                title="Close"
+              >
+                <XIcon className="size-4" />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ================================================================= */}
-      {/* View Tabs                                                         */}
+      {/* View Tabs — hidden when webDevIDE is active (IDE has its own tabs)*/}
       {/* ================================================================= */}
-      {availableViews && onSelectView && (
+      {viewType !== "webDevIDE" && availableViews && onSelectView && (
         <ViewTabs
           availableViews={availableViews}
           activeView={viewType}
@@ -491,6 +521,10 @@ export function AgentCanvas({
             liveOutput={liveTerminalOutput}
             liveConnected={liveTerminalConnected}
             onSendInput={onTerminalSendInput}
+            sessions={terminalSessions}
+            activeSession={activeTerminalSession}
+            sessionIds={terminalSessionIds}
+            onSelectSession={onSelectTerminalSession}
           />
         )}
         {viewType === "filePreview" && (
@@ -518,6 +552,10 @@ export function AgentCanvas({
             onCloseTab={onCloseTab}
             previewUrl={previewUrl}
             fileContents={fileContents}
+            sandboxId={sandboxId}
+            isWorking={isWorking}
+            isStreaming={isWorking}
+            onClose={onClose}
           />
         )}
         {viewType === "mapReduce" && <MapReduceView />}
@@ -525,17 +563,19 @@ export function AgentCanvas({
       </div>
 
       {/* ================================================================= */}
-      {/* Timeline Scrubber                                                 */}
+      {/* Timeline Scrubber — hidden for webDevIDE                          */}
       {/* ================================================================= */}
-      <TimelineScrubber
-        percentage={timelinePercentage}
-        onChange={onTimelineChange}
-      />
+      {viewType !== "webDevIDE" && (
+        <TimelineScrubber
+          percentage={timelinePercentage}
+          onChange={onTimelineChange}
+        />
+      )}
 
       {/* ================================================================= */}
-      {/* Status Bar                                                        */}
+      {/* Status Bar — hidden for webDevIDE (IDE has its own loading state) */}
       {/* ================================================================= */}
-      {(isWorking || statusText) && (
+      {viewType !== "webDevIDE" && (isWorking || statusText) && (
         <div className="flex items-center gap-2 border-t border-border/20 bg-canvas-deep px-3 py-2">
           {isWorking && (
             <div className="size-2 animate-pulse rounded-full bg-blue-500" />

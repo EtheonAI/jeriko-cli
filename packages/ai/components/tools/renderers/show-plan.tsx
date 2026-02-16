@@ -17,14 +17,19 @@ import { cn } from "@repo/design-system/lib/utils";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import type { ToolRendererProps } from "../tool-registry";
 
+interface ShowPlanStep {
+  id: string;
+  label?: string;
+  title?: string;
+  status: string;
+  description?: string;
+}
+
 interface ShowPlanInput {
   title?: string;
-  todos?: Array<{
-    id: string;
-    label: string;
-    status: string;
-    description?: string;
-  }>;
+  todos?: ShowPlanStep[];
+  plan?: ShowPlanStep[];
+  steps?: ShowPlanStep[];
 }
 
 type StepStatus = "pending" | "in_progress" | "completed" | "error";
@@ -79,9 +84,11 @@ export function ShowPlanRenderer({
 }: ToolRendererProps<ShowPlanInput, ShowPlanInput>) {
   const data = (output ?? input) as ShowPlanInput | undefined;
 
-  const steps = (data?.todos ?? []).map((t) => ({
+  const rawSteps = data?.plan ?? data?.todos ?? data?.steps ?? [];
+  const steps = rawSteps.map((t) => ({
     id: t.id,
-    label: t.label,
+    label: t.label || t.title || t.id,
+    description: t.description,
     status: normalizeStatus(t.status),
   }));
 
@@ -132,18 +139,25 @@ export function ShowPlanRenderer({
                 <StepStatusIcon status={step.status} />
               </div>
 
-              {/* Step label */}
-              <span
-                className={cn(
-                  "text-sm",
-                  step.status === "completed" && "text-muted-foreground",
-                  step.status === "in_progress" && "font-medium shimmer",
-                  step.status === "pending" && "text-muted-foreground/60",
-                  step.status === "error" && "text-destructive"
+              {/* Step label + description */}
+              <div className="flex flex-col min-w-0">
+                <span
+                  className={cn(
+                    "text-sm",
+                    step.status === "completed" && "text-muted-foreground",
+                    step.status === "in_progress" && "font-medium shimmer",
+                    step.status === "pending" && "text-muted-foreground/60",
+                    step.status === "error" && "text-destructive"
+                  )}
+                >
+                  {step.label}
+                </span>
+                {step.description && step.status !== "pending" && (
+                  <span className="text-xs text-muted-foreground/50 mt-0.5 leading-relaxed">
+                    {step.description}
+                  </span>
                 )}
-              >
-                {step.label}
-              </span>
+              </div>
             </div>
           ))}
         </div>

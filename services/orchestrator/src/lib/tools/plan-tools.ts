@@ -9,6 +9,7 @@ import type { ToolContext } from './types.js';
 const stepSchema = z.object({
   id: z.string().describe('Unique step identifier'),
   title: z.string().describe('Short description of the step'),
+  description: z.string().optional().describe('Detailed description of what this step does'),
   status: z
     .enum(['pending', 'in_progress', 'completed', 'failed'])
     .default('pending')

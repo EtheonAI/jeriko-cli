@@ -714,24 +714,24 @@ describe("E2B + Canvas Integration", () => {
       ]),
     ];
 
-    it("file_write → code view type", () => {
-      expect(viewFor("file_write")).toBe("code");
+    it("file_write → terminal view type", () => {
+      expect(viewFor("file_write")).toBe("terminal");
     });
 
-    it("file_read → code view type", () => {
-      expect(viewFor("file_read")).toBe("code");
+    it("file_read → terminal view type", () => {
+      expect(viewFor("file_read")).toBe("terminal");
     });
 
-    it("file_str_replace → code view type", () => {
-      expect(viewFor("file_str_replace")).toBe("code");
+    it("file_str_replace → terminal view type", () => {
+      expect(viewFor("file_str_replace")).toBe("terminal");
     });
 
-    it("file_find_in_content → code view type", () => {
-      expect(viewFor("file_find_in_content")).toBe("code");
+    it("file_find_in_content → terminal view type", () => {
+      expect(viewFor("file_find_in_content")).toBe("terminal");
     });
 
-    it("file_find_by_name → code view type", () => {
-      expect(viewFor("file_find_by_name")).toBe("code");
+    it("file_find_by_name → terminal view type", () => {
+      expect(viewFor("file_find_by_name")).toBe("terminal");
     });
 
     it("accumulates file contents from writes", () => {
@@ -763,7 +763,7 @@ describe("E2B + Canvas Integration", () => {
     it("latest tool is file_str_replace", () => {
       const latest = findLatestTool(messages);
       expect(latest!.toolName).toBe("file_str_replace");
-      expect(latest!.viewType).toBe("code");
+      expect(latest!.viewType).toBe("terminal");
     });
   });
 
@@ -1180,7 +1180,7 @@ describe("E2B + Canvas Integration", () => {
       expect(meta.sandboxId).toBe("sbx_fullstack_1");
     });
 
-    it("all three view types activated across session", () => {
+    it("both view types activated across session (terminal + browser)", () => {
       const viewTypes = new Set<string>();
       for (const msg of messages) {
         if (msg.role !== "assistant") continue;
@@ -1192,9 +1192,10 @@ describe("E2B + Canvas Integration", () => {
           }
         }
       }
-      expect(viewTypes.has("code")).toBe(true);
       expect(viewTypes.has("terminal")).toBe(true);
       expect(viewTypes.has("browser")).toBe(true);
+      // file tools now map to "terminal" (not "code"), so only 2 view types
+      expect(viewTypes.size).toBe(2);
     });
 
     it("total tool count matches (8 tools, 7 canvas-visible)", () => {
