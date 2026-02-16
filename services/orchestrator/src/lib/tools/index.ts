@@ -1,5 +1,8 @@
 /**
- * Tool index — aggregates all tool categories into a single registry
+ * Tool index — aggregates all tool categories into a single registry.
+ *
+ * Static tools (51): Always available based on agent mode.
+ * Dynamic tools (0–N): Composio connector tools loaded per-user at session start.
  */
 
 import type { ToolSet } from "ai";
@@ -19,6 +22,13 @@ import { createParallelTasksTool } from "./parallel-tasks.js";
 import { createWebdevTools } from "./webdev-tools.js";
 
 export type { ToolContext } from "./types.js";
+export {
+  fetchComposioTools,
+  createConnectorTools,
+  getComposioToolNames,
+  groupToolsByApp,
+  type ComposioToolSpec,
+} from "./connector-tools.js";
 
 /**
  * Agent mode determines which tools are available.
@@ -36,8 +46,13 @@ export type AgentMode = "base" | "browser" | "webdev";
  *
  * @param ctx - Tool context
  * @param mode - Agent mode (defaults to 'browser' for full tool access)
+ * @param dynamicTools - Dynamic Composio tools loaded per-user (merged last, can override)
  */
-export function createAllTools(ctx: ToolContext, mode: AgentMode = "browser"): ToolSet {
+export function createAllTools(
+  ctx: ToolContext,
+  mode: AgentMode = "browser",
+  dynamicTools?: ToolSet
+): ToolSet {
   // Base tools (always available)
   const baseTools = {
     // Communication (2)
@@ -73,7 +88,7 @@ export function createAllTools(ctx: ToolContext, mode: AgentMode = "browser"): T
   };
 
   if (mode === "base") {
-    return baseTools as ToolSet;
+    return { ...baseTools, ...(dynamicTools ?? {}) } as ToolSet;
   }
 
   // Browser mode: base + browser + deploy
@@ -84,11 +99,15 @@ export function createAllTools(ctx: ToolContext, mode: AgentMode = "browser"): T
   };
 
   if (mode === "browser") {
-    return browserTools as ToolSet;
+    return { ...browserTools, ...(dynamicTools ?? {}) } as ToolSet;
   }
 
-  // Webdev mode: browser + webdev tools
-  return { ...browserTools, ...createWebdevTools(ctx) } as ToolSet;
+  // Webdev mode: browser + webdev tools + dynamic connector tools
+  return {
+    ...browserTools,
+    ...createWebdevTools(ctx),
+    ...(dynamicTools ?? {}),
+  } as ToolSet;
 }
 
 /**

@@ -39,8 +39,8 @@ import {
 
 /** Tools that should be auto-hidden when preceded by a sibling in the same category */
 const REDUNDANT_TOOLS = new Set([
-  "browser_view",   // Agent checking page state after another browser action
-  "shell_view",     // Agent viewing terminal after shell_exec
+  "browser_view", // Agent checking page state after another browser action
+  "shell_view", // Agent viewing terminal after shell_exec
 ]);
 
 /** Tools that indicate a plan — render grouped under plan steps */
@@ -76,17 +76,19 @@ type MessageSection = GroupedSection | FlatSection;
 // ============================================================================
 
 function extractPlanSteps(part: StaticToolUIPart | DynamicToolUIPart): PlanStep[] {
-  const data = (part.state === "output-available" && part.output
-    ? part.output
-    : part.input) as Record<string, unknown> | undefined;
+  const data = (part.state === "output-available" && part.output ? part.output : part.input) as
+    | Record<string, unknown>
+    | undefined;
 
   if (!data) return [];
-  const todos = (data.todos ?? data.steps ?? data.phases) as Array<{
-    id?: string;
-    label?: string;
-    title?: string;
-    status?: string;
-  }> | undefined;
+  const todos = (data.todos ?? data.steps ?? data.phases) as
+    | Array<{
+        id?: string;
+        label?: string;
+        title?: string;
+        status?: string;
+      }>
+    | undefined;
 
   if (!todos || !Array.isArray(todos) || todos.length === 0) return [];
 
@@ -106,11 +108,7 @@ function normalizeStepStatus(status: string | undefined): PlanStep["status"] {
   return "pending";
 }
 
-function shouldHideTool(
-  toolName: string,
-  index: number,
-  parts: UIMessagePart[],
-): boolean {
+function shouldHideTool(toolName: string, index: number, parts: UIMessagePart[]): boolean {
   if (!REDUNDANT_TOOLS.has(toolName)) return false;
 
   // Look backwards for the previous tool call
@@ -156,7 +154,11 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
 
   // Flush current plan step to a grouped section
   const flushStep = () => {
-    if (currentPlanSteps && currentStepIndex < currentPlanSteps.length && currentStepParts.length > 0) {
+    if (
+      currentPlanSteps &&
+      currentStepIndex < currentPlanSteps.length &&
+      currentStepParts.length > 0
+    ) {
       sections.push({
         type: "plan-step",
         step: currentPlanSteps[currentStepIndex]!,
@@ -193,7 +195,7 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
           // Add empty section for first step — tool calls will populate it
           // Also push the plan overview as a special plan-header section
           // Find the first in_progress or pending step
-          const activeIdx = steps.findIndex(s => s.status === "in_progress");
+          const activeIdx = steps.findIndex((s) => s.status === "in_progress");
           currentStepIndex = activeIdx >= 0 ? activeIdx : 0;
 
           // Create sections for all completed steps before the active one
@@ -219,8 +221,11 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
       // Check if we should advance to next step:
       // When we encounter a text part after tool calls, it often signals
       // the agent finishing one step and transitioning to the next
-      if (isTextUIPart(part) && currentStepParts.length > 0 &&
-          currentStepParts.some(p => isToolUIPart(p))) {
+      if (
+        isTextUIPart(part) &&
+        currentStepParts.length > 0 &&
+        currentStepParts.some((p) => isToolUIPart(p))
+      ) {
         // Flush current step
         flushStep();
 
@@ -290,7 +295,7 @@ function PlanStepSection({
         className={cn(
           "text-sm w-full flex gap-2 justify-between items-center truncate py-1",
           hasChildren && "cursor-pointer hover:opacity-80",
-          !hasChildren && "cursor-default",
+          !hasChildren && "cursor-default"
         )}
       >
         <div className="flex flex-row gap-2 items-center truncate">
@@ -298,13 +303,15 @@ function PlanStepSection({
           <StepStatusIcon status={step.status} />
 
           {/* Step title */}
-          <span className={cn(
-            "truncate font-medium text-sm",
-            step.status === "completed" && "text-muted-foreground",
-            step.status === "in_progress" && "text-foreground",
-            step.status === "pending" && "text-muted-foreground/60",
-            step.status === "error" && "text-destructive",
-          )}>
+          <span
+            className={cn(
+              "truncate font-medium text-sm",
+              step.status === "completed" && "text-muted-foreground",
+              step.status === "in_progress" && "shimmer",
+              step.status === "pending" && "text-muted-foreground/60",
+              step.status === "error" && "text-destructive"
+            )}
+          >
             {step.label}
           </span>
         </div>
@@ -314,7 +321,7 @@ function PlanStepSection({
           <ChevronDownIcon
             className={cn(
               "size-4 flex-shrink-0 text-muted-foreground/50 transition-transform duration-300",
-              isOpen && "rotate-180",
+              isOpen && "rotate-180"
             )}
           />
         )}
@@ -325,7 +332,7 @@ function PlanStepSection({
         <div
           className={cn(
             "transition-[max-height,opacity] duration-150 ease-in-out overflow-hidden",
-            isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0",
+            isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0"
           )}
         >
           <div className="flex">
@@ -338,9 +345,7 @@ function PlanStepSection({
             {isLast && <div className="w-6 flex-shrink-0" />}
 
             {/* Nested content */}
-            <div className="flex flex-col gap-1.5 flex-1 min-w-0 pb-2">
-              {children}
-            </div>
+            <div className="flex flex-col gap-1.5 flex-1 min-w-0 pb-2">{children}</div>
           </div>
         </div>
       )}
@@ -394,7 +399,7 @@ function renderPart(
   part: UIMessagePart,
   index: number,
   messageId: string,
-  onViewInCanvas?: (toolCallId: string) => void,
+  onViewInCanvas?: (toolCallId: string) => void
 ) {
   if (!part || typeof part !== "object" || !("type" in part)) return null;
   if (isStepStartUIPart(part)) return null;
@@ -403,32 +408,17 @@ function renderPart(
   // Text
   if (isTextUIPart(part)) {
     if (!part.text) return null;
-    return (
-      <TextPartRenderer
-        key={`text-${index}`}
-        part={part as TextUIPart}
-      />
-    );
+    return <TextPartRenderer key={`text-${index}`} part={part as TextUIPart} />;
   }
 
   // Reasoning
   if (isReasoningUIPart(part)) {
-    return (
-      <ReasoningPartRenderer
-        key={`reasoning-${index}`}
-        part={part as ReasoningUIPart}
-      />
-    );
+    return <ReasoningPartRenderer key={`reasoning-${index}`} part={part as ReasoningUIPart} />;
   }
 
   // File parts
   if (isFileUIPart(part)) {
-    return (
-      <FilePartRenderer
-        key={`file-${index}`}
-        part={part as FileUIPart}
-      />
-    );
+    return <FilePartRenderer key={`file-${index}`} part={part as FileUIPart} />;
   }
 
   // Tool parts — render as Manus-style pills (never show_plan, it's handled by grouping)
@@ -463,13 +453,8 @@ interface MessageRendererProps {
   onViewInCanvas?: (toolCallId: string) => void;
 }
 
-export function MessageRenderer({
-  message,
-  isLastMessage,
-  isStreaming,
-  onViewSources,
-  onViewInCanvas,
-}: MessageRendererProps) {
+export function MessageRenderer(props: MessageRendererProps) {
+  const { message, onViewSources, onViewInCanvas } = props;
   const parts = message.parts as unknown as UIMessagePart[];
 
   // Collect native source parts for grouped display at the bottom
@@ -496,7 +481,7 @@ export function MessageRenderer({
   // Check if message has plan steps
   const hasPlan = useMemo(() => {
     if (!parts || !Array.isArray(parts)) return false;
-    return parts.some(p => {
+    return parts.some((p) => {
       if (!p || typeof p !== "object" || !("type" in p)) return false;
       if (!isToolUIPart(p)) return false;
       const name = getToolName(p as StaticToolUIPart | DynamicToolUIPart);
@@ -512,23 +497,68 @@ export function MessageRenderer({
   }, [parts, hasPlan]);
 
   // Flat rendering — no plan, just render parts sequentially with auto-hide
+  // Groups consecutive file parts into a grid for Manus-style display
   if (!hasPlan) {
+    const flatElements: React.ReactNode[] = [];
+    const allParts = parts ?? [];
+    let i = 0;
+
+    while (i < allParts.length) {
+      const part = allParts[i]!;
+      if (!part || typeof part !== "object" || !("type" in part)) {
+        i++;
+        continue;
+      }
+      if (isStepStartUIPart(part)) {
+        i++;
+        continue;
+      }
+      if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) {
+        i++;
+        continue;
+      }
+
+      // Auto-hide redundant tools
+      if (isToolUIPart(part)) {
+        const toolName = getToolName(part as StaticToolUIPart | DynamicToolUIPart);
+        if (shouldHideTool(toolName, i, allParts)) {
+          i++;
+          continue;
+        }
+      }
+
+      // Group consecutive file parts into a grid
+      if (isFileUIPart(part)) {
+        const fileGroup: { part: FileUIPart; index: number }[] = [];
+        while (i < allParts.length && isFileUIPart(allParts[i] as UIMessagePart)) {
+          fileGroup.push({ part: allParts[i] as FileUIPart, index: i });
+          i++;
+        }
+
+        if (fileGroup.length === 1) {
+          flatElements.push(
+            renderPart(fileGroup[0]!.part, fileGroup[0]!.index, message.id, onViewInCanvas)
+          );
+        } else {
+          // Multiple files — render in a responsive grid
+          flatElements.push(
+            <div key={`file-group-${fileGroup[0]!.index}`} className="grid grid-cols-2 gap-2">
+              {fileGroup.map(({ part: fp, index: fi }) => (
+                <FilePartRenderer key={`file-${fi}`} part={fp} />
+              ))}
+            </div>
+          );
+        }
+        continue;
+      }
+
+      flatElements.push(renderPart(part, i, message.id, onViewInCanvas));
+      i++;
+    }
+
     return (
       <>
-        {(parts ?? []).map((part, i) => {
-          if (!part || typeof part !== "object" || !("type" in part)) return null;
-          if (isStepStartUIPart(part)) return null;
-          if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) return null;
-
-          // Auto-hide redundant tools even in flat mode
-          if (isToolUIPart(part)) {
-            const toolName = getToolName(part as StaticToolUIPart | DynamicToolUIPart);
-            if (shouldHideTool(toolName, i, parts)) return null;
-          }
-
-          return renderPart(part, i, message.id, onViewInCanvas);
-        })}
-
+        {flatElements}
         {sources.length > 0 && <SourcesGroup sources={sources} onViewSources={onViewSources} />}
       </>
     );

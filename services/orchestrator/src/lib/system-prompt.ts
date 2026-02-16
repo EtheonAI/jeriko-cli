@@ -19,6 +19,8 @@ export interface SystemPromptContext {
   fileContext?: { name: string; type: string }[];
   currentDate: string;
   timezone?: string;
+  /** Dynamic Composio tools grouped by app — e.g. { "github": ["github_create_issue", ...] } */
+  composioToolsByApp?: Record<string, string[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -733,11 +735,13 @@ BEST PRACTICES
 const SKILL_DEFINITIONS: Record<string, { name: string; description: string }> = {
   "web-search": {
     name: "Web Search",
-    description: "Search the internet for current information, news, documentation, and real-time data. Use info_search_web tool.",
+    description:
+      "Search the internet for current information, news, documentation, and real-time data. Use info_search_web tool.",
   },
   "code-interpreter": {
     name: "Code Interpreter",
-    description: "Execute Python or Node.js code to perform calculations, data analysis, file processing, and generate visualizations. Use code_execute tool.",
+    description:
+      "Execute Python or Node.js code to perform calculations, data analysis, file processing, and generate visualizations. Use code_execute tool.",
   },
   "image-generation": {
     name: "Image Generation",
@@ -745,15 +749,18 @@ const SKILL_DEFINITIONS: Record<string, { name: string; description: string }> =
   },
   "document-analysis": {
     name: "Document Analysis",
-    description: "Read, analyze, and extract information from uploaded documents (PDF, DOCX, TXT, etc.). Use file_read tool on uploaded files.",
+    description:
+      "Read, analyze, and extract information from uploaded documents (PDF, DOCX, TXT, etc.). Use file_read tool on uploaded files.",
   },
   "data-analysis": {
     name: "Data Analysis",
-    description: "Analyze datasets, create charts, compute statistics, and generate reports. Use code_execute with Python (pandas, matplotlib) or Node.js.",
+    description:
+      "Analyze datasets, create charts, compute statistics, and generate reports. Use code_execute with Python (pandas, matplotlib) or Node.js.",
   },
-  "browser": {
+  browser: {
     name: "Browser",
-    description: "Browse websites, interact with web pages, fill forms, take screenshots, and scrape content. Use browser_* tools.",
+    description:
+      "Browse websites, interact with web pages, fill forms, take screenshots, and scrape content. Use browser_* tools.",
   },
 };
 
@@ -783,9 +790,7 @@ search the web rather than relying on training data.
 function fileContextSection(ctx: SystemPromptContext): string | null {
   if (!ctx.fileContext || ctx.fileContext.length === 0) return null;
 
-  const fileLines = ctx.fileContext
-    .map((f) => `  - ${f.name} (${f.type})`)
-    .join("\n");
+  const fileLines = ctx.fileContext.map((f) => `  - ${f.name} (${f.type})`).join("\n");
 
   return `<file_context>
 The user has uploaded the following files in this conversation:
@@ -814,6 +819,25 @@ function connectedAppsRules(ctx: SystemPromptContext): string {
     appList = "\nNo third-party integrations are currently connected for this user.";
   }
 
+  // Build available tool listing from dynamically-loaded Composio tools
+  let toolListing = "";
+  if (ctx.composioToolsByApp && Object.keys(ctx.composioToolsByApp).length > 0) {
+    const sections = Object.entries(ctx.composioToolsByApp).map(([app, toolNames]) => {
+      const appLabel = app.charAt(0).toUpperCase() + app.slice(1);
+      return `  ${appLabel}:\n${toolNames.map((t) => `    - ${t}`).join("\n")}`;
+    });
+    toolListing = `\n\nAVAILABLE INTEGRATION TOOLS
+  The following Composio tools are loaded and available for this session.
+  Call them directly by name — they are registered in your tool set.
+
+${sections.join("\n\n")}`;
+  } else {
+    toolListing = `\n\nAVAILABLE INTEGRATION TOOLS
+  No dynamic integration tools are loaded for this session.
+  Built-in email tools are always available: gmail_send, gmail_download,
+  outlook_send, outlook_download.`;
+  }
+
   return `<connected_apps_rules>
 You can perform actions on third-party services the user has connected
 through the Rubic integrations marketplace (powered by Composio).
@@ -826,11 +850,11 @@ AUTHORIZATION
   - If the user requests an action on a service that is not connected,
     inform them and provide instructions to connect it in Settings >
     Integrations.
+${toolListing}
 
 API USAGE
-  - Use the dynamically-loaded Composio tools for each connected service.
-    Tool names follow the pattern: {service}_{action} (e.g.,
-    gmail_send_email, github_create_issue, slack_send_message).
+  - Use ONLY the tools listed above. Do NOT hallucinate tool names that
+    are not in your tool set — the call will fail.
   - Handle API errors gracefully. If a call fails with a rate limit or
     auth error, wait briefly and retry once. If it still fails, inform
     the user.

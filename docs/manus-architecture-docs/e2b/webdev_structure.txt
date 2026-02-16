@@ -1,1 +1,0 @@
-$(find /opt/.manus/webdev -maxdepth 3)

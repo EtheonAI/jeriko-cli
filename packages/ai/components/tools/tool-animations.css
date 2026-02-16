@@ -43,6 +43,25 @@
   }
 }
 
+/* Pill shimmer — subtle border/background sweep for active tool pills */
+.shimmer-pill {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--primary) 6%, transparent) 40%,
+    color-mix(in oklch, var(--primary) 12%, transparent) 50%,
+    color-mix(in oklch, var(--primary) 6%, transparent) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shimmer-pill {
+    animation: shimmer 2.5s ease-in-out infinite;
+  }
+}
+
 /* Inverted shimmer for dark backgrounds */
 .shimmer-invert {
   background: linear-gradient(

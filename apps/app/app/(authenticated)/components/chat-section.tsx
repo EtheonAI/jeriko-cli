@@ -6,7 +6,12 @@ import type { Attachment } from "@repo/ai/lib/types";
 import { trpc } from "@/lib/trpc/client";
 import { ChatPrompt, type SubmitOptions } from "./unified-prompt";
 import { useAppDispatch } from "@/lib/store/hooks";
-import { createAndSelectSession, type AgentSession } from "@/lib/store/slices/sessions.slice";
+import {
+  createAndSelectSession,
+  type AgentSession,
+  type SessionMode,
+  type SessionStatus,
+} from "@/lib/store/slices/sessions.slice";
 
 type ChatSectionProps = {
   showConfigBar?: boolean;
@@ -48,9 +53,9 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
             typeof session.updatedAt === "string"
               ? session.updatedAt
               : new Date(session.updatedAt).toISOString(),
-          mode: (session as any).mode ?? "chat",
-          isShared: (session as any).isShared ?? false,
-          status: (session as any).status ?? "active",
+          mode: ((session as Record<string, unknown>).mode ?? "chat") as SessionMode,
+          isShared: ((session as Record<string, unknown>).isShared ?? false) as boolean,
+          status: ((session as Record<string, unknown>).status ?? "active") as SessionStatus,
         };
         dispatch(createAndSelectSession(normalized));
 
@@ -69,6 +74,7 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
             })),
             model: options.model,
             skills: options.skills,
+            connections: options.connections,
           })
         );
 

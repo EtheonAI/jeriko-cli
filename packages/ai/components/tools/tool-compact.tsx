@@ -16,7 +16,6 @@ import {
   TerminalIcon,
   ImageIcon,
   CodeIcon,
-  BellIcon,
   RocketIcon,
   BarChart3Icon,
   ListTodoIcon,
@@ -82,16 +81,11 @@ const TOOL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 // Component — Manus-style pill (same design as ToolInlineCompact)
 // ============================================================================
 
-export function ToolCompact({
-  toolName,
-  state,
-  title,
-  summary,
-  className,
-}: ToolCompactProps) {
+export function ToolCompact({ toolName, state, title, summary, className }: ToolCompactProps) {
   const ToolIcon = TOOL_ICONS[toolName] ?? CodeIcon;
   const displayName = title ?? formatToolName(toolName);
-  const isActive = state === "input-streaming" || state === "input-available" || state === "approval-responded";
+  const isActive =
+    state === "input-streaming" || state === "input-available" || state === "approval-responded";
 
   return (
     <div
@@ -109,7 +103,7 @@ export function ToolCompact({
             "cursor-pointer select-none",
             "hover:bg-white/[0.02]",
             "transition-colors duration-150",
-            isActive && "border-blue-500/20 bg-blue-500/[0.05]",
+            isActive && "border-blue-500/20 bg-blue-500/[0.05] shimmer-pill"
           )}
         >
           {/* Icon */}
@@ -118,9 +112,7 @@ export function ToolCompact({
           </div>
 
           {/* Label */}
-          <div className="text-[13px] text-muted-foreground max-w-full truncate">
-            {displayName}
-          </div>
+          <div className="text-[13px] text-muted-foreground max-w-full truncate">{displayName}</div>
 
           {/* Summary text */}
           {summary && state === "output-available" && (

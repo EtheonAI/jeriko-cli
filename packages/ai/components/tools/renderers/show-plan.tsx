@@ -78,9 +78,8 @@ export function ShowPlanRenderer({
   output,
 }: ToolRendererProps<ShowPlanInput, ShowPlanInput>) {
   const data = (output ?? input) as ShowPlanInput | undefined;
-  if (!data?.todos || data.todos.length === 0) return null;
 
-  const steps = data.todos.map((t) => ({
+  const steps = (data?.todos ?? []).map((t) => ({
     id: t.id,
     label: t.label,
     status: normalizeStatus(t.status),
@@ -94,21 +93,25 @@ export function ShowPlanRenderer({
   const completedCount = steps.filter((s) => s.status === "completed").length;
   const [isOpen, setIsOpen] = useState(isActive || completedCount < steps.length);
 
+  if (steps.length === 0) return null;
+
   return (
     <div className="flex flex-col gap-0.5 my-1">
       {/* Plan header */}
-      {data.title && (
+      {data?.title && (
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 text-sm py-1 cursor-pointer hover:opacity-80"
         >
-          <span className="font-medium text-foreground/80">{data.title}</span>
-          <span className="text-xs text-muted-foreground/50">{completedCount}/{steps.length}</span>
+          <span className="font-medium text-foreground/80">{data?.title}</span>
+          <span className="text-xs text-muted-foreground/50">
+            {completedCount}/{steps.length}
+          </span>
           <ChevronDownIcon
             className={cn(
               "size-4 text-muted-foreground/50 transition-transform duration-300",
-              isOpen && "rotate-180",
+              isOpen && "rotate-180"
             )}
           />
         </button>
@@ -118,11 +121,11 @@ export function ShowPlanRenderer({
       <div
         className={cn(
           "transition-[max-height,opacity] duration-150 ease-in-out overflow-hidden",
-          isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0",
+          isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <div className="flex flex-col gap-0.5">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <div key={step.id} className="flex items-start gap-2 py-0.5">
               {/* Status icon */}
               <div className="mt-0.5">
@@ -130,13 +133,15 @@ export function ShowPlanRenderer({
               </div>
 
               {/* Step label */}
-              <span className={cn(
-                "text-sm",
-                step.status === "completed" && "text-muted-foreground",
-                step.status === "in_progress" && "font-medium text-foreground",
-                step.status === "pending" && "text-muted-foreground/60",
-                step.status === "error" && "text-destructive",
-              )}>
+              <span
+                className={cn(
+                  "text-sm",
+                  step.status === "completed" && "text-muted-foreground",
+                  step.status === "in_progress" && "font-medium shimmer",
+                  step.status === "pending" && "text-muted-foreground/60",
+                  step.status === "error" && "text-destructive"
+                )}
+              >
                 {step.label}
               </span>
             </div>

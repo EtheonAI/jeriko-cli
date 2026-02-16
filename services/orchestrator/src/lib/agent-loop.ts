@@ -6,7 +6,14 @@
 import { streamText, stepCountIs, type ModelMessage, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { createAllTools, type ToolContext } from "./tools/index.js";
+import {
+  createAllTools,
+  fetchComposioTools,
+  createConnectorTools,
+  groupToolsByApp,
+  type ToolContext,
+  type ComposioToolSpec,
+} from "./tools/index.js";
 import { buildManusSystemPrompt, type SystemPromptContext } from "./system-prompt.js";
 import { getOrCreateSandbox } from "./e2b-manager.js";
 
@@ -56,7 +63,16 @@ function sseEvent(data: Record<string, unknown>): Uint8Array {
  * Returns a ReadableStream that emits SSE events compatible with UIMessage stream protocol.
  */
 export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
-  const { sessionId, userId, userName, messages, maxSteps = 25, skills, connections, abortSignal } = input;
+  const {
+    sessionId,
+    userId,
+    userName,
+    messages,
+    maxSteps = 25,
+    skills,
+    connections,
+    abortSignal,
+  } = input;
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -103,7 +119,27 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     imageProvider: createDefaultImageProvider(),
   };
 
-  // Build system prompt — thread skills and connections for Manus parity
+  // ── Dynamic Composio tools ──────────────────────────────────────────────
+  // Fetch user's connected Composio tools from connector service.
+  // Runs in parallel with sandbox creation — gracefully returns [] if unavailable.
+  let composioSpecs: ComposioToolSpec[] = [];
+  try {
+    composioSpecs = await fetchComposioTools(userId);
+    if (composioSpecs.length > 0) {
+      console.log(`[agent-loop] Loaded ${composioSpecs.length} Composio tools for user ${userId}`);
+    }
+  } catch {
+    // Connector service down — continue with static tools only
+  }
+
+  // Convert specs → AI SDK tools
+  const dynamicTools =
+    composioSpecs.length > 0 ? createConnectorTools(toolCtx, composioSpecs) : undefined;
+
+  // Group tool names by app for system prompt injection
+  const composioToolsByApp = composioSpecs.length > 0 ? groupToolsByApp(composioSpecs) : undefined;
+
+  // Build system prompt — thread skills, connections, and dynamic tool names
   const promptCtx: SystemPromptContext = {
     userName,
     sessionId,
@@ -114,10 +150,11 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     connectedApps: connections?.map((c) => c.name || c.id),
     selectedConnections: connections,
     fileContext: extractFileContext(messages),
+    composioToolsByApp,
   };
 
-  // Create all tools — webdev mode gives access to base + browser + webdev tools
-  const tools = createAllTools(toolCtx, "webdev");
+  // Create all tools — webdev mode + dynamic Composio tools
+  const tools = createAllTools(toolCtx, "webdev", dynamicTools);
 
   // If no API key at all, return a fallback stream
   if (!anthropicApiKey && !openaiApiKey) {
@@ -180,9 +217,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // nekoUrl is included so the frontend can offer "Take Control" → Neko WebRTC iframe.
   // The BrowserView only shows the iframe when user explicitly clicks Take Control
   // (not automatically), so the Neko readiness race condition is avoided.
-  const sandboxMeta = sandboxId
-    ? { sandboxId, ...(nekoUrl ? { nekoUrl } : {}) }
-    : undefined;
+  const sandboxMeta = sandboxId ? { sandboxId, ...(nekoUrl ? { nekoUrl } : {}) } : undefined;
 
   // Get the UIMessage stream response using the proper messageMetadata callback
   // AI SDK v6 sends metadata via protocol-compliant message-metadata events

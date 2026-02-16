@@ -1,1 +1,0 @@
-$(ls -la /opt/.manus/webdev/templates)

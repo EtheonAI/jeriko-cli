@@ -126,6 +126,7 @@ export function usePromptState(options: UsePromptStateOptions = {}) {
   const reset = useCallback(() => {
     setText("");
     clearFiles();
+    setActiveSkills([]);
     setSelectedConnections([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";

@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { ArrowRightIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  MessageCircleMoreIcon,
+  ArchiveIcon,
+  CodeIcon,
+  GlobeIcon,
+  SearchIcon,
+  FileTextIcon,
+  SparklesIcon,
+} from "lucide-react";
 
 // ============================================================================
 // Types
@@ -11,6 +20,8 @@ import { ArrowRightIcon } from "lucide-react";
 export interface Suggestion {
   text: string;
   description?: string;
+  /** Optional icon hint — auto-detected from text if not provided */
+  icon?: "chat" | "archive" | "code" | "globe" | "search" | "file" | "sparkles";
 }
 
 export interface SuggestionsProps {
@@ -20,41 +31,85 @@ export interface SuggestionsProps {
 }
 
 // ============================================================================
-// Component
+// Icon map
 // ============================================================================
 
-export function Suggestions({
-  suggestions,
-  onSelect,
-  className,
-}: SuggestionsProps) {
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  chat: MessageCircleMoreIcon,
+  archive: ArchiveIcon,
+  code: CodeIcon,
+  globe: GlobeIcon,
+  search: SearchIcon,
+  file: FileTextIcon,
+  sparkles: SparklesIcon,
+};
+
+/** Auto-detect icon from suggestion text */
+function detectIcon(text: string): React.ComponentType<{ className?: string }> {
+  const lower = text.toLowerCase();
+  if (lower.includes("search") || lower.includes("find")) return SearchIcon;
+  if (
+    lower.includes("code") ||
+    lower.includes("run") ||
+    lower.includes("test") ||
+    lower.includes("generate a webpage") ||
+    lower.includes("generate a website")
+  )
+    return CodeIcon;
+  if (lower.includes("browse") || lower.includes("web") || lower.includes("page")) return GlobeIcon;
+  if (lower.includes("file") || lower.includes("document") || lower.includes("report"))
+    return FileTextIcon;
+  if (lower.includes("presentation") || lower.includes("create")) return ArchiveIcon;
+  return MessageCircleMoreIcon;
+}
+
+// ============================================================================
+// Component — Manus-style vertical suggestion rows
+// ============================================================================
+
+export function Suggestions({ suggestions, onSelect, className }: SuggestionsProps) {
   if (suggestions.length === 0) return null;
 
   return (
-    <div
-      className={cn(
-        "flex gap-2 overflow-x-auto pb-1 scrollbar-none",
-        className
-      )}
-    >
-      {suggestions.map((suggestion, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={() => onSelect(suggestion.text)}
-          className={cn(
-            "group flex flex-shrink-0 items-center gap-2 rounded-xl",
-            "border border-border/40 bg-background px-3.5 py-2",
-            "text-left text-sm text-foreground/80",
-            "transition-all duration-150",
-            "hover:border-border hover:bg-muted/40 hover:text-foreground",
-            "active:scale-[0.98]"
-          )}
-        >
-          <span className="whitespace-nowrap">{suggestion.text}</span>
-          <ArrowRightIcon className="size-3.5 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground/60" />
-        </button>
-      ))}
+    <div className={cn("flex flex-col gap-0", className)}>
+      {suggestions.map((suggestion, i) => {
+        const Icon = suggestion.icon
+          ? (ICON_MAP[suggestion.icon] ?? MessageCircleMoreIcon)
+          : detectIcon(suggestion.text);
+
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onSelect(suggestion.text)}
+            className={cn(
+              "group/suggestion flex items-center justify-between gap-4",
+              "px-3 py-[9px] -mx-3",
+              "cursor-pointer select-none",
+              "relative",
+              "transition-all duration-150",
+              "hover:bg-muted/50 hover:rounded-[10px]",
+              // Bottom separator — hidden on hover
+              i < suggestions.length - 1 && [
+                "after:content-[''] after:absolute after:bottom-0 after:left-3 after:right-3",
+                "after:h-px after:bg-border/60",
+                "hover:after:hidden",
+              ]
+            )}
+          >
+            {/* Left: icon + text */}
+            <div className="flex items-center gap-2 min-w-0">
+              <Icon className="size-4 flex-shrink-0 text-muted-foreground/60" />
+              <span className="text-sm text-muted-foreground flex-1 min-w-0">
+                {suggestion.text}
+              </span>
+            </div>
+
+            {/* Right: arrow */}
+            <ArrowRightIcon className="size-4 flex-shrink-0 text-muted-foreground/30 transition-transform group-hover/suggestion:translate-x-0.5 group-hover/suggestion:text-muted-foreground/50" />
+          </button>
+        );
+      })}
     </div>
   );
 }

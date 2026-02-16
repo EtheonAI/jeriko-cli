@@ -1,2 +1,0 @@
-This file was written by Claude via the file.write tool.
-The call path: Claude -> Manus Backend -> start_server:8330 /text_editor -> Python file I/O

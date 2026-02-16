@@ -1,1 +1,0 @@
-$(cat /opt/.manus/webdev/.projects-config.json 2>/dev/null)

@@ -1,5 +1,0 @@
-This is a test file created at $(date).
-Testing file write operation.
-Line 3 MODIFIED.
-Appended line 4.
-Appended line 5.

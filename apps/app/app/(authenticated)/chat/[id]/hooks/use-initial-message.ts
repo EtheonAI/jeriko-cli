@@ -7,7 +7,7 @@ interface UseInitialMessageOptions {
   sessionId: string;
   sendMessage: (
     text: string,
-    options?: { body?: Record<string, unknown>; attachments?: Attachment[] },
+    options?: { body?: Record<string, unknown>; attachments?: Attachment[] }
   ) => void;
 }
 
@@ -24,20 +24,21 @@ export function useInitialMessage({ sessionId, sendMessage }: UseInitialMessageO
     sessionStorage.removeItem(key);
 
     try {
-      const { parts, model, attachments } = JSON.parse(stored) as {
+      const { parts, model, attachments, skills, connections } = JSON.parse(stored) as {
         parts: Array<{ type: string; text?: string }>;
         model?: string;
         attachments?: Attachment[];
+        skills?: string[];
+        connections?: { id: string; type?: string; name?: string }[];
       };
 
-      const textPart = parts?.find(
-        (p): p is { type: "text"; text: string } => p.type === "text"
-      );
+      const textPart = parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
       if (textPart?.text || (attachments?.length ?? 0) > 0) {
-        setTimeout(
-          () => sendMessage(textPart?.text ?? "", { body: { model }, attachments }),
-          100
-        );
+        const body: Record<string, unknown> = {};
+        if (model) body.model = model;
+        if (skills?.length) body.skills = skills;
+        if (connections?.length) body.connections = connections;
+        setTimeout(() => sendMessage(textPart?.text ?? "", { body, attachments }), 100);
       }
     } catch {
       // Ignore malformed data

@@ -30,10 +30,13 @@ export interface ToolInlineCompactProps {
 // Tool category icons & labels (Manus-style descriptive labels)
 // ============================================================================
 
-const TOOL_CATEGORY: Record<string, {
-  icon: React.ComponentType<{ className?: string }>;
-  getLabel: (input?: Record<string, unknown>, output?: Record<string, unknown>) => string;
-}> = {
+const TOOL_CATEGORY: Record<
+  string,
+  {
+    icon: React.ComponentType<{ className?: string }>;
+    getLabel: (input?: Record<string, unknown>, output?: Record<string, unknown>) => string;
+  }
+> = {
   // Browser tools
   browser_navigate: {
     icon: GlobeIcon,
@@ -102,7 +105,10 @@ const TOOL_CATEGORY: Record<string, {
   },
   browser_restart: {
     icon: GlobeIcon,
-    getLabel: (input) => input?.url ? `Restarting browser at ${tryHostname(input.url as string)}` : "Restarting browser",
+    getLabel: (input) =>
+      input?.url
+        ? `Restarting browser at ${tryHostname(input.url as string)}`
+        : "Restarting browser",
   },
   // Search tools
   web_search: {
@@ -170,11 +176,13 @@ const TOOL_CATEGORY: Record<string, {
   },
   file_find_in_content: {
     icon: SearchIcon,
-    getLabel: (input) => `Searching for "${truncate(input?.pattern as string ?? input?.query as string, 25)}"`,
+    getLabel: (input) =>
+      `Searching for "${truncate((input?.pattern as string) ?? (input?.query as string), 25)}"`,
   },
   file_find_by_name: {
     icon: SearchIcon,
-    getLabel: (input) => `Finding ${truncate(input?.pattern as string ?? input?.name as string, 25)}`,
+    getLabel: (input) =>
+      `Finding ${truncate((input?.pattern as string) ?? (input?.name as string), 25)}`,
   },
   // Deploy tools
   deploy_expose_port: {
@@ -213,7 +221,8 @@ export function ToolInlineCompact({
   const category = TOOL_CATEGORY[toolName];
   const ToolIcon = category?.icon ?? CodeIcon;
 
-  const isActive = state === "input-streaming" || state === "input-available" || state === "approval-responded";
+  const isActive =
+    state === "input-streaming" || state === "input-available" || state === "approval-responded";
 
   // Generate label
   let label: string;
@@ -243,7 +252,7 @@ export function ToolInlineCompact({
             "cursor-pointer select-none",
             "hover:bg-white/[0.02]",
             "transition-colors duration-150",
-            isActive && "border-blue-500/20 bg-blue-500/[0.05]",
+            isActive && "border-blue-500/20 bg-blue-500/[0.05] shimmer-pill"
           )}
           title={titleAttr}
         >
@@ -253,9 +262,7 @@ export function ToolInlineCompact({
           </div>
 
           {/* Label */}
-          <div className="text-[13px] text-muted-foreground max-w-full truncate">
-            {label}
-          </div>
+          <div className="text-[13px] text-muted-foreground max-w-full truncate">{label}</div>
 
           {/* Active pulse dot */}
           {isActive && (

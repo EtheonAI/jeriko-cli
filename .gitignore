@@ -58,4 +58,4 @@ sandbox_runtime.build/
 sandbox_runtime.dist/
 
 # Misc Folders/Files
-docs/.manus
+docs/

@@ -38,26 +38,37 @@ async function accumulateAndPersist(
   sessionId: string,
   lastUserText: string,
   lastUserParts: Record<string, unknown>[] | null,
-  model: string | undefined,
+  model: string | undefined
 ) {
   const decoder = new TextDecoder();
   const reader = spyStream.getReader();
 
-  // Text accumulation
-  const textChunks: string[] = [];
+  // ── Chronological parts tracking ──
+  // Parts are recorded in the order they appear in the stream so that
+  // after page refresh the message renders identically to live streaming.
+  //
+  // Each entry is either:
+  //   { kind: "text",      chunks: string[] }
+  //   { kind: "reasoning", chunks: string[] }
+  //   { kind: "tool",      toolCallId: string }
+  //   { kind: "source",    data: Record<string, unknown> }
+  type PartEntry =
+    | { kind: "text"; chunks: string[] }
+    | { kind: "reasoning"; chunks: string[] }
+    | { kind: "tool"; toolCallId: string }
+    | { kind: "source"; data: Record<string, unknown> };
 
-  // Reasoning accumulation
-  const reasoningChunks: string[] = [];
-  let reasoningOpen = false;
+  const orderedEntries: PartEntry[] = [];
 
-  // Tool parts keyed by toolCallId
+  // Active text/reasoning entry for appending deltas
+  let activeText: (PartEntry & { kind: "text" }) | null = null;
+  let activeReasoning: (PartEntry & { kind: "reasoning" }) | null = null;
+
+  // Tool parts keyed by toolCallId (for updates)
   const toolParts: Record<string, Record<string, unknown>> = {};
 
-  // Source URLs
-  const sourceParts: Record<string, unknown>[] = [];
-
   // Session metadata from message-metadata events (sandboxId, nekoUrl, etc.)
-  let sessionMeta: Record<string, unknown> = {};
+  const sessionMeta: Record<string, unknown> = {};
 
   let buffer = "";
 
@@ -79,39 +90,62 @@ async function accumulateAndPersist(
 
           switch (ev.type) {
             // ── Text events ──
+            case "text-start": {
+              // Start a new text segment — close any previous one
+              const entry: PartEntry & { kind: "text" } = { kind: "text", chunks: [] };
+              orderedEntries.push(entry);
+              activeText = entry;
+              break;
+            }
             case "text-delta": {
               if (typeof ev.delta === "string") {
-                textChunks.push(ev.delta);
+                // Lazy-create text entry if text-start was missed
+                if (!activeText) {
+                  const entry: PartEntry & { kind: "text" } = { kind: "text", chunks: [] };
+                  orderedEntries.push(entry);
+                  activeText = entry;
+                }
+                activeText.chunks.push(ev.delta);
               }
+              break;
+            }
+            case "text-end": {
+              activeText = null;
               break;
             }
 
             // ── Reasoning events ──
             case "reasoning-start": {
-              // Flush any open reasoning into a part before starting new one
-              if (reasoningOpen && reasoningChunks.length > 0) {
-                // (shouldn't happen normally — reasoning-end should come first)
-              }
-              reasoningOpen = true;
+              const entry: PartEntry & { kind: "reasoning" } = { kind: "reasoning", chunks: [] };
+              orderedEntries.push(entry);
+              activeReasoning = entry;
               break;
             }
             case "reasoning-delta": {
               if (typeof ev.delta === "string") {
-                reasoningChunks.push(ev.delta);
+                if (!activeReasoning) {
+                  const entry: PartEntry & { kind: "reasoning" } = {
+                    kind: "reasoning",
+                    chunks: [],
+                  };
+                  orderedEntries.push(entry);
+                  activeReasoning = entry;
+                }
+                activeReasoning.chunks.push(ev.delta);
               }
               break;
             }
             case "reasoning-end": {
-              reasoningOpen = false;
-              // Reasoning text is accumulated and will be flushed as a part below
+              activeReasoning = null;
               break;
             }
 
             // ── Tool events ──
             case "tool-input-start": {
-              // Tool part started — create placeholder entry
               const tcId = ev.toolCallId as string;
               if (tcId) {
+                // Close any active text segment so tool appears after preceding text
+                activeText = null;
                 toolParts[tcId] = {
                   type: `tool-${(ev.toolName as string) || "unknown"}`,
                   toolCallId: tcId,
@@ -119,6 +153,7 @@ async function accumulateAndPersist(
                   state: "input-streaming",
                   input: {},
                 };
+                orderedEntries.push({ kind: "tool", toolCallId: tcId });
               }
               break;
             }
@@ -128,12 +163,13 @@ async function accumulateAndPersist(
                 if (toolParts[tcId]) {
                   toolParts[tcId].state = "input-available";
                   toolParts[tcId].input = ev.input ?? {};
-                  // Ensure toolName is set
                   if (ev.toolName) {
                     toolParts[tcId].toolName = ev.toolName;
                     toolParts[tcId].type = `tool-${ev.toolName as string}`;
                   }
                 } else {
+                  // Tool appeared without tool-input-start — still record in order
+                  activeText = null;
                   toolParts[tcId] = {
                     type: `tool-${(ev.toolName as string) || "unknown"}`,
                     toolCallId: tcId,
@@ -141,6 +177,7 @@ async function accumulateAndPersist(
                     state: "input-available",
                     input: ev.input ?? {},
                   };
+                  orderedEntries.push({ kind: "tool", toolCallId: tcId });
                 }
               }
               break;
@@ -152,6 +189,7 @@ async function accumulateAndPersist(
                   toolParts[tcId].state = "output-available";
                   toolParts[tcId].output = ev.output;
                 } else {
+                  activeText = null;
                   toolParts[tcId] = {
                     type: `tool-${(ev.toolName as string) || "unknown"}`,
                     toolCallId: tcId,
@@ -160,6 +198,7 @@ async function accumulateAndPersist(
                     input: {},
                     output: ev.output,
                   };
+                  orderedEntries.push({ kind: "tool", toolCallId: tcId });
                 }
               }
               break;
@@ -175,22 +214,22 @@ async function accumulateAndPersist(
 
             // ── Source URL events ──
             case "source-url": {
-              sourceParts.push({
+              const sourceData = {
                 type: "source-url",
                 sourceId: ev.sourceId || String(Date.now()),
                 url: ev.url,
                 title: ev.title,
-              });
+              };
+              orderedEntries.push({ kind: "source", data: sourceData });
               break;
             }
 
             // ── Metadata events (sandboxId, nekoUrl, etc.) ──
             case "message-metadata": {
-              // Merge all metadata fields — accumulates across multiple events
               const meta = ev.messageMetadata ?? ev;
               if (meta && typeof meta === "object") {
                 for (const [key, val] of Object.entries(meta as Record<string, unknown>)) {
-                  if (key === "type") continue; // skip the event type field
+                  if (key === "type") continue;
                   if (val !== undefined && val !== null) {
                     sessionMeta[key] = val;
                   }
@@ -204,8 +243,6 @@ async function accumulateAndPersist(
             case "finish":
             case "start-step":
             case "finish-step":
-            case "text-start":
-            case "text-end":
               break;
 
             default:
@@ -220,43 +257,49 @@ async function accumulateAndPersist(
     log.error("Stream accumulation error:", err as Error);
   }
 
-  // ── Build parts array for assistant message ──
-  const fullText = textChunks.join("");
-  const fullReasoning = reasoningChunks.join("");
-  const toolPartsArr = Object.values(toolParts);
+  // ── Build parts array in chronological order ──
   const parts: Record<string, unknown>[] = [];
+  let fullText = "";
 
-  // Add reasoning part first (if any)
-  if (fullReasoning) {
-    parts.push({ type: "reasoning", text: fullReasoning });
+  for (const entry of orderedEntries) {
+    switch (entry.kind) {
+      case "reasoning": {
+        const text = entry.chunks.join("");
+        if (text) parts.push({ type: "reasoning", text });
+        break;
+      }
+      case "text": {
+        const text = entry.chunks.join("");
+        if (text) {
+          parts.push({ type: "text", text });
+          fullText += text;
+        }
+        break;
+      }
+      case "tool": {
+        const tp = toolParts[entry.toolCallId];
+        if (tp) parts.push(tp);
+        break;
+      }
+      case "source":
+        parts.push(entry.data);
+        break;
+    }
   }
 
-  // Add text part
-  if (fullText) {
-    parts.push({ type: "text", text: fullText });
-  }
-
-  // Add tool parts
-  parts.push(...toolPartsArr);
-
-  // Add source parts
-  parts.push(...sourceParts);
+  const toolPartsArr = Object.values(toolParts);
 
   // ── Persist messages ──
 
   // Save user message
   if (lastUserText || (lastUserParts?.length ?? 0) > 0) {
-    await saveMessageToDB(
-      sessionId,
-      "user",
-      lastUserText,
-      undefined,
-      lastUserParts,
-    ).catch(() => {});
+    await saveMessageToDB(sessionId, "user", lastUserText, undefined, lastUserParts).catch(
+      () => {}
+    );
   }
 
   // Save assistant message with collected parts
-  if (fullText || fullReasoning || toolPartsArr.length > 0) {
+  if (fullText || toolPartsArr.length > 0 || parts.length > 0) {
     const msgMeta: Record<string, unknown> = { model: model ?? "agent" };
     // Include sandbox info in message metadata for historical reference
     if (sessionMeta.sandboxId) msgMeta.sandboxId = sessionMeta.sandboxId;
@@ -266,7 +309,7 @@ async function accumulateAndPersist(
       "assistant",
       fullText,
       msgMeta,
-      parts.length > 0 ? parts : null,
+      parts.length > 0 ? parts : null
     ).catch(() => {});
   }
 
@@ -386,7 +429,8 @@ export const POST = async (req: Request) => {
           const updatedMeta = { ...existingMeta };
           if (skills?.length) updatedMeta.skills = skills;
           if (connections?.length) updatedMeta.connections = connections;
-          await db.update(agentSessions)
+          await db
+            .update(agentSessions)
             .set({ metadata: updatedMeta, updatedAt: new Date() })
             .where(eq(agentSessions.id, sessionId));
         }
@@ -399,10 +443,11 @@ export const POST = async (req: Request) => {
     // Include text content from parts. For assistant messages with tool results,
     // include a summary of tool calls so the orchestrator has full context.
     const coreMessages = messages.map((m) => {
-      const textContent = m.parts
-        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("") ?? "";
+      const textContent =
+        m.parts
+          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("") ?? "";
 
       return {
         role: m.role as "user" | "assistant" | "system",
@@ -413,10 +458,7 @@ export const POST = async (req: Request) => {
     // Abort orchestrator when client disconnects OR after 10-min timeout.
     // AbortSignal.any() (Node 20+) merges the request signal (client abort)
     // with a hard timeout so the agent loop doesn't run forever.
-    const combinedSignal = AbortSignal.any([
-      req.signal,
-      AbortSignal.timeout(600_000),
-    ]);
+    const combinedSignal = AbortSignal.any([req.signal, AbortSignal.timeout(600_000)]);
 
     // When client disconnects, explicitly call orchestrator stop endpoint
     // so the agent loop's AbortController is signalled server-side.
@@ -464,8 +506,13 @@ export const POST = async (req: Request) => {
 
     // Fire-and-forget: accumulate text + tool parts, save to DB when stream ends
     if (sessionId) {
-      accumulateAndPersist(spyStream, sessionId, lastUserText, lastUserParts, metadata?.model)
-        .catch((err) => log.error("Persistence error:", err as Error));
+      accumulateAndPersist(
+        spyStream,
+        sessionId,
+        lastUserText,
+        lastUserParts,
+        metadata?.model
+      ).catch((err) => log.error("Persistence error:", err as Error));
     } else {
       // No sessionId — cancel the spy stream to prevent memory leak
       spyStream.cancel().catch(() => {});
@@ -479,7 +526,7 @@ export const POST = async (req: Request) => {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      },
+      }
     );
   }
 };
