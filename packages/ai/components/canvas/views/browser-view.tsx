@@ -97,17 +97,18 @@ function BrowserUrlBar({
 
   return (
     <div className="flex items-center gap-2 border-b border-border/10 bg-canvas-surface px-3 py-1.5">
+      {/* Navigation buttons — disabled during live stream (Neko handles navigation) */}
       <div className="flex items-center gap-1">
         <button
           type="button"
           className={cn(
             "rounded p-1 transition-colors",
-            canGoBack
+            !isLiveStream && canGoBack
               ? "text-muted-foreground/70 hover:bg-muted/20"
               : "pointer-events-none text-muted-foreground/20"
           )}
           onClick={onBack}
-          disabled={!canGoBack}
+          disabled={isLiveStream || !canGoBack}
           title="Back"
         >
           <ArrowLeftIcon className="size-3.5" />
@@ -116,39 +117,52 @@ function BrowserUrlBar({
           type="button"
           className={cn(
             "rounded p-1 transition-colors",
-            canGoForward
+            !isLiveStream && canGoForward
               ? "text-muted-foreground/70 hover:bg-muted/20"
               : "pointer-events-none text-muted-foreground/20"
           )}
           onClick={onForward}
-          disabled={!canGoForward}
+          disabled={isLiveStream || !canGoForward}
           title="Forward"
         >
           <ArrowRightIcon className="size-3.5" />
         </button>
         <button
           type="button"
-          className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-muted/20"
+          className={cn(
+            "rounded p-1 transition-colors",
+            isLiveStream
+              ? "pointer-events-none text-muted-foreground/20"
+              : "text-muted-foreground/70 hover:bg-muted/20"
+          )}
           onClick={onRefresh}
+          disabled={isLiveStream}
           title="Refresh"
         >
-          <RotateCcwIcon className={cn("size-3.5", loading && "animate-spin")} />
+          <RotateCcwIcon className={cn("size-3.5", loading && !isLiveStream && "animate-spin")} />
         </button>
       </div>
+      {/* URL bar — read-only during live stream (Manus pattern: <span> not <input>) */}
       <form onSubmit={handleSubmit} className="flex flex-1">
         <div className="flex flex-1 items-center gap-2 truncate rounded-md bg-canvas-deep px-3 py-1 font-mono text-xs text-muted-foreground">
-          {loading && (
+          {loading && !isLiveStream && (
             <LoaderIcon className="size-3 flex-shrink-0 animate-spin text-blue-400" />
           )}
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Enter URL..."
-            className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground/30"
-            spellCheck={false}
-          />
+          {isLiveStream ? (
+            <span className="flex-1 truncate text-muted-foreground/50">
+              {inputValue || "Live desktop — use the browser directly"}
+            </span>
+          ) : (
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Enter URL..."
+              className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground/30"
+              spellCheck={false}
+            />
+          )}
         </div>
       </form>
       {/* Take Control button — shown when sandbox is available.
@@ -170,10 +184,16 @@ function BrowserUrlBar({
       )}
       <button
         type="button"
-        className="rounded p-1 text-muted-foreground/70 transition-colors hover:bg-muted/20"
+        className={cn(
+          "rounded p-1 transition-colors",
+          isLiveStream
+            ? "pointer-events-none text-muted-foreground/20"
+            : "text-muted-foreground/70 hover:bg-muted/20"
+        )}
         onClick={() => {
-          if (url) window.open(url, "_blank", "noopener,noreferrer");
+          if (url && !isLiveStream) window.open(url, "_blank", "noopener,noreferrer");
         }}
+        disabled={isLiveStream}
         title="Open in new tab"
       >
         <ExternalLinkIcon className="size-3.5" />
@@ -330,7 +350,7 @@ export function BrowserView({
         onScreenshotUpdate(result.screenshot, result.url, result.title);
       }
     },
-    [userControlActive, sandboxId, sendBrowserAction, onScreenshotUpdate]
+    [userControlActive, sandboxId, sendBrowserAction, onScreenshotUpdate, deactivateUserControl]
   );
 
   return (

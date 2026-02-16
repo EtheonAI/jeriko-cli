@@ -149,7 +149,7 @@ export function ChatClient({
       canvasState.onPinToolCall?.(toolCallId);
       forceOpen();
     },
-    [canvasState.onPinToolCall, forceOpen]
+    [canvasState, forceOpen]
   );
 
   // Open first source URL in browser canvas when sources are clicked
@@ -167,7 +167,7 @@ export function ChatClient({
         window.open(firstUrl.url, "_blank", "noopener,noreferrer");
       }
     },
-    [canvasState.onBrowserNavigate, canvasState.onSelectView, forceOpen]
+    [canvasState, forceOpen]
   );
 
   return (
