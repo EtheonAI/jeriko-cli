@@ -114,6 +114,8 @@ export {
   scheduledTasksRelations,
   taskExecutions,
   taskExecutionsRelations,
+  triggerEvents,
+  triggerEventsRelations,
   type TaskScheduleType,
   type TaskStatus,
   type RecurrencePattern,
@@ -121,6 +123,8 @@ export {
   type NewScheduledTask,
   type TaskExecution,
   type NewTaskExecution,
+  type TriggerEvent,
+  type NewTriggerEvent,
 } from "./scheduledTasks";
 
 // Project schemas

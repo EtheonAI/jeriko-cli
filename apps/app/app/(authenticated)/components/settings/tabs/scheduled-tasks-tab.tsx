@@ -50,6 +50,8 @@ import {
   XCircleIcon,
   PencilIcon,
   ExternalLinkIcon,
+  ZapIcon,
+  CodeIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -108,7 +110,7 @@ const taskFormSchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
   description: z.string().optional(),
   taskType: z.enum(["agent_run", "report", "sync", "backup", "custom"]),
-  scheduleType: z.enum(["once", "recurring", "cron"]),
+  scheduleType: z.enum(["once", "recurring", "cron", "trigger"]),
   scheduledAt: z.string().optional(),
   recurrencePattern: z
     .enum(["daily", "weekly", "biweekly", "monthly", "yearly", "custom"])
@@ -456,8 +458,12 @@ export function ScheduledTasksTab() {
               >
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                    {task.scheduleType === "recurring" ? (
+                    {task.scheduleType === "trigger" ? (
+                      <ZapIcon className="h-5 w-5" />
+                    ) : task.scheduleType === "recurring" ? (
                       <RepeatIcon className="h-5 w-5" />
+                    ) : task.scheduleType === "cron" ? (
+                      <CodeIcon className="h-5 w-5" />
                     ) : (
                       <ClockIcon className="h-5 w-5" />
                     )}
@@ -476,6 +482,11 @@ export function ScheduledTasksTab() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
+                      {task.scheduleType === "trigger" && (
+                        <>
+                          Trigger: {task.triggerAppName ? task.triggerAppName.charAt(0).toUpperCase() + task.triggerAppName.slice(1) : "Unknown"} / {task.triggerEventSlug || "Unknown event"}
+                        </>
+                      )}
                       {task.scheduleType === "recurring" && task.recurrencePattern && (
                         <>
                           {recurrenceLabels[task.recurrencePattern] || task.recurrencePattern}

@@ -32,7 +32,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
-import { getSessionIdBySandboxId, setSandboxDatabaseName, setSandboxProjectPath, getProjectPathBySandboxId, registerDatabaseCleanup, getTerminalServerUrlBySandboxId, getE2bSandboxIdBySandboxId } from "../lib/e2b-manager.js";
+import { getSessionIdBySandboxId, setSandboxDatabaseName, setSandboxProjectPath, getProjectPathBySandboxId, registerDatabaseCleanup, getTerminalServerUrlBySandboxId, getE2bSandboxIdBySandboxId, getDatabaseNameBySandboxId } from "../lib/e2b-manager.js";
 import { getRsaHeaders } from "../lib/rsa-auth.js";
 
 const logger = createLogger({ service: "webdev" });
@@ -249,6 +249,69 @@ function resolveTerminalUrl(sandboxId: string, bodyTerminalUrl?: string): string
   if (cached) return cached;
   if (bodyTerminalUrl) return bodyTerminalUrl;
   throw new Error(`No terminal server URL available for sandbox ${sandboxId}`);
+}
+
+// ─── S3 upload helpers ─────────────────────────────────────────────────
+
+/** MIME type map for media uploads */
+const MEDIA_MIME_MAP: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+  ".mp4": "video/mp4", ".webm": "video/webm", ".mp3": "audio/mpeg",
+  ".wav": "audio/wav", ".pdf": "application/pdf",
+};
+
+/**
+ * Upload a file from the sandbox to S3 and return a CDN/presigned URL.
+ *
+ * Manus pattern: read file from sandbox via terminal-server /file/read,
+ * then upload to S3 organized by userId/sessionId/checkpoints.
+ */
+async function uploadSandboxFileToS3(
+  sandboxId: string,
+  filePath: string,
+  userId: string
+): Promise<string | null> {
+  try {
+    const baseUrl = resolveTerminalUrl(sandboxId);
+    const body = JSON.stringify({ path: filePath });
+    const rsaHeaders = getRsaHeaders(body);
+
+    const response = await fetch(`${baseUrl}/file/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...rsaHeaders },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) return null;
+    const data = (await response.json()) as Record<string, unknown>;
+    const content = data.content as string;
+    if (!content) return null;
+
+    // Sandbox /file/read returns encoding: "base64" for binary files
+    const encoding = data.encoding as string | undefined;
+    const buffer = encoding === "base64"
+      ? Buffer.from(content, "base64")
+      : Buffer.from(content, "utf-8");
+
+    const fileName = filePath.split("/").pop() || "file";
+    const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
+    const contentType = MEDIA_MIME_MAP[ext] || "application/octet-stream";
+
+    // Organize by userId + sessionId (Manus pattern: per-session file organization)
+    const sessionId = getSessionIdBySandboxId(sandboxId) || "unknown";
+    const key = `uploads/${userId}/session/${sessionId}/checkpoints/${Date.now()}_${fileName}`;
+
+    const { uploadFile, getPresignedUrl, getCdnUrl } = await import("@repo/storage");
+    await uploadFile(key, buffer, contentType);
+
+    // Prefer CDN URL, fall back to presigned
+    return getCdnUrl(key) || await getPresignedUrl(key, 86400, true);
+  } catch (error) {
+    logger.warn({ sandboxId, filePath, error: String(error) }, "Failed to upload sandbox file to S3");
+    return null;
+  }
 }
 
 /**
@@ -937,17 +1000,20 @@ console.log('stripped Manus devDependencies');
       );
       const commitHash = hashResult.stdout.trim();
 
-      // Capture screenshot (best effort — uses Xvfb display)
-      let screenshotPath: string | null = null;
+      // Capture screenshot (best effort — uses Xorg display :0)
+      let screenshotUrl: string | null = null;
+      const screenshotFilename = `checkpoint-${commitHash}.png`;
+      const screenshotLocalPath = `/home/ubuntu/screenshots/${screenshotFilename}`;
       try {
-        const filename = `checkpoint-${commitHash}.png`;
         await sandboxExec(
           sandboxId,
-          `DISPLAY=:0 scrot /home/ubuntu/screenshots/${filename}`,
+          `DISPLAY=:0 scrot ${screenshotLocalPath}`,
           userId,
           5000
         );
-        screenshotPath = `/home/ubuntu/screenshots/${filename}`;
+
+        // Upload screenshot to S3 (Manus pattern — persist checkpoint screenshots)
+        screenshotUrl = await uploadSandboxFileToS3(sandboxId, screenshotLocalPath, userId);
       } catch {
         // Screenshot is best-effort
       }
@@ -959,7 +1025,8 @@ console.log('stripped Manus devDependencies');
         versionId: commitHash,
         commitHash,
         message,
-        screenshotPath,
+        screenshotUrl,
+        screenshotPath: screenshotUrl || screenshotLocalPath,
         timestamp: Date.now(),
       });
     } catch (err) {
@@ -1440,8 +1507,8 @@ export function getStripe() {
       return reply.status(503).send({ error: "TiDB not configured (TIDB_DATABASE_URL or TIDB_HOST missing)" });
     }
 
-    // Use project-specific database if provided, otherwise shared
-    const targetDb = body.databaseName || TIDB_DATABASE;
+    // Use project-specific database: from body → sandbox cache → default
+    const targetDb = body.databaseName || getDatabaseNameBySandboxId(sandboxId) || TIDB_DATABASE;
 
     // Build a connection URL for drizzle-kit (used in push/pull operations inside sandbox)
     // TiDB Cloud requires SSL, which mysql2 handles via the URL + ssl=true param

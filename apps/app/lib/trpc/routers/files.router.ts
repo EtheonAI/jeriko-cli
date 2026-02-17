@@ -14,6 +14,7 @@ import {
 } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { syncFileToSearch, removeFileFromSearch } from "@repo/search";
+import { deleteFile, deleteFiles, getPresignedUrl } from "@repo/storage";
 
 export const filesRouter = createTRPCRouter({
   // List files for the current user (optionally filtered by session)
@@ -157,13 +158,27 @@ export const filesRouter = createTRPCRouter({
         throw new Error("File not found");
       }
 
+      // Collect S3 keys to delete (main file + all versions)
+      const versions = await db
+        .select({ storageKey: fileVersions.storageKey })
+        .from(fileVersions)
+        .where(eq(fileVersions.fileId, input.id));
+
+      const s3Keys = [
+        ...(existing.storageKey ? [existing.storageKey] : []),
+        ...versions.map((v) => v.storageKey),
+      ];
+
       // Delete the file (versions will cascade)
       await db.delete(files).where(eq(files.id, input.id));
 
       // Remove from search index (non-blocking)
       removeFileFromSearch(input.id).catch(() => {});
 
-      // TODO: Delete actual file from storage
+      // Delete from S3 (non-blocking)
+      if (s3Keys.length > 0) {
+        deleteFiles(s3Keys).catch(() => {});
+      }
 
       return { success: true };
     }),
@@ -183,11 +198,31 @@ export const filesRouter = createTRPCRouter({
       const validIds = userFiles.map((f) => f.id);
       if (validIds.length === 0) return { success: true, count: 0 };
 
+      // Collect S3 keys before deleting DB records
+      const filesToDelete = await db
+        .select({ storageKey: files.storageKey })
+        .from(files)
+        .where(inArray(files.id, validIds));
+      const versionKeys = await db
+        .select({ storageKey: fileVersions.storageKey })
+        .from(fileVersions)
+        .where(inArray(fileVersions.fileId, validIds));
+
+      const s3Keys = [
+        ...filesToDelete.filter((f) => f.storageKey).map((f) => f.storageKey!),
+        ...versionKeys.map((v) => v.storageKey),
+      ];
+
       await db.delete(files).where(inArray(files.id, validIds));
 
       // Remove from search index (non-blocking)
       for (const id of validIds) {
         removeFileFromSearch(id).catch(() => {});
+      }
+
+      // Delete from S3 (non-blocking)
+      if (s3Keys.length > 0) {
+        deleteFiles(s3Keys).catch(() => {});
       }
 
       return { success: true, count: validIds.length };
@@ -253,17 +288,32 @@ export const filesRouter = createTRPCRouter({
         throw new Error("File not found");
       }
 
-      const FILE_SERVICE_URL = process.env.FILE_SERVICE_URL || "http://localhost:4005";
+      if (!file.storageKey) {
+        return { url: "" };
+      }
+
+      // If storageKey is already a URL (agent-created files), return it directly
+      if (file.storageKey.startsWith("http")) {
+        return { url: file.storageKey };
+      }
+
+      // storageKey is an S3 key — generate a presigned URL
       try {
-        const res = await fetch(`${FILE_SERVICE_URL}/files/${input.id}/download`, {
-          headers: { "x-user-id": ctx.user.id },
-        });
-        if (!res.ok) throw new Error("Failed to get download URL");
-        const data = await res.json();
-        return { url: data.url as string };
+        const url = await getPresignedUrl(file.storageKey, 3600);
+        return { url };
       } catch {
-        // Fallback: return storage key directly if file service is unavailable
-        return { url: file.storageKey || "" };
+        // Fallback: try file service
+        const FILE_SERVICE_URL = process.env.FILE_SERVICE_URL || "http://localhost:4005";
+        try {
+          const res = await fetch(`${FILE_SERVICE_URL}/files/${input.id}/download`, {
+            headers: { "x-user-id": ctx.user.id },
+          });
+          if (!res.ok) throw new Error("Failed to get download URL");
+          const data = await res.json();
+          return { url: data.url as string };
+        } catch {
+          return { url: file.storageKey };
+        }
       }
     }),
 

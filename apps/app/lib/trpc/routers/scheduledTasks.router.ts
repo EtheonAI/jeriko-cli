@@ -1,9 +1,23 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, scheduledTasks, taskExecutions, eq, and, desc, gte, lte } from "@repo/database";
+import {
+  db,
+  scheduledTasks,
+  taskExecutions,
+  userConnectors,
+  connectorDefinitions,
+  eq,
+  and,
+  desc,
+  gte,
+  lte,
+} from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
 import { syncTaskToSearch, removeTaskFromSearch } from "@repo/search";
+
+const CONNECTOR_SERVICE_URL =
+  process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
 
 export const scheduledTasksRouter = createTRPCRouter({
   // List scheduled tasks
@@ -62,7 +76,7 @@ export const scheduledTasksRouter = createTRPCRouter({
         name: z.string().min(1).max(255),
         description: z.string().optional(),
         taskType: z.enum(["agent_run", "report", "sync", "backup", "custom"]),
-        scheduleType: z.enum(["once", "recurring", "cron"]),
+        scheduleType: z.enum(["once", "recurring", "cron", "trigger"]),
         // One-time schedule
         scheduledAt: z.date().optional(),
         // Recurring schedule
@@ -85,6 +99,11 @@ export const scheduledTasksRouter = createTRPCRouter({
         // End conditions
         endDate: z.date().optional(),
         maxRuns: z.number().min(1).optional(),
+        // Trigger fields
+        triggerEnabled: z.boolean().optional(),
+        triggerAppName: z.string().optional(),
+        triggerEventSlug: z.string().optional(),
+        triggerConfig: z.record(z.string(), z.unknown()).optional(),
         // Organization
         organizationId: z.string().optional(),
       })
@@ -112,15 +131,121 @@ export const scheduledTasksRouter = createTRPCRouter({
         });
       }
 
+      if (
+        input.scheduleType === "trigger" &&
+        (!input.triggerAppName || !input.triggerEventSlug)
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "triggerAppName and triggerEventSlug are required for trigger tasks",
+        });
+      }
+
+      // Pre-validate: user must have the trigger app connected
+      if (input.scheduleType === "trigger" && input.triggerAppName) {
+        const [connDef] = await db
+          .select({ id: connectorDefinitions.id })
+          .from(connectorDefinitions)
+          .where(eq(connectorDefinitions.type, input.triggerAppName))
+          .limit(1);
+
+        if (!connDef) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Unknown app "${input.triggerAppName}". Please check the app name.`,
+          });
+        }
+
+        const [connection] = await db
+          .select({ id: userConnectors.id })
+          .from(userConnectors)
+          .where(
+            and(
+              eq(userConnectors.userId, ctx.user.id),
+              eq(userConnectors.connectorDefinitionId, connDef.id),
+              eq(userConnectors.status, "connected"),
+            ),
+          )
+          .limit(1);
+
+        if (!connection) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: `You must connect ${input.triggerAppName} first. Go to Applications to connect it.`,
+          });
+        }
+      }
+
       const id = createId();
 
-      // Calculate next run time
+      // Calculate next run time (trigger-only tasks have no time schedule)
       let nextRunAt: Date | undefined;
-      if (input.scheduleType === "once") {
+      if (input.scheduleType === "trigger") {
+        nextRunAt = undefined; // No time-based schedule
+      } else if (input.scheduleType === "once") {
         nextRunAt = input.scheduledAt;
-      } else {
-        // TODO: Calculate next run time based on schedule
-        nextRunAt = new Date();
+      } else if (input.scheduleType === "recurring") {
+        // Calculate next occurrence based on recurrence pattern
+        const now = new Date();
+        const next = new Date(now);
+        next.setSeconds(0, 0);
+
+        // Apply recurrence time (HH:MM)
+        if (input.recurrenceTime) {
+          const [h, m] = input.recurrenceTime.split(":").map(Number);
+          next.setHours(h ?? 9, m ?? 0);
+        } else {
+          next.setHours(9, 0); // Default 9 AM
+        }
+
+        const interval = input.recurrenceInterval ?? 1;
+
+        switch (input.recurrencePattern) {
+          case "daily":
+            if (next <= now) next.setDate(next.getDate() + interval);
+            break;
+          case "weekly": {
+            const days = input.recurrenceDaysOfWeek;
+            if (days && days.length > 0) {
+              const sorted = [...days].sort((a, b) => a - b);
+              const currentDay = now.getDay();
+              let found = false;
+              for (const day of sorted) {
+                if (day > currentDay || (day === currentDay && next > now)) {
+                  next.setDate(next.getDate() + (day - currentDay));
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                const daysUntilFirst = 7 - currentDay + sorted[0]!;
+                next.setDate(next.getDate() + daysUntilFirst + (interval - 1) * 7);
+              }
+            } else {
+              if (next <= now) next.setDate(next.getDate() + 7 * interval);
+            }
+            break;
+          }
+          case "biweekly":
+            if (next <= now) next.setDate(next.getDate() + 14);
+            break;
+          case "monthly":
+            if (input.recurrenceDayOfMonth) next.setDate(input.recurrenceDayOfMonth);
+            if (next <= now) next.setMonth(next.getMonth() + interval);
+            break;
+          case "yearly":
+            if (next <= now) next.setFullYear(next.getFullYear() + interval);
+            break;
+          default:
+            if (next <= now) next.setDate(next.getDate() + interval);
+        }
+
+        nextRunAt = next;
+      } else if (input.scheduleType === "cron" && input.cronExpression) {
+        // For cron, set nextRunAt to now — the task service cron-scheduler
+        // will recalculate using cron-parser when it picks up the task.
+        // We set it 1 minute in the future so it doesn't fire immediately.
+        nextRunAt = new Date(Date.now() + 60_000);
       }
 
       const [task] = await db
@@ -149,12 +274,74 @@ export const scheduledTasksRouter = createTRPCRouter({
           nextRunAt,
           status: "pending",
           isEnabled: true,
+          triggerEnabled: input.triggerEnabled ?? (input.scheduleType === "trigger"),
+          triggerAppName: input.triggerAppName,
+          triggerEventSlug: input.triggerEventSlug,
+          triggerConfig: input.triggerConfig,
         })
         .returning();
 
       if (task) {
         void syncTaskToSearch(task);
-        // TODO: Publish scheduledTask:new event via gateway/backend service
+
+        // Subscribe Composio trigger for trigger-type tasks
+        if (
+          input.scheduleType === "trigger" &&
+          input.triggerEventSlug &&
+          task
+        ) {
+          try {
+            const resp = await fetch(`${CONNECTOR_SERVICE_URL}/triggers/subscribe`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-user-id": ctx.user.id,
+              },
+              body: JSON.stringify({
+                triggerSlug: input.triggerEventSlug,
+                triggerConfig: input.triggerConfig ?? {},
+                scheduledTaskId: id,
+              }),
+              signal: AbortSignal.timeout(15_000),
+            });
+
+            if (!resp.ok) {
+              const errText = await resp.text().catch(() => "Unknown error");
+              console.error(`Trigger subscribe failed: ${resp.status} - ${errText}`);
+              // Clean up the task since trigger subscription failed
+              await db.delete(scheduledTasks).where(eq(scheduledTasks.id, id));
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: `Failed to subscribe trigger: ${errText}. Make sure the app is connected.`,
+              });
+            }
+
+            const result = (await resp.json()) as { triggerId?: string };
+            if (result.triggerId) {
+              await db
+                .update(scheduledTasks)
+                .set({ composioTriggerId: result.triggerId })
+                .where(eq(scheduledTasks.id, id));
+
+              // Return updated task with triggerId
+              const [updated] = await db
+                .select()
+                .from(scheduledTasks)
+                .where(eq(scheduledTasks.id, id))
+                .limit(1);
+              if (updated) return updated;
+            }
+          } catch (err) {
+            if (err instanceof TRPCError) throw err;
+            console.error("Trigger subscription error:", err);
+            // Clean up the task
+            await db.delete(scheduledTasks).where(eq(scheduledTasks.id, id));
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to subscribe trigger. Please try again.",
+            });
+          }
+        }
       }
 
       return task;
@@ -183,6 +370,10 @@ export const scheduledTasksRouter = createTRPCRouter({
         retryDelaySeconds: z.number().min(0).optional(),
         endDate: z.date().optional(),
         maxRuns: z.number().min(1).optional(),
+        triggerEnabled: z.boolean().optional(),
+        triggerAppName: z.string().optional(),
+        triggerEventSlug: z.string().optional(),
+        triggerConfig: z.record(z.string(), z.unknown()).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -281,15 +472,26 @@ export const scheduledTasksRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
       }
 
+      // Disable Composio trigger if present
+      if (existing.composioTriggerId) {
+        fetch(
+          `${CONNECTOR_SERVICE_URL}/triggers/${existing.composioTriggerId}/disable`,
+          {
+            method: "PATCH",
+            headers: { "x-user-id": ctx.user.id },
+            signal: AbortSignal.timeout(10_000),
+          },
+        ).catch(() => {}); // Non-fatal
+      }
+
       const [task] = await db
         .update(scheduledTasks)
-        .set({ status: "cancelled", isEnabled: false })
+        .set({ status: "cancelled", isEnabled: false, triggerEnabled: false })
         .where(eq(scheduledTasks.id, input.id))
         .returning();
 
       if (task) {
         void syncTaskToSearch(task);
-        // TODO: Publish scheduledTask:update event via gateway/backend service
       }
 
       return task;
@@ -309,10 +511,18 @@ export const scheduledTasksRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
       }
 
+      // Clean up Composio trigger if present
+      if (existing.composioTriggerId) {
+        fetch(`${CONNECTOR_SERVICE_URL}/triggers/${existing.composioTriggerId}`, {
+          method: "DELETE",
+          headers: { "x-user-id": ctx.user.id },
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => {}); // Non-fatal
+      }
+
       await db.delete(scheduledTasks).where(eq(scheduledTasks.id, input.id));
 
       void removeTaskFromSearch(input.id);
-      // TODO: Publish scheduledTask:deleted event via gateway/backend service
 
       return { success: true };
     }),
@@ -405,5 +615,59 @@ export const scheduledTasksRouter = createTRPCRouter({
       }
 
       return executions;
+    }),
+
+  // List available trigger types from connected apps
+  listTriggerTypes: protectedProcedure.query(async ({ ctx }) => {
+    const CONNECTOR_SERVICE_URL =
+      process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+    try {
+      const resp = await fetch(`${CONNECTOR_SERVICE_URL}/triggers/types`, {
+        headers: { "x-user-id": ctx.user.id },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) return { triggers: [] };
+      return (await resp.json()) as {
+        triggers: Array<{
+          slug: string;
+          appName: string;
+          description: string;
+          configSchema?: Record<string, unknown>;
+          payloadSchema?: Record<string, unknown>;
+        }>;
+      };
+    } catch {
+      return { triggers: [] };
+    }
+  }),
+
+  // Get trigger type config/payload schema
+  getTriggerTypeConfig: protectedProcedure
+    .input(z.object({ slug: z.string() }))
+    .query(async ({ input }) => {
+      const CONNECTOR_SERVICE_URL =
+        process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+      try {
+        const resp = await fetch(
+          `${CONNECTOR_SERVICE_URL}/triggers/types/${encodeURIComponent(input.slug)}`,
+          { signal: AbortSignal.timeout(10_000) },
+        );
+        if (!resp.ok) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Trigger type not found" });
+        }
+        return (await resp.json()) as {
+          slug: string;
+          appName: string;
+          description: string;
+          configSchema: Record<string, unknown>;
+          payloadSchema: Record<string, unknown>;
+        };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch trigger type config",
+        });
+      }
     }),
 });

@@ -37,7 +37,7 @@ export function createSearchWebTool(ctx: ToolContext) {
       // Bing HTML fallback — reliable, no CAPTCHA
       try {
         const resp = await fetch(
-          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10`,
+          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10&setlang=en&mkt=en-US&cc=US`,
           {
             headers: {
               'User-Agent':

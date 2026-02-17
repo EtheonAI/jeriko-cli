@@ -11,6 +11,7 @@ import connectorsReducer, {
 
 describe("connectors.slice - P6.13 Composio event mapping", () => {
   const initialState: ConnectorsState = {
+    connectors: [],
     availableConnectors: [],
     installedConnectors: [],
     categories: [

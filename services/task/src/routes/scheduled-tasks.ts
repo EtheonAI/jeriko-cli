@@ -28,7 +28,7 @@ const CreateScheduledTaskSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
   taskType: z.enum(["agent_run", "report", "sync", "backup", "custom"]),
-  scheduleType: z.enum(["once", "recurring", "cron"]),
+  scheduleType: z.enum(["once", "recurring", "cron", "trigger"]),
   scheduledAt: z.string().optional().transform((v) => (v ? new Date(v) : undefined)),
   recurrencePattern: z
     .enum(["daily", "weekly", "biweekly", "monthly", "yearly", "custom"])
@@ -45,6 +45,11 @@ const CreateScheduledTaskSchema = z.object({
   endDate: z.string().optional().transform((v) => (v ? new Date(v) : undefined)),
   maxRuns: z.number().min(1).optional(),
   isEnabled: z.boolean().default(true),
+  // Trigger fields (for scheduleType === "trigger" or hybrid)
+  triggerEnabled: z.boolean().optional(),
+  triggerAppName: z.string().optional(),
+  triggerEventSlug: z.string().optional(),
+  triggerConfig: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ListScheduledTasksSchema = z.object({
@@ -107,24 +112,36 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (fastify) => {
         ),
       );
     }
+    if (input.scheduleType === "trigger" && (!input.triggerAppName || !input.triggerEventSlug)) {
+      return reply.status(400).send(
+        errorResponse(
+          { code: ErrorCodes.VALIDATION_ERROR, message: "triggerAppName and triggerEventSlug are required for trigger tasks" },
+          request.id,
+        ),
+      );
+    }
 
     try {
       const id = createId();
 
-      const nextRunAt = calculateNextRunAt({
-        scheduleType: input.scheduleType,
-        scheduledAt: input.scheduledAt,
-        cronExpression: input.cronExpression,
-        recurrencePattern: input.recurrencePattern,
-        recurrenceInterval: input.recurrenceInterval,
-        recurrenceTime: input.recurrenceTime,
-        recurrenceDaysOfWeek: input.recurrenceDaysOfWeek,
-        recurrenceDayOfMonth: input.recurrenceDayOfMonth,
-        timezone: input.timezone,
-        endDate: input.endDate,
-        maxRuns: input.maxRuns,
-        runCount: 0,
-      });
+      // Trigger-only tasks have no time-based schedule
+      const nextRunAt =
+        input.scheduleType === "trigger"
+          ? null
+          : calculateNextRunAt({
+              scheduleType: input.scheduleType,
+              scheduledAt: input.scheduledAt,
+              cronExpression: input.cronExpression,
+              recurrencePattern: input.recurrencePattern,
+              recurrenceInterval: input.recurrenceInterval,
+              recurrenceTime: input.recurrenceTime,
+              recurrenceDaysOfWeek: input.recurrenceDaysOfWeek,
+              recurrenceDayOfMonth: input.recurrenceDayOfMonth,
+              timezone: input.timezone,
+              endDate: input.endDate,
+              maxRuns: input.maxRuns,
+              runCount: 0,
+            });
 
       const [task] = await db
         .insert(scheduledTasks)
@@ -151,8 +168,54 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (fastify) => {
           nextRunAt,
           status: "pending",
           isEnabled: input.isEnabled,
+          triggerEnabled: input.triggerEnabled ?? (input.scheduleType === "trigger"),
+          triggerAppName: input.triggerAppName,
+          triggerEventSlug: input.triggerEventSlug,
+          triggerConfig: input.triggerConfig,
         })
         .returning();
+
+      // If trigger is enabled, subscribe with Composio via connector service
+      if (task && input.triggerEnabled && input.triggerAppName && input.triggerEventSlug) {
+        try {
+          const connectorServiceUrl =
+            process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+          const resp = await fetch(`${connectorServiceUrl}/triggers/subscribe`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": userId,
+            },
+            body: JSON.stringify({
+              triggerSlug: input.triggerEventSlug,
+              triggerConfig: input.triggerConfig,
+              scheduledTaskId: id,
+            }),
+            signal: AbortSignal.timeout(15_000),
+          });
+
+          if (resp.ok) {
+            const data = (await resp.json()) as { triggerId?: string };
+            if (data.triggerId) {
+              await db
+                .update(scheduledTasks)
+                .set({ composioTriggerId: data.triggerId })
+                .where(eq(scheduledTasks.id, id));
+              logger.info({ taskId: id, triggerId: data.triggerId }, "Composio trigger subscribed");
+            }
+          } else {
+            logger.warn(
+              { taskId: id, status: resp.status },
+              "Failed to subscribe Composio trigger (non-fatal)",
+            );
+          }
+        } catch (triggerErr) {
+          logger.warn(
+            { taskId: id, error: triggerErr },
+            "Failed to subscribe Composio trigger (non-fatal)",
+          );
+        }
+      }
 
       // Publish real-time event
       await publish(`user:${userId}`, {
@@ -288,6 +351,7 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Send Inngest event (non-fatal — execution record already created)
       try {
+        const triggerPayload = task.payload as Record<string, unknown> | null;
         await inngest.send({
           name: "task/execute",
           data: {
@@ -295,11 +359,15 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (fastify) => {
             executionId,
             userId,
             prompt:
-              (task.payload as Record<string, unknown> | null)?.prompt ??
+              triggerPayload?.prompt ??
               task.description ??
               task.name,
             targetDeviceId:
-              (task.payload as Record<string, unknown> | null)?.targetDeviceId ?? undefined,
+              triggerPayload?.targetDeviceId ?? undefined,
+            skillIds:
+              Array.isArray(triggerPayload?.skillIds) ? triggerPayload.skillIds : undefined,
+            connectionIds:
+              Array.isArray(triggerPayload?.connectionIds) ? triggerPayload.connectionIds : undefined,
           },
         });
       } catch (inngestErr) {
@@ -324,6 +392,99 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (fastify) => {
         .send(
           errorResponse(
             { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to trigger scheduled task" },
+            request.id,
+          ),
+        );
+    }
+  });
+
+  // ── Dispatch execution from a trigger event (called by connector service webhook) ──
+  fastify.post("/scheduled-tasks/:id/trigger-event", async (request, reply) => {
+    const userId = getUserId(request);
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      executionId?: string;
+      triggerEvent?: {
+        slug: string;
+        data: Record<string, unknown>;
+        triggerId: string;
+      };
+      prompt?: string;
+    };
+
+    try {
+      // Verify ownership
+      const [task] = await db
+        .select()
+        .from(scheduledTasks)
+        .where(and(eq(scheduledTasks.id, id), eq(scheduledTasks.userId, userId)))
+        .limit(1);
+
+      if (!task) {
+        return reply
+          .status(404)
+          .send(errorResponse({ code: ErrorCodes.NOT_FOUND, message: "Task not found" }, request.id));
+      }
+
+      // Create execution record if not provided
+      const executionId = body.executionId || createId();
+      if (!body.executionId) {
+        await db.insert(taskExecutions).values({
+          id: executionId,
+          scheduledTaskId: id,
+          status: "pending",
+        });
+      }
+
+      // Mark task as running to prevent cron-scheduler from double-dispatching
+      await db
+        .update(scheduledTasks)
+        .set({ status: "running" })
+        .where(eq(scheduledTasks.id, id));
+
+      // Determine prompt: use provided prompt, or build from task
+      const prompt =
+        body.prompt ??
+        (task.payload as Record<string, unknown> | null)?.prompt ??
+        task.description ??
+        task.name;
+
+      // Send Inngest event with trigger context
+      try {
+        const eventPayload = task.payload as Record<string, unknown> | null;
+        await inngest.send({
+          name: "task/execute",
+          data: {
+            taskId: id,
+            executionId,
+            userId,
+            prompt,
+            triggerEvent: body.triggerEvent,
+            skillIds:
+              Array.isArray(eventPayload?.skillIds) ? eventPayload.skillIds : undefined,
+            connectionIds:
+              Array.isArray(eventPayload?.connectionIds) ? eventPayload.connectionIds : undefined,
+          },
+        });
+      } catch (inngestErr) {
+        logger.warn({ taskId: id, error: inngestErr }, "Failed to send Inngest event (non-fatal)");
+      }
+
+      logger.info(
+        { taskId: id, executionId, triggerSlug: body.triggerEvent?.slug },
+        "Trigger event dispatched",
+      );
+
+      return reply.send(
+        successResponse({ executionId, status: "triggered" }, request.id),
+      );
+    } catch (error) {
+      logger.error(error, "Failed to dispatch trigger event");
+      return reply
+        .status(500)
+        .send(
+          errorResponse(
+            { code: ErrorCodes.INTERNAL_ERROR, message: "Failed to dispatch trigger event" },
             request.id,
           ),
         );

@@ -48,6 +48,38 @@ func runtimeAPIHost() string {
 	return host
 }
 
+// ── Builtin tools discovery ──────────────────────────────────────────────────
+
+type BuiltinTools struct {
+	GeneratedAt string   `json:"generated_at"`
+	ToolNames   []string `json:"tool_names"`
+	Servers     []Server `json:"servers"`
+}
+
+type Server struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Tools       []Tool `json:"tools"`
+}
+
+type Tool struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
+}
+
+func readBuiltinTools() (*BuiltinTools, error) {
+	data, err := os.ReadFile("/tmp/rubic-mcp/builtin_tools.json")
+	if err != nil {
+		return nil, err
+	}
+	var bt BuiltinTools
+	if err := json.Unmarshal(data, &bt); err != nil {
+		return nil, fmt.Errorf("parse error: %w", err)
+	}
+	return &bt, nil
+}
+
 // ── API proxy call ────────────────────────────────────────────────────────────
 
 type CallApiRequest struct {
@@ -164,6 +196,48 @@ func serveMode() {
 		w.Write(result)
 	})
 
+	// Tool list endpoint
+	mux.HandleFunc("/tool/list", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		serverFilter := r.URL.Query().Get("server")
+		bt, err := readBuiltinTools()
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"generated_at": "",
+				"tool_names":   []string{},
+				"servers":      []interface{}{},
+			})
+			return
+		}
+
+		if serverFilter != "" {
+			filtered := BuiltinTools{
+				GeneratedAt: bt.GeneratedAt,
+				ToolNames:   []string{},
+				Servers:     []Server{},
+			}
+			for _, srv := range bt.Servers {
+				if srv.Name == serverFilter {
+					filtered.Servers = append(filtered.Servers, srv)
+					for _, t := range srv.Tools {
+						filtered.ToolNames = append(filtered.ToolNames, t.Name)
+					}
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(filtered)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bt)
+	})
+
 	port := os.Getenv("MCP_SERVER_PORT")
 	if port == "" {
 		port = fmt.Sprintf("%d", defaultMCP)
@@ -173,6 +247,49 @@ func serveMode() {
 	fmt.Printf("Rubic MCP CLI v%s serving on %s\n", version, addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// ── CLI tool list mode ───────────────────────────────────────────────────────
+
+func cliToolList(args []string) {
+	var serverFilter string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--server" && i+1 < len(args) {
+			serverFilter = args[i+1]
+			i++
+		}
+	}
+
+	bt, err := readBuiltinTools()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "No tools available (builtin_tools.json not found).\n")
+		fmt.Fprintf(os.Stderr, "Tools are populated when the agent connects MCP servers.\n")
+		os.Exit(0)
+	}
+
+	found := false
+	for _, srv := range bt.Servers {
+		if serverFilter != "" && srv.Name != serverFilter {
+			continue
+		}
+		found = true
+		fmt.Printf("Server: %s (%s)\n", srv.Name, srv.Description)
+		for _, tool := range srv.Tools {
+			fmt.Printf("  - %s: %s\n", tool.Name, tool.Description)
+		}
+		fmt.Println()
+	}
+
+	if !found && serverFilter != "" {
+		fmt.Fprintf(os.Stderr, "No server named %q found.\n", serverFilter)
+		fmt.Fprintf(os.Stderr, "Available servers: ")
+		names := []string{}
+		for _, srv := range bt.Servers {
+			names = append(names, srv.Name)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(names, ", "))
 		os.Exit(1)
 	}
 }
@@ -229,11 +346,19 @@ func main() {
 	case "serve":
 		serveMode()
 	case "tool":
-		if len(os.Args) < 3 || os.Args[2] != "call" {
-			fmt.Fprintf(os.Stderr, "Usage: rubic-mcp-cli tool call <api_id> [--server <srv>] [--input '{...}']\n")
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "Usage: rubic-mcp-cli tool <list|call> [args...]\n")
 			os.Exit(1)
 		}
-		cliToolCall(os.Args[3:])
+		switch os.Args[2] {
+		case "call":
+			cliToolCall(os.Args[3:])
+		case "list":
+			cliToolList(os.Args[3:])
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown tool subcommand: %s\nUsage: rubic-mcp-cli tool <list|call> [args...]\n", os.Args[2])
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
 		os.Exit(1)

@@ -126,13 +126,51 @@ function shouldHideTool(toolName: string, index: number, parts: UIMessagePart[])
 function buildSections(parts: UIMessagePart[]): MessageSection[] {
   if (!parts || !Array.isArray(parts)) return [];
 
+  // --- Pass 1: Find all show_plan invocations and determine which step is active at each point ---
+  interface PlanInvocation {
+    partIndex: number;
+    steps: PlanStep[];
+    activeStepId: string | null; // null = all completed
+  }
+
+  const planInvocations: PlanInvocation[] = [];
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]!;
+    if (!part || typeof part !== "object" || !("type" in part)) continue;
+    if (!isToolUIPart(part)) continue;
+    const toolPart = part as StaticToolUIPart | DynamicToolUIPart;
+    const toolName = getToolName(toolPart);
+    if (!PLAN_TOOL_NAMES.has(toolName)) continue;
+
+    const steps = extractPlanSteps(toolPart);
+    if (steps.length === 0) continue;
+
+    const activeIdx = steps.findIndex((s) => s.status === "in_progress");
+    planInvocations.push({
+      partIndex: i,
+      steps,
+      activeStepId: activeIdx >= 0 ? steps[activeIdx]!.id : null,
+    });
+  }
+
+  if (planInvocations.length === 0) return [];
+
+  // Use the LAST invocation's steps as the final plan state (latest statuses)
+  const finalSteps = planInvocations[planInvocations.length - 1]!.steps;
+
+  // --- Pass 2: Assign non-plan parts to their active step ---
+  const stepBuckets = new Map<string, { parts: UIMessagePart[]; partIndices: number[] }>();
+  for (const step of finalSteps) {
+    stepBuckets.set(step.id, { parts: [], partIndices: [] });
+  }
+
   const sections: MessageSection[] = [];
-  let currentPlanSteps: PlanStep[] | null = null;
-  let currentStepIndex = 0;
-  let currentStepParts: UIMessagePart[] = [];
-  let currentStepIndices: number[] = [];
   let flatParts: UIMessagePart[] = [];
   let flatIndices: number[] = [];
+  let invIdx = 0;
+  let currentActiveStepId: string | null = null;
+  let inPlanRegion = false;
 
   const flushFlat = () => {
     if (flatParts.length > 0) {
@@ -142,118 +180,69 @@ function buildSections(parts: UIMessagePart[]): MessageSection[] {
     }
   };
 
-  const flushStep = () => {
-    if (
-      currentPlanSteps &&
-      currentStepIndex < currentPlanSteps.length &&
-      currentStepParts.length > 0
-    ) {
-      sections.push({
-        type: "plan-step",
-        step: currentPlanSteps[currentStepIndex]!,
-        parts: currentStepParts,
-        partIndices: currentStepIndices,
-      });
-      currentStepParts = [];
-      currentStepIndices = [];
-    }
-  };
-
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i]!;
     if (!part || typeof part !== "object" || !("type" in part)) continue;
     if (isStepStartUIPart(part)) continue;
     if (isSourceUrlUIPart(part) || isSourceDocumentUIPart(part)) continue;
 
+    // Check if this is a plan invocation
+    if (
+      isToolUIPart(part) &&
+      invIdx < planInvocations.length &&
+      planInvocations[invIdx]!.partIndex === i
+    ) {
+      if (!inPlanRegion) {
+        flushFlat();
+        inPlanRegion = true;
+      }
+      currentActiveStepId = planInvocations[invIdx]!.activeStepId;
+      invIdx++;
+      continue; // Don't render show_plan itself
+    }
+
+    // Skip show_plan parts that weren't matched (shouldn't happen, but safety)
     if (isToolUIPart(part)) {
       const toolPart = part as StaticToolUIPart | DynamicToolUIPart;
       const toolName = getToolName(toolPart);
-
-      if (PLAN_TOOL_NAMES.has(toolName)) {
-        const steps = extractPlanSteps(toolPart);
-        if (steps.length > 0) {
-          flushFlat();
-
-          const activeIdx = steps.findIndex((s) => s.status === "in_progress");
-          const newStepIndex = activeIdx >= 0 ? activeIdx : 0;
-
-          if (currentPlanSteps) {
-            if (currentStepParts.length > 0) {
-              const updatedStep =
-                currentStepIndex < steps.length
-                  ? steps[currentStepIndex]!
-                  : currentPlanSteps[currentStepIndex]!;
-              sections.push({
-                type: "plan-step",
-                step: updatedStep,
-                parts: currentStepParts,
-                partIndices: currentStepIndices,
-              });
-            }
-            currentStepParts = [];
-            currentStepIndices = [];
-
-            for (let s = currentStepIndex + 1; s < newStepIndex; s++) {
-              sections.push({
-                type: "plan-step",
-                step: steps[s]!,
-                parts: [],
-                partIndices: [],
-              });
-            }
-          } else {
-            for (let s = 0; s < newStepIndex; s++) {
-              sections.push({
-                type: "plan-step",
-                step: steps[s]!,
-                parts: [],
-                partIndices: [],
-              });
-            }
-          }
-
-          currentPlanSteps = steps;
-          currentStepIndex = newStepIndex;
-          continue;
-        }
-      }
-
+      if (PLAN_TOOL_NAMES.has(toolName)) continue;
       if (shouldHideTool(toolName, i, parts)) continue;
     }
 
-    if (currentPlanSteps) {
-      if (
-        isTextUIPart(part) &&
-        currentStepParts.length > 0 &&
-        currentStepParts.some((p) => isToolUIPart(p))
-      ) {
-        flushStep();
-        if (currentStepIndex < currentPlanSteps.length - 1) {
-          currentStepIndex++;
-        }
-        currentStepParts.push(part);
-        currentStepIndices.push(i);
-        continue;
+    if (inPlanRegion && currentActiveStepId) {
+      const bucket = stepBuckets.get(currentActiveStepId);
+      if (bucket) {
+        bucket.parts.push(part);
+        bucket.partIndices.push(i);
+      } else {
+        // Step ID not in final plan — treat as flat
+        flatParts.push(part);
+        flatIndices.push(i);
       }
-      currentStepParts.push(part);
-      currentStepIndices.push(i);
+    } else if (inPlanRegion && !currentActiveStepId) {
+      // All steps completed — remaining content is flat (the "answer")
+      flatParts.push(part);
+      flatIndices.push(i);
     } else {
+      // Before first plan invocation
       flatParts.push(part);
       flatIndices.push(i);
     }
   }
 
-  if (currentPlanSteps) {
-    flushStep();
-    for (let s = currentStepIndex + 1; s < currentPlanSteps.length; s++) {
-      sections.push({
-        type: "plan-step",
-        step: currentPlanSteps[s]!,
-        parts: [],
-        partIndices: [],
-      });
-    }
+  // Build final sections: leading flat → plan steps → trailing flat
+  flushFlat();
+
+  for (const step of finalSteps) {
+    const bucket = stepBuckets.get(step.id)!;
+    sections.push({
+      type: "plan-step",
+      step,
+      parts: bucket.parts,
+      partIndices: bucket.partIndices,
+    });
   }
+
   flushFlat();
 
   return sections;
@@ -800,7 +789,7 @@ export function MessageRenderer(props: MessageRendererProps) {
 
         return (
           <PlanStepSection
-            key={step.id}
+            key={`plan-step-${sIdx}`}
             step={step}
             isLast={isLastPlanStep}
             defaultOpen={isActive || stepParts.length > 0}

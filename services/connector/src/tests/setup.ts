@@ -118,7 +118,7 @@ vi.mock("@repo/service-utils/circuit-breaker", () => ({
   })),
 }));
 
-// Mock Composio SDK
+// Mock Composio SDK v0.6.3
 vi.mock("@composio/core", () => {
   const mockComposioInstance = {
     getEntity: vi.fn().mockReturnValue({
@@ -140,6 +140,31 @@ vi.mock("@composio/core", () => {
     integrations: {
       list: vi.fn().mockResolvedValue({ items: [] }),
       create: vi.fn().mockResolvedValue({ id: "int_test" }),
+    },
+    triggers: {
+      // v0.6.3 API
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(null),
+      listTypes: vi.fn().mockResolvedValue({ items: [] }),
+      getType: vi.fn().mockResolvedValue(null),
+      listActive: vi.fn().mockResolvedValue({ items: [] }),
+      create: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }),
+      setup: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }), // legacy compat
+      enable: vi.fn().mockResolvedValue({ status: "success" }),
+      disable: vi.fn().mockResolvedValue({ status: "success" }),
+      delete: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      verifyWebhook: vi.fn().mockResolvedValue({
+        version: "V3",
+        payload: { triggerSlug: "GMAIL_NEW_GMAIL_MESSAGE" },
+        rawPayload: {},
+      }),
+    },
+    // Internal client for triggerInstances.upsert
+    client: {
+      triggerInstances: {
+        upsert: vi.fn().mockResolvedValue({ trigger_id: "ti_test_123" }),
+      },
     },
   };
 
@@ -176,6 +201,9 @@ vi.mock("../lib/db.js", () => {
     connectorDefinitions: mockTable("connectorDefinitions"),
     userConnectors: mockTable("userConnectors"),
     connectorSyncLogs: mockTable("connectorSyncLogs"),
+    scheduledTasks: mockTable("scheduledTasks"),
+    triggerEvents: mockTable("triggerEvents"),
+    taskExecutions: mockTable("taskExecutions"),
     initDb: vi.fn().mockResolvedValue(undefined),
     eq: vi.fn((...args: unknown[]) => ({ type: "eq", args })),
     and: vi.fn((...args: unknown[]) => ({ type: "and", args })),
@@ -189,7 +217,7 @@ vi.mock("../lib/db.js", () => {
   };
 });
 
-// Mock the Composio client helper
+// Mock the Composio client helper (v0.6.3 API)
 vi.mock("../lib/composio.js", () => ({
   getComposioClient: vi.fn().mockReturnValue({
     getEntity: vi.fn().mockReturnValue({
@@ -211,6 +239,29 @@ vi.mock("../lib/composio.js", () => ({
     integrations: {
       list: vi.fn().mockResolvedValue({ items: [] }),
       create: vi.fn().mockResolvedValue({ id: "int_test" }),
+    },
+    triggers: {
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(null),
+      listTypes: vi.fn().mockResolvedValue({ items: [] }),
+      getType: vi.fn().mockResolvedValue(null),
+      listActive: vi.fn().mockResolvedValue({ items: [] }),
+      create: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }),
+      setup: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }), // legacy compat
+      enable: vi.fn().mockResolvedValue({ status: "success" }),
+      disable: vi.fn().mockResolvedValue({ status: "success" }),
+      delete: vi.fn().mockResolvedValue({ triggerId: "ti_test_123" }),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      verifyWebhook: vi.fn().mockResolvedValue({
+        version: "V3",
+        payload: { triggerSlug: "GMAIL_NEW_GMAIL_MESSAGE" },
+        rawPayload: {},
+      }),
+    },
+    client: {
+      triggerInstances: {
+        upsert: vi.fn().mockResolvedValue({ trigger_id: "ti_test_123" }),
+      },
     },
   }),
 }));

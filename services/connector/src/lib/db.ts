@@ -6,6 +6,9 @@ export let db: any;
 export let connectorDefinitions: any;
 export let userConnectors: any;
 export let connectorSyncLogs: any;
+export let scheduledTasks: any;
+export let triggerEvents: any;
+export let taskExecutions: any;
 
 export async function initDb() {
   const mod = await import("@repo/database");
@@ -14,6 +17,9 @@ export async function initDb() {
   connectorDefinitions = resolved.connectorDefinitions;
   userConnectors = resolved.userConnectors;
   connectorSyncLogs = resolved.connectorSyncLogs;
+  scheduledTasks = resolved.scheduledTasks;
+  triggerEvents = resolved.triggerEvents;
+  taskExecutions = resolved.taskExecutions;
 }
 
 // Re-export drizzle helpers (direct dependency, no resolution issue)

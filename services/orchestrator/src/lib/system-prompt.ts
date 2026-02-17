@@ -765,8 +765,12 @@ Available command-line utilities in the sandbox:
   rubic-export-slides <input.md> [-o output.pptx]
     Convert Markdown with --- slide separators to a PPTX presentation.
 
+  rubic-mcp-cli tool list [--server <srv>]
+    List available MCP tools. Use --server to filter by integration.
+
   rubic-mcp-cli tool call <name> --server <srv> --input '{json}'
     Execute a connected MCP tool directly from the sandbox.
+    Results are saved to /tmp/rubic-mcp/mcp_result_*.json for large outputs.
 
 DOCUMENT GENERATION WORKFLOW
   When the user requests a document (report, PDF, slides, etc.):
@@ -910,6 +914,10 @@ ${sections.join("\n\n")}`;
   The following MCP server names are configured: ${mcpServers.join(", ")}
   Tools from these servers are available as first-class tools (call them
   directly by name). Additionally, sandbox code can access them via:
+    rubic-mcp-cli tool list --server <server_name>
+  Or list all available tools:
+    rubic-mcp-cli tool list
+  To execute a tool:
     rubic-mcp-cli tool call <tool_name> --server <server_name> --input '{json}'
   Results are saved to /tmp/rubic-mcp/mcp_result_*.json for large outputs.`;
   }

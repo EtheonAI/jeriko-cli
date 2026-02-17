@@ -7,6 +7,8 @@ import {
   lte,
   scheduledTasks,
   taskExecutions,
+  agentSessions,
+  messages,
 } from "../lib/db.js";
 import {
   createId,
@@ -35,8 +37,16 @@ const executeTask = inngest.createFunction(
       logger.error({ taskId, executionId, error: error.message }, "Task execution failed");
 
       try {
-        // Mark execution as failed
+        // Mark execution as failed + find linked session
+        let linkedSessionId: string | null = null;
         if (executionId) {
+          const [exec] = await db
+            .select({ sessionId: taskExecutions.sessionId })
+            .from(taskExecutions)
+            .where(eq(taskExecutions.id, executionId))
+            .limit(1);
+          linkedSessionId = exec?.sessionId ?? null;
+
           await db
             .update(taskExecutions)
             .set({
@@ -46,6 +56,22 @@ const executeTask = inngest.createFunction(
               errorStack: error.stack ?? null,
             })
             .where(eq(taskExecutions.id, executionId));
+        }
+
+        // Mark linked chat session as failed + save error message
+        if (linkedSessionId) {
+          await db.insert(messages).values({
+            id: createId(),
+            sessionId: linkedSessionId,
+            role: "assistant",
+            content: `Automation failed: ${error.message}`,
+            parts: [{ type: "text", text: `Automation failed: ${error.message}` }],
+            metadata: { source: "automation", error: true },
+          });
+          await db
+            .update(agentSessions)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(agentSessions.id, linkedSessionId));
         }
 
         // Reset scheduled task to pending so cron can retry
@@ -58,11 +84,32 @@ const executeTask = inngest.createFunction(
           })
           .where(eq(scheduledTasks.id, taskId));
 
-        // Notify user via Redis
+        // Notify user via Redis (real-time WebSocket)
         await publish(`user:${userId}`, {
           type: "scheduledTask:failed",
-          data: { taskId, executionId, error: error.message },
+          data: { taskId, executionId, sessionId: linkedSessionId, error: error.message },
         });
+
+        // Notify user via Knock (email + push + in-app)
+        const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || "http://localhost:4006";
+        const notifHeaders: Record<string, string> = { "Content-Type": "application/json", "x-user-id": userId };
+        const gatewaySecret = process.env.GATEWAY_SECRET;
+        if (gatewaySecret) notifHeaders["x-gateway-secret"] = gatewaySecret;
+        await fetch(`${notificationUrl}/send`, {
+          method: "POST",
+          headers: notifHeaders,
+          body: JSON.stringify({
+            userId,
+            type: "task",
+            title: "Task failed",
+            message: `Task execution failed: ${error.message}`,
+            priority: "high",
+            actionUrl: linkedSessionId ? `/chat/${linkedSessionId}` : `/actions`,
+            entityType: "scheduledTask",
+            entityId: taskId,
+          }),
+          signal: AbortSignal.timeout(5_000),
+        }).catch(() => {}); // Non-fatal
       } catch (dbErr) {
         logger.error({ taskId, error: dbErr }, "Failed to record task failure in DB");
       }
@@ -76,35 +123,113 @@ const executeTask = inngest.createFunction(
       userId,
       prompt,
       targetDeviceId,
-    } = event.data;
+      triggerEvent,
+      skillIds,
+      connectionIds,
+    } = event.data as {
+      taskId: string;
+      executionId?: string;
+      userId: string;
+      prompt: string;
+      targetDeviceId?: string;
+      triggerEvent?: {
+        slug: string;
+        data: Record<string, unknown>;
+        triggerId: string;
+      };
+      skillIds?: string[];
+      connectionIds?: string[];
+    };
 
-    logger.info({ taskId, executionId, userId }, "Starting task execution");
+    logger.info(
+      { taskId, executionId, userId, hasTrigger: !!triggerEvent },
+      "Starting task execution",
+    );
 
-    // Step 1: Prepare — mark execution running, update scheduled task
-    await step.run("prepare-context", async () => {
+    // Build user content (deterministic — safe outside steps)
+    let userContent = prompt;
+    if (triggerEvent) {
+      const eventSummary = JSON.stringify(triggerEvent.data, null, 2);
+      userContent = `[Trigger Event: ${triggerEvent.slug}]\nEvent data:\n${eventSummary}\n\nTask instructions: ${userContent}`;
+    }
+    if (targetDeviceId) {
+      userContent += `\n\n[Target device: ${targetDeviceId}]`;
+    }
+
+    // Step 1: Create chat session, save user message, mark running
+    const sessionId = await step.run("create-session", async () => {
+      // Fetch task for session title
+      const [task] = await db
+        .select({ name: scheduledTasks.name })
+        .from(scheduledTasks)
+        .where(eq(scheduledTasks.id, taskId))
+        .limit(1);
+      const taskName = task?.name || "Automated Task";
+
+      // Generate a date label for the session title (distinguishes runs of the same task)
+      const dateLabel = new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      const sid = createId();
+
+      // Create chat session in DB
+      await db.insert(agentSessions).values({
+        id: sid,
+        userId,
+        status: "active",
+        title: `${taskName} — ${dateLabel}`,
+        metadata: {
+          scheduledTaskId: taskId,
+          executionId: executionId ?? undefined,
+          source: "automation",
+          ...(triggerEvent ? { triggerEvent: { slug: triggerEvent.slug } } : {}),
+          ...(skillIds?.length ? { skills: skillIds } : {}),
+        },
+      });
+
+      // Save user message
+      await db.insert(messages).values({
+        id: createId(),
+        sessionId: sid,
+        role: "user",
+        content: userContent,
+        parts: [{ type: "text", text: userContent }],
+      });
+
+      // Mark execution running + link to session
       if (executionId) {
         await db
           .update(taskExecutions)
-          .set({ status: "running", startedAt: new Date() })
+          .set({ status: "running", startedAt: new Date(), sessionId: sid })
           .where(eq(taskExecutions.id, executionId));
       }
 
+      // Mark task running
       await db
         .update(scheduledTasks)
         .set({ status: "running" })
         .where(eq(scheduledTasks.id, taskId));
 
+      // Note: trigger tracking (lastTriggerAt, lastTriggerEventId) is updated
+      // by the connector webhook handler BEFORE dispatching here — do NOT overwrite.
+
       await publish(`user:${userId}`, {
         type: "scheduledTask:running",
-        data: { taskId, executionId },
+        data: { taskId, executionId, sessionId: sid, triggerEvent: triggerEvent?.slug },
       });
 
-      return { ready: true };
+      return sid;
     });
 
-    // Step 2: Call agent service
+    // Step 2: Call orchestrator for LLM completion
     const agentResult = await step.run("call-agent", async () => {
-      const agentUrl = process.env.AGENT_SERVICE_URL || "http://localhost:8000";
+      const orchestratorUrl =
+        process.env.ORCHESTRATOR_SERVICE_URL || "http://localhost:4014";
       const gatewaySecret = process.env.GATEWAY_SECRET || "";
 
       const headers: Record<string, string> = {
@@ -116,31 +241,152 @@ const executeTask = inngest.createFunction(
         headers["x-gateway-secret"] = gatewaySecret;
       }
 
-      const response = await fetch(`${agentUrl}/v1/complete`, {
+      const response = await fetch(`${orchestratorUrl}/v1/completions`, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          prompt,
-          targetDeviceId,
-          stream: false,
+          messages: [{ role: "user", content: userContent }],
+          sessionId,
+          userId,
+          ...(skillIds && skillIds.length > 0 ? { skills: skillIds } : {}),
+          ...(connectionIds && connectionIds.length > 0
+            ? { connections: connectionIds.map((id) => ({ id })) }
+            : {}),
         }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(300_000), // 5 min for complex agent tasks
       });
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
-        throw new Error(`Agent service error: ${response.status} - ${errorText}`);
+        throw new Error(
+          `Orchestrator error: ${response.status} - ${errorText}`,
+        );
       }
 
-      return response.json();
+      // Orchestrator returns SSE stream — consume it and collect text + tool calls
+      const body = response.body;
+      if (!body) {
+        throw new Error("Orchestrator returned empty response body");
+      }
+
+      let fullText = "";
+      const toolCalls: Array<{
+        toolCallId: string;
+        toolName?: string;
+        input?: unknown;
+        output?: unknown;
+        errorText?: string;
+        state: string;
+      }> = [];
+      const decoder = new TextDecoder();
+      const reader = body.getReader();
+
+      try {
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const evt = JSON.parse(data);
+              // AI SDK v6 UIMessage stream protocol
+              if (evt.type === "text-delta" && evt.delta) {
+                fullText += evt.delta;
+              }
+              if (evt.type === "tool-input-available") {
+                toolCalls.push({
+                  toolCallId: evt.toolCallId,
+                  toolName: evt.toolName,
+                  input: evt.input,
+                  state: "input-available",
+                });
+              }
+              if (evt.type === "tool-output-available") {
+                const existing = toolCalls.find(
+                  (tc) => tc.toolCallId === evt.toolCallId,
+                );
+                if (existing) {
+                  existing.output = evt.output;
+                  existing.state = "output-available";
+                } else {
+                  toolCalls.push({
+                    toolCallId: evt.toolCallId,
+                    output: evt.output,
+                    state: "output-available",
+                  });
+                }
+              }
+              if (evt.type === "tool-output-error") {
+                const existing = toolCalls.find(
+                  (tc) => tc.toolCallId === evt.toolCallId,
+                );
+                if (existing) {
+                  existing.errorText = evt.error;
+                  existing.state = "output-error";
+                }
+              }
+            } catch {
+              // Skip non-JSON lines (SSE comments, etc.)
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      return { text: fullText, toolCalls };
     });
 
-    // Step 3: Process result — mark success, update counters, publish events
+    // Step 3: Save assistant message, update session, finalize execution
     await step.run("process-result", async () => {
       const now = new Date();
 
+      // Build parts array for the assistant message
+      const parts: Record<string, unknown>[] = [];
+      if (agentResult.text) {
+        parts.push({ type: "text", text: agentResult.text });
+      }
+      for (const tc of agentResult.toolCalls) {
+        parts.push({
+          type: tc.toolName ? `tool-${tc.toolName}` : "tool-unknown",
+          toolCallId: tc.toolCallId,
+          toolName: tc.toolName,
+          state: tc.state,
+          input: tc.input,
+          output: tc.output,
+          ...(tc.errorText ? { errorText: tc.errorText } : {}),
+        });
+      }
+
+      // Save assistant message to DB
+      await db.insert(messages).values({
+        id: createId(),
+        sessionId,
+        role: "assistant",
+        content: agentResult.text || "",
+        parts: parts.length > 0 ? parts : null,
+        metadata: { model: "agent", source: "automation" },
+      });
+
+      // Mark session completed
+      await db
+        .update(agentSessions)
+        .set({ status: "completed", updatedAt: now })
+        .where(eq(agentSessions.id, sessionId));
+
+      // Mark execution success
       if (executionId) {
-        // Calculate duration from startedAt
         const [execution] = await db
           .select({ startedAt: taskExecutions.startedAt })
           .from(taskExecutions)
@@ -171,13 +417,17 @@ const executeTask = inngest.createFunction(
 
       if (task) {
         const newRunCount = (task.runCount ?? 0) + 1;
-        const nextRunAt = calculateNextRunAt({
-          ...task,
-          runCount: newRunCount,
-        });
 
-        // If no more runs, mark completed; otherwise back to pending
-        const newStatus = nextRunAt ? "pending" : "completed";
+        // For trigger-only tasks, no time-based nextRunAt — stay pending for next trigger
+        const isTriggerOnly = task.scheduleType === "trigger";
+        const nextRunAt = isTriggerOnly
+          ? null
+          : calculateNextRunAt({ ...task, runCount: newRunCount });
+
+        // Trigger-only tasks go back to pending (waiting for next trigger);
+        // time-based tasks complete if no nextRunAt
+        const newStatus =
+          isTriggerOnly ? "pending" : nextRunAt ? "pending" : "completed";
 
         await db
           .update(scheduledTasks)
@@ -191,17 +441,38 @@ const executeTask = inngest.createFunction(
           })
           .where(eq(scheduledTasks.id, taskId));
 
-        // Publish completion event
+        // Publish completion event with sessionId (real-time WebSocket)
         await publish(`user:${userId}`, {
           type: "scheduledTask:completed",
-          data: { taskId, executionId, runCount: newRunCount, nextRunAt },
+          data: { taskId, executionId, sessionId, runCount: newRunCount, nextRunAt },
         });
+
+        // Notify user via Knock (email + push + in-app)
+        const notificationUrl = process.env.NOTIFICATION_SERVICE_URL || "http://localhost:4006";
+        const gatewaySecret = process.env.GATEWAY_SECRET;
+        const notifHeaders: Record<string, string> = { "Content-Type": "application/json", "x-user-id": userId };
+        if (gatewaySecret) notifHeaders["x-gateway-secret"] = gatewaySecret;
+        await fetch(`${notificationUrl}/send`, {
+          method: "POST",
+          headers: notifHeaders,
+          body: JSON.stringify({
+            userId,
+            type: "task",
+            title: `Task completed: ${task.name}`,
+            message: `"${task.name}" finished successfully. Run #${newRunCount}.`,
+            priority: "normal",
+            actionUrl: `/chat/${sessionId}`,
+            entityType: "scheduledTask",
+            entityId: taskId,
+          }),
+          signal: AbortSignal.timeout(5_000),
+        }).catch(() => {}); // Non-fatal
 
         dispatchWebhookEvent({
           eventType: "scheduledTask.executed",
           resourceType: "scheduledTask",
           resourceId: taskId,
-          payload: { taskId, executionId, status: "success", runCount: newRunCount },
+          payload: { taskId, executionId, sessionId, status: "success", runCount: newRunCount },
           userId,
         });
       }
@@ -209,7 +480,7 @@ const executeTask = inngest.createFunction(
       return { success: true };
     });
 
-    return { taskId, executionId, status: "completed" };
+    return { taskId, executionId, sessionId, status: "completed" };
   },
 );
 
@@ -263,6 +534,7 @@ const cronScheduler = inngest.createFunction(
           });
 
           // Send Inngest event FIRST — only mark running if send succeeds
+          const taskPayload = task.payload as Record<string, unknown> | null;
           await inngest.send({
             name: "task/execute",
             data: {
@@ -270,11 +542,15 @@ const cronScheduler = inngest.createFunction(
               executionId,
               userId: task.userId,
               prompt:
-                (task.payload as Record<string, unknown> | null)?.prompt ??
+                taskPayload?.prompt ??
                 task.description ??
                 task.name,
               targetDeviceId:
-                (task.payload as Record<string, unknown> | null)?.targetDeviceId ?? undefined,
+                taskPayload?.targetDeviceId ?? undefined,
+              skillIds:
+                Array.isArray(taskPayload?.skillIds) ? taskPayload.skillIds : undefined,
+              connectionIds:
+                Array.isArray(taskPayload?.connectionIds) ? taskPayload.connectionIds : undefined,
             },
           });
 

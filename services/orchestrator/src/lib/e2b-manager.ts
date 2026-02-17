@@ -494,6 +494,17 @@ export function getE2bSandboxIdBySandboxId(sandboxId: string): string | null {
   return null;
 }
 
+/**
+ * Get the per-project database name by sandboxId (not sessionId).
+ * Used by the database endpoint when databaseName is not in the request body.
+ */
+export function getDatabaseNameBySandboxId(sandboxId: string): string | null {
+  for (const [, info] of sandboxCache) {
+    if (info.sandboxId === sandboxId) return info.databaseName;
+  }
+  return null;
+}
+
 // Database cleanup callback — registered by webdev.ts to avoid circular imports
 let dbCleanupFn: ((dbName: string) => Promise<void>) | null = null;
 

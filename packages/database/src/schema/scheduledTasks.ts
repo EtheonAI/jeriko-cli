@@ -16,7 +16,7 @@ import { organizations } from "./organizations";
  * Recurring and scheduled task management
  */
 
-export type TaskScheduleType = "once" | "recurring" | "cron";
+export type TaskScheduleType = "once" | "recurring" | "cron" | "trigger";
 export type TaskStatus =
   | "pending"
   | "running"
@@ -51,7 +51,7 @@ export const scheduledTasks = pgTable("scheduled_tasks", {
   }).notNull(),
   // Schedule configuration
   scheduleType: text("schedule_type", {
-    enum: ["once", "recurring", "cron"],
+    enum: ["once", "recurring", "cron", "trigger"],
   }).notNull(),
   // For one-time tasks
   scheduledAt: timestamp("scheduled_at", { mode: "date" }),
@@ -95,6 +95,14 @@ export const scheduledTasks = pgTable("scheduled_tasks", {
     webhookUrl?: string;
     [key: string]: unknown;
   }>(),
+  // Trigger configuration (Composio event-driven execution)
+  triggerEnabled: boolean("trigger_enabled").default(false).notNull(),
+  triggerAppName: text("trigger_app_name"), // e.g., "gmail", "github"
+  triggerEventSlug: text("trigger_event_slug"), // e.g., "GMAIL_NEW_GMAIL_MESSAGE"
+  triggerConfig: jsonb("trigger_config").$type<Record<string, unknown>>(), // trigger-specific config
+  composioTriggerId: text("composio_trigger_id"), // Composio trigger instance ID (ti_xxx)
+  lastTriggerAt: timestamp("last_trigger_at", { mode: "date" }),
+  lastTriggerEventId: text("last_trigger_event_id"), // dedup key
   // End conditions
   endDate: timestamp("end_date", { mode: "date" }),
   maxRuns: integer("max_runs"),
@@ -154,8 +162,35 @@ export const taskExecutionsRelations = relations(taskExecutions, ({ one }) => ({
   }),
 }));
 
+// Trigger Events - audit log for Composio trigger firings
+export const triggerEvents = pgTable("trigger_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => createId()),
+  scheduledTaskId: text("scheduled_task_id")
+    .notNull()
+    .references(() => scheduledTasks.id, { onDelete: "cascade" }),
+  composioTriggerId: text("composio_trigger_id").notNull(),
+  eventSlug: text("event_slug").notNull(), // e.g., "GMAIL_NEW_GMAIL_MESSAGE"
+  externalEventId: text("external_event_id"), // Composio event ID (for dedup)
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  processed: boolean("processed").default(false).notNull(),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+  executionId: text("execution_id"), // links to task_executions
+  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const triggerEventsRelations = relations(triggerEvents, ({ one }) => ({
+  scheduledTask: one(scheduledTasks, {
+    fields: [triggerEvents.scheduledTaskId],
+    references: [scheduledTasks.id],
+  }),
+}));
+
 // Export types
 export type ScheduledTask = typeof scheduledTasks.$inferSelect;
 export type NewScheduledTask = typeof scheduledTasks.$inferInsert;
 export type TaskExecution = typeof taskExecutions.$inferSelect;
 export type NewTaskExecution = typeof taskExecutions.$inferInsert;
+export type TriggerEvent = typeof triggerEvents.$inferSelect;
+export type NewTriggerEvent = typeof triggerEvents.$inferInsert;

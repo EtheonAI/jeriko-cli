@@ -1,6 +1,6 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
-export type TaskScheduleType = "once" | "recurring" | "cron";
+export type TaskScheduleType = "once" | "recurring" | "cron" | "trigger";
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "paused";
 export type RecurrencePattern = "daily" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom";
 
@@ -49,6 +49,13 @@ export interface ScheduledTask {
   endDate?: string | null;
   maxRuns?: number | null;
   metadata?: Record<string, unknown> | null;
+  triggerEnabled?: boolean;
+  triggerAppName?: string | null;
+  triggerEventSlug?: string | null;
+  triggerConfig?: Record<string, unknown> | null;
+  composioTriggerId?: string | null;
+  lastTriggerAt?: string | null;
+  lastTriggerEventId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

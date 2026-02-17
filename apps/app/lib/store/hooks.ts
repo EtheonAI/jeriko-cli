@@ -111,6 +111,10 @@ export const useTheme = () => useAppSelector((state) => state.ui.theme);
 export const useIsMobile = () => useAppSelector((state) => state.ui.isMobile);
 
 // ================== CONNECTOR SELECTORS ==================
+// Manus-compatible: single array with isInstalled/isEnabled flags
+export const useConnectorsList = () =>
+  useAppSelector((state) => state.connectors.connectors);
+
 export const useAvailableConnectors = () =>
   useAppSelector((state) => state.connectors.availableConnectors);
 

@@ -1603,8 +1603,8 @@ importers:
   services/connector:
     dependencies:
       '@composio/core':
-        specifier: ^0.1.55
-        version: 0.1.55(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)
+        specifier: ^0.6.3
+        version: 0.6.3(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)
       '@fastify/cors':
         specifier: ^10.0.0
         version: 10.1.0
@@ -3432,16 +3432,16 @@ packages:
     resolution: {integrity: sha512-/yCrWGCoA1SVKOks25EGadP9Pnj0oAIHGpl2wH2M2Y46dPM2ueb8wyCVOD7O3WCTkaJ0IkKvzhl1JY7+uCT2Dw==}
     engines: {node: '>=v18'}
 
-  '@composio/client@0.1.0-alpha.37':
-    resolution: {integrity: sha512-2YzXiRXlxqOgEz7nEh1aKdJ9vwQRb69+RX6UH+LTDmuTwW+pOjI2qbhIBxTbP2z9e2SyHVG0/AtMxc9tR5jU0w==}
+  '@composio/client@0.1.0-alpha.56':
+    resolution: {integrity: sha512-hNgChB5uhdvT4QXNzzfUuvtG6vrfanQQFY2hPyKwbeR4x6mEmIGFiZ4y2qynErdUWldAZiB/7pY/MBMg6Q9E0g==}
 
-  '@composio/core@0.1.55':
-    resolution: {integrity: sha512-GLSWTS/gZeycQ7W2wSZQ21DKV+LC6WTAilhSj+JG9Apslx3re9luF1Lyblm4UMSf4DzYWKOrtipwQOaeg7bmTg==}
+  '@composio/core@0.6.3':
+    resolution: {integrity: sha512-PZm4LQGMaaDFHWUouMHqKPg5fNfgjM2l0zF0Vw/vfWJ34KYyo1ne6YjhGvBDmOIKPByT6Dal4/ff7AHpjedL/w==}
     peerDependencies:
       zod: 4.3.6
 
-  '@composio/json-schema-to-zod@0.1.16':
-    resolution: {integrity: sha512-vu6RUQTWDW/0wLDWsQHtWJ97JsnMjA1olTQwVD88BAtKZTdDLuzjnGRxSllxp5JG/GntnovUphraZWcWfe80eQ==}
+  '@composio/json-schema-to-zod@0.1.20':
+    resolution: {integrity: sha512-d4V34itLrUWG/VBh7ciznKcxF/T22MBLHmuEzHoX0zsBOHsUmjYz5qtDh20S2p3FE+HHvLZxpXiv8yfdd4yI+Q==}
     peerDependencies:
       zod: 4.3.6
 
@@ -13378,18 +13378,6 @@ packages:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
 
-  openai@5.23.2:
-    resolution: {integrity: sha512-MQBzmTulj+MM5O8SKEk/gL8a7s5mktS9zUtAkU257WjvobGc9nKcBuVwjyEEcb9SI8a8Y2G/mzn3vm9n1Jlleg==}
-    hasBin: true
-    peerDependencies:
-      ws: ^8.18.0
-      zod: 4.3.6
-    peerDependenciesMeta:
-      ws:
-        optional: true
-      zod:
-        optional: true
-
   openai@6.17.0:
     resolution: {integrity: sha512-NHRpPEUPzAvFOAFs9+9pC6+HCw/iWsYsKCMPXH5Kw7BpMxqd8g/A07/1o7Gx2TWtCnzevVRyKMRFqyiHyAlqcA==}
     hasBin: true
@@ -15933,10 +15921,6 @@ packages:
     resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
     hasBin: true
 
-  uuid@13.0.0:
-    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
-    hasBin: true
-
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
     hasBin: true
@@ -18412,24 +18396,23 @@ snapshots:
       '@types/conventional-commits-parser': 5.0.2
       chalk: 5.4.1
 
-  '@composio/client@0.1.0-alpha.37': {}
+  '@composio/client@0.1.0-alpha.56': {}
 
-  '@composio/core@0.1.55(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)':
+  '@composio/core@0.6.3(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)':
     dependencies:
-      '@composio/client': 0.1.0-alpha.37
-      '@composio/json-schema-to-zod': 0.1.16(zod@4.3.6)
+      '@composio/client': 0.1.0-alpha.56
+      '@composio/json-schema-to-zod': 0.1.20(zod@4.3.6)
       '@types/json-schema': 7.0.15
       chalk: 4.1.2
-      openai: 5.23.2(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)
+      openai: 6.17.0(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6)
       pusher-js: 8.4.0
       semver: 7.7.4
-      uuid: 13.0.0
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
     transitivePeerDependencies:
       - ws
 
-  '@composio/json-schema-to-zod@0.1.16(zod@4.3.6)':
+  '@composio/json-schema-to-zod@0.1.20(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
 
@@ -24450,7 +24433,7 @@ snapshots:
     dependencies:
       '@types/node': 24.9.1
       tapable: 2.2.1
-      webpack: 5.98.0(@swc/core@1.15.1)(esbuild@0.25.10)
+      webpack: 5.98.0(@swc/core@1.15.1)
     transitivePeerDependencies:
       - '@swc/core'
       - esbuild
@@ -30587,11 +30570,6 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  openai@5.23.2(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6):
-    optionalDependencies:
-      ws: 8.19.0(bufferutil@4.0.9)
-      zod: 4.3.6
-
   openai@6.17.0(ws@8.19.0(bufferutil@4.0.9))(zod@4.3.6):
     optionalDependencies:
       ws: 8.19.0(bufferutil@4.0.9)
@@ -33700,8 +33678,6 @@ snapshots:
   uuid@10.0.0: {}
 
   uuid@11.1.0: {}
-
-  uuid@13.0.0: {}
 
   uuid@8.3.2: {}
 

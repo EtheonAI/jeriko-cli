@@ -28,6 +28,7 @@ export function normalizeScheduledTask(raw: any): ScheduledTask {
     ...raw,
     scheduledAt: toIsoString(raw?.scheduledAt),
     lastRunAt: toIsoString(raw?.lastRunAt),
+    lastTriggerAt: toIsoString(raw?.lastTriggerAt),
     nextRunAt: toIsoString(raw?.nextRunAt),
     endDate: toIsoString(raw?.endDate),
     createdAt: toIsoString(raw?.createdAt) ?? new Date().toISOString(),

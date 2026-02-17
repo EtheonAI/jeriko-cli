@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { db, connectorDefinitions, userConnectors, eq, and } from "../lib/db.js";
-import { getComposioClient } from "../lib/composio.js";
+import { getComposioClient, resolveToolkitVersions, getToolkitVersion } from "../lib/composio.js";
 import { getUserId, logger } from "../lib/helpers.js";
 
 export async function toolRoutes(app: FastifyInstance) {
@@ -35,20 +35,33 @@ export async function toolRoutes(app: FastifyInstance) {
           toolkits: toolkitNames,
         });
 
+        // Composio SDK returns OpenAI function-calling format:
+        // [{ type: "function", function: { name, description, parameters } }]
         const mappedTools = (
           tools as Array<{
+            type?: string;
+            function?: {
+              name?: string;
+              description?: string;
+              parameters?: Record<string, unknown>;
+            };
+            // Legacy fields (older SDK versions)
             name?: string;
+            slug?: string;
             description?: string;
             inputParameters?: Record<string, unknown>;
-            slug?: string;
           }>
-        ).map((tool) => ({
-          name: tool.slug ?? tool.name ?? "",
-          description: tool.description ?? "",
-          parameters: tool.inputParameters ?? {},
-          appName: extractAppFromToolName(tool.slug ?? tool.name ?? ""),
-          source: "composio" as const,
-        }));
+        ).map((tool) => {
+          const fn = tool.function;
+          const name = fn?.name ?? tool.slug ?? tool.name ?? "";
+          return {
+            name,
+            description: fn?.description ?? tool.description ?? "",
+            parameters: fn?.parameters ?? tool.inputParameters ?? {},
+            appName: extractAppFromToolName(name),
+            source: "composio" as const,
+          };
+        });
 
         logger.info(
           { userId, toolkits: toolkitNames.length, tools: mappedTools.length },
@@ -104,17 +117,26 @@ export async function toolRoutes(app: FastifyInstance) {
 
       const mappedTools = (
         tools as Array<{
+          type?: string;
+          function?: {
+            name?: string;
+            description?: string;
+            parameters?: Record<string, unknown>;
+          };
           name?: string;
+          slug?: string;
           description?: string;
           inputParameters?: Record<string, unknown>;
-          slug?: string;
         }>
-      ).map((tool) => ({
-        name: tool.slug ?? tool.name ?? "",
-        description: tool.description ?? "",
-        parameters: tool.inputParameters ?? {},
-        appName: result.definition.type,
-      }));
+      ).map((tool) => {
+        const fn = tool.function;
+        return {
+          name: fn?.name ?? tool.slug ?? tool.name ?? "",
+          description: fn?.description ?? tool.description ?? "",
+          parameters: fn?.parameters ?? tool.inputParameters ?? {},
+          appName: result.definition.type,
+        };
+      });
 
       return { tools: mappedTools };
     } catch (error) {
@@ -167,11 +189,14 @@ export async function toolRoutes(app: FastifyInstance) {
         }
       }
 
-      // Execute via new Composio SDK
+      // Execute via Composio SDK (v0.6.3+ requires pinned toolkit version)
       const composio = getComposioClient();
+      await resolveToolkitVersions();
+      const version = getToolkitVersion(appName);
       const result = await composio.tools.execute(body.toolName, {
         userId,
         arguments: body.arguments,
+        ...(version ? { version } : { dangerouslySkipVersionCheck: true }),
       });
 
       logger.info({ userId, tool: body.toolName }, "Tool executed");

@@ -98,13 +98,18 @@ function migrateContentToParts(content: string): UIMessage["parts"] | null {
  * Deep-sanitize a value to be structuredClone-safe.
  * Strips functions, symbols, class instances, circular refs, etc.
  * Uses JSON round-trip which is the most reliable method.
+ *
+ * CRITICAL: If JSON.stringify fails (circular refs, BigInt, etc.),
+ * returns undefined instead of the original value. The AI SDK calls
+ * structuredClone(lastMessage) internally — if it throws, the
+ * finally block crashes accessing activeResponse.state.
  */
 function sanitize<T>(value: T): T {
   if (value === undefined || value === null) return value;
   try {
     return JSON.parse(JSON.stringify(value));
   } catch {
-    return value;
+    return undefined as unknown as T;
   }
 }
 
@@ -219,18 +224,19 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     sendMessage: sdkSendMessage,
     stop,
     regenerate,
+    resumeStream,
   } = useChat({
     id: sessionId,
     transport: transportRef.current,
     messages: initialUIMessages,
     experimental_throttle: 16,
-    // resume: DISABLED — causes `Cannot read properties of undefined (reading 'state')`
-    // crash on historical chat pages. The AI SDK's resumeStream sends GET to
-    // /api/chat/{id}/stream; when the server returns 204 (no active stream),
-    // makeRequest's finally block accesses this.activeResponse!.state before
-    // activeResponse is set. We don't have Redis configured in dev, so resume
-    // was always a no-op that only caused crashes. Re-enable when Redis is wired.
-    // resume: true,
+    // CRITICAL: resume must be false — we call resumeStream manually below.
+    // The SDK's built-in resume: true uses a useEffect without a guard,
+    // causing React 19 strict mode to double-invoke it. Two concurrent
+    // makeRequest calls race on the same Chat instance, and the first
+    // call's finally block clears activeResponse before the second's
+    // finally can read it → "Cannot read properties of undefined (reading 'state')".
+    resume: false,
     onFinish: ({ messages: finishedMessages }) => {
       const reduxMsgs: ReduxMessage[] = finishedMessages.map((m) => ({
         id: m.id,
@@ -298,6 +304,31 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     [sdkSendMessage, sessionId]
   );
 
+  // Custom stop: halt local rendering immediately, then tell the server to
+  // abort the agent loop. This replaces the old auto-stop-on-disconnect —
+  // stop is now an explicit user action (Stop button).
+  const customStop = useCallback(async () => {
+    // Stop local rendering immediately
+    stop();
+    // Tell server to abort the agent loop
+    try {
+      await fetch(`/api/chat/${sessionId}/stop`, { method: "POST" });
+    } catch { /* best-effort */ }
+  }, [stop, sessionId]);
+
+  // Resume active streams on mount — manually guarded to prevent
+  // React 19 strict mode from double-invoking (which causes the
+  // "Cannot read properties of undefined (reading 'state')" crash).
+  const resumeCalledRef = useRef(false);
+  useEffect(() => {
+    if (resumeCalledRef.current) return;
+    resumeCalledRef.current = true;
+    resumeStream().catch(() => {
+      // Swallow resume errors — most common case is "no active stream"
+      // which is expected for historical chats.
+    });
+  }, [resumeStream]);
+
   // Sync streaming state to Redux
   useEffect(() => {
     const isActive = status === "streaming" || status === "submitted";
@@ -315,7 +346,7 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     status,
     isStreaming,
     sendMessage,
-    stop,
+    stop: customStop,
     regenerate,
   };
 }

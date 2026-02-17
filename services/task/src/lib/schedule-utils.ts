@@ -2,7 +2,7 @@ import cronParser from "cron-parser";
 const { parseExpression } = cronParser;
 
 export interface ScheduleInput {
-  scheduleType: "once" | "recurring" | "cron";
+  scheduleType: "once" | "recurring" | "cron" | "trigger";
   scheduledAt?: Date | string | null;
   cronExpression?: string | null;
   recurrencePattern?: string | null;
@@ -40,6 +40,10 @@ export function calculateNextRunAt(task: ScheduleInput): Date | null {
 
     case "recurring":
       return calculateRecurringNext(task);
+
+    case "trigger":
+      // Trigger-only tasks have no time-based schedule
+      return null;
 
     default:
       return null;

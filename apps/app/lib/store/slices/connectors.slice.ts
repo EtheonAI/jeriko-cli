@@ -76,47 +76,52 @@ export interface ComposioEventMapping {
 }
 
 export interface ConnectorsState {
-  // Available connectors from the marketplace
-  availableConnectors: Connector[];
-  // User's installed connectors
-  installedConnectors: InstalledConnector[];
-  // Categories for filtering
-  categories: ConnectorCategory[];
-  // Selected connector for details view
-  selectedConnectorId: string | null;
-  // Search/filter state
+  // ── Manus-aligned fields (exact match to Manus all-state.json) ──
+  // Single array of all connectors with isInstalled/isEnabled flags
+  connectors: Connector[];
+  githubRepositories: unknown[];
+  githubRepositoriesLoading: boolean;
+  temporaryEnabledOverrides: Record<string, boolean>;
+  temporaryGithubRepositories: Record<string, unknown>;
   searchQuery: string;
+  multipleEmailConfirmedInfo: Record<string, unknown>;
+  multipleCalendarConfirmedInfo: Record<string, unknown>;
+
+  // ── Rubic extensions ──
+  // Separate installed list for Rubic's Composio/Drizzle backend
+  availableConnectors: Connector[];
+  installedConnectors: InstalledConnector[];
+  categories: ConnectorCategory[];
+  selectedConnectorId: string | null;
   selectedCategory: ConnectorCategory | "all";
-  // Loading states
   isLoadingAvailable: boolean;
   isLoadingInstalled: boolean;
   isInstalling: boolean;
-  // Connection flow state
   connectionFlow: {
     isOpen: boolean;
     connectorId: string | null;
     step: "select" | "configure" | "authorize" | "complete";
     error: string | null;
   };
-  // Composio event mappings (for Composio-based connectors)
   composioEventMappings: ComposioEventMapping[];
-  // Manus-aligned keys
-  temporaryEnabledOverrides: Record<string, boolean>;
-  temporaryGithubRepositories: Record<string, unknown>;
-  multipleEmailConfirmedInfo: Record<string, unknown>;
-  multipleCalendarConfirmedInfo: Record<string, unknown>;
-  githubRepositories: unknown[];
-  githubRepositoriesLoading: boolean;
-  // Error state
   error: string | null;
 }
 
 const initialState: ConnectorsState = {
+  // Manus-aligned defaults
+  connectors: [],
+  githubRepositories: [],
+  githubRepositoriesLoading: false,
+  temporaryEnabledOverrides: {},
+  temporaryGithubRepositories: {},
+  searchQuery: "",
+  multipleEmailConfirmedInfo: {},
+  multipleCalendarConfirmedInfo: {},
+  // Rubic extensions
   availableConnectors: [],
   installedConnectors: [],
   categories: ["productivity", "developer", "communication", "data", "finance", "social", "custom"],
   selectedConnectorId: null,
-  searchQuery: "",
   selectedCategory: "all",
   isLoadingAvailable: false,
   isLoadingInstalled: false,
@@ -128,13 +133,6 @@ const initialState: ConnectorsState = {
     error: null,
   },
   composioEventMappings: [],
-  // Manus-aligned defaults
-  temporaryEnabledOverrides: {},
-  temporaryGithubRepositories: {},
-  multipleEmailConfirmedInfo: {},
-  multipleCalendarConfirmedInfo: {},
-  githubRepositories: [],
-  githubRepositoriesLoading: false,
   error: null,
 };
 
@@ -142,9 +140,17 @@ const connectorsSlice = createSlice({
   name: "connectors",
   initialState,
   reducers: {
+    // Manus-compatible: set all connectors (single array with isInstalled/isEnabled flags)
+    setConnectors: (state, action: PayloadAction<Connector[]>) => {
+      state.connectors = action.payload;
+      state.availableConnectors = action.payload;
+      state.isLoadingAvailable = false;
+    },
+
     // Set available connectors from marketplace
     setAvailableConnectors: (state, action: PayloadAction<Connector[]>) => {
       state.availableConnectors = action.payload;
+      state.connectors = action.payload;
       state.isLoadingAvailable = false;
     },
 
@@ -344,16 +350,13 @@ const connectorsSlice = createSlice({
       }
     },
   },
-  extraReducers: (builder) => {
-    // Manus compatibility
-    builder.addCase("connectors/setConnectors", (state, action) => {
-      state.availableConnectors = (action as { payload?: Connector[] }).payload ?? [];
-      state.isLoadingAvailable = false;
-    });
+  extraReducers: (_builder) => {
+    // Manus WS events handled via setConnectors reducer above
   },
 });
 
 export const {
+  setConnectors,
   setAvailableConnectors,
   setInstalledConnectors,
   addInstalledConnector,

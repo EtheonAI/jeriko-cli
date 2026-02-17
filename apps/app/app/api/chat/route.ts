@@ -3,8 +3,9 @@ import type { UIMessage } from "@repo/ai/lib/types/ui-message";
 import { auth } from "@repo/auth";
 import { headers } from "next/headers";
 import { saveMessageToDB, autoSetSessionTitle } from "@/lib/chat/persistence";
-import { clearActiveStreamId } from "@/lib/chat/resumable-stream";
-import { db, agentSessions, eq } from "@repo/database";
+import { getStreamContext, setActiveStreamId, clearActiveStreamId } from "@/lib/chat/resumable-stream";
+import { db, agentSessions, files, eq } from "@repo/database";
+import { createId } from "@paralleldrive/cuid2";
 
 const ORCHESTRATOR_SERVICE_URL = process.env.ORCHESTRATOR_SERVICE_URL || "http://localhost:4014";
 
@@ -36,6 +37,7 @@ export const maxDuration = 600;
 async function accumulateAndPersist(
   spyStream: ReadableStream<Uint8Array>,
   sessionId: string,
+  userId: string,
   lastUserText: string,
   lastUserParts: Record<string, unknown>[] | null,
   model: string | undefined
@@ -340,8 +342,151 @@ async function accumulateAndPersist(
     await autoSetSessionTitle(sessionId, lastUserText).catch(() => {});
   }
 
+  // ── Track agent-created files in the files table ──
+  // Manus pattern: when a file is synced to S3, persist a DB record so it appears
+  // in the Library (/files) page. Scan tool outputs for S3/CDN URLs.
+  await trackAgentFiles(sessionId, userId, toolParts).catch((err) =>
+    log.error("Agent file tracking error:", err as Error)
+  );
+
   // Clear active stream ID (resumable stream cleanup)
   await clearActiveStreamId(sessionId).catch(() => {});
+}
+
+/** MIME type lookup for common file extensions */
+const EXT_MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", svg: "image/svg+xml", pdf: "application/pdf",
+  mp4: "video/mp4", webm: "video/webm", mp3: "audio/mpeg", wav: "audio/wav",
+  txt: "text/plain", html: "text/html", css: "text/css", js: "application/javascript",
+  json: "application/json", csv: "text/csv", md: "text/markdown",
+  zip: "application/zip", doc: "application/msword",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+function guessMime(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return EXT_MIME[ext] || "application/octet-stream";
+}
+
+/**
+ * Track files that the agent uploaded to S3 during the session.
+ * Creates DB records in the `files` table so they appear on the /files (Library) page.
+ *
+ * Manus pattern: files become "synced" when they get a CDN URL. At that point,
+ * the backend persists them in the files table for the cross-session library.
+ */
+async function trackAgentFiles(
+  sessionId: string,
+  userId: string,
+  toolParts: Record<string, Record<string, unknown>>
+) {
+  const seen = new Set<string>();
+  const toInsert: Array<{
+    name: string;
+    url: string;
+    mimeType: string;
+  }> = [];
+
+  for (const tp of Object.values(toolParts)) {
+    const output = tp.output as Record<string, unknown> | undefined;
+    if (!output) continue;
+
+    const toolName = (tp.toolName as string) || "";
+
+    // message_notify_user / message_ask_user with attachments
+    if (
+      (toolName === "message_notify_user" || toolName === "message_ask_user") &&
+      Array.isArray(output.attachments)
+    ) {
+      for (const att of output.attachments as Array<Record<string, unknown>>) {
+        const url = att.url as string | undefined;
+        if (url && !seen.has(url)) {
+          seen.add(url);
+          const name =
+            (att.name as string) ||
+            (att.path as string)?.split("/").pop() ||
+            "file";
+          toInsert.push({
+            name,
+            url,
+            mimeType: (att.mediaType as string) || guessMime(name),
+          });
+        }
+      }
+    }
+
+    // generate_image
+    if (toolName === "generate_image") {
+      const url = (output.url || output.imageUrl) as string | undefined;
+      if (url && !seen.has(url)) {
+        seen.add(url);
+        toInsert.push({
+          name: (output.filename as string) || "generated-image.png",
+          url,
+          mimeType: "image/png",
+        });
+      }
+    }
+
+    // deploy / make_manus_page with file outputs
+    if (
+      (toolName === "make_manus_page" || toolName === "deploy_apply_deployment") &&
+      typeof output.url === "string"
+    ) {
+      const url = output.url as string;
+      if (!seen.has(url)) {
+        seen.add(url);
+        toInsert.push({
+          name: (output.filename as string) || "page.html",
+          url,
+          mimeType: "text/html",
+        });
+      }
+    }
+
+    // Shell outputs from rubic-upload-file — extract CDN/presigned URLs
+    if (toolName === "shell_exec" || toolName === "code_execute") {
+      const stdout = ((output.stdout || output.text || "") as string).trim();
+      // rubic-upload-file prints the CDN URL on its last line
+      const urlMatch = stdout.match(
+        /https?:\/\/[^\s"'<>]+\.(png|jpe?g|gif|webp|svg|pdf|mp[34]|webm|wav|txt|html|css|js|json|csv|md|zip|tar\.gz|doc[x]?|xls[x]?|ppt[x]?)(?:\?[^\s"'<>]*)?/gi
+      );
+      if (urlMatch) {
+        for (const url of urlMatch) {
+          if (seen.has(url)) continue;
+          seen.add(url);
+          const rawName = url.split("/").pop()?.split("?")[0] || "file";
+          toInsert.push({
+            name: decodeURIComponent(rawName),
+            url,
+            mimeType: guessMime(rawName),
+          });
+        }
+      }
+    }
+  }
+
+  if (toInsert.length === 0) return;
+
+  // Insert file records — one at a time with try/catch to skip duplicates
+  for (const f of toInsert) {
+    try {
+      await db.insert(files).values({
+        id: createId(),
+        userId,
+        sessionId,
+        name: f.name,
+        path: "/",
+        mimeType: f.mimeType,
+        storageKey: f.url, // Store the URL — getDownloadUrl falls back to this
+        storageProvider: "s3",
+      });
+    } catch {
+      // Skip — may be duplicate or other non-critical error
+    }
+  }
 }
 
 export const POST = async (req: Request) => {
@@ -492,20 +637,10 @@ export const POST = async (req: Request) => {
       };
     });
 
-    // Abort orchestrator when client disconnects OR after 10-min timeout.
-    // AbortSignal.any() (Node 20+) merges the request signal (client abort)
-    // with a hard timeout so the agent loop doesn't run forever.
-    const combinedSignal = AbortSignal.any([req.signal, AbortSignal.timeout(600_000)]);
-
-    // When client disconnects, explicitly call orchestrator stop endpoint
-    // so the agent loop's AbortController is signalled server-side.
-    if (sessionId) {
-      req.signal.addEventListener("abort", () => {
-        fetch(`${ORCHESTRATOR_SERVICE_URL}/v1/completions/${sessionId}/stop`, {
-          method: "POST",
-        }).catch(() => {});
-      });
-    }
+    // Hard 10-min timeout only — do NOT pass req.signal so the agent loop
+    // continues even when the browser tab closes. Stop is explicit via
+    // POST /api/chat/[id]/stop.
+    const timeoutSignal = AbortSignal.timeout(600_000);
 
     // Stream from orchestrator's /v1/completions endpoint
     const orchestratorResp = await fetch(`${ORCHESTRATOR_SERVICE_URL}/v1/completions`, {
@@ -528,7 +663,7 @@ export const POST = async (req: Request) => {
         // Forward session metadata (sandboxId, nekoUrl) for sandbox resume/recovery
         ...(sessionMeta.sandboxId ? { sessionMeta } : {}),
       }),
-      signal: combinedSignal,
+      signal: timeoutSignal,
     });
 
     if (!orchestratorResp.ok) {
@@ -541,23 +676,74 @@ export const POST = async (req: Request) => {
       throw new Error("Orchestrator returned no body");
     }
 
-    // Tee the stream: one leg → client, one leg → DB persistence accumulator
-    const [clientStream, spyStream] = orchestratorResp.body.tee();
+    // ── Resumable stream wrapping ──
+    // If Redis is available, wrap the orchestrator body in a resumable stream
+    // that publishes chunks to Redis. This lets disconnected clients resume
+    // the SSE stream via GET /api/chat/[id]/stream.
+    //
+    // Key insight: the resumableStream library internally reads from the
+    // source (orchestratorResp.body) and publishes to Redis regardless of
+    // whether the client-facing branch is consumed. So when the browser tab
+    // closes, Next.js cancels the client tee branch, but the spy branch
+    // (accumulateAndPersist) keeps consuming — which keeps the source alive
+    // and the orchestrator HTTP connection open.
+    const streamContext = sessionId ? await getStreamContext() : null;
 
-    // Fire-and-forget: accumulate text + tool parts, save to DB when stream ends
-    if (sessionId) {
-      accumulateAndPersist(
-        spyStream,
-        sessionId,
-        lastUserText,
-        lastUserParts,
-        metadata?.model
-      ).catch((err) => log.error("Persistence error:", err as Error));
-    } else {
-      // No sessionId — cancel the spy stream to prevent memory leak
-      spyStream.cancel().catch(() => {});
+    if (streamContext && sessionId) {
+      // Tee upfront: primaryBody for Redis wrapping, fallbackBody as safety net.
+      // If resumableStream() calls the factory and then fails (Redis error),
+      // orchestratorResp.body gets locked by pipeThrough(). The fallback copy
+      // ensures we can always serve the stream even if Redis wrapping blows up.
+      const [primaryBody, fallbackBody] = orchestratorResp.body.tee();
+
+      try {
+        const streamId = crypto.randomUUID();
+        await setActiveStreamId(sessionId, streamId);
+
+        const resumable = await streamContext.resumableStream(
+          streamId,
+          () => primaryBody.pipeThrough(new TextDecoderStream()),
+        );
+
+        if (resumable) {
+          fallbackBody.cancel().catch(() => {});
+
+          const [clientText, spyText] = resumable.tee();
+          const clientStream = clientText.pipeThrough(new TextEncoderStream());
+          const spyStream = spyText.pipeThrough(new TextEncoderStream());
+
+          accumulateAndPersist(spyStream, sessionId, userId, lastUserText, lastUserParts, metadata?.model)
+            .catch((err) => log.error("Persistence error:", err as Error));
+
+          return new Response(clientStream, { headers: SSE_HEADERS });
+        }
+
+        // resumable null → stream already completed; cancel primary, use fallback
+        primaryBody.cancel().catch(() => {});
+        await clearActiveStreamId(sessionId);
+      } catch (err) {
+        log.warn("Resumable stream wrapping failed, falling back:", {
+          error: (err as Error).message,
+        });
+        primaryBody.cancel().catch(() => {});
+        await clearActiveStreamId(sessionId).catch(() => {});
+      }
+
+      // Redis path didn't work — use fallbackBody
+      const [clientStream, spyStream] = fallbackBody.tee();
+      accumulateAndPersist(spyStream, sessionId, userId, lastUserText, lastUserParts, metadata?.model)
+        .catch((err) => log.error("Persistence error:", err as Error));
+      return new Response(clientStream, { headers: SSE_HEADERS });
     }
 
+    // No Redis or no sessionId — direct stream
+    const [clientStream, spyStream] = orchestratorResp.body.tee();
+    if (sessionId) {
+      accumulateAndPersist(spyStream, sessionId, userId, lastUserText, lastUserParts, metadata?.model)
+        .catch((err) => log.error("Persistence error:", err as Error));
+    } else {
+      spyStream.cancel().catch(() => {});
+    }
     return new Response(clientStream, { headers: SSE_HEADERS });
   } catch (error) {
     log.error("Chat error", error as Error);

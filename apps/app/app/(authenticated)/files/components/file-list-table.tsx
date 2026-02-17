@@ -105,7 +105,7 @@ export function FileListTable({
               <ContextMenuTrigger asChild>
                 <TableRow
                   className={cn("cursor-pointer", isSelected && "bg-primary/5")}
-                  onDoubleClick={() => onOpen(file)}
+                  onClick={() => onOpen(file)}
                 >
                   <TableCell>
                     <Checkbox

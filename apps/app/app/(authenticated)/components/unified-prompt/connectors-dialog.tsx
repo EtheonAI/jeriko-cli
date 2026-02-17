@@ -498,17 +498,15 @@ function RecommendedCard({ def, installed, onInstall, onUninstall, isConnecting,
   return (
     <div
       className={cn(
-        "flex flex-1 items-center gap-3 px-4 py-3 min-h-[84px] bg-secondary rounded-xl border border-border max-w-[50%] transition-all duration-200",
+        "relative flex flex-1 items-center gap-3 px-4 py-3 min-h-[84px] bg-secondary rounded-xl border border-border max-w-[50%] transition-all duration-200",
         isConnecting && "border-foreground/30 ring-1 ring-foreground/10",
-        isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent/50"
+        isConnected && "border-green-500/30",
+        !isInstalled && !isDisabled && "cursor-pointer hover:bg-accent/50",
+        isDisabled && "opacity-50 cursor-not-allowed"
       )}
       onClick={() => {
-        if (isDisabled) return;
-        if (isInstalled && !isConnecting) {
-          onUninstall(installed!.id);
-        } else if (!isConnecting) {
-          onInstall(def.id);
-        }
+        if (isDisabled || isInstalled || isConnecting) return;
+        onInstall(def.id);
       }}
     >
       <div className="relative flex items-center justify-center size-10 bg-secondary rounded-lg border border-border shrink-0">
@@ -546,9 +544,23 @@ function RecommendedCard({ def, installed, onInstall, onUninstall, isConnecting,
           )}
         </div>
         <p className="text-[12px] leading-[16px] text-muted-foreground line-clamp-2">
-          {isConnecting ? "Connecting..." : def.description}
+          {isConnecting ? "Connecting..." : isConnected ? "Connected" : def.description}
         </p>
       </div>
+      {/* Disconnect button — only for installed connectors */}
+      {isInstalled && !isConnecting && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUninstall(installed!.id);
+          }}
+          className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Disconnect"
+        >
+          <XIcon size={14} />
+        </button>
+      )}
     </div>
   );
 }
@@ -566,17 +578,15 @@ function AppCard({ def, installed, onInstall, onUninstall, isConnecting, isAnyCo
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-4 py-3 min-h-[76px] bg-secondary rounded-xl border border-border transition-all duration-200",
+        "relative flex items-center gap-3 px-4 py-3 min-h-[76px] bg-secondary rounded-xl border border-border transition-all duration-200",
         isConnecting && "border-foreground/30 ring-1 ring-foreground/10",
-        isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-accent/50"
+        isConnected && "border-green-500/30",
+        !isInstalled && !isDisabled && "cursor-pointer hover:bg-accent/50",
+        isDisabled && "opacity-50 cursor-not-allowed"
       )}
       onClick={() => {
-        if (isDisabled) return;
-        if (isInstalled && !isConnecting) {
-          onUninstall(installed!.id);
-        } else if (!isConnecting) {
-          onInstall(def.id);
-        }
+        if (isDisabled || isInstalled || isConnecting) return;
+        onInstall(def.id);
       }}
     >
       <div className="relative flex items-center justify-center size-10 bg-secondary rounded-lg border border-border shrink-0">
@@ -612,10 +622,24 @@ function AppCard({ def, installed, onInstall, onUninstall, isConnecting, isAnyCo
         </div>
         <div className="w-full overflow-hidden">
           <p className="text-[12px] font-normal leading-[16px] text-muted-foreground tracking-[-0.091px] line-clamp-2">
-            {isConnecting ? "Connecting..." : def.description}
+            {isConnecting ? "Connecting..." : isConnected ? "Connected" : def.description}
           </p>
         </div>
       </div>
+      {/* Disconnect button — only for installed connectors */}
+      {isInstalled && !isConnecting && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUninstall(installed!.id);
+          }}
+          className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          title="Disconnect"
+        >
+          <XIcon size={14} />
+        </button>
+      )}
     </div>
   );
 }

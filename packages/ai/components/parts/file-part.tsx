@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { Dialog, DialogContent, DialogTrigger } from "@repo/design-system/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@repo/design-system/components/ui/dialog";
 import {
   FileIcon,
   FileTextIcon,
@@ -225,6 +225,7 @@ export function FilePart({ part, className, compact = false, onRemove }: FilePar
           </button>
         </DialogTrigger>
         <DialogContent className="max-w-4xl">
+          <DialogTitle className="sr-only">{filename}</DialogTitle>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={part.url} alt={filename} className="max-h-[80vh] w-full object-contain" />
         </DialogContent>

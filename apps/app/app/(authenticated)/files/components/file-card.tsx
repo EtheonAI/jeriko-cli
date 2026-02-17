@@ -36,7 +36,7 @@ export function FileCard({ file, onOpen }: FileCardProps) {
         "group relative flex cursor-pointer flex-col items-center rounded-lg border p-4 transition-colors hover:bg-muted/50",
         isSelected && "border-primary bg-primary/5"
       )}
-      onDoubleClick={() => onOpen(file)}
+      onClick={() => onOpen(file)}
     >
       <div className="absolute left-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <Checkbox

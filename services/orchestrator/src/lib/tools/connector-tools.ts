@@ -116,6 +116,11 @@ export function createConnectorTools(ctx: ToolContext, specs: ComposioToolSpec[]
     // Sanitise the tool name for AI SDK (lowercase, underscores only)
     const toolName = sanitiseToolName(spec.name);
 
+    // Skip tools with empty or invalid names (Composio SDK sometimes returns hollow objects)
+    if (!toolName) {
+      continue;
+    }
+
     // Skip if name collision with static tools (after sanitisation)
     if (
       toolName === "gmail_send" ||

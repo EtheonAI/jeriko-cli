@@ -7,6 +7,7 @@ export let db: DatabaseModule["db"];
 export let scheduledTasks: DatabaseModule["scheduledTasks"];
 export let taskExecutions: DatabaseModule["taskExecutions"];
 export let agentSessions: DatabaseModule["agentSessions"];
+export let messages: DatabaseModule["messages"];
 export let agents: DatabaseModule["agents"];
 export let agentTasks: DatabaseModule["agentTasks"];
 
@@ -28,6 +29,7 @@ export async function initDb() {
   scheduledTasks = resolved.scheduledTasks;
   taskExecutions = resolved.taskExecutions;
   agentSessions = resolved.agentSessions;
+  messages = resolved.messages;
   agents = resolved.agents;
   agentTasks = resolved.agentTasks;
   eq = resolved.eq;

@@ -130,21 +130,38 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // ── Download uploaded files to sandbox ~/upload/ ───────────────────────
   // If the user attached files and a sandbox is available, download them
   // so the agent can read them with file_read.
+  // Uses terminal server's /terminal/{id}/write API with RSA headers.
   const filesToDownload = inputFileContext?.filter((f) => f.url) ?? [];
   if (filesToDownload.length > 0 && terminalServerUrl && terminalServerUrl !== "no-sandbox") {
+    // Ensure "upload" terminal exists
+    try {
+      const createBody = JSON.stringify({ id: "upload" });
+      const createHeaders = getRsaHeaders(createBody);
+      await fetch(`${terminalServerUrl}/terminal/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...createHeaders },
+        body: createBody,
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      // Terminal may already exist — not fatal
+    }
+
     await Promise.allSettled(
       filesToDownload.map(async (f) => {
         const safeName = (f.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
         try {
-          await fetch(`${terminalServerUrl}/shell/exec`, {
+          const cmd = `mkdir -p ~/upload && curl -sL -o ~/upload/${safeName} "${f.url}"\n`;
+          const writeBody = JSON.stringify({ text: cmd });
+          const writeHeaders = getRsaHeaders(writeBody);
+          await fetch(`${terminalServerUrl}/terminal/upload/write`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              command: `mkdir -p ~/upload && curl -sL -o ~/upload/${safeName} "${f.url}"`,
-              timeout: 30,
-            }),
+            headers: { "Content-Type": "application/json", ...writeHeaders },
+            body: writeBody,
             signal: AbortSignal.timeout(35_000),
           });
+          // Wait for download to complete
+          await new Promise((r) => setTimeout(r, 3000));
         } catch {
           // Non-critical — agent can still access files via URL
         }
@@ -157,10 +174,12 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // so the agent can read skill definitions from ~/skills/.
   if (skills && skills.length > 0 && terminalServerUrl && terminalServerUrl !== "no-sandbox") {
     try {
+      const skillsBody = JSON.stringify({ skill_ids: skills, user_id: userId, session_id: sessionId });
+      const skillsHeaders = getRsaHeaders(skillsBody);
       await fetch(`${terminalServerUrl}/skills/sync-skills`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skill_ids: skills, user_id: userId, session_id: sessionId }),
+        headers: { "Content-Type": "application/json", ...skillsHeaders },
+        body: skillsBody,
         signal: AbortSignal.timeout(15_000),
       });
     } catch {

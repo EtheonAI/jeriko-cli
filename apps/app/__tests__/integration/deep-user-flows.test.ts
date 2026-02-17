@@ -173,7 +173,7 @@ describe("User Flow: Building a Web App", () => {
     }, "plan-1"));
     processor.process(toolResult("show_plan", {}, "plan-1"));
 
-    // Step 1: Write files → canvas should show "code"
+    // Step 1: Write files → canvas should show "terminal"
     processor.process(toolStart("file_write", {
       file: "/home/user/todo-app/package.json",
       content: '{"name":"todo-app","dependencies":{"react":"^19"}}',
@@ -181,7 +181,7 @@ describe("User Flow: Building a Web App", () => {
     processor.process(toolResult("file_write", {
       success: true, path: "/home/user/todo-app/package.json",
     }, "write-1"));
-    expect(TOOL_VIEW_MAP["file_write"]).toBe("code");
+    expect(TOOL_VIEW_MAP["file_write"]).toBe("terminal");
 
     processor.process(toolStart("file_write", {
       file: "/home/user/todo-app/src/App.tsx",
@@ -669,11 +669,11 @@ describe("User Flow: Code Editor / IDE", () => {
     const toolParts = processor.collectedParts.filter(isToolPart);
     expect(toolParts).toHaveLength(6);
 
-    // All should map to "code" canvas view
+    // All should map to "terminal" canvas view
     for (const part of toolParts) {
       const toolName = getToolName(part);
-      // All file/code tools including text_editor map to "code" canvas view
-      expect(TOOL_VIEW_MAP[toolName]).toBe("code");
+      // All file tools including text_editor map to "terminal" canvas view
+      expect(TOOL_VIEW_MAP[toolName]).toBe("terminal");
     }
   });
 });
@@ -1007,7 +1007,7 @@ describe("User Flow: Mixed Skills in Single Session", () => {
     const canvasViews = toolParts.map((p) => TOOL_VIEW_MAP[getToolName(p)]);
     expect(canvasViews).toEqual([
       "browser",   // web_search
-      "code",      // file_write
+      "terminal",  // file_write
       "terminal",  // code_execute
       "browser",   // browser_navigate
       "terminal",  // code_execute

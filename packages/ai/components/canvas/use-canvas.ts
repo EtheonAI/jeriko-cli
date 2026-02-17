@@ -1420,16 +1420,25 @@ function getLanguage(path: string): string {
  * Builds a simple file tree from an array of file paths.
  */
 function buildFileTree(paths: string[]): FileNode[] {
+  // Find common prefix to strip (e.g., /home/ubuntu/my-app/ → show my-app/ as root)
+  // Matches Manus behavior where the file tree starts at the project directory
+  const commonPrefix = findCommonPrefix(paths);
+
   const root: FileNode = { name: "root", path: "/", type: "directory", children: [] };
 
   for (const filePath of paths) {
-    const parts = filePath.split("/").filter(Boolean);
+    // Strip common prefix so tree starts at project root
+    const relativePath = commonPrefix ? filePath.slice(commonPrefix.length) : filePath;
+    const parts = relativePath.split("/").filter(Boolean);
     let current = root;
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]!;
       const isFile = i === parts.length - 1;
-      const currentPath = "/" + parts.slice(0, i + 1).join("/");
+      // Keep full path for file operations (clicking opens the right file)
+      const currentPath = commonPrefix
+        ? commonPrefix + parts.slice(0, i + 1).join("/")
+        : "/" + parts.slice(0, i + 1).join("/");
 
       let child = current.children?.find((c) => c.name === part);
       if (!child) {
@@ -1449,4 +1458,23 @@ function buildFileTree(paths: string[]): FileNode[] {
   }
 
   return root.children ?? [];
+}
+
+/** Find the common directory prefix of all file paths (up to the project root). */
+function findCommonPrefix(paths: string[]): string {
+  if (paths.length === 0) return "";
+  const splitPaths = paths.map((p) => p.split("/").filter(Boolean));
+  const minLen = Math.min(...splitPaths.map((p) => p.length));
+  const commonParts: string[] = [];
+  for (let i = 0; i < minLen - 1; i++) {
+    const part = splitPaths[0]![i];
+    if (splitPaths.every((p) => p[i] === part)) {
+      commonParts.push(part!);
+    } else {
+      break;
+    }
+  }
+  // Only strip if prefix is at least /home/ubuntu/project (3 parts)
+  if (commonParts.length < 3) return "";
+  return "/" + commonParts.join("/") + "/";
 }

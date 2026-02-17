@@ -371,6 +371,13 @@ function PreviewPanel({
             type="text"
             value={urlPath}
             onChange={(e) => setUrlPath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && previewUrl && iframeRef.current) {
+                const base = new URL(previewUrl);
+                base.pathname = urlPath.startsWith("/") ? urlPath : `/${urlPath}`;
+                iframeRef.current.src = base.toString();
+              }
+            }}
             className="min-w-0 flex-1 bg-transparent text-xs text-muted-foreground outline-none"
             placeholder="/"
           />
@@ -1048,30 +1055,37 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
     setIsLoading(true);
 
     try {
-      // List project files via orchestrator terminal server
-      const resp = await fetch("/api/ide", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sandboxId,
-          action: "file-list",
-          path: "/home/ubuntu",
-        }),
-      });
+      // List user-uploaded files and project output files (Manus pattern)
+      // Check ~/upload/ first (user-uploaded files), then project public/ dir
+      const allFiles: StorageFile[] = [];
+      const dirsToScan = ["/home/ubuntu/upload", "/home/ubuntu/screenshots"];
 
-      if (resp.ok) {
-        const data = await resp.json();
-        const fileList = (data.files ?? []).map(
-          (f: { name: string; path?: string; size?: number; lastModified?: string; type?: string }) => ({
-            name: f.name,
-            path: f.path || `/home/ubuntu/${f.name}`,
-            size: f.size || 0,
-            lastModified: f.lastModified || new Date().toISOString(),
-            type: f.type || "file",
-          })
-        );
-        setFiles(fileList);
+      for (const dir of dirsToScan) {
+        try {
+          const resp = await fetch("/api/ide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sandboxId, action: "file-list", path: dir }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            const fileList = (data.files ?? [])
+              .filter((f: { name: string; type?: string }) => f.type !== "directory")
+              .map((f: { name: string; path?: string; size?: number; lastModified?: string; type?: string }) => ({
+                name: f.name,
+                path: f.path || `${dir}/${f.name}`,
+                size: f.size || 0,
+                lastModified: f.lastModified || new Date().toISOString(),
+                type: f.type || "file",
+              }));
+            allFiles.push(...fileList);
+          }
+        } catch {
+          // Directory may not exist
+        }
       }
+
+      setFiles(allFiles);
     } catch {
       // Silently fail
     } finally {

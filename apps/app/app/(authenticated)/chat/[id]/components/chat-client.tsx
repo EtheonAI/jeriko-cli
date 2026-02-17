@@ -213,7 +213,7 @@ export function ChatClient({
               onSelectTab={canvasState.onSelectTab}
               onCloseTab={canvasState.onCloseTab}
               previewUrl={canvasState.previewUrl}
-              fileContents={canvasState.fileContents}
+              fileContents={canvasState.allFileContents}
               terminalOutput={canvasState.terminalOutput}
               liveTerminalOutput={e2bTerminal.output}
               liveTerminalConnected={e2bTerminal.isConnected}

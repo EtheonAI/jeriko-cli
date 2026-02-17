@@ -5,6 +5,7 @@ import { oauthRoutes } from "./routes/oauth.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { toolRoutes } from "./routes/tools.js";
 import { syncRoutes } from "./routes/sync.js";
+import { triggerRoutes } from "./routes/triggers.js";
 
 async function main() {
   // Initialize database (dynamic import for ESM compatibility)
@@ -14,6 +15,7 @@ async function main() {
     name: "connector",
     port: parseInt(process.env.PORT || "4009", 10),
     cors: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : false,
+    publicRoutes: ["/triggers/webhook"],
   });
 
   logger.info("Database initialized");
@@ -24,6 +26,7 @@ async function main() {
   await app.register(integrationRoutes);
   await app.register(toolRoutes);
   await app.register(syncRoutes);
+  await app.register(triggerRoutes);
 
   await start();
 }
