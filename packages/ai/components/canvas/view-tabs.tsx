@@ -9,6 +9,7 @@ import {
   PresentationIcon,
   PaintbrushIcon,
   LayoutGridIcon,
+  PencilIcon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
@@ -23,6 +24,7 @@ const VIEW_TAB_CONFIG: Record<
   { label: string; icon: LucideIcon; color: string } | null
 > = {
   browser: { label: "Browser", icon: GlobeIcon, color: "text-blue-400" },
+  editor: { label: "Editor", icon: PencilIcon, color: "text-amber-400" },
   code: { label: "Code", icon: CodeIcon, color: "text-green-400" },
   terminal: { label: "Terminal", icon: TerminalIcon, color: "text-green-400" },
   filePreview: { label: "Preview", icon: FileTextIcon, color: "text-orange-400" },
@@ -36,6 +38,7 @@ const VIEW_TAB_CONFIG: Record<
 // Ordered display priority
 const VIEW_ORDER: CanvasViewType[] = [
   "browser",
+  "editor",
   "code",
   "terminal",
   "filePreview",

@@ -3,12 +3,18 @@
  * POST /v1/completions — accepts messages, streams SSE response.
  * POST /v1/completions/:sessionId/stop — abort a running completion.
  * This is what the Next.js chat route proxies to.
+ *
+ * Credit enforcement:
+ *   - Checks credits BEFORE starting agent loop (returns 402 if insufficient)
+ *   - Meters step completion and tool calls via billing service
  */
 
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import type { ModelMessage } from "ai";
 import { runStreamingAgentLoop } from "../lib/agent-loop.js";
+import { getRedisClient } from "@repo/service-utils";
+import { checkUserCredits, getUserLimits, type PlanLimits } from "../lib/billing-client.js";
 
 // ── Active stream tracking ────────────────────────────────────────────────
 // Maps sessionId → AbortController for active streaming completions.
@@ -60,13 +66,48 @@ const completionBodySchema = z.object({
   ).optional(),
   /** Session metadata from DB — contains sandboxId for resume, skills/connections from previous runs */
   sessionMeta: z.record(z.string(), z.unknown()).optional(),
+  /** Project ID for project-scoped Composio entity routing */
+  projectId: z.string().optional(),
 });
 
 export const completionRoutes: FastifyPluginAsync = async (fastify) => {
   // SSE streaming completion
   fastify.post("/v1/completions", async (request, reply) => {
+    // ── Idempotency guard ──────────────────────────────────────────────
+    // Prevents duplicate tool executions (email sends, API calls) when
+    // Inngest retries a timed-out task. The task service sends
+    // x-idempotency-key: <executionId>. Redis SET NX ensures only the
+    // first request proceeds; retries get 409 until the lock expires.
+    const idempotencyKey = request.headers["x-idempotency-key"] as string | undefined;
+    let idempotencyLockKey: string | null = null;
+
+    if (idempotencyKey) {
+      try {
+        const redis = getRedisClient();
+        idempotencyLockKey = `exec-lock:${idempotencyKey}`;
+        // SET NX — only succeeds if key doesn't exist. TTL = 10 min (max execution time).
+        const acquired = await redis.set(idempotencyLockKey, "in-progress", "EX", 600, "NX");
+        if (!acquired) {
+          const status = await redis.get(idempotencyLockKey);
+          if (status === "completed") {
+            return reply.status(200).send({ status: "already-completed", idempotencyKey });
+          }
+          return reply.status(409).send({ error: "Execution already in progress", idempotencyKey });
+        }
+      } catch (redisErr) {
+        // Redis down — proceed without idempotency protection (better than crashing)
+        fastify.log.warn({ idempotencyKey, error: redisErr }, "Redis unavailable for idempotency check — proceeding without lock");
+        idempotencyLockKey = null;
+      }
+    }
+
     const parsed = completionBodySchema.safeParse(request.body);
     if (!parsed.success) {
+      // Release lock on validation failure so retry can proceed
+      if (idempotencyLockKey) {
+        const redis = getRedisClient();
+        await redis.del(idempotencyLockKey).catch(() => {});
+      }
       return reply.status(400).send({
         error: "Invalid request body",
         details: parsed.error.issues,
@@ -83,7 +124,34 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
       connections,
       fileContext,
       sessionMeta,
+      projectId,
     } = parsed.data;
+
+    // ── Credit check ────────────────────────────────────────────────────
+    // Check credits BEFORE starting the agent loop. Returns 402 if insufficient.
+    // Graceful: if billing service is down, allow (null result).
+    const creditCheck = await checkUserCredits(userId, 10);
+    if (creditCheck && !creditCheck.hasCredits) {
+      // Release lock on credit failure
+      if (idempotencyLockKey) {
+        const redis = getRedisClient();
+        await redis.del(idempotencyLockKey).catch(() => {});
+      }
+      return reply.status(402).send({
+        error: "Insufficient credits",
+        code: "PAYMENT_REQUIRED",
+        balance: creditCheck.currentBalance,
+        state: creditCheck.state,
+        message: "You don't have enough credits to continue. Please upgrade your plan or purchase more credits.",
+      });
+    }
+
+    // ── Plan limits ─────────────────────────────────────────────────────
+    // Get plan limits for maxSteps enforcement
+    const planLimits = await getUserLimits(userId);
+    const effectiveMaxSteps = maxSteps
+      ? Math.min(maxSteps, planLimits.maxStepsPerSession)
+      : planLimits.maxStepsPerSession;
 
     // Create abort controller for this session
     const abortController = new AbortController();
@@ -95,12 +163,17 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         userId,
         userName,
         messages: messages as ModelMessage[],
-        maxSteps,
+        maxSteps: effectiveMaxSteps,
         skills,
         connections,
         fileContext,
         sessionMeta,
+        projectId,
         abortSignal: abortController.signal,
+        planLimits: {
+          maxParallelSubtasks: planLimits.maxParallelSubtasks,
+          planType: planLimits.planType,
+        },
       });
 
       // Set SSE headers — must include CORS manually since reply.raw bypasses Fastify.
@@ -151,10 +224,20 @@ export const completionRoutes: FastifyPluginAsync = async (fastify) => {
         }
       } finally {
         activeStreams.delete(sessionId);
+        // Mark idempotency lock as completed (24h TTL for dedup window)
+        if (idempotencyLockKey) {
+          const redis = getRedisClient();
+          await redis.set(idempotencyLockKey, "completed", "EX", 86400).catch(() => {});
+        }
         try { reply.raw.end(); } catch { /* already closed */ }
       }
     } catch (error) {
       activeStreams.delete(sessionId);
+      // Delete lock on failure so Inngest retry can proceed
+      if (idempotencyLockKey) {
+        const redis = getRedisClient();
+        await redis.del(idempotencyLockKey).catch(() => {});
+      }
       const errMsg = error instanceof Error ? error.message : "Completion failed";
       return reply.status(500).send({ error: errMsg });
     }

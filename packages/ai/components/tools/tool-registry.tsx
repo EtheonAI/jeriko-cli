@@ -4,19 +4,24 @@ import * as React from "react";
 import { createContext, useContext, useMemo, type ComponentType } from "react";
 import type { ToolInvocationState } from "../../lib/types/ui-message";
 
-// Renderers — one per visual category
-import { FilePreview } from "./renderers/file-preview";
+// Renderers — lazy-loaded to avoid pulling heavy deps (Shiki, Mermaid, etc.)
+// into the initial bundle. Only GenericTool and ProgressTool load eagerly
+// since they're lightweight and used as fallbacks.
 import { GenericTool } from "./renderers/generic-tool";
 import { ProgressTool } from "./renderers/progress-tool";
-import { ImageResult } from "./renderers/image-result";
-import { DeployResult } from "./renderers/deploy-result";
-import { WebSearchEnhanced } from "./renderers/web-search-enhanced";
-import { CodeBlockEnhanced } from "./renderers/code-block-enhanced";
-import { TerminalOutputEnhanced } from "./renderers/terminal-output-enhanced";
-import { BrowserViewerEnhanced } from "./renderers/browser-viewer-enhanced";
-import { ShowPlanRenderer } from "./renderers/show-plan";
-import { DeviceCommandRenderer } from "./renderers/device-command";
-import { MessageNotifyRenderer } from "./renderers/message-notify-renderer";
+import { lazy } from "react";
+
+const FilePreview = lazy(() => import("./renderers/file-preview").then(m => ({ default: m.FilePreview })));
+const ImageResult = lazy(() => import("./renderers/image-result").then(m => ({ default: m.ImageResult })));
+const DeployResult = lazy(() => import("./renderers/deploy-result").then(m => ({ default: m.DeployResult })));
+const WebSearchEnhanced = lazy(() => import("./renderers/web-search-enhanced").then(m => ({ default: m.WebSearchEnhanced })));
+const CodeBlockEnhanced = lazy(() => import("./renderers/code-block-enhanced").then(m => ({ default: m.CodeBlockEnhanced })));
+const TerminalOutputEnhanced = lazy(() => import("./renderers/terminal-output-enhanced").then(m => ({ default: m.TerminalOutputEnhanced })));
+const BrowserViewerEnhanced = lazy(() => import("./renderers/browser-viewer-enhanced").then(m => ({ default: m.BrowserViewerEnhanced })));
+const ShowPlanRenderer = lazy(() => import("./renderers/show-plan").then(m => ({ default: m.ShowPlanRenderer })));
+const DeviceCommandRenderer = lazy(() => import("./renderers/device-command").then(m => ({ default: m.DeviceCommandRenderer })));
+const MessageNotifyRenderer = lazy(() => import("./renderers/message-notify-renderer").then(m => ({ default: m.MessageNotifyRenderer })));
+const MessageDraftRenderer = lazy(() => import("./renderers/message-draft-renderer").then(m => ({ default: m.MessageDraftRenderer })));
 
 export interface ToolRendererProps<TInput = unknown, TOutput = unknown> {
   toolName: string;
@@ -113,10 +118,10 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   image_rmbg: ImageResult as ToolRenderer,
   image_search_upload: ImageResult as ToolRenderer,
 
-  // Email (Gmail & Outlook)
-  gmail_send: ProgressTool as ToolRenderer,
+  // Email (Gmail & Outlook) — full draft renderer for send, progress for download
+  gmail_send: MessageDraftRenderer as ToolRenderer,
   gmail_download: ProgressTool as ToolRenderer,
-  outlook_send: ProgressTool as ToolRenderer,
+  outlook_send: MessageDraftRenderer as ToolRenderer,
   outlook_download: ProgressTool as ToolRenderer,
 
   // Skills

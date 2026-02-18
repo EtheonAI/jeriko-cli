@@ -267,14 +267,14 @@ describe("SSE → UI Rendering Pipeline", () => {
       }
     });
 
-    it("should map file tools to terminal canvas view", () => {
+    it("should map file tools to editor canvas view", () => {
       const fileTools = [
         "file_read", "file_write", "file_str_replace",
         "file_find_in_content", "file_find_by_name",
       ];
 
       for (const tool of fileTools) {
-        expect(TOOL_VIEW_MAP[tool]).toBe("terminal");
+        expect(TOOL_VIEW_MAP[tool]).toBe("editor");
       }
     });
 
@@ -292,7 +292,7 @@ describe("SSE → UI Rendering Pipeline", () => {
     it("should detect latest tool view from sequential tool calls", () => {
       // Simulate processing multiple tools in sequence
       const tools = ["file_write", "shell_exec", "browser_navigate"];
-      const expectedViews = ["terminal", "terminal", "browser"];
+      const expectedViews = ["editor", "terminal", "browser"];
 
       for (let i = 0; i < tools.length; i++) {
         const tool = tools[i]!;
@@ -649,7 +649,7 @@ describe("SSE → UI Rendering Pipeline", () => {
       const toolSequence = [
         { tool: "show_plan", expectedView: undefined },
         { tool: "web_search", expectedView: "browser" },
-        { tool: "file_write", expectedView: "terminal" },
+        { tool: "file_write", expectedView: "editor" },
         { tool: "shell_exec", expectedView: "terminal" },
         { tool: "browser_navigate", expectedView: "browser" },
         { tool: "message_notify_user", expectedView: undefined },

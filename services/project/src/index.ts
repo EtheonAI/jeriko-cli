@@ -95,7 +95,7 @@ async function verifyProjectAccess(
 async function main() {
   await initDb();
 
-  const { app, logger, start } = await createService({ name: "project" });
+  const { app, logger, start } = await createService({ name: "project", port: parseInt(process.env.PORT || "4010", 10) });
 
   // ---------------------------------------------------------------------------
   // List user's projects

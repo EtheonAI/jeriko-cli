@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useSocket } from "@/lib/socket/provider";
 import { ToolRegistry, AgentCanvas, useCanvas, usePlannerState, PlannerBar } from "@repo/ai/components";
 import { useE2BStream } from "@repo/ai/hooks/use-e2b-stream";
 import { useE2BTerminal } from "@repo/ai/hooks/use-e2b-terminal";
-import type { UIMessage as RepoUIMessage, SourceUrlUIPart, SourceDocumentUIPart } from "@repo/ai/lib/types";
+import type { UIMessage as RepoUIMessage, SourceUrlUIPart, SourceDocumentUIPart, FileUIPart } from "@repo/ai/lib/types";
 import type { Message as ReduxMessage } from "@/lib/store/slices/chat.slice";
 import type { SubmitOptions } from "@/app/(authenticated)/components/unified-prompt/types";
 import type { Attachment } from "@repo/ai/lib/types";
+import type { LibraryFile } from "@/app/(authenticated)/files/components/library-file-card";
+import { trpc } from "@/lib/trpc/client";
 
 // Hooks
 import { useChatSession } from "../hooks/use-chat-session";
@@ -22,6 +24,7 @@ import { ChatLayout } from "./chat-layout";
 import { ChatMessages } from "./chat-messages";
 import { ChatPrompt } from "@/app/(authenticated)/components/chat-prompt/chat-prompt";
 import { FileManagementPanel } from "./file-management-panel";
+import { LibraryPreviewModal } from "@/app/(authenticated)/files/components/library-preview-modal";
 
 // ============================================================================
 // Types
@@ -30,6 +33,7 @@ import { FileManagementPanel } from "./file-management-panel";
 interface ChatClientProps {
   sessionId: string;
   initialMessages?: ReduxMessage[];
+  hasMoreMessages?: boolean;
   user?: {
     name?: string | null;
     email: string;
@@ -44,11 +48,13 @@ interface ChatClientProps {
 export function ChatClient({
   sessionId,
   initialMessages = [],
+  hasMoreMessages = false,
   user,
 }: ChatClientProps) {
   // Core chat hook — useChat is the source of truth
   const {
     messages,
+    setMessages,
     status,
     isStreaming,
     sendMessage,
@@ -110,8 +116,50 @@ export function ChatClient({
   // the prompt pauses and the canvas switches to live Neko WebRTC stream.
   const [userControlActive, setUserControlActive] = useState(false);
 
+  // Pagination — load earlier messages on demand
+  const [hasMore, setHasMore] = useState(hasMoreMessages);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const cursorRef = useRef<string | null>(
+    hasMoreMessages && initialMessages.length > 0 ? initialMessages[0]!.id : null
+  );
+  const utils = trpc.useUtils();
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !cursorRef.current) return;
+    setLoadingMore(true);
+    try {
+      const result = await utils.messages.listPaginated.fetch({
+        sessionId,
+        cursor: cursorRef.current,
+        limit: 50,
+      });
+      if (result.messages.length > 0) {
+        // Convert DB messages to UIMessage format and prepend
+        const olderMessages = result.messages.map((m: any) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant" | "system",
+          parts: m.parts?.length
+            ? (m.parts as any)
+            : [{ type: "text" as const, text: m.content ?? "" }],
+          metadata: m.metadata,
+          createdAt: typeof m.createdAt === "string" ? m.createdAt : m.createdAt?.toISOString?.() ?? new Date().toISOString(),
+        }));
+        setMessages((prev: any[]) => [...olderMessages, ...prev]);
+      }
+      cursorRef.current = result.nextCursor;
+      setHasMore(!!result.nextCursor);
+    } catch (err) {
+      console.error("Failed to load more messages:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, sessionId, utils.messages.listPaginated, setMessages]);
+
   // File management panel
   const [filesPanelOpen, setFilesPanelOpen] = useState(false);
+
+  // File preview modal — reuses LibraryPreviewModal from /files page
+  const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
 
   // Socket room join/leave
   const { isConnected, joinRoom, leaveRoom } = useSocket();
@@ -143,6 +191,25 @@ export function ChatClient({
     setFilesPanelOpen((prev) => !prev);
   }, []);
 
+  // Open file deliverable in LibraryPreviewModal (same as /files page)
+  const handlePreviewFile = useCallback(
+    (file: FileUIPart) => {
+      setPreviewFile({
+        id: "",
+        sessionId,
+        name: file.filename ?? "file",
+        path: file.filename ?? "file",
+        mimeType: file.mediaType,
+        size: null,
+        storageKey: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        resolvedUrl: file.url,
+      });
+    },
+    [sessionId]
+  );
+
   // Pin a tool call to the canvas and force-open it
   const handleViewInCanvas = useCallback(
     (toolCallId: string) => {
@@ -171,6 +238,12 @@ export function ChatClient({
   );
 
   return (
+    <>
+    <LibraryPreviewModal
+      file={previewFile}
+      onClose={() => setPreviewFile(null)}
+      inlineContent={null}
+    />
     <ToolRegistry>
       {/* Header */}
       <ChatHeader
@@ -259,11 +332,15 @@ export function ChatClient({
           status={status}
           isStreaming={isStreaming}
           feedback={feedback}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
           onSendMessage={handleSendMessage}
           onRegenerate={regenerate}
           onFeedback={handleFeedback}
+          onLoadMore={handleLoadMore}
           onViewSources={handleViewSources}
           onViewInCanvas={handleViewInCanvas}
+          onPreviewFile={handlePreviewFile}
         />
 
         {/* Planner bar — above prompt, only visible when agent calls show_plan */}
@@ -291,5 +368,6 @@ export function ChatClient({
         </div>
       </ChatLayout>
     </ToolRegistry>
+    </>
   );
 }

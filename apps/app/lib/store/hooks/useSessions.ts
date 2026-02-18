@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import {
   setSessions,
-  appendSessions,
   addSession,
   updateSession,
   removeSession,
@@ -13,7 +12,8 @@ import {
   setCurrentSession,
   toggleSessionPinned,
   toggleSessionFavorite,
-  setSessionSharing,
+  setSessionsLoading,
+  setSessionsError,
   setSearchQuery,
   setFilterStatus,
   setFilterMode,
@@ -24,210 +24,167 @@ import {
   toggleSessionSelection,
   clearSessionSelection,
   selectAllSessions,
-  setSessionsLoading,
-  setSessionsError,
   type AgentSession,
   type SessionStatus,
   type SessionMode,
   type SessionsState,
 } from "../slices/sessions.slice";
-import {
-  useGetSessionsQuery,
-  useGetSessionQuery,
-  useCreateSessionMutation,
-  useUpdateSessionMutation,
-  useDeleteSessionMutation,
-} from "../api/api.slice";
 import { wsJoinRoom, wsLeaveRoom } from "../middleware/websocket.middleware";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+
+function serializeDates<T>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj.toISOString() as unknown as T;
+  if (Array.isArray(obj)) return obj.map(serializeDates) as unknown as T;
+  if (typeof obj === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[key] = serializeDates(value);
+    }
+    return result as T;
+  }
+  return obj;
+}
 
 /**
- * Sessions Hook - Integrates RTK Query and WebSocket with sessions slice
+ * Sessions Hook - Integrates vanilla tRPC and WebSocket with sessions slice
  *
- * Action Triggers:
- * - fetchSessions: API Call (RTK Query)
- * - createSession: API Call (RTK Query) + WebSocket join
- * - updateSession: API Call (RTK Query)
- * - deleteSession: API Call (RTK Query) + WebSocket leave
- * - setCurrentSession: State + WebSocket join/leave
- * - archiveSession: API Call (RTK Query)
- * - setSearchQuery/setFilter*: State only
- * - selectSession/toggleSelection: State only
- *
- * Real-time events (WebSocket):
- * - session:new -> addSession
- * - session:update -> updateSession
+ * Real-time events (WebSocket middleware):
+ * - session:new -> addSession (already handled in websocket.middleware.ts)
+ * - session:update -> updateSession (already handled in websocket.middleware.ts)
  */
 export function useSessionsIntegration() {
   const dispatch = useAppDispatch();
   const sessionsState = useAppSelector((state) => state.sessions);
-  const { status: wsStatus } = useAppSelector((state) => state.websocket);
+  const wsStatus = useAppSelector((state) => state.websocket.status);
+  const hasFetchedRef = useRef(false);
 
-  // RTK Query hooks
-  const {
-    data: sessionsData,
-    isLoading: isFetchingSessions,
-    refetch: refetchSessions,
-  } = useGetSessionsQuery();
-
-  const [createSessionMutation, { isLoading: isCreating }] = useCreateSessionMutation();
-  const [updateSessionMutation, { isLoading: isUpdating }] = useUpdateSessionMutation();
-  const [deleteSessionMutation, { isLoading: isDeleting }] = useDeleteSessionMutation();
-
-  // Sync sessions from RTK Query to Redux state
-  useEffect(() => {
-    if (sessionsData) {
+  // Fetch sessions if not already loaded by ReduxDataLoader
+  const fetchSessions = useCallback(async () => {
+    dispatch(setSessionsLoading(true));
+    try {
+      const sessions = await getTrpcClient().sessions.list.query();
+      const serialized = serializeDates(sessions);
       dispatch(
         setSessions({
-          sessions: sessionsData,
-          hasMore: false, // Pagination can be added later
+          sessions: serialized as any,
+          hasMore: false,
           cursor: null,
-          totalCount: sessionsData.length,
+          totalCount: (serialized as any[]).length,
         })
       );
+      hasFetchedRef.current = true;
+    } catch (err: any) {
+      dispatch(setSessionsError(err?.message || "Failed to load sessions"));
     }
-  }, [sessionsData, dispatch]);
+  }, [dispatch]);
 
-  // Sync loading state
+  // Auto-fetch on mount if not already loaded
   useEffect(() => {
-    dispatch(setSessionsLoading(isFetchingSessions));
-  }, [isFetchingSessions, dispatch]);
+    if (hasFetchedRef.current) return;
+    if (sessionsState.sessions.length > 0) {
+      hasFetchedRef.current = true;
+      return;
+    }
+    fetchSessions();
+  }, [sessionsState.sessions.length, fetchSessions]);
 
   // Join current session room when it changes
   useEffect(() => {
     if (sessionsState.currentSessionId && wsStatus === "connected") {
       dispatch(wsJoinRoom(`session:${sessionsState.currentSessionId}`));
-
       return () => {
         dispatch(wsLeaveRoom(`session:${sessionsState.currentSessionId}`));
       };
     }
   }, [sessionsState.currentSessionId, wsStatus, dispatch]);
 
-  /**
-   * Create a new session
-   * Trigger: API Call + WebSocket join
-   */
+  // Create session
   const createSession = useCallback(
     async (title?: string) => {
       try {
-        const result = await createSessionMutation({ title }).unwrap();
-        // Join the new session room
-        if (wsStatus === "connected") {
-          dispatch(wsJoinRoom(`session:${result.id}`));
+        const result = await getTrpcClient().sessions.create.mutate({ title } as any);
+        if (result) {
+          dispatch(addSession(serializeDates(result) as any));
+          if (wsStatus === "connected") {
+            dispatch(wsJoinRoom(`session:${(result as any).id}`));
+          }
+          dispatch(setCurrentSession((result as any).id));
         }
-        dispatch(setCurrentSession(result.id));
         return { success: true, session: result };
       } catch (error: any) {
         dispatch(setSessionsError(error?.message || "Failed to create session"));
         return { success: false, error: error?.message };
       }
     },
-    [dispatch, createSessionMutation, wsStatus]
+    [dispatch, wsStatus]
   );
 
-  /**
-   * Update an existing session
-   * Trigger: API Call
-   */
+  // Update session — optimistic + API
   const updateSessionHandler = useCallback(
     async (sessionId: string, updates: Partial<AgentSession>) => {
-      // Optimistic update
       dispatch(updateSession({ id: sessionId, updates }));
-
       try {
-        await updateSessionMutation({ id: sessionId, updates }).unwrap();
+        await getTrpcClient().sessions.update.mutate({ id: sessionId, ...updates } as any);
         return { success: true };
       } catch (error: any) {
-        // Revert on error
-        refetchSessions();
+        await fetchSessions();
         dispatch(setSessionsError(error?.message || "Failed to update session"));
         return { success: false, error: error?.message };
       }
     },
-    [dispatch, updateSessionMutation, refetchSessions]
+    [dispatch, fetchSessions]
   );
 
-  /**
-   * Delete a session
-   * Trigger: API Call + WebSocket leave
-   */
+  // Delete session — optimistic + API
   const deleteSessionHandler = useCallback(
     async (sessionId: string) => {
-      // Leave room first
       if (wsStatus === "connected") {
         dispatch(wsLeaveRoom(`session:${sessionId}`));
       }
-
-      // Optimistic update
       dispatch(removeSession(sessionId));
-
       try {
-        await deleteSessionMutation(sessionId).unwrap();
+        await getTrpcClient().sessions.delete.mutate({ id: sessionId });
         return { success: true };
       } catch (error: any) {
-        // Revert on error
-        refetchSessions();
+        await fetchSessions();
         dispatch(setSessionsError(error?.message || "Failed to delete session"));
         return { success: false, error: error?.message };
       }
     },
-    [dispatch, deleteSessionMutation, refetchSessions, wsStatus]
+    [dispatch, fetchSessions, wsStatus]
   );
 
-  /**
-   * Archive a session
-   * Trigger: API Call
-   */
+  // Archive session
   const archiveSessionHandler = useCallback(
     async (sessionId: string) => {
-      // Optimistic update
       dispatch(archiveSession(sessionId));
-
       try {
-        await updateSessionMutation({
-          id: sessionId,
-          updates: { status: "archived" as SessionStatus },
-        }).unwrap();
+        await getTrpcClient().sessions.update.mutate({ id: sessionId, status: "archived" } as any);
         return { success: true };
       } catch (error: any) {
-        // Revert on error
-        refetchSessions();
-        dispatch(setSessionsError(error?.message || "Failed to archive session"));
+        await fetchSessions();
         return { success: false, error: error?.message };
       }
     },
-    [dispatch, updateSessionMutation, refetchSessions]
+    [dispatch, fetchSessions]
   );
 
-  /**
-   * Restore an archived session
-   * Trigger: API Call
-   */
+  // Restore session
   const restoreSessionHandler = useCallback(
     async (sessionId: string) => {
-      // Optimistic update
       dispatch(restoreSession(sessionId));
-
       try {
-        await updateSessionMutation({
-          id: sessionId,
-          updates: { status: "active" as SessionStatus },
-        }).unwrap();
+        await getTrpcClient().sessions.update.mutate({ id: sessionId, status: "active" } as any);
         return { success: true };
       } catch (error: any) {
-        // Revert on error
-        refetchSessions();
-        dispatch(setSessionsError(error?.message || "Failed to restore session"));
+        await fetchSessions();
         return { success: false, error: error?.message };
       }
     },
-    [dispatch, updateSessionMutation, refetchSessions]
+    [dispatch, fetchSessions]
   );
 
-  /**
-   * Set current session
-   * Trigger: State + WebSocket room management
-   */
   const selectSession = useCallback(
     (sessionId: string | null) => {
       dispatch(setCurrentSession(sessionId));
@@ -235,85 +192,48 @@ export function useSessionsIntegration() {
     [dispatch]
   );
 
-  /**
-   * Toggle session pinned status
-   * Trigger: API Call + State
-   */
   const togglePinned = useCallback(
     async (sessionId: string) => {
       const session = sessionsState.sessions.find((s: AgentSession) => s.id === sessionId);
       if (!session) return { success: false };
-
-      // Optimistic update
       dispatch(toggleSessionPinned(sessionId));
-
       try {
-        await updateSessionMutation({
+        await getTrpcClient().sessions.update.mutate({
           id: sessionId,
-          updates: { isPinned: !session.isPinned },
-        }).unwrap();
+          metadata: { isPinned: !session.isPinned },
+        } as any);
         return { success: true };
-      } catch (error: any) {
-        // Revert on error
+      } catch {
         dispatch(toggleSessionPinned(sessionId));
-        return { success: false, error: error?.message };
+        return { success: false };
       }
     },
-    [dispatch, updateSessionMutation, sessionsState.sessions]
+    [dispatch, sessionsState.sessions]
   );
 
-  /**
-   * Toggle session favorite status
-   * Trigger: API Call + State
-   */
   const toggleFavorite = useCallback(
     async (sessionId: string) => {
       const session = sessionsState.sessions.find((s: AgentSession) => s.id === sessionId);
       if (!session) return { success: false };
-
-      // Optimistic update
       dispatch(toggleSessionFavorite(sessionId));
-
       try {
-        await updateSessionMutation({
+        await getTrpcClient().sessions.update.mutate({
           id: sessionId,
-          updates: { isFavorite: !session.isFavorite },
-        }).unwrap();
+          metadata: { isFavorite: !session.isFavorite },
+        } as any);
         return { success: true };
-      } catch (error: any) {
-        // Revert on error
+      } catch {
         dispatch(toggleSessionFavorite(sessionId));
-        return { success: false, error: error?.message };
+        return { success: false };
       }
     },
-    [dispatch, updateSessionMutation, sessionsState.sessions]
+    [dispatch, sessionsState.sessions]
   );
 
-  /**
-   * Filter and sort setters
-   * Trigger: State only
-   */
-  const setSearch = useCallback(
-    (query: string) => {
-      dispatch(setSearchQuery(query));
-    },
-    [dispatch]
-  );
-
-  const setStatusFilter = useCallback(
-    (status: SessionStatus | "all") => {
-      dispatch(setFilterStatus(status));
-    },
-    [dispatch]
-  );
-
-  const setModeFilter = useCallback(
-    (mode: SessionMode | "all") => {
-      dispatch(setFilterMode(mode));
-    },
-    [dispatch]
-  );
-
+  // Filter and sort setters
+  const setSearch = useCallback((query: string) => dispatch(setSearchQuery(query)), [dispatch]);
+  const setStatusFilter = useCallback((status: SessionStatus | "all") => dispatch(setFilterStatus(status)), [dispatch]);
+  const setModeFilter = useCallback((mode: SessionMode | "all") => dispatch(setFilterMode(mode)), [dispatch]);
   const setSorting = useCallback(
     (sortBy: SessionsState["sortBy"], sortOrder: "asc" | "desc") => {
       dispatch(setSortBy(sortBy));
@@ -321,72 +241,25 @@ export function useSessionsIntegration() {
     },
     [dispatch]
   );
+  const toggleShowArchived = useCallback((show: boolean) => dispatch(setShowArchived(show)), [dispatch]);
+  const toggleSelection = useCallback((sessionId: string) => dispatch(toggleSessionSelection(sessionId)), [dispatch]);
+  const selectAll = useCallback(() => dispatch(selectAllSessions()), [dispatch]);
+  const clearSelection = useCallback(() => dispatch(clearSessionSelection()), [dispatch]);
 
-  const toggleShowArchived = useCallback(
-    (show: boolean) => {
-      dispatch(setShowArchived(show));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Selection actions
-   * Trigger: State only
-   */
-  const toggleSelection = useCallback(
-    (sessionId: string) => {
-      dispatch(toggleSessionSelection(sessionId));
-    },
-    [dispatch]
-  );
-
-  const selectAll = useCallback(() => {
-    dispatch(selectAllSessions());
-  }, [dispatch]);
-
-  const clearSelection = useCallback(() => {
-    dispatch(clearSessionSelection());
-  }, [dispatch]);
-
-  /**
-   * Refresh sessions from server
-   * Trigger: API Call
-   */
-  const refresh = useCallback(() => {
-    refetchSessions();
-  }, [refetchSessions]);
-
-  // Filter sessions based on current filters (memoized)
+  // Filtered sessions
   const filteredSessions = useMemo(
     () =>
       sessionsState.sessions.filter((session: AgentSession) => {
-        if (
-          sessionsState.searchQuery &&
-          !session.title?.toLowerCase().includes(sessionsState.searchQuery.toLowerCase())
-        ) {
-          return false;
-        }
-        if (sessionsState.filterStatus !== "all" && session.status !== sessionsState.filterStatus) {
-          return false;
-        }
-        if (sessionsState.filterMode !== "all" && session.mode !== sessionsState.filterMode) {
-          return false;
-        }
-        if (!sessionsState.showArchived && session.status === "archived") {
-          return false;
-        }
+        if (sessionsState.searchQuery && !session.title?.toLowerCase().includes(sessionsState.searchQuery.toLowerCase())) return false;
+        if (sessionsState.filterStatus !== "all" && session.status !== sessionsState.filterStatus) return false;
+        if (sessionsState.filterMode !== "all" && session.mode !== sessionsState.filterMode) return false;
+        if (!sessionsState.showArchived && session.status === "archived") return false;
         return true;
       }),
-    [
-      sessionsState.sessions,
-      sessionsState.searchQuery,
-      sessionsState.filterStatus,
-      sessionsState.filterMode,
-      sessionsState.showArchived,
-    ]
+    [sessionsState.sessions, sessionsState.searchQuery, sessionsState.filterStatus, sessionsState.filterMode, sessionsState.showArchived]
   );
 
-  // Sort sessions (memoized)
+  // Sorted sessions
   const sortedSessions = useMemo(() => {
     const { sortBy, sortOrder } = sessionsState;
     return filteredSessions.toSorted((a: AgentSession, b: AgentSession) => {
@@ -402,23 +275,18 @@ export function useSessionsIntegration() {
           comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
           break;
         case "lastActivityAt":
-          comparison =
-            new Date(a.lastActivityAt || a.updatedAt).getTime() -
-            new Date(b.lastActivityAt || b.updatedAt).getTime();
+          comparison = new Date(a.lastActivityAt || a.updatedAt).getTime() - new Date(b.lastActivityAt || b.updatedAt).getTime();
           break;
       }
       return sortOrder === "desc" ? -comparison : comparison;
     });
   }, [filteredSessions, sessionsState.sortBy, sessionsState.sortOrder]);
 
-  // Get current session
   const currentSession = sessionsState.currentSessionId
-    ? sessionsState.sessions.find((s: AgentSession) => s.id === sessionsState.currentSessionId) ||
-      null
+    ? sessionsState.sessions.find((s: AgentSession) => s.id === sessionsState.currentSessionId) || null
     : null;
 
   return {
-    // State
     sessions: sortedSessions,
     allSessions: sessionsState.sessions,
     currentSession,
@@ -428,18 +296,15 @@ export function useSessionsIntegration() {
     groups: sessionsState.groups,
     hasMore: sessionsState.hasMore,
     totalCount: sessionsState.totalCount,
-    isLoading: sessionsState.isLoading || isCreating || isUpdating || isDeleting,
+    isLoading: sessionsState.isLoading,
     error: sessionsState.error,
     isConnected: wsStatus === "connected",
-
-    // Filter state
     searchQuery: sessionsState.searchQuery,
     filterStatus: sessionsState.filterStatus,
     filterMode: sessionsState.filterMode,
     sortBy: sessionsState.sortBy,
     sortOrder: sessionsState.sortOrder,
     showArchived: sessionsState.showArchived,
-
     // Actions
     createSession,
     updateSession: updateSessionHandler,
@@ -457,7 +322,7 @@ export function useSessionsIntegration() {
     toggleSelection,
     selectAll,
     clearSelection,
-    refresh,
+    refresh: fetchSessions,
   };
 }
 

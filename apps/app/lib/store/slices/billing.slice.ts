@@ -9,23 +9,65 @@ export type PlanType = "free" | "pro" | "max" | "enterprise";
 export type BillingInterval = "monthly" | "yearly";
 export type PaymentStatus = "active" | "past_due" | "canceled" | "trialing";
 
+export interface PlanLimits {
+  maxConcurrentSessions: number;
+  maxParallelSubtasks: number;
+  maxScheduledTasks: number;
+  maxStepsPerSession: number;
+  dailyRefreshCredits: number;
+  planType: PlanType;
+  planName: string;
+}
+
+export interface CreditBreakdown {
+  total: number;
+  daily: { available: number; used: number; total: number; refreshAmount: number };
+  monthly: { available: number; used: number; total: number };
+  purchased: { available: number; used: number; total: number };
+  starter: { available: number; used: number; total: number };
+  autoTopupEnabled: boolean;
+}
+
 export interface CreditPackage {
   id: string;
-  plan: PlanType;
+  name: string;
+  description?: string | null;
   price: number;
   credits: number;
   currency: string;
-  popular?: boolean;
+  bonusCredits?: number | null;
+  isActive?: boolean;
+  isPopular?: boolean;
+  sortOrder?: number | null;
+  stripePriceId?: string | null;
+  stripeProductId?: string | null;
 }
 
 export interface MembershipTier {
   id: string;
-  plan: PlanType;
-  price: number;
-  discountPrice?: number;
-  credits: number;
-  interval: BillingInterval | "";
-  features: string[];
+  name: string;
+  type: PlanType;
+  description?: string | null;
+  priceMonthly: number;
+  priceYearly: number;
+  discountYearlyPercent?: number | null;
+  monthlyCredits: number;
+  starterCredits?: number;
+  dailyRefreshCredits?: number;
+  maxConcurrentSessions?: number;
+  maxParallelSubtasks?: number;
+  maxScheduledTasks?: number;
+  maxStepsPerSession?: number;
+  features: string[] | null;
+  limits?: Record<string, unknown> | null;
+  isActive?: boolean;
+  isPopular?: boolean;
+  sortOrder?: number | null;
+  // Legacy compat fields
+  plan?: PlanType;
+  price?: number;
+  credits?: number;
+  interval?: BillingInterval | "";
   popular?: boolean;
 }
 
@@ -86,6 +128,12 @@ export interface BillingState {
   subscription: Subscription | null;
   freeRefreshCredits: number;
 
+  // Plan limits (Manus parity)
+  planLimits: PlanLimits;
+
+  // Credit breakdown (daily, monthly, purchased, starter)
+  creditBreakdown: CreditBreakdown;
+
   // Auto top-up
   userAutoTopupInfo: AutoTopupInfo | null;
 
@@ -129,7 +177,24 @@ const initialState: BillingState = {
   personalPlanTiers: [],
   teamPlanTiers: [],
   subscription: null,
-  freeRefreshCredits: 1500,
+  freeRefreshCredits: 300,
+  planLimits: {
+    maxConcurrentSessions: 1,
+    maxParallelSubtasks: 5,
+    maxScheduledTasks: 1,
+    maxStepsPerSession: 15,
+    dailyRefreshCredits: 300,
+    planType: "free",
+    planName: "Rubic Light",
+  },
+  creditBreakdown: {
+    total: 0,
+    daily: { available: 0, used: 0, total: 0, refreshAmount: 300 },
+    monthly: { available: 0, used: 0, total: 0 },
+    purchased: { available: 0, used: 0, total: 0 },
+    starter: { available: 0, used: 0, total: 0 },
+    autoTopupEnabled: false,
+  },
   userAutoTopupInfo: null,
   paymentMethods: [],
   invoices: [],
@@ -189,6 +254,28 @@ const billingSlice = createSlice({
 
     setFreeRefreshCredits: (state, action: PayloadAction<number>) => {
       state.freeRefreshCredits = action.payload;
+    },
+
+    // Plan limits
+    setPlanLimits: (state, action: PayloadAction<PlanLimits>) => {
+      state.planLimits = action.payload;
+    },
+
+    // Credit breakdown (real-time updates from WebSocket)
+    setCreditBreakdown: (state, action: PayloadAction<CreditBreakdown>) => {
+      state.creditBreakdown = action.payload;
+    },
+
+    // Update total credits (from WebSocket billing.credits.update event)
+    updateCreditBalance: (
+      state,
+      action: PayloadAction<{ balanceAfter: number; creditsCharged: number }>
+    ) => {
+      state.creditBreakdown.total = action.payload.balanceAfter;
+      // Also update subscription credits if applicable
+      if (state.subscription) {
+        state.subscription.creditsUsed += action.payload.creditsCharged;
+      }
     },
 
     // Auto top-up
@@ -359,6 +446,9 @@ export const {
   setSubscription,
   updateSubscription,
   setFreeRefreshCredits,
+  setPlanLimits,
+  setCreditBreakdown,
+  updateCreditBalance,
   setAutoTopupInfo,
   updateAutoTopupInfo,
   setPaymentMethods,

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { db, connectorDefinitions, userConnectors, eq, desc } from "../lib/db.js";
+import { db, connectorDefinitions, userConnectors, eq, and, desc, isNull } from "../lib/db.js";
 import { getComposioClient } from "../lib/composio.js";
 import { logger } from "../lib/helpers.js";
 
@@ -7,6 +7,12 @@ export async function integrationRoutes(app: FastifyInstance) {
   // List user's integrations with definition details
   app.get<{ Params: { userId: string } }>("/users/:userId/integrations", async (request, reply) => {
     const { userId } = request.params;
+    const projectId = (request.query as Record<string, string>).projectId as string | undefined;
+
+    const projectFilter = projectId
+      ? eq(userConnectors.projectId, projectId)
+      : isNull(userConnectors.projectId);
+
     try {
       const integrations = await db
         .select({
@@ -18,7 +24,7 @@ export async function integrationRoutes(app: FastifyInstance) {
           connectorDefinitions,
           eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
         )
-        .where(eq(userConnectors.userId, userId))
+        .where(and(eq(userConnectors.userId, userId), projectFilter))
         .orderBy(desc(userConnectors.createdAt));
 
       return { integrations };

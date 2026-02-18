@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import {
   setNotifications,
-  appendNotifications,
   addNotification,
   markAsRead,
   markAllAsRead,
@@ -14,7 +13,6 @@ import {
   setPreferences,
   updatePreference,
   setLoading,
-  setLoadingMore,
   setUpdatingPreferences,
   setHasNewNotifications,
   setNotificationsError,
@@ -24,121 +22,93 @@ import {
   type NotificationPreferences,
   type NotificationType,
 } from "../slices/notifications.slice";
-import {
-  useGetNotificationsQuery,
-  useMarkNotificationAsReadMutation,
-  useMarkAllNotificationsAsReadMutation,
-  useDeleteNotificationMutation,
-  useGetNotificationPreferencesQuery,
-  useUpdateNotificationPreferencesMutation,
-} from "../api/api.slice";
-import { wsSend } from "../middleware/websocket.middleware";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 
 /**
- * Notifications Hook - Integrates WebSocket (real-time) and RTK Query (API) with notifications slice
+ * Notifications Hook - Integrates WebSocket (real-time) and vanilla tRPC (API) with notifications slice
  *
- * Action Triggers:
- * - fetchNotifications: API Call (RTK Query)
- * - fetchMore: API Call (RTK Query)
- * - markAsRead: API Call (RTK Query) + State
- * - markAllAsRead: API Call (RTK Query) + State
- * - deleteNotification: API Call (RTK Query) + State
- * - updatePreferences: API Call (RTK Query) + State
- * - addNotification: State only (from WebSocket)
- * - setFilter: State only
- *
- * Real-time events (WebSocket):
- * - notification:new -> addNotification
- * - notification:read -> markAsRead
+ * Real-time events (WebSocket middleware):
+ * - notification:new -> addNotification (already handled in websocket.middleware.ts)
+ * - notification:read -> markAsRead (already handled in websocket.middleware.ts)
  */
 export function useNotificationsIntegration() {
   const dispatch = useAppDispatch();
   const notificationsState = useAppSelector((state) => state.notifications);
-  const { status: wsStatus } = useAppSelector((state) => state.websocket);
+  const wsStatus = useAppSelector((state) => state.websocket.status);
+  const hasFetchedRef = useRef(false);
 
-  // RTK Query hooks
-  const {
-    data: notificationsData,
-    isLoading: isFetchingNotifications,
-    refetch: refetchNotifications,
-  } = useGetNotificationsQuery();
-
-  const {
-    data: preferencesData,
-    isLoading: isFetchingPreferences,
-  } = useGetNotificationPreferencesQuery();
-
-  const [markReadMutation] = useMarkNotificationAsReadMutation();
-  const [markAllReadMutation] = useMarkAllNotificationsAsReadMutation();
-  const [deleteNotificationMutation] = useDeleteNotificationMutation();
-  const [updatePreferencesMutation] = useUpdateNotificationPreferencesMutation();
-
-  // Sync RTK Query data with Redux state
-  useEffect(() => {
-    if (notificationsData) {
+  // Fetch notifications on mount (if not already loaded by ReduxDataLoader)
+  const fetchNotifications = useCallback(async () => {
+    dispatch(setLoading(true));
+    try {
+      const [list, unreadByType] = await Promise.all([
+        getTrpcClient().notifications.list.query({ limit: 50, offset: 0, unreadOnly: false }),
+        getTrpcClient().notifications.getUnreadCountsByType.query(),
+      ]);
+      const normalized: Notification[] = ((list as any).items ?? []).map((n: any) => ({
+        ...n,
+        isArchived: n.isArchived ?? false,
+        isRead: n.isRead ?? false,
+        priority: n.priority ?? "normal",
+        createdAt: typeof n.createdAt === "string" ? n.createdAt : new Date(n.createdAt).toISOString(),
+      }));
       dispatch(
         setNotifications({
-          notifications: notificationsData.notifications,
-          hasMore: notificationsData.hasMore,
-          cursor: notificationsData.cursor,
+          notifications: normalized,
+          hasMore: (list as any).hasMore ?? false,
+          cursor: null,
         })
       );
+      if (unreadByType) {
+        const total = Object.values(unreadByType).reduce((sum, v) => sum + (v as number), 0);
+        dispatch(setUnreadCounts({ total, byType: unreadByType as any }));
+      }
+      hasFetchedRef.current = true;
+    } catch (err: any) {
+      dispatch(setNotificationsError(err?.message || "Failed to load notifications"));
+    } finally {
+      dispatch(setLoading(false));
     }
-  }, [notificationsData, dispatch]);
+  }, [dispatch]);
 
-  // Sync preferences
-  useEffect(() => {
-    if (preferencesData) {
-      dispatch(setPreferences(preferencesData));
+  // Fetch notification preferences
+  const fetchPreferences = useCallback(async () => {
+    try {
+      const prefs = await getTrpcClient().notifications.getPreferences.query();
+      if (prefs) {
+        dispatch(setPreferences(prefs as any));
+      }
+    } catch {
+      // Non-critical
     }
-  }, [preferencesData, dispatch]);
+  }, [dispatch]);
 
-  // Sync loading state
-  useEffect(() => {
-    dispatch(setLoading(isFetchingNotifications));
-  }, [isFetchingNotifications, dispatch]);
-
-  /**
-   * Mark notification as read
-   * Trigger: API Call + State
-   */
+  // Mark notification as read — optimistic + API
   const markNotificationAsRead = useCallback(
     async (notificationId: string) => {
-      // Optimistic update
       dispatch(markAsRead(notificationId));
-
       try {
-        await markReadMutation(notificationId).unwrap();
+        await getTrpcClient().notifications.markAsRead.mutate({ id: notificationId });
       } catch (error: any) {
-        // Revert on error - refetch to get accurate state
-        refetchNotifications();
+        await fetchNotifications();
         dispatch(setNotificationsError(error?.message || "Failed to mark as read"));
       }
     },
-    [dispatch, markReadMutation, refetchNotifications]
+    [dispatch, fetchNotifications]
   );
 
-  /**
-   * Mark all notifications as read
-   * Trigger: API Call + State
-   */
+  // Mark all as read — optimistic + API
   const markAllNotificationsAsRead = useCallback(async () => {
-    // Optimistic update
     dispatch(markAllAsRead());
-
     try {
-      await markAllReadMutation().unwrap();
+      await getTrpcClient().notifications.markAllAsRead.mutate();
     } catch (error: any) {
-      // Revert on error - refetch to get accurate state
-      refetchNotifications();
+      await fetchNotifications();
       dispatch(setNotificationsError(error?.message || "Failed to mark all as read"));
     }
-  }, [dispatch, markAllReadMutation, refetchNotifications]);
+  }, [dispatch, fetchNotifications]);
 
-  /**
-   * Archive notification
-   * Trigger: State only (no API endpoint currently)
-   */
+  // Archive notification — state only (no API endpoint)
   const archiveNotificationHandler = useCallback(
     (notificationId: string) => {
       dispatch(archiveNotification(notificationId));
@@ -146,98 +116,68 @@ export function useNotificationsIntegration() {
     [dispatch]
   );
 
-  /**
-   * Delete notification
-   * Trigger: API Call + State
-   */
+  // Delete notification — optimistic + API
   const deleteNotificationHandler = useCallback(
     async (notificationId: string) => {
-      // Optimistic update
       dispatch(deleteNotification(notificationId));
-
       try {
-        await deleteNotificationMutation(notificationId).unwrap();
+        await getTrpcClient().notifications.delete.mutate({ id: notificationId });
       } catch (error: any) {
-        // Revert on error - refetch to get accurate state
-        refetchNotifications();
+        await fetchNotifications();
         dispatch(setNotificationsError(error?.message || "Failed to delete notification"));
       }
     },
-    [dispatch, deleteNotificationMutation, refetchNotifications]
+    [dispatch, fetchNotifications]
   );
 
-  /**
-   * Update notification preferences
-   * Trigger: API Call + State
-   */
+  // Update notification preferences — optimistic + API
   const updateNotificationPreferences = useCallback(
     async (preferences: Partial<NotificationPreferences>) => {
       dispatch(setUpdatingPreferences(true));
-
-      // Optimistic update
+      const prevPreferences = notificationsState.preferences;
       dispatch(updatePreference(preferences));
-
       try {
-        await updatePreferencesMutation(preferences).unwrap();
+        await getTrpcClient().notifications.updatePreferences.mutate(preferences as any);
         dispatch(setUpdatingPreferences(false));
       } catch (error: any) {
-        // Revert on error
-        if (preferencesData) {
-          dispatch(setPreferences(preferencesData));
-        }
+        if (prevPreferences) dispatch(setPreferences(prevPreferences));
         dispatch(setNotificationsError(error?.message || "Failed to update preferences"));
       }
     },
-    [dispatch, updatePreferencesMutation, preferencesData]
+    [dispatch, notificationsState.preferences]
   );
 
-  /**
-   * Set notification filter
-   * Trigger: State only
-   */
   const setNotificationFilter = useCallback(
-    (filter: {
-      type?: NotificationType | "all";
-      showRead?: boolean;
-      showArchived?: boolean;
-    }) => {
+    (filter: { type?: NotificationType | "all"; showRead?: boolean; showArchived?: boolean }) => {
       dispatch(setFilter(filter));
     },
     [dispatch]
   );
 
-  /**
-   * Acknowledge new notifications (clear the "new" indicator)
-   * Trigger: State only
-   */
   const acknowledgeNewNotifications = useCallback(() => {
     dispatch(setHasNewNotifications(false));
   }, [dispatch]);
 
-  /**
-   * Clear all notifications from state
-   * Trigger: State only
-   */
   const clearAllNotifications = useCallback(() => {
     dispatch(clearNotifications());
   }, [dispatch]);
 
-  /**
-   * Refresh notifications from server
-   * Trigger: API Call
-   */
-  const refresh = useCallback(() => {
-    refetchNotifications();
-  }, [refetchNotifications]);
+  // Auto-fetch on mount if not already loaded
+  useEffect(() => {
+    if (hasFetchedRef.current) return;
+    if (notificationsState.notifications.length > 0) {
+      hasFetchedRef.current = true;
+      return;
+    }
+    fetchNotifications();
+  }, [notificationsState.notifications.length, fetchNotifications]);
 
-  // Filter notifications based on current filter
+  // Filter notifications
   const filteredNotifications = notificationsState.notifications.filter((n: Notification) => {
     const { type, showRead, showArchived } = notificationsState.filter;
-
     if (type !== "all" && n.type !== type) return false;
     if (!showRead && n.isRead) return false;
     if (!showArchived && n.isArchived) return false;
-
     return true;
   });
 
@@ -256,7 +196,6 @@ export function useNotificationsIntegration() {
     isUpdatingPreferences: notificationsState.isUpdatingPreferences,
     error: notificationsState.error,
     isConnected: wsStatus === "connected",
-
     // Actions
     markAsRead: markNotificationAsRead,
     markAllAsRead: markAllNotificationsAsRead,
@@ -266,7 +205,7 @@ export function useNotificationsIntegration() {
     setFilter: setNotificationFilter,
     acknowledgeNew: acknowledgeNewNotifications,
     clear: clearAllNotifications,
-    refresh,
+    refresh: fetchNotifications,
   };
 }
 

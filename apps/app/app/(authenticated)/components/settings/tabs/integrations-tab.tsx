@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -57,7 +57,7 @@ import {
   ClockIcon,
   RotateCcwIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -90,27 +90,68 @@ function DeliveryStatusBadge({ status }: { status: string }) {
 
 function DeliveryLogSection({ webhookId }: { webhookId: string }) {
   const [detailDeliveryId, setDetailDeliveryId] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<any[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deliveryDetail, setDeliveryDetail] = useState<any | null>(null);
+  const [isRetryPending, setIsRetryPending] = useState(false);
 
-  const { data: deliveries, isLoading } = trpc.webhooks.getDeliveries.useQuery(
-    { webhookId, limit: 20, offset: 0 },
-    { retry: 1 }
-  );
+  const fetchDeliveries = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await getTrpcClient().webhooks.getDeliveries.query({
+        webhookId,
+        limit: 20,
+        offset: 0,
+      });
+      setDeliveries(data);
+    } catch {
+      setDeliveries(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [webhookId]);
 
-  const { data: deliveryDetail } = trpc.webhooks.getDeliveryDetails.useQuery(
-    { deliveryId: detailDeliveryId!, webhookId },
-    { enabled: !!detailDeliveryId }
-  );
+  useEffect(() => {
+    fetchDeliveries();
+  }, [fetchDeliveries]);
 
-  const utils = trpc.useUtils();
-  const retryDelivery = trpc.webhooks.retryDelivery.useMutation({
-    onSuccess: () => {
-      toast.success("Delivery queued for retry");
-      utils.webhooks.getDeliveries.invalidate({ webhookId });
+  useEffect(() => {
+    if (!detailDeliveryId) {
+      setDeliveryDetail(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getTrpcClient().webhooks.getDeliveryDetails.query({
+          deliveryId: detailDeliveryId,
+          webhookId,
+        });
+        if (!cancelled) setDeliveryDetail(data);
+      } catch {
+        if (!cancelled) setDeliveryDetail(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detailDeliveryId, webhookId]);
+
+  const retryDelivery = useCallback(
+    async (deliveryId: string) => {
+      try {
+        setIsRetryPending(true);
+        await getTrpcClient().webhooks.retryDelivery.mutate({ deliveryId, webhookId });
+        toast.success("Delivery queued for retry");
+        fetchDeliveries();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to retry delivery");
+      } finally {
+        setIsRetryPending(false);
+      }
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to retry delivery");
-    },
-  });
+    [webhookId, fetchDeliveries]
+  );
 
   if (isLoading) {
     return (
@@ -156,8 +197,8 @@ function DeliveryLogSection({ webhookId }: { webhookId: string }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2"
-                    onClick={() => retryDelivery.mutate({ deliveryId: delivery.id, webhookId })}
-                    disabled={retryDelivery.isPending}
+                    onClick={() => retryDelivery(delivery.id)}
+                    disabled={isRetryPending}
                   >
                     <RotateCcwIcon className="h-3 w-3" />
                   </Button>
@@ -238,62 +279,46 @@ export function IntegrationsTab() {
   const [copied, setCopied] = useState<string | null>(null);
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
 
+  // Webhooks state
+  const [webhooks, setWebhooks] = useState<any[] | null>(null);
+  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(true);
+  const [isWebhooksError, setIsWebhooksError] = useState(false);
+  const [eventTypes, setEventTypes] = useState<any[] | null>(null);
+
+  // Mutation pending states
+  const [isCreatePending, setIsCreatePending] = useState(false);
+  const [isDeletePending, setIsDeletePending] = useState(false);
+  const [isTestPending, setIsTestPending] = useState(false);
+  const [isRegeneratePending, setIsRegeneratePending] = useState(false);
+
   // Fetch webhooks
-  const {
-    data: webhooks,
-    isLoading: isLoadingWebhooks,
-    isError: isWebhooksError,
-    refetch: refetchWebhooks,
-  } = trpc.webhooks.list.useQuery(undefined, { retry: 1 });
-  const { data: eventTypes } = trpc.webhooks.getEventTypes.useQuery(undefined, { retry: 1 });
+  const fetchWebhooks = useCallback(async () => {
+    try {
+      setIsLoadingWebhooks(true);
+      setIsWebhooksError(false);
+      const data = await getTrpcClient().webhooks.list.query();
+      setWebhooks(data);
+    } catch {
+      setIsWebhooksError(true);
+      setWebhooks(null);
+    } finally {
+      setIsLoadingWebhooks(false);
+    }
+  }, []);
 
-  // Mutations
-  const utils = trpc.useUtils();
+  const fetchEventTypes = useCallback(async () => {
+    try {
+      const data = await getTrpcClient().webhooks.getEventTypes.query();
+      setEventTypes(data);
+    } catch {
+      setEventTypes(null);
+    }
+  }, []);
 
-  const createWebhook = trpc.webhooks.create.useMutation({
-    onSuccess: () => {
-      toast.success("Webhook created");
-      utils.webhooks.list.invalidate();
-      setIsCreateOpen(false);
-      form.reset();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to create webhook");
-    },
-  });
-
-  const deleteWebhook = trpc.webhooks.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Webhook deleted");
-      utils.webhooks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to delete webhook");
-    },
-  });
-
-  const testWebhook = trpc.webhooks.test.useMutation({
-    onSuccess: (result) => {
-      if (result.success) {
-        toast.success(`Test successful (${result.status})`);
-      } else {
-        toast.error(`Test failed: ${result.error || result.statusText}`);
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to test webhook");
-    },
-  });
-
-  const regenerateSecret = trpc.webhooks.regenerateSecret.useMutation({
-    onSuccess: () => {
-      toast.success("Secret regenerated");
-      utils.webhooks.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to regenerate secret");
-    },
-  });
+  useEffect(() => {
+    fetchWebhooks();
+    fetchEventTypes();
+  }, [fetchWebhooks, fetchEventTypes]);
 
   // Form
   const form = useForm<CreateWebhookForm>({
@@ -307,6 +332,73 @@ export function IntegrationsTab() {
 
   const selectedEvents = form.watch("events");
 
+  // Mutations
+  const createWebhook = useCallback(
+    async (data: { name: string; url: string; events: any[] }) => {
+      try {
+        setIsCreatePending(true);
+        await getTrpcClient().webhooks.create.mutate(data);
+        toast.success("Webhook created");
+        fetchWebhooks();
+        setIsCreateOpen(false);
+        form.reset();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to create webhook");
+      } finally {
+        setIsCreatePending(false);
+      }
+    },
+    [fetchWebhooks, form]
+  );
+
+  const deleteWebhook = useCallback(
+    async (id: string) => {
+      try {
+        setIsDeletePending(true);
+        await getTrpcClient().webhooks.delete.mutate({ id });
+        toast.success("Webhook deleted");
+        fetchWebhooks();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to delete webhook");
+      } finally {
+        setIsDeletePending(false);
+      }
+    },
+    [fetchWebhooks]
+  );
+
+  const testWebhook = useCallback(async (id: string) => {
+    try {
+      setIsTestPending(true);
+      const result = await getTrpcClient().webhooks.test.mutate({ id });
+      if (result.success) {
+        toast.success(`Test successful (${result.status})`);
+      } else {
+        toast.error(`Test failed: ${result.error || result.statusText}`);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to test webhook");
+    } finally {
+      setIsTestPending(false);
+    }
+  }, []);
+
+  const regenerateSecret = useCallback(
+    async (id: string) => {
+      try {
+        setIsRegeneratePending(true);
+        await getTrpcClient().webhooks.regenerateSecret.mutate({ id });
+        toast.success("Secret regenerated");
+        fetchWebhooks();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to regenerate secret");
+      } finally {
+        setIsRegeneratePending(false);
+      }
+    },
+    [fetchWebhooks]
+  );
+
   const copyToClipboard = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(id);
@@ -315,7 +407,7 @@ export function IntegrationsTab() {
   };
 
   const onSubmit = (data: CreateWebhookForm) => {
-    createWebhook.mutate({
+    createWebhook({
       name: data.name,
       url: data.url,
       events: data.events as any[],
@@ -365,7 +457,7 @@ export function IntegrationsTab() {
         <ErrorState
           title="Failed to load integrations"
           message="Unable to load your webhooks. Please try again."
-          onRetry={() => refetchWebhooks()}
+          onRetry={() => fetchWebhooks()}
         />
       </div>
     );
@@ -472,8 +564,8 @@ export function IntegrationsTab() {
                   <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={createWebhook.isPending}>
-                    {createWebhook.isPending && (
+                  <Button type="submit" disabled={isCreatePending}>
+                    {isCreatePending && (
                       <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
                     )}
                     Create Webhook
@@ -591,11 +683,11 @@ export function IntegrationsTab() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => testWebhook.mutate({ id: webhook.id })}
-                        disabled={testWebhook.isPending}
+                        onClick={() => testWebhook(webhook.id)}
+                        disabled={isTestPending}
                         title="Send test"
                       >
-                        {testWebhook.isPending ? (
+                        {isTestPending ? (
                           <Loader2Icon className="h-4 w-4 animate-spin" />
                         ) : (
                           <ExternalLinkIcon className="h-4 w-4" />
@@ -604,8 +696,8 @@ export function IntegrationsTab() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => regenerateSecret.mutate({ id: webhook.id })}
-                        disabled={regenerateSecret.isPending}
+                        onClick={() => regenerateSecret(webhook.id)}
+                        disabled={isRegeneratePending}
                         title="Regenerate secret"
                       >
                         <RefreshCwIcon className="h-4 w-4" />
@@ -630,7 +722,7 @@ export function IntegrationsTab() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => deleteWebhook.mutate({ id: webhook.id })}
+                              onClick={() => deleteWebhook(webhook.id)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Delete
@@ -686,58 +778,102 @@ function ApiKeysSection() {
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  const {
-    data: apiKeysList,
-    isLoading: isLoadingKeys,
-    isError: isKeysError,
-    refetch: refetchKeys,
-  } = trpc.apiKeys.list.useQuery(undefined, { retry: 1 });
+  // Data state
+  const [apiKeysList, setApiKeysList] = useState<any[] | null>(null);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
+  const [isKeysError, setIsKeysError] = useState(false);
 
-  const utils = trpc.useUtils();
+  // Mutation pending states
+  const [isCreateKeyPending, setIsCreateKeyPending] = useState(false);
+  const [isRevokePending, setIsRevokePending] = useState(false);
+  const [isDeleteKeyPending, setIsDeleteKeyPending] = useState(false);
+  const [isRenamePending, setIsRenamePending] = useState(false);
 
-  const createKey = trpc.apiKeys.create.useMutation({
-    onSuccess: (data) => {
-      setRevealedKey(data.key);
-      utils.apiKeys.list.invalidate();
-      setIsCreateOpen(false);
-      setNewKeyName("Default");
-      toast.success("API key created. Copy it now — it won't be shown again.");
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to create API key");
-    },
-  });
+  const fetchKeys = useCallback(async () => {
+    try {
+      setIsLoadingKeys(true);
+      setIsKeysError(false);
+      const data = await getTrpcClient().apiKeys.list.query();
+      setApiKeysList(data);
+    } catch {
+      setIsKeysError(true);
+      setApiKeysList(null);
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  }, []);
 
-  const revokeKey = trpc.apiKeys.revoke.useMutation({
-    onSuccess: () => {
-      toast.success("API key revoked");
-      utils.apiKeys.list.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to revoke API key");
-    },
-  });
+  useEffect(() => {
+    fetchKeys();
+  }, [fetchKeys]);
 
-  const deleteKey = trpc.apiKeys.delete.useMutation({
-    onSuccess: () => {
-      toast.success("API key deleted");
-      utils.apiKeys.list.invalidate();
+  const createKey = useCallback(
+    async (name: string) => {
+      try {
+        setIsCreateKeyPending(true);
+        const data = await getTrpcClient().apiKeys.create.mutate({ name });
+        setRevealedKey(data.key);
+        fetchKeys();
+        setIsCreateOpen(false);
+        setNewKeyName("Default");
+        toast.success("API key created. Copy it now — it won't be shown again.");
+      } catch (error: any) {
+        toast.error(error.message || "Failed to create API key");
+      } finally {
+        setIsCreateKeyPending(false);
+      }
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to delete API key");
-    },
-  });
+    [fetchKeys]
+  );
 
-  const renameKey = trpc.apiKeys.rename.useMutation({
-    onSuccess: () => {
-      toast.success("API key renamed");
-      utils.apiKeys.list.invalidate();
-      setEditingKeyId(null);
+  const revokeKey = useCallback(
+    async (id: string) => {
+      try {
+        setIsRevokePending(true);
+        await getTrpcClient().apiKeys.revoke.mutate({ id });
+        toast.success("API key revoked");
+        fetchKeys();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to revoke API key");
+      } finally {
+        setIsRevokePending(false);
+      }
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to rename API key");
+    [fetchKeys]
+  );
+
+  const deleteKey = useCallback(
+    async (id: string) => {
+      try {
+        setIsDeleteKeyPending(true);
+        await getTrpcClient().apiKeys.delete.mutate({ id });
+        toast.success("API key deleted");
+        fetchKeys();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to delete API key");
+      } finally {
+        setIsDeleteKeyPending(false);
+      }
     },
-  });
+    [fetchKeys]
+  );
+
+  const renameKey = useCallback(
+    async (id: string, name: string) => {
+      try {
+        setIsRenamePending(true);
+        await getTrpcClient().apiKeys.rename.mutate({ id, name });
+        toast.success("API key renamed");
+        fetchKeys();
+        setEditingKeyId(null);
+      } catch (error: any) {
+        toast.error(error.message || "Failed to rename API key");
+      } finally {
+        setIsRenamePending(false);
+      }
+    },
+    [fetchKeys]
+  );
 
   const copyApiKey = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
@@ -768,7 +904,7 @@ function ApiKeysSection() {
         <ErrorState
           title="Failed to load API keys"
           message="Unable to load your API keys. Please try again."
-          onRetry={() => refetchKeys()}
+          onRetry={() => fetchKeys()}
         />
       </div>
     );
@@ -810,10 +946,10 @@ function ApiKeysSection() {
                 Cancel
               </Button>
               <Button
-                onClick={() => createKey.mutate({ name: newKeyName })}
-                disabled={createKey.isPending || !newKeyName.trim()}
+                onClick={() => createKey(newKeyName)}
+                disabled={isCreateKeyPending || !newKeyName.trim()}
               >
-                {createKey.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                {isCreateKeyPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
                 Create Key
               </Button>
             </DialogFooter>
@@ -874,7 +1010,7 @@ function ApiKeysSection() {
                           maxLength={100}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && editName.trim()) {
-                              renameKey.mutate({ id: apiKey.id, name: editName });
+                              renameKey(apiKey.id, editName);
                             }
                             if (e.key === "Escape") setEditingKeyId(null);
                           }}
@@ -886,10 +1022,10 @@ function ApiKeysSection() {
                           className="h-7 px-2"
                           onClick={() => {
                             if (editName.trim()) {
-                              renameKey.mutate({ id: apiKey.id, name: editName });
+                              renameKey(apiKey.id, editName);
                             }
                           }}
-                          disabled={renameKey.isPending}
+                          disabled={isRenamePending}
                         >
                           <CheckIcon className="h-3 w-3" />
                         </Button>
@@ -957,7 +1093,7 @@ function ApiKeysSection() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => revokeKey.mutate({ id: apiKey.id })}
+                              onClick={() => revokeKey(apiKey.id)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Revoke
@@ -987,7 +1123,7 @@ function ApiKeysSection() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => deleteKey.mutate({ id: apiKey.id })}
+                            onClick={() => deleteKey(apiKey.id)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
                             Delete

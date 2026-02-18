@@ -1,21 +1,37 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
+import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { useSettings, type SettingsTab } from "./settings-context";
-import { AccountTab } from "./tabs/account-tab";
-import { BillingTab } from "./tabs/billing-tab";
-import { ConnectorsTab } from "./tabs/connectors-tab";
-import { DataControlsTab } from "./tabs/data-controls-tab";
-import { DevicesTab } from "./tabs/devices-tab";
-import { HelpTab } from "./tabs/help-tab";
-import { IntegrationsTab } from "./tabs/integrations-tab";
-import { MailManusTab } from "./tabs/mail-manus-tab";
-import { PersonalizationTab } from "./tabs/personalization-tab";
 import { PlaceholderTab } from "./tabs/placeholder-tab";
-import { ScheduledTasksTab } from "./tabs/scheduled-tasks-tab";
-import { SettingsTab as SettingsTabComponent } from "./tabs/settings-tab";
-import { SkillsTab } from "./tabs/skills-tab";
-import { UsageTab } from "./tabs/usage-tab";
+
+// Lazy-load all settings tabs — only the active tab's JS is downloaded.
+// This saves ~100KB+ from the initial bundle since most users never open settings.
+const TabLoading = () => (
+  <div className="space-y-4">
+    <Skeleton className="h-8 w-48" />
+    <Skeleton className="h-4 w-72" />
+    <div className="space-y-3 mt-6">
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+    </div>
+  </div>
+);
+
+const AccountTab = dynamic(() => import("./tabs/account-tab").then((m) => ({ default: m.AccountTab })), { loading: TabLoading });
+const BillingTab = dynamic(() => import("./tabs/billing-tab").then((m) => ({ default: m.BillingTab })), { loading: TabLoading });
+const ConnectorsTab = dynamic(() => import("./tabs/connectors-tab").then((m) => ({ default: m.ConnectorsTab })), { loading: TabLoading });
+const DataControlsTab = dynamic(() => import("./tabs/data-controls-tab").then((m) => ({ default: m.DataControlsTab })), { loading: TabLoading });
+const HelpTab = dynamic(() => import("./tabs/help-tab").then((m) => ({ default: m.HelpTab })), { loading: TabLoading });
+const IntegrationsTab = dynamic(() => import("./tabs/integrations-tab").then((m) => ({ default: m.IntegrationsTab })), { loading: TabLoading });
+const MailManusTab = dynamic(() => import("./tabs/mail-manus-tab").then((m) => ({ default: m.MailManusTab })), { loading: TabLoading });
+const PersonalizationTab = dynamic(() => import("./tabs/personalization-tab").then((m) => ({ default: m.PersonalizationTab })), { loading: TabLoading });
+const ScheduledTasksTab = dynamic(() => import("./tabs/scheduled-tasks-tab").then((m) => ({ default: m.ScheduledTasksTab })), { loading: TabLoading });
+const SettingsTabComponent = dynamic(() => import("./tabs/settings-tab").then((m) => ({ default: m.SettingsTab })), { loading: TabLoading });
+const SkillsTab = dynamic(() => import("./tabs/skills-tab").then((m) => ({ default: m.SkillsTab })), { loading: TabLoading });
+const UsageTab = dynamic(() => import("./tabs/usage-tab").then((m) => ({ default: m.UsageTab })), { loading: TabLoading });
 
 type SettingsContentProps = {
   user?: {
@@ -37,10 +53,6 @@ const tabConfig: Record<
   "scheduled-tasks": {
     title: "Scheduled Tasks",
     description: "Automate your recurring tasks",
-  },
-  devices: {
-    title: "Devices",
-    description: "Manage your connected devices",
   },
   connectors: { title: "Connectors", description: "Connect third-party services" },
   mail: { title: "Mail Manus", description: "Configure email integration" },
@@ -75,8 +87,6 @@ export function SettingsContent({ user, isPro = false }: SettingsContentProps) {
         return <BillingTab isPro={isPro} />;
       case "scheduled-tasks":
         return <ScheduledTasksTab />;
-      case "devices":
-        return <DevicesTab />;
       case "connectors":
         return <ConnectorsTab />;
       case "mail":

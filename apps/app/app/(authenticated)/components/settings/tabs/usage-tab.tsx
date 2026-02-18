@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback, useEffect } from "react";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -7,7 +8,8 @@ import { Progress } from "@repo/design-system/components/ui/progress";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { CrownIcon, SparklesIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useAppSelector } from "@/lib/store/hooks";
 import { useSettings } from "../settings-context";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -19,32 +21,61 @@ type UsageTabProps = {
 export function UsageTab({ isPro = false }: UsageTabProps) {
   const { setActiveTab } = useSettings();
 
-  // Fetch credit balance
-  const { data: creditBalance, isLoading: isLoadingBalance, isError: isBalanceError, refetch: refetchBalance } = trpc.billing.getCreditBalance.useQuery(undefined, { retry: 1 });
+  // Read core billing data from Redux (hydrated by ReduxDataLoader)
+  const creditBreakdown = useAppSelector((state) => state.billing.creditBreakdown);
+  const reduxSubscription = useAppSelector((state) => state.billing.subscription);
+  const isLoadingBilling = useAppSelector((state) => state.billing.isSubscriptionLoading);
 
-  // Fetch subscription info
-  const { data: subscription, isLoading: isLoadingSubscription, isError: isSubscriptionError, refetch: refetchSubscription } = trpc.billing.getSubscription.useQuery(undefined, { retry: 1 });
+  // Lazy-fetch usage data (settings-only, not app-critical)
+  const [usageSummary, setUsageSummary] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["billing"]["getUsageSummary"]["query"]>> | undefined>(undefined);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+  const [isSummaryError, setIsSummaryError] = useState(false);
 
-  // Fetch usage summary
-  const { data: usageSummary, isLoading: isLoadingSummary, isError: isSummaryError, refetch: refetchSummary } = trpc.billing.getUsageSummary.useQuery(undefined, { retry: 1 });
+  const [usageRecords, setUsageRecords] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["billing"]["getUsageRecords"]["query"]>> | undefined>(undefined);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
 
-  // Fetch recent usage records
-  const { data: usageRecords, isLoading: isLoadingRecords } = trpc.billing.getUsageRecords.useQuery({
-    limit: 10,
-  }, { retry: 1 });
+  const fetchUsageSummary = useCallback(async () => {
+    try {
+      setIsLoadingSummary(true);
+      setIsSummaryError(false);
+      const data = await getTrpcClient().billing.getUsageSummary.query();
+      setUsageSummary(data);
+    } catch {
+      setIsSummaryError(true);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
 
-  const isLoading = isLoadingBalance || isLoadingSubscription || isLoadingSummary || isLoadingRecords;
-  const isError = isBalanceError || isSubscriptionError || isSummaryError;
+  const fetchUsageRecords = useCallback(async () => {
+    try {
+      setIsLoadingRecords(true);
+      const data = await getTrpcClient().billing.getUsageRecords.query({ limit: 10 });
+      setUsageRecords(data);
+    } catch {
+      // silently fail for records — summary error is the primary indicator
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  }, []);
 
-  // Calculate totals
-  const totalCredits = creditBalance?.balance || 0;
-  const periodCredits = creditBalance?.periodCredits || 0;
-  const periodUsed = creditBalance?.periodCreditsUsed || 0;
-  const purchasedCredits = creditBalance?.purchasedCredits || 0;
+  useEffect(() => {
+    fetchUsageSummary();
+    fetchUsageRecords();
+  }, [fetchUsageSummary, fetchUsageRecords]);
+
+  const isLoading = isLoadingBilling || isLoadingSummary || isLoadingRecords;
+  const isError = isSummaryError;
+
+  // Calculate totals from Redux credit breakdown
+  const totalCredits = creditBreakdown.total;
+  const periodCredits = creditBreakdown.monthly.total;
+  const periodUsed = creditBreakdown.monthly.used;
+  const purchasedCredits = creditBreakdown.purchased.available;
 
   const usagePercent = periodCredits > 0 ? (periodUsed / periodCredits) * 100 : 0;
-  const isSubscribed = subscription !== null;
-  const planName = subscription?.plan?.name || "Free";
+  const isSubscribed = reduxSubscription !== null;
+  const planName = reduxSubscription ? reduxSubscription.plan.charAt(0).toUpperCase() + reduxSubscription.plan.slice(1) : "Free";
 
   // Group usage by date for display
   const groupedUsage = usageRecords?.reduce((acc, record) => {
@@ -95,9 +126,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
           title="Failed to load usage data"
           message="Unable to load your usage information. Please try again."
           onRetry={() => {
-            refetchBalance();
-            refetchSubscription();
-            refetchSummary();
+            fetchUsageSummary();
           }}
         />
       </div>
@@ -152,7 +181,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
             </div>
             <p className="text-xs text-muted-foreground">
               {isSubscribed
-                ? `Renews ${subscription?.subscription?.currentPeriodEnd ? format(new Date(subscription.subscription.currentPeriodEnd), "MMM d, yyyy") : "soon"}`
+                ? `Renews ${reduxSubscription?.currentPeriodEnd ? format(new Date(reduxSubscription.currentPeriodEnd), "MMM d, yyyy") : "soon"}`
                 : "Limited to basic features"
               }
             </p>
@@ -259,7 +288,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
       </div>
 
       {/* Auto top-up settings */}
-      {creditBalance?.autoTopupEnabled && (
+      {creditBreakdown.autoTopupEnabled && (
         <>
           <Separator />
           <div className="space-y-4">
@@ -269,7 +298,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
                 <div>
                   <p className="text-sm font-medium">Auto top-up enabled</p>
                   <p className="text-xs text-muted-foreground">
-                    Credits will be purchased automatically when balance falls below {"autoTopupThreshold" in creditBalance ? creditBalance.autoTopupThreshold || 100 : 100}
+                    Credits will be purchased automatically when balance is low
                   </p>
                 </div>
                 <Badge variant="secondary">Active</Badge>

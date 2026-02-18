@@ -25,6 +25,8 @@ export interface FilePartProps {
   className?: string;
   compact?: boolean;
   onRemove?: () => void;
+  /** When set, clicking the file card calls this instead of opening a new tab */
+  onPreview?: (file: FileUIPart) => void;
 }
 
 // ============================================================================
@@ -163,7 +165,7 @@ function FileMenu({ url, filename }: { url: string; filename: string }) {
  * FilePart — Manus-style file card with header + preview area.
  * Compact mode for user message attachments, full card for assistant files.
  */
-export function FilePart({ part, className, compact = false, onRemove }: FilePartProps) {
+export function FilePart({ part, className, compact = false, onRemove, onPreview }: FilePartProps) {
   const isImage = part.mediaType.startsWith("image/");
   const isAudio = part.mediaType.startsWith("audio/");
   const isVideo = part.mediaType.startsWith("video/");
@@ -200,8 +202,31 @@ export function FilePart({ part, className, compact = false, onRemove }: FilePar
     );
   }
 
-  // Full image with dialog (keep special handling)
+  // Full image — use onPreview modal when provided, otherwise inline Dialog lightbox
   if (isImage) {
+    if (onPreview) {
+      return (
+        <button
+          type="button"
+          onClick={() => onPreview(part)}
+          className={cn(
+            "group relative overflow-hidden rounded-xl border border-border/50 transition-colors hover:border-border",
+            className
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={part.url}
+            alt={filename}
+            className="max-h-64 max-w-full object-contain"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+            <ExternalLinkIcon className="size-6 text-white" />
+          </div>
+        </button>
+      );
+    }
     return (
       <Dialog>
         <DialogTrigger asChild>
@@ -286,14 +311,24 @@ export function FilePart({ part, className, compact = false, onRemove }: FilePar
       </div>
 
       {/* Preview area — Manus aspect-[16/9] scaled content */}
-      <a
-        href={part.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block transition-opacity hover:opacity-80"
-      >
-        <FilePreview part={part} filename={filename} />
-      </a>
+      {onPreview ? (
+        <button
+          type="button"
+          onClick={() => onPreview(part)}
+          className="block w-full text-left transition-opacity hover:opacity-80"
+        >
+          <FilePreview part={part} filename={filename} />
+        </button>
+      ) : (
+        <a
+          href={part.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block transition-opacity hover:opacity-80"
+        >
+          <FilePreview part={part} filename={filename} />
+        </a>
+      )}
     </div>
   );
 }

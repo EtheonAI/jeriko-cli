@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -9,7 +10,7 @@ import {
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { HistoryIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { useLibraryData } from "@/lib/store/hooks";
 import { formatDistanceToNow } from "date-fns";
 import { formatFileSize } from "@/lib/utils/file-utils";
 import type { FileItem } from "./file-card";
@@ -20,10 +21,29 @@ interface VersionHistorySheetProps {
 }
 
 export function VersionHistorySheet({ file, onClose }: VersionHistorySheetProps) {
-  const { data: versions, isLoading } = trpc.files.versions.useQuery(
-    { fileId: file?.id ?? "" },
-    { enabled: !!file }
-  );
+  const { fetchVersions } = useLibraryData({ autoFetch: false });
+  const [versions, setVersions] = useState<any[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!file) {
+      setVersions(null);
+      return;
+    }
+    setIsLoading(true);
+    fetchVersions(file.id)
+      .then(() => {
+        // fetchVersions dispatches to Redux; for local display we re-query
+        import("@/lib/trpc/vanilla").then(({ getTrpcClient }) => {
+          getTrpcClient()
+            .files.versions.query({ fileId: file.id })
+            .then((data) => setVersions(data as any[]))
+            .catch(() => setVersions(null))
+            .finally(() => setIsLoading(false));
+        });
+      })
+      .catch(() => setIsLoading(false));
+  }, [file?.id, fetchVersions]);
 
   return (
     <Sheet open={!!file} onOpenChange={(open) => !open && onClose()}>

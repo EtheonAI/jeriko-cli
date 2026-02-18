@@ -1,14 +1,21 @@
 import type { FastifyInstance } from "fastify";
-import { db, connectorDefinitions, userConnectors, eq, and } from "../lib/db.js";
+import { db, connectorDefinitions, userConnectors, eq, and, isNull } from "../lib/db.js";
 import { getComposioClient, resolveToolkitVersions, getToolkitVersion } from "../lib/composio.js";
 import { getUserId, logger } from "../lib/helpers.js";
+import { getComposioEntityId } from "../lib/entity.js";
 
 export async function toolRoutes(app: FastifyInstance) {
   // Get ALL tools across user's connected apps — called by agent service
   app.get<{ Params: { userId: string } }>("/users/:userId/tools", async (request, reply) => {
     const { userId } = request.params;
+    const projectId = (request.query as Record<string, string>).projectId as string | undefined;
+
+    const projectFilter = projectId
+      ? eq(userConnectors.projectId, projectId)
+      : isNull(userConnectors.projectId);
+
     try {
-      // Get user's connected integrations
+      // Get user's connected integrations (scoped to project or user-level)
       const integrations = await db
         .select({
           connector: userConnectors,
@@ -19,7 +26,7 @@ export async function toolRoutes(app: FastifyInstance) {
           connectorDefinitions,
           eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
         )
-        .where(and(eq(userConnectors.userId, userId), eq(userConnectors.status, "connected")));
+        .where(and(eq(userConnectors.userId, userId), eq(userConnectors.status, "connected"), projectFilter));
 
       if (integrations.length === 0) {
         return { tools: [] };
@@ -30,8 +37,9 @@ export async function toolRoutes(app: FastifyInstance) {
 
       // Fetch tools from Composio for these toolkits (new SDK)
       const composio = getComposioClient();
+      const entityId = getComposioEntityId(userId, projectId);
       try {
-        const tools = await composio.tools.get(userId, {
+        const tools = await composio.tools.get(entityId, {
           toolkits: toolkitNames,
         });
 
@@ -152,6 +160,7 @@ export async function toolRoutes(app: FastifyInstance) {
       const body = request.body as {
         toolName: string;
         arguments: Record<string, unknown>;
+        projectId?: string;
       };
 
       if (!body.toolName) {
@@ -160,7 +169,11 @@ export async function toolRoutes(app: FastifyInstance) {
 
       const appName = extractAppFromToolName(body.toolName);
 
-      // Verify user has this app connected
+      // Verify user has this app connected (scoped to project if provided)
+      const executeProjectFilter = body.projectId
+        ? eq(userConnectors.projectId, body.projectId)
+        : isNull(userConnectors.projectId);
+
       if (appName) {
         const [definition] = await db
           .select()
@@ -176,7 +189,8 @@ export async function toolRoutes(app: FastifyInstance) {
               and(
                 eq(userConnectors.userId, userId),
                 eq(userConnectors.connectorDefinitionId, definition.id),
-                eq(userConnectors.status, "connected")
+                eq(userConnectors.status, "connected"),
+                executeProjectFilter
               )
             )
             .limit(1);
@@ -193,8 +207,9 @@ export async function toolRoutes(app: FastifyInstance) {
       const composio = getComposioClient();
       await resolveToolkitVersions();
       const version = getToolkitVersion(appName);
+      const entityId = getComposioEntityId(userId, body.projectId);
       const result = await composio.tools.execute(body.toolName, {
-        userId,
+        userId: entityId,
         arguments: body.arguments,
         ...(version ? { version } : { dangerouslySkipVersionCheck: true }),
       });

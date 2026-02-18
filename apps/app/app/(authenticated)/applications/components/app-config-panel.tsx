@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Separator } from "@repo/design-system/components/ui/separator";
@@ -40,7 +41,8 @@ import {
   XCircleIcon,
   ClockIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useConnectorsData } from "@/lib/store/hooks";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { AppStatusBadge } from "./app-status-badge";
@@ -58,53 +60,105 @@ export function AppConfigPanel({
   onOpenChange,
   onReconnect,
 }: AppConfigPanelProps) {
-  const utils = trpc.useUtils();
+  const {
+    sync: syncHook,
+    disconnect: disconnectHook,
+    uninstall: uninstallHook,
+    updateConfig: updateConfigHook,
+    getConnector,
+    getSyncHistory: getSyncHistoryHook,
+  } = useConnectorsData({ autoFetch: false });
 
-  const { data, isLoading } = trpc.connectors.get.useQuery(
-    { id: connectorId! },
-    { enabled: !!connectorId && open }
-  );
+  const [data, setData] = useState<any | null>(null);
+  const [syncHistory, setSyncHistory] = useState<any[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { data: syncHistory } = trpc.connectors.getSyncHistory.useQuery(
-    { connectorId: connectorId!, limit: 5 },
-    { enabled: !!connectorId && open }
-  );
+  // Fetch connector + sync history when panel opens
+  useEffect(() => {
+    if (!connectorId || !open) {
+      setData(null);
+      setSyncHistory(null);
+      return;
+    }
+    setIsLoading(true);
+    Promise.all([
+      getConnector(connectorId).catch(() => null),
+      getSyncHistoryHook(connectorId).catch(() => null),
+    ]).then(([connectorData, history]) => {
+      setData(connectorData);
+      setSyncHistory(history as any);
+      setIsLoading(false);
+    });
+  }, [connectorId, open, getConnector, getSyncHistoryHook]);
 
-  const updateConfig = trpc.connectors.updateConfig.useMutation({
-    onSuccess: () => {
-      toast.success("Settings updated");
-      utils.connectors.get.invalidate({ id: connectorId! });
-      utils.connectors.list.invalidate();
+  const [syncPending, setSyncPending] = useState(false);
+  const [disconnectPending, setDisconnectPending] = useState(false);
+  const [uninstallPending, setUninstallPending] = useState(false);
+
+  const updateConfig = {
+    mutate: async (params: { id: string; syncEnabled?: boolean; syncInterval?: number }) => {
+      try {
+        await updateConfigHook({ id: params.id, config: params as any });
+        toast.success("Settings updated");
+        // Refresh data
+        if (connectorId) {
+          getConnector(connectorId).then(setData).catch(() => {});
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to update settings");
+      }
     },
-    onError: (error) => toast.error(error.message || "Failed to update settings"),
-  });
+  };
 
-  const syncConnector = trpc.connectors.sync.useMutation({
-    onSuccess: () => {
-      toast.success("Sync started");
-      utils.connectors.get.invalidate({ id: connectorId! });
-      utils.connectors.list.invalidate();
+  const syncConnector = {
+    isPending: syncPending,
+    mutate: async (params: { id: string }) => {
+      setSyncPending(true);
+      try {
+        await syncHook(params.id);
+        toast.success("Sync started");
+        if (connectorId) {
+          getConnector(connectorId).then(setData).catch(() => {});
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to start sync");
+      } finally {
+        setSyncPending(false);
+      }
     },
-    onError: (error) => toast.error(error.message || "Failed to start sync"),
-  });
+  };
 
-  const disconnectConnector = trpc.connectors.disconnect.useMutation({
-    onSuccess: () => {
-      toast.success("Disconnected");
-      utils.connectors.list.invalidate();
-      onOpenChange(false);
+  const disconnectConnector = {
+    isPending: disconnectPending,
+    mutate: async (params: { id: string }) => {
+      setDisconnectPending(true);
+      try {
+        await disconnectHook(params.id);
+        toast.success("Disconnected");
+        onOpenChange(false);
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to disconnect");
+      } finally {
+        setDisconnectPending(false);
+      }
     },
-    onError: (error) => toast.error(error.message || "Failed to disconnect"),
-  });
+  };
 
-  const uninstallConnector = trpc.connectors.uninstall.useMutation({
-    onSuccess: () => {
-      toast.success("Removed");
-      utils.connectors.list.invalidate();
-      onOpenChange(false);
+  const uninstallConnector = {
+    isPending: uninstallPending,
+    mutate: async (params: { id: string }) => {
+      setUninstallPending(true);
+      try {
+        await uninstallHook(params.id);
+        toast.success("Removed");
+        onOpenChange(false);
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to remove");
+      } finally {
+        setUninstallPending(false);
+      }
     },
-    onError: (error) => toast.error(error.message || "Failed to remove"),
-  });
+  };
 
   const connector = data?.connector;
   const definition = data?.definition;

@@ -11,6 +11,7 @@ import type { FileNode, FileTab } from "./views/code-view";
 
 export type CanvasViewType =
   | "browser"
+  | "editor"
   | "code"
   | "terminal"
   | "filePreview"
@@ -150,12 +151,12 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   shell_write_to_process: "terminal",
   shell_kill_process: "terminal",
 
-  // File tools — terminal view (shows ubuntu@sandbox output like Manus)
-  file_read: "terminal",
-  file_write: "terminal",
-  file_str_replace: "terminal",
-  file_find_in_content: "terminal",
-  file_find_by_name: "terminal",
+  // File tools — editor view (Manus FileToolView: filename header + read-only editor)
+  file_read: "editor",
+  file_write: "editor",
+  file_str_replace: "editor",
+  file_find_in_content: "editor",
+  file_find_by_name: "editor",
 
   // Code execution
   code_execute: "terminal",
@@ -172,8 +173,8 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   // Manus page -> browser
   make_manus_page: "browser",
 
-  // Text editor -> terminal (operates on files, shows terminal output)
-  text_editor: "terminal",
+  // Text editor -> editor view (operates on files, Manus FileToolView parity)
+  text_editor: "editor",
 
   // Slide present -> browser (generates viewable URL)
   slide_present: "browser",
@@ -603,6 +604,20 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
             contents[path] = contents[path].replace(oldStr, newStr);
           }
         }
+        if (toolName === "text_editor") {
+          const path = (args.path as string) ?? "";
+          const command = (args.command as string) ?? "";
+          if (path) {
+            if (command === "create" && args.file_text) {
+              contents[path] = args.file_text as string;
+            } else if (command === "str_replace" && args.old_str && contents[path]) {
+              contents[path] = contents[path].replace(args.old_str as string, (args.new_str as string) ?? "");
+            } else if (command === "view" && toolPart.state === "output-available" && output) {
+              const content = (output.content as string) ?? "";
+              if (content) contents[path] = content;
+            }
+          }
+        }
       }
     }
     return contents;
@@ -737,9 +752,8 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     [allToolCallIds]
   );
 
-  // Accumulate terminal output from shell_exec AND file tools — per-session (Manus parity)
-  // Shell tools use the `id` param for session; file tools use "default" session.
-  // File operations render as ubuntu@sandbox terminal commands (Manus style).
+  // Accumulate terminal output from shell_exec — per-session (Manus parity)
+  // Shell tools use the `id` param for session tracking.
   // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
   useEffect(() => {
     if (!latestTool) return;
@@ -772,60 +786,6 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       });
 
       setActiveTerminalSession(sessionId);
-    } else if (
-      latestTool.toolName === "file_write" ||
-      latestTool.toolName === "file_read" ||
-      latestTool.toolName === "file_str_replace" ||
-      latestTool.toolName === "file_find_in_content" ||
-      latestTool.toolName === "file_find_by_name"
-    ) {
-      // File tools → terminal output styled as ubuntu@sandbox commands
-      const filePath = ((latestTool.args?.path ?? latestTool.args?.file) as string) ?? "";
-      const fileName = filePath.split("/").pop() || filePath;
-      let cmd = "";
-      let result = "";
-
-      if (latestTool.toolName === "file_write") {
-        const bytes = (output.bytesWritten as number) || (output.size as number) || 0;
-        cmd = `cat > ${filePath}`;
-        result = `\x1b[32m✓\x1b[0m Wrote ${fileName} (${bytes} bytes)`;
-      } else if (latestTool.toolName === "file_read") {
-        cmd = `cat ${filePath}`;
-        const content = (output.content as string) ?? "";
-        const lines = content.split("\n");
-        result = lines.length > 20 ? lines.slice(0, 20).join("\n") + `\n... (${lines.length} lines)` : content;
-      } else if (latestTool.toolName === "file_str_replace") {
-        cmd = `sed -i 's/.../.../g' ${filePath}`;
-        result = `\x1b[32m✓\x1b[0m Edited ${fileName}`;
-      } else if (latestTool.toolName === "file_find_in_content") {
-        const regex = (latestTool.args?.regex as string) ?? "";
-        cmd = `grep -rn '${regex}' ${filePath}`;
-        result = (output.matches as string) ?? (output.output as string) ?? "";
-      } else if (latestTool.toolName === "file_find_by_name") {
-        const glob = (latestTool.args?.glob as string) ?? "*";
-        cmd = `find ${filePath} -name '${glob}'`;
-        result = (output.files as string) ?? (output.output as string) ?? "";
-      }
-
-      if (cmd) {
-        const sessionId = "default";
-        setTerminalSessions((prev) => {
-          const sessionLines = prev[sessionId] ?? [];
-          const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
-          if (lastCmd === `$ ${cmd}`) return prev;
-          return {
-            ...prev,
-            [sessionId]: [...sessionLines, `$ ${cmd}`, ...result.split("\n")],
-          };
-        });
-
-        setTerminalSessionOrder((prev) => {
-          if (prev.includes(sessionId)) return prev;
-          return [...prev, sessionId];
-        });
-
-        setActiveTerminalSession(sessionId);
-      }
     }
   }, [latestTool?.toolCallId, latestTool?.state]);
 
@@ -869,7 +829,8 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       agentFilePath &&
       (latestTool.toolName === "file_read" ||
         latestTool.toolName === "file_write" ||
-        latestTool.toolName === "file_str_replace")
+        latestTool.toolName === "file_str_replace" ||
+        latestTool.toolName === "text_editor")
     ) {
       setUserSelectedPath(null);
     }
@@ -1275,6 +1236,49 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     state.onSelectTerminalSession = onSelectTerminalSession;
   }
 
+  // Editor view data — simple Manus-style: one file at a time, no tree/tabs
+  if (effectiveViewType === "editor" || availableViews.has("editor")) {
+    const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
+
+    if (pinnedTool && pinnedTool.viewType === "editor") {
+      const pinnedPath = (pinnedTool.args?.path ?? pinnedTool.args?.file) as string | undefined;
+      const pinOutput = pinnedTool.output as Record<string, unknown> | undefined;
+      const content =
+        typeof pinnedTool.output === "string"
+          ? pinnedTool.output
+          : (pinOutput?.content ?? (pinnedTool.args?.content as string | undefined));
+      if (content) {
+        state.activeFileContent = typeof content === "string" ? content : String(content);
+        state.activeFileLanguage = pinnedPath ? getLanguage(pinnedPath) : undefined;
+        if (pinnedPath) {
+          state.fileTabs = [{ id: "0", name: pinnedPath.split("/").pop() || pinnedPath, path: pinnedPath, isActive: true }];
+        }
+      }
+    } else if (Object.keys(allFileContents).length > 0) {
+      const allPaths = Object.keys(allFileContents);
+      const activePath =
+        (agentPath && allFileContents[agentPath] ? agentPath : null) ??
+        allPaths[allPaths.length - 1] ??
+        null;
+      if (activePath) {
+        state.activeFileContent = allFileContents[activePath];
+        state.activeFileLanguage = getLanguage(activePath);
+        state.fileTabs = [{ id: "0", name: activePath.split("/").pop() || activePath, path: activePath, isActive: true }];
+      }
+      state.allFileContents = allFileContents;
+    } else if (
+      (activeTool?.toolName === "file_write" && activeTool?.args?.content) ||
+      (activeTool?.toolName === "text_editor" && activeTool?.args?.command === "create" && activeTool?.args?.file_text)
+    ) {
+      const content = (activeTool.args.content ?? activeTool.args.file_text) as string;
+      state.activeFileContent = content;
+      state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
+      if (agentPath) {
+        state.fileTabs = [{ id: "0", name: agentPath.split("/").pop() || agentPath, path: agentPath, isActive: true }];
+      }
+    }
+  }
+
   // Code view data — populate when code is available (for view switching)
   if (effectiveViewType === "code" || availableViews.has("code")) {
     const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
@@ -1333,9 +1337,13 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
       state.allFileContents = allFileContents;
-    } else if (activeTool?.toolName === "file_write" && activeTool?.args?.content) {
+    } else if (
+      (activeTool?.toolName === "file_write" && activeTool?.args?.content) ||
+      (activeTool?.toolName === "text_editor" && activeTool?.args?.command === "create" && activeTool?.args?.file_text)
+    ) {
       // Show content being written even before output
-      state.activeFileContent = activeTool.args.content as string;
+      const content = (activeTool.args.content ?? activeTool.args.file_text) as string;
+      state.activeFileContent = content;
       state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
     }
   }

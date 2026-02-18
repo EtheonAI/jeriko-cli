@@ -1,3 +1,185 @@
 @import "@repo/design-system/styles/globals.css";
 @import "@repo/ai/components/tools/tool-animations.css";
 @source "../../../packages/ai/**/*.{ts,tsx}";
+
+/* ============================================================================
+   Manus-matching markdown rendering — used by Library file preview
+   Both modal (ReactMarkdown) and card inline preview (simpleMarkdownToHtml)
+   Exact values from Manus file-modal.html + library-file-page.html
+   ============================================================================ */
+
+.rubic-markdown {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-foreground);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Headings — Manus: font-[600], line-height 1.3, py-[3px] */
+.rubic-markdown h1 {
+  font-size: 1.875em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-block: 3px;
+  margin-top: 0;
+  margin-bottom: 4px;
+  color: var(--color-foreground);
+}
+
+.rubic-markdown h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-block: 3px;
+  margin-top: 1.4em;
+  margin-bottom: 1px;
+  color: var(--color-foreground);
+}
+
+.rubic-markdown h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-block: 3px;
+  margin-top: 1em;
+  margin-bottom: 1px;
+  color: var(--color-foreground);
+}
+
+.rubic-markdown h4,
+.rubic-markdown h5,
+.rubic-markdown h6 {
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.3;
+  padding-block: 3px;
+  margin-top: 1em;
+  margin-bottom: 1px;
+  color: var(--color-foreground);
+}
+
+/* Paragraphs — Manus: my-[1px] py-[3px] */
+.rubic-markdown p {
+  padding-block: 3px;
+  margin-block: 1px;
+}
+
+/* Inline code — Manus: rounded-[4px] px-[0.4em] py-[0.2em] bg text-[85%] */
+.rubic-markdown :not(pre) > code {
+  font-size: 85%;
+  border-radius: 4px;
+  padding: 0.2em 0.4em;
+  background: var(--color-muted);
+  color: var(--color-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Code blocks — Manus: rounded-lg, border, header bar with language + copy */
+.rubic-markdown pre {
+  margin-block: 4px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+  overflow: hidden;
+}
+
+.rubic-markdown pre code {
+  display: block;
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  background: transparent;
+  border-radius: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--color-foreground);
+}
+
+/* Lists — Manus: ps-[2px], py-[3px] per item */
+.rubic-markdown ul,
+.rubic-markdown ol {
+  padding-left: 1.5em;
+  margin-block: 1px;
+}
+
+.rubic-markdown li {
+  padding-block: 3px;
+  padding-inline-start: 2px;
+}
+
+.rubic-markdown ul { list-style-type: disc; }
+.rubic-markdown ol { list-style-type: decimal; }
+
+.rubic-markdown li > ul,
+.rubic-markdown li > ol {
+  margin-block: 0;
+}
+
+/* Links */
+.rubic-markdown a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rubic-markdown a:hover {
+  opacity: 0.8;
+}
+
+/* Blockquotes — Manus: border-left 3px */
+.rubic-markdown blockquote {
+  border-left: 3px solid var(--color-border);
+  margin-left: 0;
+  padding-left: 1em;
+  color: var(--color-muted-foreground);
+  margin-block: 4px;
+}
+
+/* Horizontal rules */
+.rubic-markdown hr {
+  height: 13px;
+  margin-block: 1px;
+  display: flex;
+  align-items: center;
+  border: none;
+}
+
+.rubic-markdown hr::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* Tables — Manus uses standard borders */
+.rubic-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 4px;
+  font-size: 0.875rem;
+}
+
+.rubic-markdown th,
+.rubic-markdown td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.rubic-markdown th {
+  font-weight: 600;
+  background: var(--color-muted);
+}
+
+/* Images */
+.rubic-markdown img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  margin-block: 4px;
+}
+
+/* Strong / em */
+.rubic-markdown strong { font-weight: 600; }
+.rubic-markdown em { font-style: italic; }

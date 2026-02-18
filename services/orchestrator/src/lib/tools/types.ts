@@ -7,6 +7,7 @@ export interface ToolContext {
   sessionId: string;
   userId: string;
   userName?: string;
+  projectId?: string;
 
   // Database
   db: DatabaseClient;
@@ -23,6 +24,12 @@ export interface ToolContext {
   searchProvider?: SearchProvider;
   imageProvider?: ImageProvider;
   storage: StorageClient;
+
+  // Plan Limits (from billing service)
+  planLimits?: {
+    maxParallelSubtasks: number;
+    planType: string;
+  };
 }
 
 export interface DatabaseClient {

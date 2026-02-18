@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, primaryKey, index } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
@@ -59,7 +59,9 @@ export const messages = pgTable("messages", {
     [key: string]: unknown;
   }>(),
   createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_messages_session_created").on(table.sessionId, table.createdAt),
+]);
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   session: one(agentSessions, {

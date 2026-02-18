@@ -186,3 +186,21 @@ export async function listFiles(
     lastModified: obj.LastModified ?? new Date(),
   }));
 }
+
+/** Fetch the first N bytes of a file directly from S3 (no presigned URL round-trip) */
+export async function getFileContentHead(key: string, maxBytes: number = 3072): Promise<string | null> {
+  const client = getClient();
+  try {
+    const result = await client.send(
+      new GetObjectCommand({
+        Bucket: getBucket(),
+        Key: key,
+        Range: `bytes=0-${maxBytes - 1}`,
+      })
+    );
+    if (!result.Body) return null;
+    return result.Body.transformToString("utf-8");
+  } catch {
+    return null;
+  }
+}

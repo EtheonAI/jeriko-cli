@@ -242,6 +242,7 @@ export function createGmailSendTool(ctx: ToolContext) {
               bcc: params.bcc,
               is_html: params.is_html,
             },
+            ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
           }),
           signal: AbortSignal.timeout(30000),
         });
@@ -313,6 +314,7 @@ export function createOutlookSendTool(ctx: ToolContext) {
               bcc: params.bcc,
               is_html: params.is_html,
             },
+            ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
           }),
           signal: AbortSignal.timeout(30000),
         });
@@ -374,6 +376,7 @@ export function createGmailDownloadTool(ctx: ToolContext) {
             arguments: {
               message_id: params.message_id,
             },
+            ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
           }),
           signal: AbortSignal.timeout(60000),
         });
@@ -467,6 +470,7 @@ export function createOutlookDownloadTool(ctx: ToolContext) {
             arguments: {
               message_id: params.message_id,
             },
+            ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
           }),
           signal: AbortSignal.timeout(60000),
         });

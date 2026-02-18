@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { cn } from "@repo/design-system/lib/utils";
 import { CableIcon, Loader2Icon, PlusIcon, SettingsIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 
 // ============================================================================
 // Types
@@ -83,16 +83,24 @@ export function ConnectionsModal({
 }: ConnectionsModalProps) {
   const router = useRouter();
 
-  // Fetch user's installed connectors
-  const { data: connectors, isLoading: loadingConnectors } = trpc.connectors.list.useQuery(undefined, {
-    retry: 1,
-    staleTime: 60_000,
-  });
+  // Local state for connectors data
+  const [connectors, setConnectors] = useState<any[] | null>(null);
+  const [definitions, setDefinitions] = useState<any[] | null>(null);
+  const [loadingConnectors, setLoadingConnectors] = useState(true);
 
-  // Fetch all definitions to show popular apps for new users
-  const { data: definitions } = trpc.connectors.listDefinitions.useQuery(undefined, {
-    staleTime: 5 * 60_000,
-  });
+  // Fetch user's installed connectors + definitions on mount
+  useEffect(() => {
+    const client = getTrpcClient();
+    setLoadingConnectors(true);
+    Promise.all([
+      client.connectors.list.query().catch(() => null),
+      client.connectors.listDefinitions.query().catch(() => null),
+    ]).then(([installed, defs]) => {
+      if (installed) setConnectors(installed as any[]);
+      if (defs) setDefinitions(defs as any[]);
+      setLoadingConnectors(false);
+    });
+  }, []);
 
   const isSelected = (id: string) => selectedConnections.some((c) => c.id === id);
   const selectedCount = selectedConnections.length;

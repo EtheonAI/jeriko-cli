@@ -33,15 +33,21 @@ import {
 import { cn } from "@repo/design-system/lib/utils";
 import type { CanvasViewType, ToolAction, ToolActionType } from "./use-canvas";
 import { ViewTabs } from "./view-tabs";
-import { BrowserView } from "./views/browser-view";
-import { CodeView, type FileNode, type FileTab } from "./views/code-view";
-import { TerminalView } from "./views/terminal-view";
-import { FilePreviewView } from "./views/file-preview-view";
+import { lazy, Suspense } from "react";
+import type { FileNode, FileTab } from "./views/code-view";
 import { EmptyView } from "./views/empty-view";
-import { SlidesView } from "./views/slides-view";
-import { WebDevIDEView } from "./views/web-dev-ide-view";
-import { AICanvasView } from "./views/ai-canvas-view";
-import { MapReduceView } from "./views/map-reduce-view";
+
+// Lazy-load heavy canvas views — only the active view's JS is loaded.
+// EmptyView stays eager since it's the default (lightweight).
+const BrowserView = lazy(() => import("./views/browser-view").then(m => ({ default: m.BrowserView })));
+const CodeView = lazy(() => import("./views/code-view").then(m => ({ default: m.CodeView })));
+const EditorView = lazy(() => import("./views/editor-view").then(m => ({ default: m.EditorView })));
+const TerminalView = lazy(() => import("./views/terminal-view").then(m => ({ default: m.TerminalView })));
+const FilePreviewView = lazy(() => import("./views/file-preview-view").then(m => ({ default: m.FilePreviewView })));
+const SlidesView = lazy(() => import("./views/slides-view").then(m => ({ default: m.SlidesView })));
+const WebDevIDEView = lazy(() => import("./views/web-dev-ide-view").then(m => ({ default: m.WebDevIDEView })));
+const AICanvasView = lazy(() => import("./views/ai-canvas-view").then(m => ({ default: m.AICanvasView })));
+const MapReduceView = lazy(() => import("./views/map-reduce-view").then(m => ({ default: m.MapReduceView })));
 
 // ============================================================================
 // Types
@@ -172,6 +178,7 @@ const VIEW_INFO: Record<
   { label: string; icon: LucideIcon; color: string }
 > = {
   browser: { label: "Browser", icon: GlobeIcon, color: "text-blue-400" },
+  editor: { label: "Editor", icon: PencilIcon, color: "text-amber-400" },
   code: { label: "Code Editor", icon: CodeIcon, color: "text-green-400" },
   terminal: {
     label: "Terminal",
@@ -483,6 +490,11 @@ export function AgentCanvas({
       {/* Content                                                           */}
       {/* ================================================================= */}
       <div className="min-h-0 flex-1 overflow-hidden">
+        <Suspense fallback={
+          <div className="flex h-full items-center justify-center">
+            <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-muted-foreground/60" />
+          </div>
+        }>
         {viewType === "browser" && (
           <BrowserView
             url={browserUrl}
@@ -502,6 +514,13 @@ export function AgentCanvas({
             nekoUrl={nekoUrl}
             streamUrl={streamUrl}
             onUserControlChange={onUserControlChange}
+          />
+        )}
+        {viewType === "editor" && (
+          <EditorView
+            filePath={fileTabs?.find((t) => t.isActive)?.path}
+            content={activeFileContent}
+            language={activeFileLanguage}
           />
         )}
         {viewType === "code" && (
@@ -560,6 +579,7 @@ export function AgentCanvas({
         )}
         {viewType === "mapReduce" && <MapReduceView />}
         {viewType === "empty" && <EmptyView />}
+        </Suspense>
       </div>
 
       {/* ================================================================= */}

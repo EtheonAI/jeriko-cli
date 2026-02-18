@@ -5,8 +5,8 @@ import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { useSettings } from "./settings-context";
 import { SettingsContent } from "./settings-content";
 import { SettingsNav } from "./settings-nav";
-import { trpc } from "@/lib/trpc/client";
-import { useEffect } from "react";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useEffect, useRef } from "react";
 
 type SettingsDialogProps = {
   user?: {
@@ -19,28 +19,32 @@ type SettingsDialogProps = {
 
 export function SettingsDialog({ user, isPro = false }: SettingsDialogProps) {
   const { isOpen, closeSettings } = useSettings();
-  const utils = trpc.useUtils();
+  const hasPrefetched = useRef(false);
 
+  // Only prefetch settings data when the dialog is OPENED, not on every page load.
+  // This saves 15 network requests on initial page load.
   useEffect(() => {
-    // Prefetch key settings data early so tabs are instant on open.
-    utils.notifications.getPreferences.prefetch();
-    utils.user.getPreferences.prefetch();
-    utils.user.getProfile.prefetch();
-    utils.billing.getSubscription.prefetch();
-    utils.billing.listPlans.prefetch();
-    utils.billing.listPaymentMethods.prefetch();
-    utils.billing.listInvoices.prefetch({ limit: 5 });
-    utils.billing.listCreditPackages.prefetch();
-    utils.billing.getCreditBalance.prefetch();
-    utils.billing.getUsageSummary.prefetch();
-    utils.billing.getUsageRecords.prefetch({ limit: 10 });
-    utils.connectors.listDefinitions.prefetch();
-    utils.connectors.list.prefetch();
-    utils.webhooks.list.prefetch();
-    utils.webhooks.getEventTypes.prefetch();
-    // webhooks.getDeliveries requires a webhookId — prefetched on-demand in the tab
-    // mail.getOrCreateMailbox depends on agent_mailboxes table — prefetched on-demand
-  }, [utils]);
+    if (!isOpen || hasPrefetched.current) return;
+    hasPrefetched.current = true;
+
+    const client = getTrpcClient();
+    // Fire-and-forget prefetch — warm the vanilla client cache
+    client.notifications.getPreferences.query().catch(() => {});
+    client.user.getPreferences.query().catch(() => {});
+    client.user.getProfile.query().catch(() => {});
+    client.billing.getSubscription.query().catch(() => {});
+    client.billing.listPlans.query().catch(() => {});
+    client.billing.listPaymentMethods.query().catch(() => {});
+    client.billing.listInvoices.query({ limit: 5 }).catch(() => {});
+    client.billing.listCreditPackages.query().catch(() => {});
+    client.billing.getCreditBalance.query().catch(() => {});
+    client.billing.getUsageSummary.query().catch(() => {});
+    client.billing.getUsageRecords.query({ limit: 10 }).catch(() => {});
+    client.connectors.listDefinitions.query().catch(() => {});
+    client.connectors.list.query().catch(() => {});
+    client.webhooks.list.query().catch(() => {});
+    client.webhooks.getEventTypes.query().catch(() => {});
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeSettings()}>

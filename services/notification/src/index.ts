@@ -70,7 +70,7 @@ const UpdatePreferencesBody = z.object({
 async function main() {
   await initDb();
 
-  const { app, logger, start } = await createService({ name: "notification" });
+  const { app, logger, start } = await createService({ name: "notification", port: parseInt(process.env.PORT || "4006", 10) });
 
   if (!knock) {
     logger.warn("KNOCK_SECRET_API_KEY not set - email delivery via Knock disabled");

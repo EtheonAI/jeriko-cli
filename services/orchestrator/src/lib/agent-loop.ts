@@ -17,6 +17,7 @@ import {
 import { buildManusSystemPrompt, type SystemPromptContext } from "./system-prompt.js";
 import { getOrCreateSandbox } from "./e2b-manager.js";
 import { getRsaHeaders } from "./rsa-auth.js";
+import { meterStep, meterTool } from "./billing-client.js";
 
 export interface AgentLoopInput {
   sessionId: string;
@@ -29,7 +30,14 @@ export interface AgentLoopInput {
   fileContext?: { name: string; type: string; url?: string }[];
   /** Session metadata from DB — used for sandbox recovery (contains sandboxId from previous runs) */
   sessionMeta?: Record<string, unknown>;
+  /** Project ID for project-scoped Composio entity routing */
+  projectId?: string;
   abortSignal?: AbortSignal;
+  /** Plan limits from billing service — used for parallel subtask caps */
+  planLimits?: {
+    maxParallelSubtasks: number;
+    planType: string;
+  };
 }
 
 export interface AgentLoopResult {
@@ -77,7 +85,9 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     connections,
     fileContext: inputFileContext,
     sessionMeta,
+    projectId,
     abortSignal,
+    planLimits,
   } = input;
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
@@ -117,6 +127,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     sessionId,
     userId,
     userName,
+    projectId,
     db: createNoopDb(),
     sandboxId: sandboxId || "no-sandbox",
     terminalServerUrl: terminalServerUrl || "no-sandbox",
@@ -125,6 +136,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     storage: createStorageClient(),
     searchProvider: createDefaultSearchProvider(),
     imageProvider: createDefaultImageProvider(),
+    planLimits,
   };
 
   // ── Download uploaded files to sandbox ~/upload/ ───────────────────────
@@ -192,7 +204,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // Runs in parallel with sandbox creation — gracefully returns [] if unavailable.
   let composioSpecs: ComposioToolSpec[] = [];
   try {
-    composioSpecs = await fetchComposioTools(userId);
+    composioSpecs = await fetchComposioTools(userId, projectId);
     if (composioSpecs.length > 0) {
       console.log(`[agent-loop] Loaded ${composioSpecs.length} Composio tools for user ${userId}`);
     }
@@ -204,8 +216,40 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   const dynamicTools =
     composioSpecs.length > 0 ? createConnectorTools(toolCtx, composioSpecs) : undefined;
 
-  // Group tool names by app for system prompt injection
+  // Group tool names by app for system prompt injection.
+  // groupToolsByApp skips static tools (gmail, outlook etc) — but the system prompt
+  // needs to know ALL connected apps. Build a complete map from ALL specs.
   const composioToolsByApp = composioSpecs.length > 0 ? groupToolsByApp(composioSpecs) : undefined;
+
+  // Build a COMPLETE tools-by-app map including static tools that groupToolsByApp skips.
+  // Without this, the system prompt says "no integrations" for apps with static tool overrides.
+  const allToolsByApp: Record<string, string[]> | undefined = composioSpecs.length > 0
+    ? (() => {
+        const map: Record<string, string[]> = { ...(composioToolsByApp ?? {}) };
+        for (const spec of composioSpecs) {
+          const app = spec.appName.toLowerCase();
+          if (!map[app]) {
+            // This app's tools were all filtered by STATIC_TOOL_NAMES.
+            // Add them with their sanitised names so the system prompt lists them.
+            const toolName = spec.name
+              .toLowerCase()
+              .replace(/[^a-z0-9_]/g, "_")
+              .replace(/_+/g, "_")
+              .replace(/^_|_$/g, "");
+            map[app] = map[app] ?? [];
+            if (toolName && !map[app]!.includes(toolName)) {
+              map[app]!.push(toolName);
+            }
+          }
+        }
+        return map;
+      })()
+    : undefined;
+
+  // Build list of ALL connected app names (for connectedApps fallback).
+  const allConnectedApps = composioSpecs.length > 0
+    ? [...new Set(composioSpecs.map((s) => s.appName.charAt(0).toUpperCase() + s.appName.slice(1)))]
+    : undefined;
 
   // ── Manus-parity: Inject MCP config into sandbox ──────────────────────
   // Write builtin_tools.json + set ENABLED_MCP_SERVERS so rubic-mcp-cli
@@ -270,10 +314,11 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     currentDate: new Date().toISOString().split("T")[0] ?? new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     activeSkills: skills,
-    connectedApps: connections?.map((c) => c.name || c.id),
+    // Use frontend-selected connections first, fall back to auto-detected apps from Composio
+    connectedApps: connections?.map((c) => c.name || c.id) ?? allConnectedApps,
     selectedConnections: connections,
     fileContext: inputFileContext?.length ? inputFileContext : extractFileContext(messages),
-    composioToolsByApp,
+    composioToolsByApp: allToolsByApp,
     enabledMcpServers,
   };
 
@@ -335,6 +380,31 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     stopWhen: stepCountIs(maxSteps),
     tools,
     abortSignal,
+    // Metering hook: called when each step finishes (LLM completion + tool execution)
+    onStepFinish: ({ stepType, usage, toolCalls }) => {
+      // Meter the LLM step (token usage)
+      if (usage && (usage.promptTokens > 0 || usage.completionTokens > 0)) {
+        meterStep({
+          userId,
+          sessionId,
+          stepId: `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          model: anthropicModel,
+        });
+      }
+
+      // Meter each tool call
+      if (toolCalls && toolCalls.length > 0) {
+        for (const tc of toolCalls) {
+          meterTool({
+            userId,
+            sessionId,
+            toolName: tc.toolName,
+          });
+        }
+      }
+    },
   });
 
   // Build sandbox metadata for message-metadata events

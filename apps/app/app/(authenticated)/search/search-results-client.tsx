@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@repo/design-system/components/ui/card";
@@ -79,20 +79,22 @@ export function SearchResultsClient({
     }
   }, [debouncedQuery, activeType, router]);
 
-  // TRPC search query
-  const {
-    data: searchResults,
-    isLoading,
-    error,
-  } = trpc.search.global.useQuery(
-    {
-      query: debouncedQuery,
-      limit: 50,
-    },
-    {
-      enabled: debouncedQuery.length >= 2,
+  // Search query via vanilla tRPC
+  const [searchResults, setSearchResults] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (debouncedQuery.length < 2) {
+      setSearchResults(null);
+      return;
     }
-  );
+    setIsLoading(true);
+    getTrpcClient()
+      .search.global.query({ query: debouncedQuery, limit: 50 })
+      .then((data) => setSearchResults(data))
+      .catch(() => setSearchResults(null))
+      .finally(() => setIsLoading(false));
+  }, [debouncedQuery]);
 
   // Filter results by type
   const filteredResults =

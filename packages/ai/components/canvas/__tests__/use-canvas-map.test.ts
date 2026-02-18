@@ -69,7 +69,7 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Terminal tools -> "terminal" (12 entries: 6 shell + 5 file + 1 text_editor)
+// 2. Terminal tools -> "terminal" (6 entries: shell + code_execute)
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — terminal tools", () => {
@@ -81,19 +81,11 @@ describe("TOOL_VIEW_MAP — terminal tools", () => {
     "shell_write_to_process",
     "shell_kill_process",
     "code_execute",
-    // File tools — terminal view shows ubuntu@sandbox output (5)
-    "file_read",
-    "file_write",
-    "file_str_replace",
-    "file_find_in_content",
-    "file_find_by_name",
-    // Text editor (1)
-    "text_editor",
   ].sort();
 
-  it("should contain exactly 12 terminal entries", () => {
+  it("should contain exactly 6 terminal entries", () => {
     const terminalKeys = keysForView("terminal");
-    expect(terminalKeys).toHaveLength(12);
+    expect(terminalKeys).toHaveLength(6);
   });
 
   it("should map every expected terminal tool to 'terminal'", () => {
@@ -107,6 +99,39 @@ describe("TOOL_VIEW_MAP — terminal tools", () => {
   it("should not have any extra terminal entries beyond the expected set", () => {
     const terminalKeys = keysForView("terminal");
     expect(terminalKeys).toEqual(EXPECTED_TERMINAL_TOOLS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2b. Editor tools -> "editor" (6 entries: file tools + text_editor — Manus FileToolView parity)
+// ---------------------------------------------------------------------------
+
+describe("TOOL_VIEW_MAP — editor tools", () => {
+  const EXPECTED_EDITOR_TOOLS = [
+    "file_read",
+    "file_write",
+    "file_str_replace",
+    "file_find_in_content",
+    "file_find_by_name",
+    "text_editor",
+  ].sort();
+
+  it("should contain exactly 6 editor entries", () => {
+    const editorKeys = keysForView("editor");
+    expect(editorKeys).toHaveLength(6);
+  });
+
+  it("should map every expected editor tool to 'editor'", () => {
+    for (const tool of EXPECTED_EDITOR_TOOLS) {
+      expect(TOOL_VIEW_MAP[tool], `${tool} should map to "editor"`).toBe(
+        "editor"
+      );
+    }
+  });
+
+  it("should not have any extra editor entries beyond the expected set", () => {
+    const editorKeys = keysForView("editor");
+    expect(editorKeys).toEqual(EXPECTED_EDITOR_TOOLS);
   });
 });
 
@@ -173,18 +198,19 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — total count", () => {
-  it("should have exactly 43 entries (22 browser + 12 terminal + 9 webDevIDE)", () => {
+  it("should have exactly 43 entries (22 browser + 6 terminal + 6 editor + 9 webDevIDE)", () => {
     const totalKeys = Object.keys(TOOL_VIEW_MAP);
     expect(totalKeys).toHaveLength(43);
   });
 
-  it("should have counts that add up: browser + terminal + webDevIDE = total", () => {
+  it("should have counts that add up: browser + terminal + editor + webDevIDE = total", () => {
     const browserCount = keysForView("browser").length;
     const terminalCount = keysForView("terminal").length;
+    const editorCount = keysForView("editor").length;
     const webdevCount = keysForView("webDevIDE").length;
     const total = Object.keys(TOOL_VIEW_MAP).length;
 
-    expect(browserCount + terminalCount + webdevCount).toBe(total);
+    expect(browserCount + terminalCount + editorCount + webdevCount).toBe(total);
   });
 });
 
@@ -193,9 +219,9 @@ describe("TOOL_VIEW_MAP — total count", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — no unexpected view types", () => {
-  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "webDevIDE"];
+  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "editor", "webDevIDE"];
 
-  it("every value should be one of: browser, terminal, webDevIDE", () => {
+  it("every value should be one of: browser, terminal, editor, webDevIDE", () => {
     const viewTypes = new Set(Object.values(TOOL_VIEW_MAP));
 
     for (const vt of viewTypes) {
@@ -206,8 +232,8 @@ describe("TOOL_VIEW_MAP — no unexpected view types", () => {
     }
   });
 
-  it("should use exactly the three expected view types", () => {
+  it("should use exactly the four expected view types", () => {
     const viewTypes = [...new Set(Object.values(TOOL_VIEW_MAP))].sort();
-    expect(viewTypes).toEqual(["browser", "terminal", "webDevIDE"]);
+    expect(viewTypes).toEqual(["browser", "editor", "terminal", "webDevIDE"]);
   });
 });

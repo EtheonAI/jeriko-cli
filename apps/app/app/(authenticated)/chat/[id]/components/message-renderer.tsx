@@ -4,8 +4,9 @@ import * as React from "react";
 import { useMemo, useState, useCallback } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import {
-  ChevronRightIcon,
+  ChevronDownIcon,
   CheckCircle2Icon,
+  CheckIcon,
   CircleDotIcon,
   CircleIcon,
   XCircleIcon,
@@ -282,19 +283,25 @@ function CollapsibleSection({
 
   return (
     <div className="flex gap-3 group/section">
-      {/* Timeline column — icon + connector line */}
-      <div className="flex flex-col items-center w-5 shrink-0">
-        <div className="flex size-5 shrink-0 items-center justify-center">
+      {/* Timeline column — Manus: w-[24px], icon at center, dashed line at start-[8px] */}
+      <div className="flex flex-col items-center w-6 shrink-0 relative">
+        <div className="flex size-4 shrink-0 items-center justify-center z-10">
           {icon}
         </div>
         {!isLast && (
-          <div className={cn("mt-0.5 w-px flex-1 min-h-[8px]", lineColor)} />
+          <div
+            className={cn(
+              "absolute border-l border-dashed top-4",
+              lineColor,
+            )}
+            style={{ left: "8px", height: "calc(100% + 14px)" }}
+          />
         )}
       </div>
 
       {/* Content column */}
       <div className={cn("min-w-0 flex-1", !isLast && "pb-2")}>
-        {/* Header row */}
+        {/* Header row — Manus: text-sm, font-medium, gap-2, clickable */}
         <button
           type="button"
           onClick={toggle}
@@ -308,7 +315,7 @@ function CollapsibleSection({
           <span
             className={cn(
               "flex-1 text-sm font-medium truncate",
-              titleClassName ?? "text-foreground/70",
+              titleClassName ?? "text-[var(--rubic-text-primary,theme(colors.foreground/70))]",
             )}
           >
             {title}
@@ -316,11 +323,12 @@ function CollapsibleSection({
 
           {badge}
 
+          {/* Manus: chevron-down rotates 180° when expanded */}
           {hasChildren && (
-            <ChevronRightIcon
+            <ChevronDownIcon
               className={cn(
-                "size-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200",
-                isOpen && "rotate-90",
+                "size-4 shrink-0 text-muted-foreground/50 transition-transform duration-300",
+                isOpen && "rotate-180",
               )}
             />
           )}
@@ -333,18 +341,16 @@ function CollapsibleSection({
           </p>
         )}
 
-        {/* Collapsible body */}
+        {/* Collapsible body — Manus: gap-3 (12px), pt-2, transition max-height */}
         {hasChildren && (
           <div
             className={cn(
-              "grid transition-all duration-300 ease-in-out",
-              isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+              "transition-[max-height,opacity] duration-150 ease-in-out overflow-hidden",
+              isOpen ? "max-h-[100000px] opacity-100" : "max-h-0 opacity-0",
             )}
           >
-            <div className="overflow-hidden">
-              <div className="flex flex-col gap-0.5 pt-1.5">
-                {children}
-              </div>
+            <div className="flex flex-col gap-3 pt-2">
+              {children}
             </div>
           </div>
         )}
@@ -372,10 +378,10 @@ function PlanStepSection({
 }) {
   const lineColor =
     step.status === "completed"
-      ? "bg-green-500/20"
+      ? "border-green-500/30"
       : step.status === "in_progress"
-        ? "bg-blue-500/20"
-        : "bg-border/50";
+        ? "border-blue-500/30"
+        : "border-[var(--rubic-border-dark,theme(colors.border))]";
 
   const titleColor =
     step.status === "completed"
@@ -414,7 +420,12 @@ function PlanStepSection({
 
 function StepStatusIcon({ status }: { status: PlanStep["status"] }) {
   if (status === "completed") {
-    return <CheckCircle2Icon className="size-4 text-green-500" />;
+    // Manus: filled circle with checkmark, 16x16, bg-[var(--text-disable)]
+    return (
+      <div className="size-4 flex-shrink-0 flex items-center justify-center rounded-full bg-[var(--rubic-text-disable,theme(colors.muted.foreground/40))]">
+        <CheckIcon className="size-2.5 text-white" />
+      </div>
+    );
   }
   if (status === "in_progress") {
     return <CircleDotIcon className="size-4 text-blue-500 animate-pulse" />;
@@ -422,8 +433,10 @@ function StepStatusIcon({ status }: { status: PlanStep["status"] }) {
   if (status === "error") {
     return <XCircleIcon className="size-4 text-destructive" />;
   }
-  // Pending
-  return <CircleIcon className="size-4 text-muted-foreground/30" />;
+  // Pending — Manus: empty circle with border, 16x16
+  return (
+    <div className="size-4 flex-shrink-0 flex items-center justify-center border border-[var(--rubic-border-dark,theme(colors.border))] rounded-full" />
+  );
 }
 
 // ============================================================================
@@ -456,11 +469,13 @@ function AutoGroupedToolRendering({
   messageId,
   onViewInCanvas,
   timestamp,
+  onPreviewFile,
 }: {
   parts: UIMessagePart[];
   messageId: string;
   onViewInCanvas?: (toolCallId: string) => void;
   timestamp?: string;
+  onPreviewFile?: (file: FileUIPart) => void;
 }) {
   const { leading, grouped, trailing, toolNames } = useMemo(() => {
     const leadingParts: { part: UIMessagePart; idx: number }[] = [];
@@ -525,7 +540,7 @@ function AutoGroupedToolRendering({
     <>
       {/* Leading text — before tools */}
       {leading.map(({ part, idx }) =>
-        renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+        renderPart(part, idx, messageId, onViewInCanvas, timestamp, onPreviewFile)
       )}
 
       {/* Tool group — collapsible section */}
@@ -533,7 +548,7 @@ function AutoGroupedToolRendering({
         <CollapsibleSection
           icon={
             allToolsDone
-              ? <CheckCircle2Icon className="size-4 text-green-500" />
+              ? <StepStatusIcon status="completed" />
               : <CircleDotIcon className="size-4 text-blue-500 animate-pulse" />
           }
           title={groupLabel}
@@ -546,17 +561,17 @@ function AutoGroupedToolRendering({
           }
           isLast={trailing.length === 0}
           defaultOpen={true}
-          lineColor={allToolsDone ? "bg-green-500/20" : "bg-blue-500/20"}
+          lineColor={allToolsDone ? "border-green-500/30" : "border-blue-500/30"}
         >
           {grouped.map(({ part, idx }) =>
-            renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+            renderPart(part, idx, messageId, onViewInCanvas, timestamp, onPreviewFile)
           )}
         </CollapsibleSection>
       )}
 
       {/* Trailing text — the "answer" */}
       {trailing.map(({ part, idx }) =>
-        renderPart(part, idx, messageId, onViewInCanvas, timestamp)
+        renderPart(part, idx, messageId, onViewInCanvas, timestamp, onPreviewFile)
       )}
     </>
   );
@@ -571,7 +586,8 @@ function renderPart(
   index: number,
   _messageId: string,
   onViewInCanvas?: (toolCallId: string) => void,
-  timestamp?: string
+  timestamp?: string,
+  onPreviewFile?: (file: FileUIPart) => void,
 ) {
   if (!part || typeof part !== "object" || !("type" in part)) return null;
   if (isStepStartUIPart(part)) return null;
@@ -590,7 +606,7 @@ function renderPart(
 
   // File parts
   if (isFileUIPart(part)) {
-    return <FilePartRenderer key={`file-${index}`} part={part as FileUIPart} />;
+    return <FilePartRenderer key={`file-${index}`} part={part as FileUIPart} onPreview={onPreviewFile} />;
   }
 
   // Tool parts — render as clickable pills
@@ -624,10 +640,11 @@ interface MessageRendererProps {
   isStreaming: boolean;
   onViewSources?: (sources: (SourceUrlUIPart | SourceDocumentUIPart)[]) => void;
   onViewInCanvas?: (toolCallId: string) => void;
+  onPreviewFile?: (file: FileUIPart) => void;
 }
 
 export function MessageRenderer(props: MessageRendererProps) {
-  const { message, onViewSources, onViewInCanvas } = props;
+  const { message, onViewSources, onViewInCanvas, onPreviewFile } = props;
   const parts = message.parts as unknown as UIMessagePart[];
 
   // Format timestamp for tool pill hover
@@ -656,31 +673,29 @@ export function MessageRenderer(props: MessageRendererProps) {
     return collected;
   }, [parts]);
 
-  // Check if message has plan steps
-  const hasPlan = useMemo(() => {
-    if (!parts || !Array.isArray(parts)) return false;
-    return parts.some((p) => {
-      if (!p || typeof p !== "object" || !("type" in p)) return false;
-      if (!isToolUIPart(p)) return false;
-      const name = getToolName(p as StaticToolUIPart | DynamicToolUIPart);
-      return PLAN_TOOL_NAMES.has(name);
-    });
-  }, [parts]);
+  // Single-pass: detect plan, tools, and build sections in one memo
+  const { hasPlan, hasTools, sections } = useMemo(() => {
+    if (!parts || !Array.isArray(parts)) {
+      return { hasPlan: false, hasTools: false, sections: [] as MessageSection[] };
+    }
 
-  // Build sections
-  const sections = useMemo(() => {
-    if (!parts || !Array.isArray(parts)) return [];
-    if (!hasPlan) return [];
-    return buildSections(parts);
-  }, [parts, hasPlan]);
+    let foundPlan = false;
+    let foundTools = false;
+    for (const p of parts) {
+      if (!p || typeof p !== "object" || !("type" in p)) continue;
+      if (!isToolUIPart(p)) continue;
+      foundTools = true;
+      if (PLAN_TOOL_NAMES.has(getToolName(p as StaticToolUIPart | DynamicToolUIPart))) {
+        foundPlan = true;
+        break; // No need to continue — hasPlan implies hasTools
+      }
+    }
 
-  // Check if message has any tools (for auto-grouping)
-  const hasTools = useMemo(() => {
-    if (!parts || !Array.isArray(parts)) return false;
-    return parts.some((p) => {
-      if (!p || typeof p !== "object" || !("type" in p)) return false;
-      return isToolUIPart(p);
-    });
+    return {
+      hasPlan: foundPlan,
+      hasTools: foundTools,
+      sections: foundPlan ? buildSections(parts) : [],
+    };
   }, [parts]);
 
   // Flat rendering — no plan
@@ -696,6 +711,7 @@ export function MessageRenderer(props: MessageRendererProps) {
             messageId={message.id}
             onViewInCanvas={onViewInCanvas}
             timestamp={timestamp}
+            onPreviewFile={onPreviewFile}
           />
           {sources.length > 0 && <SourcesGroup sources={sources} onViewSources={onViewSources} />}
         </>
@@ -722,13 +738,13 @@ export function MessageRenderer(props: MessageRendererProps) {
 
         if (fileGroup.length === 1) {
           flatElements.push(
-            renderPart(fileGroup[0]!.part, fileGroup[0]!.index, message.id, onViewInCanvas, timestamp)
+            renderPart(fileGroup[0]!.part, fileGroup[0]!.index, message.id, onViewInCanvas, timestamp, onPreviewFile)
           );
         } else {
           flatElements.push(
             <div key={`file-group-${fileGroup[0]!.index}`} className="grid grid-cols-2 gap-2">
               {fileGroup.map(({ part: fp, index: fi }) => (
-                <FilePartRenderer key={`file-${fi}`} part={fp} />
+                <FilePartRenderer key={`file-${fi}`} part={fp} onPreview={onPreviewFile} />
               ))}
             </div>
           );
@@ -736,7 +752,7 @@ export function MessageRenderer(props: MessageRendererProps) {
         continue;
       }
 
-      flatElements.push(renderPart(part, i, message.id, onViewInCanvas, timestamp));
+      flatElements.push(renderPart(part, i, message.id, onViewInCanvas, timestamp, onPreviewFile));
       i++;
     }
 
@@ -776,7 +792,7 @@ export function MessageRenderer(props: MessageRendererProps) {
           return (
             <React.Fragment key={`flat-${sIdx}`}>
               {section.parts.map((part, pIdx) =>
-                renderPart(part, section.partIndices[pIdx]!, message.id, onViewInCanvas, timestamp)
+                renderPart(part, section.partIndices[pIdx]!, message.id, onViewInCanvas, timestamp, onPreviewFile)
               )}
             </React.Fragment>
           );
@@ -796,7 +812,7 @@ export function MessageRenderer(props: MessageRendererProps) {
             toolCount={toolCount}
           >
             {stepParts.map((part, pIdx) =>
-              renderPart(part, partIndices[pIdx]!, message.id, onViewInCanvas, timestamp)
+              renderPart(part, partIndices[pIdx]!, message.id, onViewInCanvas, timestamp, onPreviewFile)
             )}
           </PlanStepSection>
         );

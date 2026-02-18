@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Fragment, useMemo, useState } from "react";
 import type { UIMessage } from "ai";
-import type { SourceUrlUIPart, SourceDocumentUIPart } from "@repo/ai/lib/types";
+import type { SourceUrlUIPart, SourceDocumentUIPart, FileUIPart } from "@repo/ai/lib/types";
 import { cn } from "@repo/design-system/lib/utils";
 import { StarIcon } from "lucide-react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -94,6 +94,7 @@ interface ChatMessageProps {
   onRate?: (messageId: string, rating: number) => void;
   onViewSources?: (sources: (SourceUrlUIPart | SourceDocumentUIPart)[]) => void;
   onViewInCanvas?: (toolCallId: string) => void;
+  onPreviewFile?: (file: FileUIPart) => void;
 }
 
 export const ChatMessage = React.memo(
@@ -107,6 +108,7 @@ export const ChatMessage = React.memo(
     onRate,
     onViewSources,
     onViewInCanvas,
+    onPreviewFile,
   }: ChatMessageProps) {
     const isAssistant = message.role === "assistant";
 
@@ -136,6 +138,7 @@ export const ChatMessage = React.memo(
               isStreaming={isStreaming}
               onViewSources={onViewSources}
               onViewInCanvas={onViewInCanvas}
+              onPreviewFile={onPreviewFile}
             />
           </MessageContent>
         </Message>
@@ -167,9 +170,11 @@ export const ChatMessage = React.memo(
   (prev, next) =>
     prev.message.id === next.message.id &&
     prev.message.parts === next.message.parts &&
+    prev.message.metadata === next.message.metadata &&
     prev.isLastMessage === next.isLastMessage &&
     prev.isStreaming === next.isStreaming &&
     prev.rating === next.rating &&
     prev.onViewSources === next.onViewSources &&
-    prev.onViewInCanvas === next.onViewInCanvas
+    prev.onViewInCanvas === next.onViewInCanvas &&
+    prev.onPreviewFile === next.onPreviewFile
 );

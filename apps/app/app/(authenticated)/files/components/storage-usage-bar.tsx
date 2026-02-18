@@ -1,14 +1,20 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Progress } from "@repo/design-system/components/ui/progress";
-import { trpc } from "@/lib/trpc/client";
+import { useLibraryData } from "@/lib/store/hooks";
 import { formatFileSize } from "@/lib/utils/file-utils";
 import { HardDriveIcon } from "lucide-react";
 
 const STORAGE_LIMIT = 5 * 1024 * 1024 * 1024; // 5 GB default
 
 export function StorageUsageBar() {
-  const { data } = trpc.files.getStorageUsage.useQuery();
+  const { getStorageUsage } = useLibraryData({ autoFetch: false });
+  const [data, setData] = useState<{ totalSize: number; totalCount: number } | null>(null);
+
+  useEffect(() => {
+    getStorageUsage().then(setData).catch(() => {});
+  }, [getStorageUsage]);
 
   if (!data) return null;
 

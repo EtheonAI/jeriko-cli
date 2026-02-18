@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { SidebarMenuItem, SidebarMenuButton } from "@repo/design-system/components/ui/sidebar";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import {
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarMenuAction,
+} from "@repo/design-system/components/ui/sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +43,7 @@ import {
   PaletteIcon,
   SearchIcon,
   ActivityIcon,
-  MoreHorizontalIcon,
+  EllipsisIcon,
   PenLineIcon,
   ShareIcon,
   StarIcon,
@@ -48,12 +52,11 @@ import {
   Trash2Icon,
   Loader2Icon,
   CheckIcon,
-  CopyIcon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
 import {
   removeSession,
@@ -101,7 +104,7 @@ type ChatItemProps = {
   chat: Chat;
 };
 
-export function ChatItem({ chat }: ChatItemProps) {
+export const ChatItem = memo(function ChatItem({ chat }: ChatItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(chat.title);
@@ -116,52 +119,20 @@ export function ChatItem({ chat }: ChatItemProps) {
   const pathname = usePathname();
   const router = useRouter();
   const isActive = pathname === `/chat/${chat.id}`;
-  const { isStreaming, currentStreamingSessionId } = useAppSelector((state) => state.chat);
-  const session = useAppSelector((state) =>
-    state.sessions.sessions.find((s: { id: string }) => s.id === chat.id)
+  // Narrow selectors: each returns a primitive, so ChatItem only re-renders
+  // when that specific value changes — not when any session is updated.
+  const isLoading = useAppSelector(
+    (state) => state.chat.isStreaming && state.chat.currentStreamingSessionId === chat.id
   );
-  const isLoading = isStreaming && currentStreamingSessionId === chat.id;
+  const isFavoriteFromRedux = useAppSelector(
+    (state) => state.sessions.sessions.find((s: { id: string }) => s.id === chat.id)?.isFavorite ?? false
+  );
   const dispatch = useAppDispatch();
+  const [isMoving, setIsMoving] = useState(false);
 
   const Icon = getIconForChat(chat.title);
-  const utils = trpc.useUtils();
 
-  const updateSession = trpc.sessions.update.useMutation({
-    onSuccess: (updated) => {
-      dispatch(updateSessionAction({ id: updated!.id, updates: updated as any }));
-    },
-    onError: () => utils.sessions.list.invalidate(),
-  });
-
-  const deleteSession = trpc.sessions.delete.useMutation({
-    onSuccess: () => {
-      dispatch(removeSession(chat.id));
-      utils.sessions.list.invalidate();
-    },
-    onError: () => utils.sessions.list.invalidate(),
-  });
-
-  const { data: projects } = trpc.projects.list.useQuery(
-    { status: "active", limit: 50 },
-    { enabled: showMoveDialog }
-  );
-
-  const addSessionToProject = trpc.projects.addSession.useMutation({
-    onSuccess: () => {
-      const project = projects?.find((p) => p.id === selectedProjectId);
-      toast.success(`Moved to ${project?.name ?? "project"}`);
-      dispatch(
-        updateSessionAction({
-          id: chat.id,
-          updates: { projectId: selectedProjectId },
-        })
-      );
-      setShowMoveDialog(false);
-    },
-    onError: (err) => {
-      toast.error(err.message ?? "Failed to move to project");
-    },
-  });
+  const projects = useAppSelector((state) => state.projects.projects);
 
   useEffect(() => {
     if (isRenaming && renameInputRef.current) {
@@ -191,10 +162,10 @@ export function ChatItem({ chat }: ChatItemProps) {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== chat.title) {
       dispatch(updateSessionAction({ id: chat.id, updates: { title: trimmed } }));
-      updateSession.mutate({ id: chat.id, title: trimmed });
+      getTrpcClient().sessions.update.mutate({ id: chat.id, title: trimmed }).catch(() => {});
     }
     setIsRenaming(false);
-  }, [renameValue, chat.title, chat.id, dispatch, updateSession]);
+  }, [renameValue, chat.title, chat.id, dispatch]);
 
   const handleRenameKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -209,49 +180,60 @@ export function ChatItem({ chat }: ChatItemProps) {
 
   const handleToggleFavorite = useCallback(() => {
     dispatch(toggleSessionFavorite(chat.id));
-    const isFav = !(session?.isFavorite ?? false);
-    updateSession.mutate({
-      id: chat.id,
-      metadata: { isFavorite: isFav },
-    });
+    const isFav = !(isFavoriteFromRedux ?? chat.isFavorite ?? false);
+    getTrpcClient()
+      .sessions.update.mutate({ id: chat.id, metadata: { isFavorite: isFav } })
+      .catch(() => {});
     toast.success(isFav ? "Added to favorites" : "Removed from favorites");
-  }, [chat.id, session?.isFavorite, dispatch, updateSession]);
+  }, [chat.id, chat.isFavorite, isFavoriteFromRedux, dispatch]);
 
-  const handleMoveToProject = useCallback(() => {
+  const handleMoveToProject = useCallback(async () => {
     if (!selectedProjectId) return;
-    addSessionToProject.mutate({
-      projectId: selectedProjectId,
-      sessionId: chat.id,
-    });
-  }, [selectedProjectId, chat.id, addSessionToProject]);
+    setIsMoving(true);
+    try {
+      await getTrpcClient().projects.addSession.mutate({
+        projectId: selectedProjectId,
+        sessionId: chat.id,
+      });
+      const project = projects?.find((p: any) => p.id === selectedProjectId);
+      toast.success(`Moved to ${project?.name ?? "project"}`);
+      dispatch(updateSessionAction({ id: chat.id, updates: { projectId: selectedProjectId } }));
+      setShowMoveDialog(false);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to move to project");
+    } finally {
+      setIsMoving(false);
+    }
+  }, [selectedProjectId, chat.id, projects, dispatch]);
 
   const handleDelete = useCallback(() => {
-    // Optimistically remove from tRPC cache for instant UI update
-    utils.sessions.list.setData(undefined, (old) =>
-      old?.filter((s) => s.id !== chat.id)
-    );
     dispatch(removeSession(chat.id));
-    deleteSession.mutate({ id: chat.id });
+    getTrpcClient().sessions.delete.mutate({ id: chat.id }).catch(() => {});
     setShowDeleteDialog(false);
-    // If user is viewing this chat, redirect to dashboard
     if (isActive) {
       router.push("/");
     }
-  }, [chat.id, dispatch, deleteSession, utils, isActive, router]);
+  }, [chat.id, dispatch, isActive, router]);
 
-  const isFavorite = session?.isFavorite ?? chat.isFavorite ?? false;
-  const filteredProjects = (projects ?? []).filter((p) =>
-    p.name.toLowerCase().includes(moveSearch.toLowerCase())
-  );
+  const isFavorite = isFavoriteFromRedux ?? chat.isFavorite ?? false;
+  const filteredProjects = useMemo(() => {
+    const query = moveSearch.toLowerCase();
+    return (projects ?? []).filter((p) => p.name.toLowerCase().includes(query));
+  }, [projects, moveSearch]);
 
+  // Rename mode — inline editing
   if (isRenaming) {
     return (
       <SidebarMenuItem>
-        <div className="flex items-center h-9 px-2 gap-3 rounded-lg">
-          <Icon className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
+        <div className="flex items-center h-9 rounded-[10px] ps-[9px] pe-[2px] gap-3">
+          {isLoading ? (
+            <Loader2Icon className="size-[18px] shrink-0 animate-spin text-sidebar-foreground/40" />
+          ) : (
+            <Icon className="size-[18px] shrink-0 text-sidebar-foreground/40" />
+          )}
           <input
             ref={renameInputRef}
-            className="flex-1 bg-transparent text-sm outline-none border-b border-primary"
+            className="flex-1 bg-transparent text-sm outline-none border-b border-primary min-w-0"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={handleRenameKeyDown}
@@ -264,54 +246,57 @@ export function ChatItem({ chat }: ChatItemProps) {
 
   return (
     <>
-      <SidebarMenuItem className="group/item">
-        <SidebarMenuButton asChild isActive={isActive} className="h-9 px-2 pr-9 gap-3 rounded-lg">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          tooltip={chat.title}
+          className="h-9 rounded-[10px] gap-3 ps-[9px] pe-[2px] [&>svg]:size-[18px]"
+        >
           <Link href={`/chat/${chat.id}`}>
             {isLoading ? (
-              <Loader2Icon className="h-4 w-4 shrink-0 animate-spin text-sidebar-foreground/50" />
+              <Loader2Icon className="animate-spin text-sidebar-foreground/40" />
             ) : (
-              <Icon className="h-4 w-4 shrink-0 text-sidebar-foreground/60" />
+              <Icon className="text-sidebar-foreground/40" />
             )}
-            <span className="truncate">{chat.title}</span>
+            <span className="flex-1 min-w-0 truncate text-sm">{chat.title}</span>
             {isFavorite && (
-              <StarIcon className="h-3 w-3 fill-yellow-400 text-yellow-400 shrink-0 ml-auto" />
+              <StarIcon className="!size-3 fill-yellow-400 text-yellow-400 shrink-0" />
             )}
           </Link>
         </SidebarMenuButton>
 
-        {/* Three-dots menu */}
+        {/* Three-dots menu — shows on hover (Manus style) */}
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="absolute right-1 top-1/2 -translate-y-1/2 size-7 flex items-center justify-center rounded-md opacity-0 group-hover/item:opacity-100 data-[state=open]:opacity-100 hover:bg-sidebar-accent/60 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
+            <SidebarMenuAction
+              showOnHover
+              className="right-[2px] size-8 rounded-lg hover:bg-sidebar-accent/60 [&>svg]:size-[18px] data-[state=open]:opacity-100"
             >
-              <MoreHorizontalIcon className="h-4 w-4 text-sidebar-foreground/60" />
-              <span className="sr-only">More options</span>
-            </button>
+              <EllipsisIcon className="text-sidebar-foreground/40" />
+            </SidebarMenuAction>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuItem onClick={handleShare} className="gap-2">
               {linkCopied ? (
-                <CheckIcon className="h-4 w-4" />
+                <CheckIcon className="size-4" />
               ) : (
-                <ShareIcon className="h-4 w-4" />
+                <ShareIcon className="size-4" />
               )}
               {linkCopied ? "Copied!" : "Share"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleRenameStart} className="gap-2">
-              <PenLineIcon className="h-4 w-4" />
+              <PenLineIcon className="size-4" />
               Rename
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleToggleFavorite} className="gap-2">
               <StarIcon
-                className={`h-4 w-4 ${isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`}
+                className={`size-4 ${isFavorite ? "fill-yellow-400 text-yellow-400" : ""}`}
               />
               {isFavorite ? "Remove from favorites" : "Add to favorites"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={handleOpenInNewTab} className="gap-2">
-              <ExternalLinkIcon className="h-4 w-4" />
+              <ExternalLinkIcon className="size-4" />
               Open in new tab
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -322,7 +307,7 @@ export function ChatItem({ chat }: ChatItemProps) {
               }}
               className="gap-2"
             >
-              <FolderIcon className="h-4 w-4" />
+              <FolderIcon className="size-4" />
               Move to project
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -331,7 +316,7 @@ export function ChatItem({ chat }: ChatItemProps) {
               className="gap-2"
               onClick={() => setShowDeleteDialog(true)}
             >
-              <Trash2Icon className="h-4 w-4" />
+              <Trash2Icon className="size-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -371,7 +356,7 @@ export function ChatItem({ chat }: ChatItemProps) {
           </DialogHeader>
 
           <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               placeholder="Search projects..."
               value={moveSearch}
@@ -412,7 +397,7 @@ export function ChatItem({ chat }: ChatItemProps) {
                         <span className="text-sm">{project.icon}</span>
                       ) : (
                         <FolderIcon
-                          className="h-4 w-4"
+                          className="size-4"
                           style={{ color: project.color ?? undefined }}
                         />
                       )}
@@ -426,7 +411,7 @@ export function ChatItem({ chat }: ChatItemProps) {
                       )}
                     </div>
                     {selectedProjectId === project.id && (
-                      <CheckIcon className="h-4 w-4 text-primary shrink-0" />
+                      <CheckIcon className="size-4 text-primary shrink-0" />
                     )}
                   </button>
                 ))}
@@ -440,13 +425,13 @@ export function ChatItem({ chat }: ChatItemProps) {
             </Button>
             <Button
               onClick={handleMoveToProject}
-              disabled={!selectedProjectId || addSessionToProject.isPending}
+              disabled={!selectedProjectId || isMoving}
             >
-              {addSessionToProject.isPending ? "Moving..." : "Move"}
+              {isMoving ? "Moving..." : "Move"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
   );
-}
+});

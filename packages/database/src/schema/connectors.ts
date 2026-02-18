@@ -10,6 +10,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { relations } from "drizzle-orm";
 import { users } from "./users";
 import { organizations } from "./organizations";
+import { projects } from "./projects";
 
 /**
  * Connectors Schema
@@ -95,6 +96,9 @@ export const userConnectors = pgTable("user_connectors", {
   organizationId: text("organization_id").references(() => organizations.id, {
     onDelete: "cascade",
   }),
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
   status: text("status", {
     enum: ["connected", "disconnected", "error", "pending", "syncing"],
   })
@@ -144,6 +148,10 @@ export const userConnectorsRelations = relations(userConnectors, ({ one }) => ({
   organization: one(organizations, {
     fields: [userConnectors.organizationId],
     references: [organizations.id],
+  }),
+  project: one(projects, {
+    fields: [userConnectors.projectId],
+    references: [projects.id],
   }),
 }));
 

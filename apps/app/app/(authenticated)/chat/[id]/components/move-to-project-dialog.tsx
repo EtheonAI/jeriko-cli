@@ -13,7 +13,8 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { Input } from "@repo/design-system/components/ui/input";
 import { FolderIcon, CheckIcon, SearchIcon, PlusIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { useAppSelector } from "@/lib/store/hooks";
+import { useProjectsData } from "@/lib/store/hooks";
 import { toast } from "sonner";
 
 interface MoveToProjectDialogProps {
@@ -33,27 +34,28 @@ export function MoveToProjectDialog({
 }: MoveToProjectDialogProps) {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(currentProjectId ?? null);
+  const [isPending, setIsPending] = useState(false);
 
-  const { data: projects, isLoading } = trpc.projects.list.useQuery(
-    { status: "active", limit: 50 },
-    { enabled: open }
-  );
+  // Read projects from Redux (hydrated by ReduxDataLoader)
+  const projects = useAppSelector((state) => state.projects.projects);
+  const isLoading = useAppSelector((state) => state.projects.isLoading);
 
-  const addSession = trpc.projects.addSession.useMutation({
-    onSuccess: () => {
-      const project = projects?.find((p) => p.id === selectedId);
-      toast.success(`Moved to ${project?.name ?? "project"}`);
-      onMoved?.(selectedId!, project?.name ?? "Project");
-      onOpenChange(false);
-    },
-    onError: (err) => {
-      toast.error(err.message ?? "Failed to move to project");
-    },
-  });
+  const { addSessionToProject } = useProjectsData({ autoFetch: false });
 
-  const handleMove = () => {
+  const handleMove = async () => {
     if (!selectedId) return;
-    addSession.mutate({ projectId: selectedId, sessionId });
+    setIsPending(true);
+    try {
+      await addSessionToProject({ projectId: selectedId, sessionId });
+      const project = projects?.find((p: any) => p.id === selectedId);
+      toast.success(`Moved to ${project?.name ?? "project"}`);
+      onMoved?.(selectedId, project?.name ?? "Project");
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to move to project");
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const filtered = (projects ?? []).filter((p) =>
@@ -144,8 +146,8 @@ export function MoveToProjectDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleMove} disabled={!selectedId || addSession.isPending}>
-            {addSession.isPending ? "Moving..." : "Move"}
+          <Button onClick={handleMove} disabled={!selectedId || isPending}>
+            {isPending ? "Moving..." : "Move"}
           </Button>
         </DialogFooter>
       </DialogContent>

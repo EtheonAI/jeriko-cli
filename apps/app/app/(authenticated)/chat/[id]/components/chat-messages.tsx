@@ -2,8 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import type { UIMessage } from "ai";
-import type { SourceUrlUIPart, SourceDocumentUIPart } from "@repo/ai/lib/types";
-import { EndOfChat } from "@repo/ai/components/parts";
+import type { SourceUrlUIPart, SourceDocumentUIPart, FileUIPart } from "@repo/ai/lib/types";
 import { toast } from "sonner";
 import {
   Conversation,
@@ -19,94 +18,16 @@ interface ChatMessagesProps {
   status: string;
   isStreaming: boolean;
   feedback: Record<string, number>;
+  hasMore?: boolean;
+  loadingMore?: boolean;
   onSendMessage: (text: string) => void;
   onRegenerate: () => void;
   onFeedback: (messageId: string, rating: number) => void;
+  onLoadMore?: () => void;
   onViewSources?: (sources: (SourceUrlUIPart | SourceDocumentUIPart)[]) => void;
   onViewInCanvas?: (toolCallId: string) => void;
   onViewFiles?: () => void;
-}
-
-/**
- * Generate follow-up suggestions and detect task completion state.
- * Manus-style: show context-aware suggestions after the assistant finishes.
- * Returns both suggestions and whether the agent used tools (= task mode).
- */
-function useEndOfChatState(messages: UIMessage[], isStreaming: boolean) {
-  return useMemo(() => {
-    if (isStreaming || messages.length === 0) {
-      return { suggestions: [], usedTools: false };
-    }
-
-    const lastMsg = messages[messages.length - 1];
-    if (!lastMsg || lastMsg.role !== "assistant") {
-      return { suggestions: [], usedTools: false };
-    }
-
-    // Check what tools were used
-    const parts = lastMsg.parts ?? [];
-    const hasAnyTool = parts.some(
-      (p) =>
-        typeof p === "object" &&
-        "type" in p &&
-        typeof p.type === "string" &&
-        p.type.startsWith("tool-")
-    );
-    const hasCode = parts.some(
-      (p) =>
-        typeof p === "object" &&
-        "type" in p &&
-        typeof p.type === "string" &&
-        (p.type.startsWith("tool-file_") ||
-          p.type.startsWith("tool-shell_") ||
-          p.type === "tool-code_execute")
-    );
-    const hasBrowser = parts.some(
-      (p) =>
-        typeof p === "object" &&
-        "type" in p &&
-        typeof p.type === "string" &&
-        p.type.startsWith("tool-browser_")
-    );
-    const hasSearch = parts.some(
-      (p) =>
-        typeof p === "object" &&
-        "type" in p &&
-        typeof p.type === "string" &&
-        (p.type === "tool-web_search" ||
-          p.type === "tool-search_web" ||
-          p.type === "tool-info_search_web")
-    );
-
-    let suggestions;
-    if (hasCode) {
-      suggestions = [
-        { text: "Run and test the code" },
-        { text: "Explain what this does" },
-        { text: "Modify this further" },
-      ];
-    } else if (hasBrowser) {
-      suggestions = [
-        { text: "Continue browsing" },
-        { text: "Extract key information" },
-        { text: "Search for something else" },
-      ];
-    } else if (hasSearch) {
-      suggestions = [
-        { text: "Search for more details" },
-        { text: "Summarize the findings" },
-        { text: "Compare with alternatives" },
-      ];
-    } else {
-      suggestions = [
-        { text: "Tell me more" },
-        { text: "Can you help with something else?" },
-        { text: "Explain in more detail" },
-      ];
-    }
-
-    return { suggestions, usedTools: hasAnyTool };
-  }, [messages, isStreaming]);
+  onPreviewFile?: (file: FileUIPart) => void;
 }
 
 /**
@@ -128,8 +49,14 @@ function useThinkingState(messages: UIMessage[], status: string, isStreaming: bo
 
     if (!isStreaming) return { show: false, label: "" };
 
-    // Find the last assistant message
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    // Find the last assistant message — backward loop (no array copy)
+    let lastAssistant: UIMessage | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.role === "assistant") {
+        lastAssistant = messages[i];
+        break;
+      }
+    }
     if (!lastAssistant || !lastAssistant.parts || lastAssistant.parts.length === 0) {
       // Streaming but no assistant message yet — still waiting
       return { show: true, label: "Thinking" };
@@ -185,12 +112,15 @@ export function ChatMessages({
   status,
   isStreaming,
   feedback,
+  hasMore,
+  loadingMore,
   onSendMessage,
   onRegenerate,
   onFeedback,
+  onLoadMore,
   onViewSources,
   onViewInCanvas,
-  onViewFiles,
+  onPreviewFile,
 }: ChatMessagesProps) {
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -199,25 +129,28 @@ export function ChatMessages({
   }, []);
 
   const thinking = useThinkingState(messages, status, isStreaming);
-  const endOfChat = useEndOfChatState(messages, isStreaming);
-
-  // Detect if the last assistant message has file parts (for "View all files" link)
-  const hasFileParts = useMemo(() => {
-    if (isStreaming || messages.length === 0) return false;
-    const lastMsg = messages[messages.length - 1];
-    if (!lastMsg || lastMsg.role !== "assistant") return false;
-    return (lastMsg.parts ?? []).some(
-      (p) => typeof p === "object" && "type" in p && p.type === "file"
-    );
-  }, [messages, isStreaming]);
 
   return (
     <Conversation className="min-h-0 flex-1">
       <ConversationContent data-testid="message-list" className="mx-auto max-w-3xl">
         {messages.length === 0 && !thinking.show ? (
-          <EmptyState onSuggestionClick={onSendMessage} />
+          <EmptyState />
         ) : (
           <>
+            {/* Load earlier messages button */}
+            {hasMore && (
+              <div className="flex justify-center py-3">
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  {loadingMore ? "Loading..." : "Load earlier messages"}
+                </button>
+              </div>
+            )}
+
             {messages.map((message, index) => (
               <ChatMessage
                 key={message.id}
@@ -230,23 +163,12 @@ export function ChatMessages({
                 onRate={message.role === "assistant" ? onFeedback : undefined}
                 onViewSources={onViewSources}
                 onViewInCanvas={onViewInCanvas}
+                onPreviewFile={onPreviewFile}
               />
             ))}
 
             {/* Thinking indicator — shown during initial load and between tool calls */}
             {thinking.show && <ThinkingIndicator label={thinking.label} />}
-
-            {/* End-of-chat section — Manus-style task completion + rating + suggestions */}
-            {!thinking.show && endOfChat.suggestions.length > 0 && (
-              <div className="mt-4 mb-2">
-                <EndOfChat
-                  taskCompleted={endOfChat.usedTools}
-                  onViewFiles={hasFileParts ? onViewFiles : undefined}
-                  suggestions={endOfChat.suggestions}
-                  onSelectSuggestion={onSendMessage}
-                />
-              </div>
-            )}
           </>
         )}
       </ConversationContent>

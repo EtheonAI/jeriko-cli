@@ -1,6 +1,4 @@
 import { configureStore } from "@reduxjs/toolkit";
-import { setupListeners } from "@reduxjs/toolkit/query";
-import { apiSlice } from "./api/api.slice";
 // Core slices
 import authReducer from "./slices/auth.slice";
 import chatReducer from "./slices/chat.slice";
@@ -48,7 +46,7 @@ import agentWorkspaceReducer from "./slices/agentWorkspace.slice";
 import webdevAuthReducer from "./slices/webdevAuth.slice";
 import aiCanvasEditorReducer from "./slices/aiCanvasEditor.slice";
 import searchReducer from "./slices/search.slice";
-import devicesReducer from "./slices/devices.slice";
+
 import toolCallsReducer from "./slices/toolCalls.slice";
 // Rubic-specific slices
 import skillsReducer from "./slices/skills.slice";
@@ -59,8 +57,6 @@ import { websocketMiddleware } from "./middleware/websocket.middleware";
 export const makeStore = () => {
   const store = configureStore({
     reducer: {
-      // RTK Query
-      [apiSlice.reducerPath]: apiSlice.reducer,
       // Core domain slices
       auth: authReducer,
       chat: chatReducer,
@@ -108,7 +104,7 @@ export const makeStore = () => {
       webdevAuth: webdevAuthReducer,
       aiCanvasEditor: aiCanvasEditorReducer,
       search: searchReducer,
-      devices: devicesReducer,
+      // devices slice removed — not needed
       toolCalls: toolCallsReducer,
       // Rubic-specific slices
       skills: skillsReducer,
@@ -125,14 +121,9 @@ export const makeStore = () => {
             "websocket/leaveRoom",
           ],
         },
-      })
-        .concat(apiSlice.middleware)
-        .concat(websocketMiddleware),
+      }).concat(websocketMiddleware),
     devTools: process.env.NODE_ENV !== "production",
   });
-
-  // Enable refetch on focus/reconnect
-  setupListeners(store.dispatch);
 
   return store;
 };
@@ -152,9 +143,6 @@ export type AppDispatch = AppStore["dispatch"];
 
 // Types consumers need from the barrel
 export type { SearchResultType, SearchResultItem } from "./slices/search.slice";
-
-// Re-export API hooks
-export * from "./api/api.slice";
 
 // Re-export WebSocket actions
 export {

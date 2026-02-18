@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -32,7 +32,7 @@ import {
   FileTextIcon,
   CalendarIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -60,54 +60,108 @@ const statusVariants: Record<string, { variant: "default" | "secondary" | "destr
 export function ConnectorsTab() {
   const [selectedConnector, setSelectedConnector] = useState<string | null>(null);
 
-  // Fetch data
-  const { data: definitions, isLoading: isLoadingDefinitions, isError: isDefinitionsError, refetch: refetchDefinitions } = trpc.connectors.listDefinitions.useQuery(undefined, { retry: 1 });
-  const { data: installedConnectors, isLoading: isLoadingInstalled, isError: isInstalledError, refetch: refetchInstalled } = trpc.connectors.list.useQuery(undefined, { retry: 1 });
+  // Query state
+  const [definitions, setDefinitions] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["connectors"]["listDefinitions"]["query"]>> | undefined>(undefined);
+  const [installedConnectors, setInstalledConnectors] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["connectors"]["list"]["query"]>> | undefined>(undefined);
+  const [isLoadingDefinitions, setIsLoadingDefinitions] = useState(true);
+  const [isLoadingInstalled, setIsLoadingInstalled] = useState(true);
+  const [isDefinitionsError, setIsDefinitionsError] = useState(false);
+  const [isInstalledError, setIsInstalledError] = useState(false);
 
-  // Mutations
-  const utils = trpc.useUtils();
+  // Mutation pending states
+  const [isInstallPending, setIsInstallPending] = useState(false);
+  const [isDisconnectPending, setIsDisconnectPending] = useState(false);
+  const [isUninstallPending, setIsUninstallPending] = useState(false);
+  const [isSyncPending, setIsSyncPending] = useState(false);
 
-  const installConnector = trpc.connectors.install.useMutation({
-    onSuccess: (data) => {
+  // Fetch definitions
+  const fetchDefinitions = useCallback(async () => {
+    setIsLoadingDefinitions(true);
+    setIsDefinitionsError(false);
+    try {
+      const data = await getTrpcClient().connectors.listDefinitions.query();
+      setDefinitions(data);
+    } catch {
+      setIsDefinitionsError(true);
+    } finally {
+      setIsLoadingDefinitions(false);
+    }
+  }, []);
+
+  // Fetch installed connectors
+  const fetchInstalled = useCallback(async () => {
+    setIsLoadingInstalled(true);
+    setIsInstalledError(false);
+    try {
+      const data = await getTrpcClient().connectors.list.query();
+      setInstalledConnectors(data);
+    } catch {
+      setIsInstalledError(true);
+    } finally {
+      setIsLoadingInstalled(false);
+    }
+  }, []);
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchDefinitions();
+    fetchInstalled();
+  }, [fetchDefinitions, fetchInstalled]);
+
+  // Mutation callbacks
+  const installConnector = useCallback(async (input: { connectorDefinitionId: string }) => {
+    setIsInstallPending(true);
+    try {
+      const data = await getTrpcClient().connectors.install.mutate(input);
       toast.success("Connector added. Click Connect to authorize.");
-      utils.connectors.list.invalidate();
+      await fetchInstalled();
       // Redirect to OAuth flow
       // window.location.href = `/api/connectors/${data.id}/oauth/start`;
-    },
-    onError: (error) => {
+    } catch (error: any) {
       toast.error(error.message || "Failed to install connector");
-    },
-  });
+    } finally {
+      setIsInstallPending(false);
+    }
+  }, [fetchInstalled]);
 
-  const disconnectConnector = trpc.connectors.disconnect.useMutation({
-    onSuccess: () => {
+  const disconnectConnector = useCallback(async (input: { id: string }) => {
+    setIsDisconnectPending(true);
+    try {
+      await getTrpcClient().connectors.disconnect.mutate(input);
       toast.success("Connector disconnected");
-      utils.connectors.list.invalidate();
-    },
-    onError: (error) => {
+      await fetchInstalled();
+    } catch (error: any) {
       toast.error(error.message || "Failed to disconnect connector");
-    },
-  });
+    } finally {
+      setIsDisconnectPending(false);
+    }
+  }, [fetchInstalled]);
 
-  const uninstallConnector = trpc.connectors.uninstall.useMutation({
-    onSuccess: () => {
+  const uninstallConnector = useCallback(async (input: { id: string }) => {
+    setIsUninstallPending(true);
+    try {
+      await getTrpcClient().connectors.uninstall.mutate(input);
       toast.success("Connector removed");
-      utils.connectors.list.invalidate();
-    },
-    onError: (error) => {
+      await fetchInstalled();
+    } catch (error: any) {
       toast.error(error.message || "Failed to remove connector");
-    },
-  });
+    } finally {
+      setIsUninstallPending(false);
+    }
+  }, [fetchInstalled]);
 
-  const syncConnector = trpc.connectors.sync.useMutation({
-    onSuccess: () => {
+  const syncConnector = useCallback(async (input: { id: string }) => {
+    setIsSyncPending(true);
+    try {
+      await getTrpcClient().connectors.sync.mutate(input);
       toast.success("Sync started");
-      utils.connectors.list.invalidate();
-    },
-    onError: (error) => {
+      await fetchInstalled();
+    } catch (error: any) {
       toast.error(error.message || "Failed to start sync");
-    },
-  });
+    } finally {
+      setIsSyncPending(false);
+    }
+  }, [fetchInstalled]);
 
   const isLoading = isLoadingDefinitions || isLoadingInstalled;
   const isError = isDefinitionsError || isInstalledError;
@@ -144,7 +198,7 @@ export function ConnectorsTab() {
       window.location.href = `/api/connectors/${installed.connector.id}/oauth/start`;
     } else {
       // Install first
-      installConnector.mutate({ connectorDefinitionId: definitionId });
+      installConnector({ connectorDefinitionId: definitionId });
     }
   };
 
@@ -178,8 +232,8 @@ export function ConnectorsTab() {
           title="Failed to load connectors"
           message="Unable to load your connectors. Please try again."
           onRetry={() => {
-            refetchDefinitions();
-            refetchInstalled();
+            fetchDefinitions();
+            fetchInstalled();
           }}
         />
       </div>
@@ -239,10 +293,10 @@ export function ConnectorsTab() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => syncConnector.mutate({ id: connector.id })}
-                        disabled={syncConnector.isPending}
+                        onClick={() => syncConnector({ id: connector.id })}
+                        disabled={isSyncPending}
                       >
-                        {syncConnector.isPending && selectedConnector === connector.id ? (
+                        {isSyncPending && selectedConnector === connector.id ? (
                           <Loader2Icon className="h-4 w-4 animate-spin" />
                         ) : (
                           <RefreshCwIcon className="h-4 w-4" />
@@ -267,7 +321,7 @@ export function ConnectorsTab() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => disconnectConnector.mutate({ id: connector.id })}
+                              onClick={() => disconnectConnector({ id: connector.id })}
                             >
                               Disconnect
                             </AlertDialogAction>
@@ -300,7 +354,7 @@ export function ConnectorsTab() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => uninstallConnector.mutate({ id: connector.id })}
+                            onClick={() => uninstallConnector({ id: connector.id })}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
                             Remove
@@ -360,9 +414,9 @@ export function ConnectorsTab() {
                         size="sm"
                         className="ml-4"
                         onClick={() => handleConnect(definition.id)}
-                        disabled={installConnector.isPending}
+                        disabled={isInstallPending}
                       >
-                        {installConnector.isPending && selectedConnector === definition.id ? (
+                        {isInstallPending && selectedConnector === definition.id ? (
                           <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
                         ) : (
                           <LinkIcon className="h-4 w-4 mr-2" />

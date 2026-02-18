@@ -7,6 +7,7 @@ import {
   projectSessions,
   projectGroups,
   projectGroupItems,
+  agentSessions,
   eq,
   and,
   desc,
@@ -467,6 +468,65 @@ export const projectsRouter = createTRPCRouter({
         );
 
       return { success: true };
+    }),
+
+  // List sessions belonging to a project
+  listSessions: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      // Verify project access
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, input.projectId))
+        .limit(1);
+
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+
+      if (project.userId !== ctx.user.id) {
+        const [membership] = await db
+          .select()
+          .from(projectMembers)
+          .where(
+            and(
+              eq(projectMembers.projectId, input.projectId),
+              eq(projectMembers.userId, ctx.user.id)
+            )
+          )
+          .limit(1);
+
+        if (!membership) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You don't have access to this project",
+          });
+        }
+      }
+
+      const sessions = await db
+        .select({
+          id: agentSessions.id,
+          title: agentSessions.title,
+          status: agentSessions.status,
+          createdAt: agentSessions.createdAt,
+          updatedAt: agentSessions.updatedAt,
+        })
+        .from(projectSessions)
+        .innerJoin(agentSessions, eq(projectSessions.sessionId, agentSessions.id))
+        .where(eq(projectSessions.projectId, input.projectId))
+        .orderBy(desc(agentSessions.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      return sessions;
     }),
 
   // List project groups

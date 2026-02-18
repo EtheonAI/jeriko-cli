@@ -11,6 +11,30 @@ export interface WebSocketEntity {
   updatedAt: string;
 }
 
+/**
+ * Manus-style tool event entity.
+ * Every tool invocation from the AI SDK SSE stream is normalized into this shape
+ * and stored in `websocket.toolEvents` / `websocket.toolEventIds`.
+ * Canvas selectors read from these — no useMemo scanning of messages[].
+ */
+export interface ToolEventEntity {
+  id: string; // toolCallId
+  sessionId: string;
+  timestamp: number;
+  toolName: string;
+  state: "pending" | "running" | "complete" | "error";
+  input: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  /** Cached screenshot extraction (avoid re-extraction in selectors) */
+  screenshot?: string;
+  /** Cached URL extraction */
+  url?: string;
+  /** Cached title extraction */
+  title?: string;
+  /** Cached content extraction */
+  content?: string;
+}
+
 export type ReconnectPolicy = "exponential" | "linear" | "fixed" | "disabled";
 
 export interface ReconnectConfig {
@@ -22,9 +46,15 @@ export interface ReconnectConfig {
 }
 
 export interface WebSocketState {
-  // Manus-style normalized entities
+  // Manus-style normalized entities (generic)
   ids: string[];
   entities: Record<string, WebSocketEntity>;
+
+  // Manus-style tool event entities (from AI SDK SSE stream)
+  // Canvas selectors read from these — replaces useMemo message scanning
+  toolEventIds: string[]; // ordered by arrival
+  toolEvents: Record<string, ToolEventEntity>; // toolCallId → event
+  toolEventsBySession: Record<string, string[]>; // sessionId → toolCallId[]
 
   // Connection status
   status: ConnectionStatus;
@@ -58,6 +88,9 @@ export interface WebSocketState {
 const initialState: WebSocketState = {
   ids: [],
   entities: {},
+  toolEventIds: [],
+  toolEvents: {},
+  toolEventsBySession: {},
   status: "disconnected",
   error: null,
   contextLengthStatus: "normal",
@@ -146,6 +179,38 @@ const websocketSlice = createSlice({
     clearEntities: (state) => {
       state.ids = [];
       state.entities = {};
+    },
+
+    // Manus-style tool event management (from AI SDK SSE stream)
+    upsertToolEvent: (state, action: PayloadAction<ToolEventEntity>) => {
+      const { id, sessionId } = action.payload;
+      const isNew = !state.toolEvents[id];
+      state.toolEvents[id] = action.payload;
+      if (isNew) {
+        state.toolEventIds.push(id);
+        if (!state.toolEventsBySession[sessionId]) {
+          state.toolEventsBySession[sessionId] = [];
+        }
+        state.toolEventsBySession[sessionId].push(id);
+      }
+    },
+
+    clearToolEvents: (state) => {
+      state.toolEventIds = [];
+      state.toolEvents = {};
+      state.toolEventsBySession = {};
+    },
+
+    clearSessionToolEvents: (state, action: PayloadAction<string>) => {
+      const sessionId = action.payload;
+      const sessionEventIds = state.toolEventsBySession[sessionId] ?? [];
+      for (const id of sessionEventIds) {
+        delete state.toolEvents[id];
+      }
+      state.toolEventIds = state.toolEventIds.filter(
+        (id) => !sessionEventIds.includes(id)
+      );
+      delete state.toolEventsBySession[sessionId];
     },
 
     // Context length status
@@ -252,6 +317,9 @@ export const {
   setEntity,
   removeEntity,
   clearEntities,
+  upsertToolEvent,
+  clearToolEvents,
+  clearSessionToolEvents,
   setContextLengthStatus,
   setTaskFinished,
   setIsVNCConnected,

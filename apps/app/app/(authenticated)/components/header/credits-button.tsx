@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Popover, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { SparklesIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { useAppSelector } from "@/lib/store/hooks";
 import { CreditsDropdown } from "./credits-dropdown";
 
 type CreditsButtonProps = {
@@ -28,17 +28,13 @@ export function CreditsButton({
 }: CreditsButtonProps) {
   const [mounted, setMounted] = useState(false);
 
-  // Fetch real credit balance and subscription from tRPC
-  const { data: creditBalance } = trpc.billing.getCreditBalance.useQuery(undefined, {
-    enabled: mounted,
-  });
-  const { data: subscription } = trpc.billing.getSubscription.useQuery(undefined, {
-    enabled: mounted,
-  });
+  // Read billing from Redux (hydrated by ReduxDataLoader)
+  const creditBreakdown = useAppSelector((state) => state.billing.creditBreakdown);
+  const subscription = useAppSelector((state) => state.billing.subscription);
 
-  // Use fetched data, fall back to props
-  const credits = creditBalance?.balance ?? creditsProp;
-  const isPro = subscription ? subscription.plan?.type !== "free" : isProProp;
+  // Use Redux data, fall back to props
+  const credits = creditBreakdown.total || creditsProp;
+  const isPro = subscription ? subscription.plan !== "free" : isProProp;
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -65,11 +61,11 @@ export function CreditsButton({
       </PopoverTrigger>
       <CreditsDropdown
         isPro={isPro}
-        expirationDate={expirationDate}
-        freeCredits={freeCredits}
-        monthlyCredits={monthlyCredits}
-        dailyRefreshCredits={dailyRefreshCredits}
-        dailyRefreshMax={dailyRefreshMax}
+        expirationDate={expirationDate ?? subscription?.currentPeriodEnd}
+        freeCredits={freeCredits ?? creditBreakdown.daily.available}
+        monthlyCredits={monthlyCredits ?? creditBreakdown.monthly.available}
+        dailyRefreshCredits={dailyRefreshCredits ?? creditBreakdown.daily.refreshAmount}
+        dailyRefreshMax={dailyRefreshMax ?? creditBreakdown.daily.total}
       />
     </Popover>
   );

@@ -42,6 +42,13 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   discountYearlyPercent: integer("discount_yearly_percent").default(0),
   // Credits
   monthlyCredits: integer("monthly_credits").default(0).notNull(),
+  starterCredits: integer("starter_credits").default(0).notNull(), // one-time non-expiring credits on signup
+  dailyRefreshCredits: integer("daily_refresh_credits").default(0).notNull(), // credits refreshed daily
+  // Plan Limits (Manus parity)
+  maxConcurrentSessions: integer("max_concurrent_sessions").default(1).notNull(),
+  maxParallelSubtasks: integer("max_parallel_subtasks").default(5).notNull(),
+  maxScheduledTasks: integer("max_scheduled_tasks").default(1).notNull(),
+  maxStepsPerSession: integer("max_steps_per_session").default(25).notNull(),
   // Features
   features: jsonb("features").$type<string[]>(),
   limits: jsonb("limits").$type<{
@@ -50,6 +57,12 @@ export const subscriptionPlans = pgTable("subscription_plans", {
     maxStorage?: number; // in MB
     maxTeamMembers?: number;
     maxProjects?: number;
+    chatModeUnlimited?: boolean;
+    slidesGeneration?: boolean;
+    imageGeneration?: boolean;
+    videoGeneration?: boolean;
+    betaFeatures?: boolean;
+    prioritySupport?: boolean;
     [key: string]: unknown;
   }>(),
   // Stripe
@@ -168,15 +181,24 @@ export const creditBalances = pgTable("credit_balances", {
   organizationId: text("organization_id").references(() => organizations.id, {
     onDelete: "cascade",
   }),
-  // Balance
+  // Balance — total usable credits (sum of all credit types)
   balance: integer("balance").default(0).notNull(),
-  // Period tracking
-  periodCredits: integer("period_credits").default(0).notNull(), // Credits from subscription
+  // Period tracking (monthly subscription credits)
+  periodCredits: integer("period_credits").default(0).notNull(),
   periodCreditsUsed: integer("period_credits_used").default(0).notNull(),
   periodStart: timestamp("period_start", { mode: "date" }),
   periodEnd: timestamp("period_end", { mode: "date" }),
-  // Purchased credits
+  // Daily refresh credits (Manus parity: 300/day, expire at midnight UTC)
+  dailyCredits: integer("daily_credits").default(0).notNull(),
+  dailyCreditsUsed: integer("daily_credits_used").default(0).notNull(),
+  dailyRefreshAmount: integer("daily_refresh_amount").default(300).notNull(),
+  lastDailyRefreshAt: timestamp("last_daily_refresh_at", { mode: "date" }),
+  // Starter credits (one-time, never expire — Manus: 1000 on signup)
+  starterCredits: integer("starter_credits").default(0).notNull(),
+  starterCreditsUsed: integer("starter_credits_used").default(0).notNull(),
+  // Purchased / add-on credits (never expire, require active subscription)
   purchasedCredits: integer("purchased_credits").default(0).notNull(),
+  purchasedCreditsUsed: integer("purchased_credits_used").default(0).notNull(),
   // Auto top-up
   autoTopupEnabled: boolean("auto_topup_enabled").default(false).notNull(),
   autoTopupThreshold: integer("auto_topup_threshold"),
@@ -393,7 +415,7 @@ export const usageLedger = pgTable("usage_ledger", {
     .references(() => users.id, { onDelete: "cascade" }),
   // Event details
   eventType: text("event_type", {
-    enum: ["step_start", "step_finish", "tool_call", "credits_grant", "credits_deduct"],
+    enum: ["step_start", "step_finish", "tool_call", "vm_time", "daily_refresh", "credits_grant", "credits_deduct"],
   }).notNull(),
   sessionId: text("session_id"),
   stepId: text("step_id"),

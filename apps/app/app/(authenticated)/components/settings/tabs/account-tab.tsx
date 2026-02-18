@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,9 +20,9 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import { UserAvatar } from "../../shared/user-avatar";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
-import { Loader2Icon, CheckIcon, XIcon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 
 type AccountTabProps = {
   user?: {
@@ -51,42 +51,9 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 export function AccountTab({ user }: AccountTabProps) {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // tRPC queries and mutations
-  const utils = trpc.useUtils();
-
-  const updateProfileMutation = trpc.user.updateProfile.useMutation({
-    onSuccess: () => {
-      toast.success("Profile updated successfully");
-      utils.user.getProfile.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update profile");
-    },
-  });
-
-  const changePasswordMutation = trpc.user.changePassword.useMutation({
-    onSuccess: () => {
-      toast.success("Password changed successfully");
-      passwordForm.reset();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to change password");
-    },
-  });
-
-  const deleteAccountMutation = trpc.user.deleteAccount.useMutation({
-    onSuccess: () => {
-      toast.success("Account deleted");
-      // Redirect to home or login page
-      window.location.href = "/";
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to delete account");
-      setIsDeleting(false);
-    },
-  });
 
   // Profile form
   const profileForm = useForm<ProfileFormData>({
@@ -106,22 +73,38 @@ export function AccountTab({ user }: AccountTabProps) {
     },
   });
 
-  const onProfileSubmit = (data: ProfileFormData) => {
-    updateProfileMutation.mutate({ name: data.name });
-  };
+  const onProfileSubmit = useCallback(async (data: ProfileFormData) => {
+    setIsUpdatingProfile(true);
+    try {
+      await getTrpcClient().user.updateProfile.mutate({ name: data.name });
+      toast.success("Profile updated successfully");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update profile");
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  }, []);
 
-  const onPasswordSubmit = (data: PasswordFormData) => {
-    changePasswordMutation.mutate({
-      currentPassword: data.currentPassword,
-      newPassword: data.newPassword,
-    });
-  };
+  const onPasswordSubmit = useCallback(async (data: PasswordFormData) => {
+    setIsChangingPassword(true);
+    try {
+      await getTrpcClient().user.changePassword.mutate({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+      });
+      toast.success("Password changed successfully");
+      passwordForm.reset();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to change password");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }, [passwordForm]);
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file
     if (file.size > 2 * 1024 * 1024) {
       toast.error("Image must be less than 2MB");
       return;
@@ -132,24 +115,37 @@ export function AccountTab({ user }: AccountTabProps) {
       return;
     }
 
-    // Convert to base64 or upload to storage
-    // For now, we'll use a data URL (in production, upload to S3/R2)
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const dataUrl = reader.result as string;
-      updateProfileMutation.mutate({ image: dataUrl });
+      setIsUpdatingProfile(true);
+      try {
+        await getTrpcClient().user.updateProfile.mutate({ image: dataUrl });
+        toast.success("Avatar updated");
+      } catch (error: any) {
+        toast.error(error?.message || "Failed to update avatar");
+      } finally {
+        setIsUpdatingProfile(false);
+      }
     };
     reader.readAsDataURL(file);
-  };
+  }, []);
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = useCallback(async () => {
     if (deleteConfirmation !== "DELETE") {
       toast.error("Please type DELETE to confirm");
       return;
     }
     setIsDeleting(true);
-    deleteAccountMutation.mutate({ confirmation: "DELETE" });
-  };
+    try {
+      await getTrpcClient().user.deleteAccount.mutate({ confirmation: "DELETE" });
+      toast.success("Account deleted");
+      window.location.href = "/";
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to delete account");
+      setIsDeleting(false);
+    }
+  }, [deleteConfirmation]);
 
   return (
     <div className="space-y-6">
@@ -184,9 +180,9 @@ export function AccountTab({ user }: AccountTabProps) {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={updateProfileMutation.isPending}
+              disabled={isUpdatingProfile}
             >
-              {updateProfileMutation.isPending ? (
+              {isUpdatingProfile ? (
                 <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Change avatar
@@ -228,10 +224,10 @@ export function AccountTab({ user }: AccountTabProps) {
 
           <Button
             type="submit"
-            disabled={updateProfileMutation.isPending || !profileForm.formState.isDirty}
+            disabled={isUpdatingProfile || !profileForm.formState.isDirty}
             className="w-fit"
           >
-            {updateProfileMutation.isPending ? (
+            {isUpdatingProfile ? (
               <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
             ) : null}
             Save changes
@@ -297,9 +293,9 @@ export function AccountTab({ user }: AccountTabProps) {
           <Button
             type="submit"
             className="w-fit"
-            disabled={changePasswordMutation.isPending}
+            disabled={isChangingPassword}
           >
-            {changePasswordMutation.isPending ? (
+            {isChangingPassword ? (
               <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
             ) : null}
             Update password

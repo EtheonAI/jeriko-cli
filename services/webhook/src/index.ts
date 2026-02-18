@@ -42,6 +42,7 @@ async function main() {
 
   const { app, logger, start } = await createService({
     name: "webhook",
+    port: parseInt(process.env.PORT || "4007", 10),
     publicRoutes: ["/internal/"],
     onShutdown: [stopProcessor],
   });

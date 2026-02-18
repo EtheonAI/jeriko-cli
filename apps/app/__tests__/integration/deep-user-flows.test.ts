@@ -181,7 +181,7 @@ describe("User Flow: Building a Web App", () => {
     processor.process(toolResult("file_write", {
       success: true, path: "/home/user/todo-app/package.json",
     }, "write-1"));
-    expect(TOOL_VIEW_MAP["file_write"]).toBe("terminal");
+    expect(TOOL_VIEW_MAP["file_write"]).toBe("editor");
 
     processor.process(toolStart("file_write", {
       file: "/home/user/todo-app/src/App.tsx",
@@ -669,11 +669,10 @@ describe("User Flow: Code Editor / IDE", () => {
     const toolParts = processor.collectedParts.filter(isToolPart);
     expect(toolParts).toHaveLength(6);
 
-    // All should map to "terminal" canvas view
+    // All should map to "editor" canvas view (Manus FileToolView parity)
     for (const part of toolParts) {
       const toolName = getToolName(part);
-      // All file tools including text_editor map to "terminal" canvas view
-      expect(TOOL_VIEW_MAP[toolName]).toBe("terminal");
+      expect(TOOL_VIEW_MAP[toolName]).toBe("editor");
     }
   });
 });
@@ -1007,7 +1006,7 @@ describe("User Flow: Mixed Skills in Single Session", () => {
     const canvasViews = toolParts.map((p) => TOOL_VIEW_MAP[getToolName(p)]);
     expect(canvasViews).toEqual([
       "browser",   // web_search
-      "terminal",  // file_write
+      "editor",    // file_write → editor view (Manus FileToolView parity)
       "terminal",  // code_execute
       "browser",   // browser_navigate
       "terminal",  // code_execute

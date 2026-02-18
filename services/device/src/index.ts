@@ -16,7 +16,7 @@ async function main() {
 
   const { app, logger, start } = await createService({
     name: "device",
-    port: parseInt(process.env.PORT || "4014", 10),
+    port: parseInt(process.env.PORT || "4015", 10),
     cors: true,
     onShutdown: [() => clearInterval(staleChecker)],
   });

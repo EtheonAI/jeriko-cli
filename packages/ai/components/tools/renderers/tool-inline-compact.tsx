@@ -34,126 +34,183 @@ export interface ToolInlineCompactProps {
 // Tool category icons & labels
 // ============================================================================
 
-const TOOL_CATEGORY: Record<
-  string,
-  {
-    icon: React.ComponentType<{ className?: string }>;
-    getLabel: (input?: Record<string, unknown>, output?: Record<string, unknown>) => string;
-  }
-> = {
-  // Browser tools
+// Manus-style: label (action text) + arg (displayed in <code> mono font)
+// Matches TOOL_FUNCTION_MAP + TOOL_FUNCTION_ARG_MAP from Manus constants/tool.ts
+interface ToolCategoryEntry {
+  icon: React.ComponentType<{ className?: string }>;
+  getLabel: (input?: Record<string, unknown>, output?: Record<string, unknown>) => string;
+  /** Optional: argument value shown in mono <code> after the label (Manus-style) */
+  getArg?: (input?: Record<string, unknown>) => string | undefined;
+}
+
+const TOOL_CATEGORY: Record<string, ToolCategoryEntry> = {
+  // Browser tools — labels match Manus TOOL_FUNCTION_MAP exactly
   browser_navigate: {
     icon: GlobeIcon,
-    getLabel: (input) => {
-      const url = input?.url as string | undefined;
-      return url ? `Navigate to ${tryHostname(url)}` : "Navigating to page";
-    },
+    getLabel: () => "Navigating to",
+    getArg: (input) => input?.url ? tryHostname(input.url as string) : undefined,
   },
-  browser_view: { icon: GlobeIcon, getLabel: () => "Viewing page state" },
+  browser_view: { icon: GlobeIcon, getLabel: () => "Viewing webpage" },
   browser_click: {
     icon: GlobeIcon,
-    getLabel: (input) => {
-      const desc = input?.description as string | undefined;
-      return desc ? `Click: ${truncate(desc, 40)}` : "Clicking element";
+    getLabel: () => "Clicking",
+    getArg: (input) => {
+      const desc = (input?.element ?? input?.description) as string | undefined;
+      return desc ? truncate(desc, 40) : undefined;
     },
   },
   browser_input: {
     icon: GlobeIcon,
-    getLabel: (input) => {
+    getLabel: () => "Entering text",
+    getArg: (input) => {
       const text = input?.text as string | undefined;
-      return text ? `Typing "${truncate(text, 30)}"` : "Typing text";
+      return text ? truncate(text, 30) : undefined;
     },
   },
   browser_scroll: { icon: GlobeIcon, getLabel: () => "Scrolling page" },
   browser_scroll_up: { icon: GlobeIcon, getLabel: () => "Scrolling up" },
   browser_scroll_down: { icon: GlobeIcon, getLabel: () => "Scrolling down" },
-  browser_move_mouse: { icon: GlobeIcon, getLabel: () => "Moving cursor" },
-  browser_key_press: { icon: GlobeIcon, getLabel: (input) => `Pressing ${(input?.key as string) || "key"}` },
-  browser_press_key: { icon: GlobeIcon, getLabel: (input) => `Pressing ${(input?.key as string) || "key"}` },
+  browser_move_mouse: { icon: GlobeIcon, getLabel: () => "Moving mouse" },
+  browser_key_press: {
+    icon: GlobeIcon,
+    getLabel: () => "Pressing key",
+    getArg: (input) => (input?.key as string) || undefined,
+  },
+  browser_press_key: {
+    icon: GlobeIcon,
+    getLabel: () => "Pressing key",
+    getArg: (input) => (input?.key as string) || undefined,
+  },
   browser_select_option: { icon: GlobeIcon, getLabel: () => "Selecting option" },
-  browser_console_exec: { icon: GlobeIcon, getLabel: () => "Running console command" },
+  browser_console_exec: { icon: GlobeIcon, getLabel: () => "Executing JS code" },
   browser_console_view: { icon: GlobeIcon, getLabel: () => "Viewing console output" },
   browser_screenshot: { icon: GlobeIcon, getLabel: () => "Capturing screenshot" },
   browser_restart: {
     icon: GlobeIcon,
-    getLabel: (input) => input?.url ? `Restarting browser at ${tryHostname(input.url as string)}` : "Restarting browser",
+    getLabel: () => "Restarting browser",
+    getArg: (input) => input?.url ? tryHostname(input.url as string) : undefined,
   },
-  // Search tools
+  // Search tools — Manus: "Searching web"
   web_search: {
     icon: SearchIcon,
-    getLabel: (input) => {
+    getLabel: () => "Searching web",
+    getArg: (input) => {
       const query = input?.query as string | undefined;
-      return query ? `Searching: ${truncate(query, 40)}` : "Searching the web";
+      return query ? truncate(query, 40) : undefined;
     },
   },
   search_web: {
     icon: SearchIcon,
-    getLabel: (input) => {
+    getLabel: () => "Searching web",
+    getArg: (input) => {
       const query = input?.query as string | undefined;
-      return query ? `Searching: ${truncate(query, 40)}` : "Searching the web";
+      return query ? truncate(query, 40) : undefined;
     },
   },
   info_search_web: {
     icon: SearchIcon,
-    getLabel: (input) => {
+    getLabel: () => "Searching web",
+    getArg: (input) => {
       const query = input?.query as string | undefined;
-      return query ? `Searching: ${truncate(query, 40)}` : "Searching the web";
+      return query ? truncate(query, 40) : undefined;
     },
   },
-  // Shell tools
+  // Shell tools — labels match Manus TOOL_FUNCTION_MAP
   shell_exec: {
     icon: TerminalIcon,
-    getLabel: (input) => {
+    getLabel: () => "Executing command",
+    getArg: (input) => {
       const cmd = input?.command as string | undefined;
-      return cmd ? `$ ${truncate(cmd, 50)}` : "Running command";
+      return cmd ? truncate(cmd, 50) : undefined;
     },
   },
-  shell_view: { icon: TerminalIcon, getLabel: () => "Viewing terminal output" },
-  shell_wait: { icon: TerminalIcon, getLabel: () => "Waiting for process" },
-  shell_write_to_process: { icon: TerminalIcon, getLabel: () => "Writing to process" },
-  shell_kill_process: { icon: TerminalIcon, getLabel: () => "Stopping process" },
+  shell_view: { icon: TerminalIcon, getLabel: () => "Viewing command output" },
+  shell_wait: { icon: TerminalIcon, getLabel: () => "Waiting for command" },
+  shell_write_to_process: { icon: TerminalIcon, getLabel: () => "Writing data to process" },
+  shell_kill_process: { icon: TerminalIcon, getLabel: () => "Terminating process" },
   // Code execution
   code_execute: { icon: CodeIcon, getLabel: () => "Running code" },
-  // File tools
-  file_read: { icon: FileTextIcon, getLabel: (input) => `Reading ${fileName(input?.path ?? input?.file)}` },
-  file_write: { icon: PencilIcon, getLabel: (input) => `Creating file: ${fileName(input?.path ?? input?.file)}` },
-  file_str_replace: { icon: PencilIcon, getLabel: (input) => `Editing ${fileName(input?.path ?? input?.file)}` },
+  // File tools — labels match Manus TOOL_FUNCTION_MAP + stripped path in <code>
+  file_read: {
+    icon: FileTextIcon,
+    getLabel: () => "Reading file",
+    getArg: (input) => stripSandboxPath((input?.file ?? input?.path) as string | undefined),
+  },
+  file_write: {
+    icon: PencilIcon,
+    getLabel: () => "Writing file",
+    getArg: (input) => stripSandboxPath((input?.file ?? input?.path) as string | undefined),
+  },
+  file_str_replace: {
+    icon: PencilIcon,
+    getLabel: () => "Replacing file content",
+    getArg: (input) => stripSandboxPath((input?.file ?? input?.path) as string | undefined),
+  },
   file_find_in_content: {
     icon: SearchIcon,
-    getLabel: (input) => `Searching for "${truncate((input?.pattern as string) ?? (input?.query as string), 25)}"`,
+    getLabel: () => "Searching file content",
+    getArg: (input) => {
+      const pat = (input?.pattern as string) ?? (input?.query as string);
+      return pat ? truncate(pat, 25) : undefined;
+    },
   },
   file_find_by_name: {
     icon: SearchIcon,
-    getLabel: (input) => `Finding ${truncate((input?.pattern as string) ?? (input?.name as string), 25)}`,
+    getLabel: () => "Finding file",
+    getArg: (input) => {
+      const pat = (input?.pattern as string) ?? (input?.name as string);
+      return pat ? truncate(pat, 25) : undefined;
+    },
   },
   // Deploy tools
-  deploy_expose_port: { icon: RocketIcon, getLabel: (input) => `Exposing port ${input?.port ?? ""}` },
+  deploy_expose_port: {
+    icon: RocketIcon,
+    getLabel: () => "Exposing port",
+    getArg: (input) => input?.port != null ? String(input.port) : undefined,
+  },
   deploy_apply_deployment: { icon: RocketIcon, getLabel: () => "Deploying application" },
   make_manus_page: { icon: RocketIcon, getLabel: () => "Creating page" },
   // Image
   generate_image: {
     icon: ImageIcon,
-    getLabel: (input) => {
+    getLabel: () => "Generating image",
+    getArg: (input) => {
       const prompt = input?.prompt as string | undefined;
-      return prompt ? `Generating: ${truncate(prompt, 35)}` : "Generating image";
+      return prompt ? truncate(prompt, 35) : undefined;
     },
   },
   // Text editor (Manus-style file editing)
-  text_editor: { icon: PencilIcon, getLabel: (input) => `Editing ${fileName(input?.path ?? input?.file)}` },
+  text_editor: {
+    icon: PencilIcon,
+    getLabel: () => "Replacing file content",
+    getArg: (input) => stripSandboxPath((input?.path ?? input?.file) as string | undefined),
+  },
   // Slides
   slide_present: { icon: RocketIcon, getLabel: () => "Presenting slides" },
   // Progress / outcomes
   check_outcomes: { icon: SearchIcon, getLabel: () => "Checking outcomes" },
   // WebDev IDE tools
-  webdev_init_project: { icon: CodeIcon, getLabel: (input) => `Initializing project${input?.name ? `: ${truncate(input.name as string, 30)}` : ""}` },
+  webdev_init_project: {
+    icon: CodeIcon,
+    getLabel: () => "Initializing project",
+    getArg: (input) => input?.name ? truncate(input.name as string, 30) : undefined,
+  },
   webdev_save_checkpoint: { icon: CodeIcon, getLabel: () => "Saving checkpoint" },
   webdev_check_status: { icon: CodeIcon, getLabel: () => "Checking project status" },
   webdev_restart_server: { icon: CodeIcon, getLabel: () => "Restarting dev server" },
   webdev_rollback_checkpoint: { icon: CodeIcon, getLabel: () => "Rolling back checkpoint" },
-  webdev_execute_sql: { icon: CodeIcon, getLabel: (input) => `Running SQL${input?.query ? `: ${truncate(input.query as string, 30)}` : ""}` },
+  webdev_execute_sql: {
+    icon: CodeIcon,
+    getLabel: () => "Running SQL",
+    getArg: (input) => input?.query ? truncate(input.query as string, 30) : undefined,
+  },
   webdev_push_schema: { icon: CodeIcon, getLabel: () => "Pushing database schema" },
   webdev_list_versions: { icon: CodeIcon, getLabel: () => "Listing project versions" },
-  webdev_add_feature: { icon: CodeIcon, getLabel: (input) => `Adding ${(input?.feature as string) || "feature"}` },
+  webdev_add_feature: {
+    icon: CodeIcon,
+    getLabel: () => "Adding feature",
+    getArg: (input) => (input?.feature as string) || undefined,
+  },
 };
 
 // ============================================================================
@@ -175,10 +232,12 @@ export function ToolInlineCompact({
   const isActive =
     state === "input-streaming" || state === "input-available" || state === "approval-responded";
 
-  // Generate label
+  // Generate label + optional arg (Manus-style split rendering)
   let label: string;
+  let arg: string | undefined;
   if (category) {
     label = category.getLabel(input, output);
+    arg = category.getArg?.(input);
   } else {
     label = formatToolName(toolName);
   }
@@ -200,25 +259,30 @@ export function ToolInlineCompact({
           onClick={onClick}
           onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
           className={cn(
-            "rounded-[15px] px-2.5 py-[3px]",
+            "rounded-[15px] px-[10px] py-[3px]",
             "border border-[var(--rubic-border-light)] bg-[var(--rubic-fill-gray)]",
-            "inline-flex max-w-full gap-1 items-center",
+            "inline-flex max-w-full gap-2 items-center",
             "relative h-full overflow-hidden",
             "select-none",
-            onClick && "cursor-pointer hover:bg-[var(--rubic-fill-gray-dark)]",
+            onClick && "cursor-pointer hover:bg-[var(--rubic-fill-gray-dark)] dark:hover:bg-white/[0.02]",
             "transition-colors duration-150",
             isActive && "border-blue-500/20 bg-blue-500/[0.05]"
           )}
           title={titleAttr}
         >
-          {/* Icon */}
-          <div className="w-[21px] inline-flex items-center flex-shrink-0 text-[var(--rubic-text-secondary)]">
-            <ToolIcon className={cn("size-[18px]", isActive && "text-blue-400")} />
+          {/* Icon — Manus: w-[16px] container, :size="21" icon, text-primary */}
+          <div className="w-[16px] inline-flex items-center flex-shrink-0 text-[var(--rubic-text-primary)]">
+            <ToolIcon className={cn("size-[21px]", isActive && "text-blue-400")} />
           </div>
 
-          {/* Label */}
-          <div className="text-[13px] text-[var(--rubic-text-secondary)] max-w-full truncate">
-            {label}
+          {/* Label + Arg — Manus-style: action text + mono code arg in pill */}
+          <div className="flex-1 h-full min-w-0 inline-flex items-center text-[14px] text-[var(--rubic-text-secondary)] max-w-full">
+            <span className="whitespace-nowrap">{label}</span>
+            {arg && (
+              <span className="flex-1 min-w-0 rounded-[6px] px-1 ml-1 text-[12px] font-mono text-ellipsis overflow-hidden whitespace-nowrap text-[var(--rubic-text-tertiary)]">
+                <code>{arg}</code>
+              </span>
+            )}
           </div>
 
           {/* Active pulse dot */}
@@ -261,9 +325,15 @@ function truncate(str?: string, max = 20): string {
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
 
-function fileName(path?: unknown): string {
-  if (typeof path !== "string" || !path) return "file";
-  return path.split("/").pop() ?? path;
+/** Strip sandbox prefixes from file paths (Manus strips /home/ubuntu/) */
+function stripSandboxPath(path?: string | null): string | undefined {
+  if (typeof path !== "string" || !path) return undefined;
+  // Strip common sandbox home dir prefixes
+  const stripped = path
+    .replace(/^\/home\/ubuntu\//, "")
+    .replace(/^\/home\/user\//, "")
+    .replace(/^~\//, "");
+  return stripped || path.split("/").pop() || path;
 }
 
 function formatToolName(name: string): string {
@@ -284,12 +354,14 @@ function buildTitle(toolName: string, input?: Record<string, unknown>): string {
   if (toolName.includes("search") && input?.query) {
     return `Searching: ${input.query as string}`;
   }
-  if (toolName.startsWith("file_") && (input?.path || input?.file)) {
+  if ((toolName.startsWith("file_") || toolName === "text_editor") && (input?.path || input?.file)) {
     return `File: ${(input.path ?? input.file) as string}`;
   }
   if (toolName === "shell_exec" && input?.command) {
     return `$ ${input.command as string}`;
   }
 
-  return category.getLabel(input);
+  const label = category.getLabel(input);
+  const arg = category.getArg?.(input);
+  return arg ? `${label} ${arg}` : label;
 }

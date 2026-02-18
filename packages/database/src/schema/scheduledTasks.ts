@@ -103,6 +103,8 @@ export const scheduledTasks = pgTable("scheduled_tasks", {
   composioTriggerId: text("composio_trigger_id"), // Composio trigger instance ID (ti_xxx)
   lastTriggerAt: timestamp("last_trigger_at", { mode: "date" }),
   lastTriggerEventId: text("last_trigger_event_id"), // dedup key
+  // Linked chat session — one session per scheduled task, reused across all executions
+  sessionId: text("session_id"),
   // End conditions
   endDate: timestamp("end_date", { mode: "date" }),
   maxRuns: integer("max_runs"),

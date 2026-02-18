@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import { ShieldXIcon } from "lucide-react";
 import type { StaticToolUIPart, DynamicToolUIPart } from "../../lib/types/ui-message";
@@ -30,6 +31,8 @@ const FULL_RENDERER_TOOLS = new Set([
   "generate_image",
   "message_notify_user",
   "message_ask_user",
+  "gmail_send",
+  "outlook_send",
 ]);
 
 // Debug mode
@@ -110,14 +113,16 @@ export function ToolPart({
         data-tool-state={part.state}
         className={cn("my-1", className)}
       >
-        <ToolRenderer
-          toolName={toolName}
-          toolCallId={part.toolCallId}
-          state={part.state}
-          input={part.input}
-          output={part.output}
-          errorText={part.errorText}
-        />
+        <Suspense fallback={<ToolCompact toolName={toolName} state={part.state} />}>
+          <ToolRenderer
+            toolName={toolName}
+            toolCallId={part.toolCallId}
+            state={part.state}
+            input={part.input}
+            output={part.output}
+            errorText={part.errorText}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -153,14 +158,16 @@ export function ToolPart({
         data-tool-state={part.state}
         className={cn("my-2", className)}
       >
-        <ToolRenderer
-          toolName={toolName}
-          toolCallId={part.toolCallId}
-          state={part.state}
-          input={part.input}
-          output={part.output}
-          errorText={part.errorText}
-        />
+        <Suspense fallback={<ToolCompact toolName={toolName} state={part.state} />}>
+          <ToolRenderer
+            toolName={toolName}
+            toolCallId={part.toolCallId}
+            state={part.state}
+            input={part.input}
+            output={part.output}
+            errorText={part.errorText}
+          />
+        </Suspense>
       </div>
     );
   }

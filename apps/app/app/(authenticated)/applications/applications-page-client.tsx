@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { SearchIcon, RefreshCwIcon, AppWindowIcon, PlusIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
 import { AppCard } from "./components/app-card";
 import { CategoryFilter, type CategoryValue } from "./components/category-filter";
@@ -21,49 +21,93 @@ export function ApplicationsPageClient() {
   const [configOpen, setConfigOpen] = useState(false);
   const [connectingDefId, setConnectingDefId] = useState<string | null>(null);
 
-  // Data fetching
-  const {
-    data: definitions,
-    isLoading: isLoadingDefs,
-    isError: isDefsError,
-    refetch: refetchDefs,
-  } = trpc.connectors.listDefinitions.useQuery(undefined, { retry: 1 });
+  // Data fetching via vanilla tRPC
+  const [definitions, setDefinitions] = useState<any[] | null>(null);
+  const [installedConnectors, setInstalledConnectors] = useState<any[] | null>(null);
+  const [isLoadingDefs, setIsLoadingDefs] = useState(true);
+  const [isLoadingInstalled, setIsLoadingInstalled] = useState(true);
+  const [isDefsError, setIsDefsError] = useState(false);
+  const [isInstalledError, setIsInstalledError] = useState(false);
+  const definitionsRef = useRef(definitions);
+  definitionsRef.current = definitions;
+  const connectingDefIdRef = useRef(connectingDefId);
+  connectingDefIdRef.current = connectingDefId;
 
-  const {
-    data: installedConnectors,
-    isLoading: isLoadingInstalled,
-    isError: isInstalledError,
-    refetch: refetchInstalled,
-  } = trpc.connectors.list.useQuery(undefined, { retry: 1 });
+  const fetchData = useCallback(() => {
+    const client = getTrpcClient();
+    setIsLoadingDefs(true);
+    setIsLoadingInstalled(true);
+    setIsDefsError(false);
+    setIsInstalledError(false);
 
-  const utils = trpc.useUtils();
+    client.connectors.listDefinitions
+      .query()
+      .then((data) => { setDefinitions(data as any[]); setIsDefsError(false); })
+      .catch(() => setIsDefsError(true))
+      .finally(() => setIsLoadingDefs(false));
 
-  // Mutations
-  const installConnector = trpc.connectors.install.useMutation({
-    onSuccess: (_data, variables) => {
-      utils.connectors.list.invalidate();
-      // After installing, start OAuth
-      startOAuth(variables.connectorDefinitionId);
-    },
-    onError: (error) => {
-      if (error.message.includes("already installed")) {
-        // Already installed — go straight to OAuth
-        const def = definitions?.find((d) => d.id === connectingDefId);
-        if (def) {
-          initOAuth.mutate({ type: def.type });
+    client.connectors.list
+      .query()
+      .then((data) => { setInstalledConnectors(data as any[]); setIsInstalledError(false); })
+      .catch(() => setIsInstalledError(true))
+      .finally(() => setIsLoadingInstalled(false));
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const refetchDefs = useCallback(() => {
+    setIsLoadingDefs(true);
+    getTrpcClient().connectors.listDefinitions.query()
+      .then((data) => { setDefinitions(data as any[]); setIsDefsError(false); })
+      .catch(() => setIsDefsError(true))
+      .finally(() => setIsLoadingDefs(false));
+  }, []);
+
+  const refetchInstalled = useCallback(() => {
+    setIsLoadingInstalled(true);
+    getTrpcClient().connectors.list.query()
+      .then((data) => { setInstalledConnectors(data as any[]); setIsInstalledError(false); })
+      .catch(() => setIsInstalledError(true))
+      .finally(() => setIsLoadingInstalled(false));
+  }, []);
+
+  // OAuth flow helper: check connection status with retries
+  const checkConnectionWithRetries = useCallback(async (def: { type: string; name: string }) => {
+    const client = getTrpcClient();
+    let connected = false;
+    const maxAttempts = 3;
+    const delays = [1000, 3000, 5000];
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const result = await client.connectors.checkConnection.mutate({ type: def.type });
+        if (result.status === "connected") {
+          toast.success(`${def.name} connected successfully!`);
+          connected = true;
+          break;
         }
-      } else {
-        setConnectingDefId(null);
-        toast.error(error.message || "Failed to connect");
+        if (result.status === "error") {
+          toast.error(`Failed to connect ${def.name}. Please try again.`);
+          break;
+        }
+      } catch {
+        // Network error — retry
       }
-    },
-  });
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
+    }
 
-  const checkConnection = trpc.connectors.checkConnection.useMutation();
+    if (!connected) {
+      toast.info("Connection pending. Check Applications page for status.");
+    }
+  }, []);
 
-  const initOAuth = trpc.connectors.initializeOAuth.useMutation({
-    onSuccess: (data) => {
-      // Open OAuth popup
+  // OAuth flow helper: open popup and poll
+  const startOAuthFlow = useCallback(async (type: string) => {
+    try {
+      const client = getTrpcClient();
+      const data = await client.connectors.initializeOAuth.mutate({ type });
       const popup = window.open(data.authUrl, "oauth", "width=600,height=700,popup=true");
       if (!popup) {
         toast.error("Please allow popups for this site to connect apps.");
@@ -71,96 +115,50 @@ export function ApplicationsPageClient() {
         return;
       }
 
-      // Poll for popup close, then check status with retries + backoff
       const check = setInterval(async () => {
         if (popup.closed) {
           clearInterval(check);
-
-          const def = definitions?.find((d) => d.id === connectingDefId);
+          const def = definitionsRef.current?.find((d) => d.id === connectingDefIdRef.current);
           if (def) {
-            // Retry status check with backoff: the connector service uses
-            // waitForConnection (up to 15s) so we give it multiple chances
-            let connected = false;
-            const maxAttempts = 3;
-            const delays = [1000, 3000, 5000]; // backoff: 1s, 3s, 5s
-
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-              try {
-                const result = await checkConnection.mutateAsync({ type: def.type });
-                if (result.status === "connected") {
-                  toast.success(`${def.name} connected successfully!`);
-                  connected = true;
-                  break;
-                }
-                if (result.status === "error") {
-                  toast.error(`Failed to connect ${def.name}. Please try again.`);
-                  break;
-                }
-              } catch {
-                // Network error — retry
-              }
-              // Wait before next attempt (unless last attempt)
-              if (attempt < maxAttempts - 1) {
-                await new Promise((r) => setTimeout(r, delays[attempt]));
-              }
-            }
-
-            if (!connected) {
-              toast.info("Connection pending. Check Applications page for status.");
-            }
+            await checkConnectionWithRetries(def);
           }
-
           setConnectingDefId(null);
-          utils.connectors.list.invalidate();
-          utils.connectors.listDefinitions.invalidate();
+          refetchInstalled();
+          refetchDefs();
         }
       }, 500);
-    },
-    onError: (error) => {
+    } catch (error: any) {
       setConnectingDefId(null);
-      toast.error(error.message || "Failed to start connection");
-    },
-  });
+      toast.error(error?.message || "Failed to start connection");
+    }
+  }, [checkConnectionWithRetries, refetchInstalled, refetchDefs]);
 
   // Listen for postMessage from the OAuth callback popup
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      // Only accept messages from our own origin
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === "composio-oauth-callback") {
-        // Composio sends status: "success" or "failed"
         if (event.data.status === "failed") {
           toast.error("OAuth authorization was denied or failed.");
           setConnectingDefId(null);
         }
-        utils.connectors.list.invalidate();
-        utils.connectors.listDefinitions.invalidate();
+        refetchInstalled();
+        refetchDefs();
       }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [utils]);
-
-  const startOAuth = useCallback(
-    (definitionId: string) => {
-      const def = definitions?.find((d) => d.id === definitionId);
-      if (def) {
-        initOAuth.mutate({ type: def.type });
-      }
-    },
-    [definitions, initOAuth]
-  );
+  }, [refetchInstalled, refetchDefs]);
 
   const handleConnect = useCallback(
     (definitionId: string, _type: string) => {
       setConnectingDefId(definitionId);
-      // Go straight to OAuth — connector service creates the user_connector record
       const def = definitions?.find((d) => d.id === definitionId);
       if (def) {
-        initOAuth.mutate({ type: def.type });
+        startOAuthFlow(def.type);
       }
     },
-    [installedConnectors, definitions, initOAuth, installConnector]
+    [definitions, startOAuthFlow]
   );
 
   const handleConfigure = useCallback((connectorId: string) => {

@@ -22,6 +22,20 @@
       "when": 1770553579657,
       "tag": "0002_lonely_korath",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771430123224,
+      "tag": "0003_purple_iceman",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771951200000,
+      "tag": "0004_add_messages_session_created_index",
+      "breakpoints": true
     }
   ]
 }

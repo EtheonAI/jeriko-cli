@@ -22,13 +22,15 @@ import {
   lte,
   initDb,
 } from "./lib/db.js";
-import { checkCredits, meterStepFinish, meterToolCall } from "./lib/metering.js";
+import { checkCredits, meterStepFinish, meterToolCall, meterVmTime, getUserPlanLimits, initializeUserCredits, refreshDailyCreditsIfNeeded } from "./lib/metering.js";
+import { PLAN_DEFINITIONS, TOOL_CREDIT_COSTS, getToolCreditCost } from "./lib/plans.js";
 
 // ─── Stripe Client ───────────────────────────────────────────────────────────
 
-const stripe = new Stripe(getEnv("STRIPE_SECRET_KEY", ""), {
-  apiVersion: "2025-09-30.clover" as Stripe.LatestApiVersion,
-});
+const stripeKey = getEnv("STRIPE_SECRET_KEY", "");
+const stripe = stripeKey
+  ? new Stripe(stripeKey, { apiVersion: "2025-09-30.clover" as Stripe.LatestApiVersion })
+  : (null as unknown as Stripe);
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -89,6 +91,14 @@ const MeterToolBody = z.object({
   userId: z.string().min(1),
   sessionId: z.string().min(1),
   toolName: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const MeterVmTimeBody = z.object({
+  userId: z.string().min(1),
+  sessionId: z.string().min(1),
+  sandboxId: z.string().min(1),
+  durationMinutes: z.number().positive(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -308,6 +318,7 @@ async function main() {
 
   const { app, logger, start } = await createService({
     name: "billing",
+    port: parseInt(process.env.PORT || "4008", 10),
     publicRoutes: ["/webhooks/stripe"],
   });
 
@@ -743,6 +754,138 @@ async function main() {
     });
 
     return reply.success({ metered: true });
+  }));
+
+  // ─── Meter VM Time ──────────────────────────────────────────────────
+
+  app.post("/metering/vm-time", typedRoute({ body: MeterVmTimeBody }, async (request, reply) => {
+    const { userId, sessionId, sandboxId, durationMinutes, metadata } = request.body;
+
+    await meterVmTime({
+      userId,
+      sessionId,
+      sandboxId,
+      durationMinutes,
+      metadata,
+    });
+
+    return reply.success({ metered: true });
+  }));
+
+  // ─── Get Plan Limits ──────────────────────────────────────────────────
+
+  const PlanLimitsParams = z.object({
+    userId: z.string().min(1),
+  });
+
+  app.get("/users/:userId/plan-limits", typedRoute({ params: PlanLimitsParams }, async (request, reply) => {
+    const { userId } = request.params;
+    const limits = await getUserPlanLimits(userId);
+    return reply.success(limits);
+  }));
+
+  // ─── Get Tool Credit Costs ────────────────────────────────────────────
+
+  app.get("/tool-costs", typedRoute({}, async (_request, reply) => {
+    return reply.success({ costs: TOOL_CREDIT_COSTS });
+  }));
+
+  // ─── Initialize User Credits (called on signup) ───────────────────────
+
+  const InitCreditsBody = z.object({
+    userId: z.string().min(1),
+    starterCredits: z.number().optional(),
+    dailyRefreshAmount: z.number().optional(),
+  });
+
+  app.post("/credits/initialize", typedRoute({ body: InitCreditsBody }, async (request, reply) => {
+    const { userId, starterCredits, dailyRefreshAmount } = request.body;
+    await initializeUserCredits(userId, starterCredits, dailyRefreshAmount);
+    return reply.success({ initialized: true });
+  }));
+
+  // ─── Refresh Daily Credits ────────────────────────────────────────────
+
+  const RefreshDailyBody = z.object({
+    userId: z.string().min(1),
+  });
+
+  app.post("/credits/refresh-daily", typedRoute({ body: RefreshDailyBody }, async (request, reply) => {
+    const { userId } = request.body;
+    const refreshed = await refreshDailyCreditsIfNeeded(userId);
+    return reply.success({ refreshed });
+  }));
+
+  // ─── Seed Plans (admin endpoint — seeds the 3 Manus-parity plans) ────
+
+  app.post("/admin/seed-plans", typedRoute({}, async (_request, reply) => {
+    const results = [];
+
+    for (const planDef of PLAN_DEFINITIONS) {
+      // Check if plan with this type already exists
+      const [existing] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.type, planDef.type))
+        .limit(1);
+
+      if (existing) {
+        // Update existing plan
+        await db
+          .update(subscriptionPlans)
+          .set({
+            name: planDef.name,
+            description: planDef.description,
+            priceMonthly: planDef.priceMonthly,
+            priceYearly: planDef.priceYearly,
+            discountYearlyPercent: planDef.discountYearlyPercent,
+            monthlyCredits: planDef.monthlyCredits,
+            starterCredits: planDef.starterCredits,
+            dailyRefreshCredits: planDef.dailyRefreshCredits,
+            maxConcurrentSessions: planDef.maxConcurrentSessions,
+            maxParallelSubtasks: planDef.maxParallelSubtasks,
+            maxScheduledTasks: planDef.maxScheduledTasks,
+            maxStepsPerSession: planDef.maxStepsPerSession,
+            features: planDef.features,
+            limits: planDef.limits,
+            isPopular: planDef.isPopular,
+            sortOrder: planDef.sortOrder,
+            isActive: true,
+          })
+          .where(eq(subscriptionPlans.id, existing.id));
+        results.push({ type: planDef.type, action: "updated", id: existing.id });
+      } else {
+        // Insert new plan
+        const [inserted] = await db
+          .insert(subscriptionPlans)
+          .values({
+            id: createId(),
+            name: planDef.name,
+            type: planDef.type,
+            description: planDef.description,
+            priceMonthly: planDef.priceMonthly,
+            priceYearly: planDef.priceYearly,
+            discountYearlyPercent: planDef.discountYearlyPercent,
+            monthlyCredits: planDef.monthlyCredits,
+            starterCredits: planDef.starterCredits,
+            dailyRefreshCredits: planDef.dailyRefreshCredits,
+            maxConcurrentSessions: planDef.maxConcurrentSessions,
+            maxParallelSubtasks: planDef.maxParallelSubtasks,
+            maxScheduledTasks: planDef.maxScheduledTasks,
+            maxStepsPerSession: planDef.maxStepsPerSession,
+            features: planDef.features,
+            limits: planDef.limits,
+            isPopular: planDef.isPopular,
+            sortOrder: planDef.sortOrder,
+            isActive: true,
+          })
+          .returning();
+        results.push({ type: planDef.type, action: "created", id: inserted!.id });
+      }
+    }
+
+    logger.info({ results }, "Plans seeded successfully");
+    return reply.success({ plans: results });
   }));
 
   // ─── Stripe Webhook Handler ──────────────────────────────────────────────

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import dynamic from "next/dynamic";
 import { env } from "@/env";
 import { verifySession } from "@/lib/dal";
+import { serverTrpc, HydrateClient } from "@/lib/trpc/server";
 import { AvatarStack } from "./components/avatar-stack";
 import { Cursors } from "./components/cursors";
 import { Header } from "./components/header/index";
@@ -30,8 +31,16 @@ const App = async () => {
     image: session.user.image ?? null,
   };
 
+  // Prefetch data on the server — client components get it instantly via HydrateClient.
+  // MUST await for data to be included in the dehydrated HTML payload.
+  // Promise.all runs them in parallel — no sequential waterfall.
+  await Promise.all([
+    serverTrpc.sessions.list.prefetch(),
+    serverTrpc.billing.getCreditBalance.prefetch(),
+  ]);
+
   return (
-    <>
+    <HydrateClient>
       <Header title="Rubic" version="1.0" user={user}>
         {env.LIVEBLOCKS_SECRET && (
           <CollaborationProvider orgId={session?.user?.id ?? ""}>
@@ -54,7 +63,7 @@ const App = async () => {
           <ChatSection showConfigBar />
         </div>
       </main>
-    </>
+    </HydrateClient>
   );
 };
 

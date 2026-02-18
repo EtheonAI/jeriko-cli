@@ -8,10 +8,11 @@ import {
   taskExecutions,
   eq,
   and,
+  isNull,
 } from "../lib/db.js";
 import { getComposioClient } from "../lib/composio.js";
 import { getUserId, logger } from "../lib/helpers.js";
-import { createId } from "@repo/service-utils";
+import { createId, getRedisClient } from "@repo/service-utils";
 
 // ─── Raw body symbol for webhook signature verification ──────────
 // Standard Webhooks signs over the exact raw bytes. We capture them
@@ -142,6 +143,7 @@ export async function triggerRoutes(app: FastifyInstance) {
       triggerSlug: string;
       triggerConfig?: Record<string, unknown>;
       scheduledTaskId?: string;
+      projectId?: string;
     };
 
     if (!body.triggerSlug) {
@@ -160,6 +162,10 @@ export async function triggerRoutes(app: FastifyInstance) {
         .where(eq(connectorDefinitions.type, triggerAppPrefix))
         .limit(1);
 
+      const triggerProjectFilter = body.projectId
+        ? eq(userConnectors.projectId, body.projectId)
+        : isNull(userConnectors.projectId);
+
       let connectedAccountId: string | undefined;
       if (definition) {
         const [integration] = await db
@@ -170,6 +176,7 @@ export async function triggerRoutes(app: FastifyInstance) {
               eq(userConnectors.userId, userId),
               eq(userConnectors.connectorDefinitionId, definition.id),
               eq(userConnectors.status, "connected"),
+              triggerProjectFilter,
             ),
           )
           .limit(1);
@@ -437,9 +444,28 @@ export async function triggerRoutes(app: FastifyInstance) {
         return reply.status(200).send({ status: "ignored", reason: "task_disabled" });
       }
 
-      // Dedup: check if we already processed this event
+      // ── Atomic dedup via Redis SET NX ────────────────────────────
+      // Composio retries webhooks on timeout/5xx. Two concurrent deliveries
+      // of the same event (same log_id) would both pass a DB-only check.
+      // Redis SET NX is atomic — only the first caller proceeds.
+      if (externalEventId) {
+        try {
+          const redis = getRedisClient();
+          const dedupKey = `trigger-dedup:${triggerId}:${externalEventId}`;
+          const acquired = await redis.set(dedupKey, "1", "EX", 86400, "NX"); // 24h TTL
+          if (!acquired) {
+            logger.info({ taskId: task.id, externalEventId }, "Duplicate trigger event (Redis) — skipping");
+            return reply.status(200).send({ status: "ignored", reason: "duplicate" });
+          }
+        } catch (redisErr) {
+          // Redis down — fall through to DB dedup (less reliable but better than nothing)
+          logger.warn({ taskId: task.id, error: redisErr }, "Redis unavailable for trigger dedup — falling through to DB check");
+        }
+      }
+
+      // Fallback DB dedup (covers Redis-down scenarios)
       if (externalEventId && task.lastTriggerEventId === externalEventId) {
-        logger.info({ taskId: task.id, externalEventId }, "Duplicate trigger event — skipping");
+        logger.info({ taskId: task.id, externalEventId }, "Duplicate trigger event (DB) — skipping");
         return reply.status(200).send({ status: "ignored", reason: "duplicate" });
       }
 

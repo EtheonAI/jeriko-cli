@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Switch } from "@repo/design-system/components/ui/switch";
 import { Label } from "@repo/design-system/components/ui/label";
@@ -41,31 +42,54 @@ import {
   AlertTriangleIcon,
   FolderIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
 export function DataControlsTab() {
-  const {
-    data: preferences,
-    isLoading,
-    isError,
-    refetch,
-  } = trpc.user.getPreferences.useQuery(undefined, { retry: 1 });
-  const utils = trpc.useUtils();
+  const [preferences, setPreferences] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["user"]["getPreferences"]["query"]>> | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
 
-  const updatePreferences = trpc.user.updatePreferences.useMutation({
-    onSuccess: () => {
+  const [isUpdatePending, setIsUpdatePending] = useState(false);
+  const [isExportPending, setIsExportPending] = useState(false);
+  const [isClearHistoryPending, setIsClearHistoryPending] = useState(false);
+  const [isClearFilesPending, setIsClearFilesPending] = useState(false);
+
+  const fetchPreferences = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setIsError(false);
+      const data = await getTrpcClient().user.getPreferences.query();
+      setPreferences(data);
+    } catch {
+      setIsError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPreferences();
+  }, [fetchPreferences]);
+
+  const updatePreferences = useCallback(async (input: Parameters<ReturnType<typeof getTrpcClient>["user"]["updatePreferences"]["mutate"]>[0]) => {
+    try {
+      setIsUpdatePending(true);
+      await getTrpcClient().user.updatePreferences.mutate(input);
       toast.success("Settings updated");
-      utils.user.getPreferences.invalidate();
-    },
-    onError: (error) => {
+      fetchPreferences();
+    } catch (error: any) {
       toast.error(error.message || "Failed to update settings");
-    },
-  });
+    } finally {
+      setIsUpdatePending(false);
+    }
+  }, [fetchPreferences]);
 
-  const exportData = trpc.user.exportData.useMutation({
-    onSuccess: (data) => {
+  const exportData = useCallback(async () => {
+    try {
+      setIsExportPending(true);
+      const data = await getTrpcClient().user.exportData.mutate();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -76,32 +100,39 @@ export function DataControlsTab() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success("Data exported successfully");
-    },
-    onError: (error) => {
+    } catch (error: any) {
       toast.error(error.message || "Failed to export data");
-    },
-  });
+    } finally {
+      setIsExportPending(false);
+    }
+  }, []);
 
-  const clearHistory = trpc.user.clearChatHistory.useMutation({
-    onSuccess: () => {
+  const clearHistory = useCallback(async () => {
+    try {
+      setIsClearHistoryPending(true);
+      await getTrpcClient().user.clearChatHistory.mutate();
       toast.success("Conversation history cleared");
-    },
-    onError: (error) => {
+    } catch (error: any) {
       toast.error(error.message || "Failed to clear history");
-    },
-  });
+    } finally {
+      setIsClearHistoryPending(false);
+    }
+  }, []);
 
-  const clearFiles = trpc.user.clearFiles.useMutation({
-    onSuccess: () => {
+  const clearFiles = useCallback(async () => {
+    try {
+      setIsClearFilesPending(true);
+      await getTrpcClient().user.clearFiles.mutate();
       toast.success("Files cleared");
-    },
-    onError: (error) => {
+    } catch (error: any) {
       toast.error(error.message || "Failed to clear files");
-    },
-  });
+    } finally {
+      setIsClearFilesPending(false);
+    }
+  }, []);
 
   const handleToggle = (key: string, value: boolean) => {
-    updatePreferences.mutate({ [key]: value });
+    updatePreferences({ [key]: value });
   };
 
   if (isLoading) {
@@ -132,7 +163,7 @@ export function DataControlsTab() {
         <ErrorState
           title="Failed to load data controls"
           message="Unable to load your privacy settings. Please try again."
-          onRetry={() => refetch()}
+          onRetry={() => fetchPreferences()}
         />
       </div>
     );
@@ -243,10 +274,10 @@ export function DataControlsTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportData.mutate()}
-              disabled={exportData.isPending}
+              onClick={() => exportData()}
+              disabled={isExportPending}
             >
-              {exportData.isPending ? (
+              {isExportPending ? (
                 <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <DownloadIcon className="h-4 w-4 mr-2" />
@@ -286,10 +317,10 @@ export function DataControlsTab() {
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => clearHistory.mutate()}
+                    onClick={() => clearHistory()}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {clearHistory.isPending && (
+                    {isClearHistoryPending && (
                       <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
                     )}
                     Clear History
@@ -330,10 +361,10 @@ export function DataControlsTab() {
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => clearFiles.mutate()}
+                    onClick={() => clearFiles()}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {clearFiles.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                    {isClearFilesPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
                     Clear Files
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -362,7 +393,7 @@ export function DataControlsTab() {
               <Select
                 value={preferences?.conversationRetention || "90d"}
                 onValueChange={(value) =>
-                  updatePreferences.mutate({
+                  updatePreferences({
                     conversationRetention: value as "30d" | "90d" | "1y" | "never",
                   })
                 }
@@ -387,7 +418,7 @@ export function DataControlsTab() {
               <Select
                 value={preferences?.fileRetention || "never"}
                 onValueChange={(value) =>
-                  updatePreferences.mutate({
+                  updatePreferences({
                     fileRetention: value as "30d" | "90d" | "1y" | "never",
                   })
                 }
@@ -412,7 +443,7 @@ export function DataControlsTab() {
               <Select
                 value={preferences?.activityLogRetention || "30d"}
                 onValueChange={(value) =>
-                  updatePreferences.mutate({
+                  updatePreferences({
                     activityLogRetention: value as "30d" | "90d" | "1y" | "never",
                   })
                 }

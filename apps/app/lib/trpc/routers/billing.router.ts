@@ -35,6 +35,105 @@ export const billingRouter = createTRPCRouter({
     return plans;
   }),
 
+  // Get user's plan limits (concurrent sessions, parallel subtasks, etc.)
+  getPlanLimits: protectedProcedure.query(async ({ ctx }) => {
+    const [sub] = await db
+      .select({
+        planId: userSubscriptions.planId,
+        status: userSubscriptions.status,
+      })
+      .from(userSubscriptions)
+      .where(eq(userSubscriptions.userId, ctx.user.id))
+      .limit(1);
+
+    if (!sub || sub.status !== "active") {
+      return {
+        maxConcurrentSessions: 1,
+        maxParallelSubtasks: 5,
+        maxScheduledTasks: 1,
+        maxStepsPerSession: 15,
+        dailyRefreshCredits: 300,
+        planType: "free" as const,
+        planName: "Rubic Light",
+      };
+    }
+
+    const [plan] = await db
+      .select()
+      .from(subscriptionPlans)
+      .where(eq(subscriptionPlans.id, sub.planId))
+      .limit(1);
+
+    if (!plan) {
+      return {
+        maxConcurrentSessions: 1,
+        maxParallelSubtasks: 5,
+        maxScheduledTasks: 1,
+        maxStepsPerSession: 15,
+        dailyRefreshCredits: 300,
+        planType: "free" as const,
+        planName: "Rubic Light",
+      };
+    }
+
+    return {
+      maxConcurrentSessions: plan.maxConcurrentSessions,
+      maxParallelSubtasks: plan.maxParallelSubtasks,
+      maxScheduledTasks: plan.maxScheduledTasks,
+      maxStepsPerSession: plan.maxStepsPerSession,
+      dailyRefreshCredits: plan.dailyRefreshCredits,
+      planType: plan.type,
+      planName: plan.name,
+    };
+  }),
+
+  // Get detailed credit breakdown (daily, monthly, purchased, starter)
+  getCreditBreakdown: protectedProcedure.query(async ({ ctx }) => {
+    const [balance] = await db
+      .select()
+      .from(creditBalances)
+      .where(eq(creditBalances.userId, ctx.user.id))
+      .limit(1);
+
+    if (!balance) {
+      return {
+        total: 0,
+        daily: { available: 0, used: 0, total: 0, refreshAmount: 300 },
+        monthly: { available: 0, used: 0, total: 0 },
+        purchased: { available: 0, used: 0, total: 0 },
+        starter: { available: 0, used: 0, total: 0 },
+        autoTopupEnabled: false,
+      };
+    }
+
+    return {
+      total: balance.balance,
+      daily: {
+        available: Math.max(0, balance.dailyCredits - balance.dailyCreditsUsed),
+        used: balance.dailyCreditsUsed,
+        total: balance.dailyCredits,
+        refreshAmount: balance.dailyRefreshAmount,
+      },
+      monthly: {
+        available: Math.max(0, balance.periodCredits - balance.periodCreditsUsed),
+        used: balance.periodCreditsUsed,
+        total: balance.periodCredits,
+      },
+      purchased: {
+        available: Math.max(0, balance.purchasedCredits - balance.purchasedCreditsUsed),
+        used: balance.purchasedCreditsUsed,
+        total: balance.purchasedCredits,
+      },
+      starter: {
+        available: Math.max(0, balance.starterCredits - balance.starterCreditsUsed),
+        used: balance.starterCreditsUsed,
+        total: balance.starterCredits,
+      },
+      autoTopupEnabled: balance.autoTopupEnabled,
+    };
+  }),
+
+
   // Get user's current subscription
   getSubscription: protectedProcedure.query(async ({ ctx }) => {
     const [subscription] = await db

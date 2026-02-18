@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { db, messages as messagesTable, eq, asc } from "@repo/database";
+import { db, messages as messagesTable, eq, desc } from "@repo/database";
 import { getSession } from "@/lib/dal";
 import type { Message } from "@/lib/store/slices/chat.slice";
 import { ChatClient } from "./components/chat-client";
+
+/** Max messages to load on initial page render. Older messages load on demand. */
+const INITIAL_MESSAGE_LIMIT = 50;
 
 type ChatPageProps = {
   params: Promise<{
@@ -27,14 +30,23 @@ export default async function ChatPage({ params }: ChatPageProps) {
     notFound();
   }
 
-  // Fetch initial messages from database
+  // Fetch initial messages from database — limited to most recent N
   let initialMessages: Message[] = [];
+  let hasMoreMessages = false;
   try {
+    // Fetch limit+1 in DESC order, then reverse, to get the most recent messages
     const dbMessages = await db
       .select()
       .from(messagesTable)
       .where(eq(messagesTable.sessionId, id))
-      .orderBy(asc(messagesTable.createdAt));
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(INITIAL_MESSAGE_LIMIT + 1);
+
+    hasMoreMessages = dbMessages.length > INITIAL_MESSAGE_LIMIT;
+    if (hasMoreMessages) dbMessages.pop();
+
+    // Reverse to chronological order
+    dbMessages.reverse();
 
     // Filter and deduplicate:
     // 1. Skip role="tool" messages — tool data is already inside assistant parts
@@ -101,6 +113,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
       <ChatClient
         sessionId={id}
         initialMessages={initialMessages}
+        hasMoreMessages={hasMoreMessages}
         user={{
           name: session?.user?.name,
           email: session?.user?.email ?? "",

@@ -60,10 +60,13 @@ const STATIC_TOOL_NAMES = new Set([
  * Returns an empty array on failure (graceful degradation — agent still works
  * with static tools even if connector service is down).
  */
-export async function fetchComposioTools(userId: string): Promise<ComposioToolSpec[]> {
+export async function fetchComposioTools(userId: string, projectId?: string): Promise<ComposioToolSpec[]> {
   try {
+    const url = new URL(`${CONNECTOR_SERVICE_URL}/users/${encodeURIComponent(userId)}/tools`);
+    if (projectId) url.searchParams.set("projectId", projectId);
+
     const response = await fetch(
-      `${CONNECTOR_SERVICE_URL}/users/${encodeURIComponent(userId)}/tools`,
+      url.toString(),
       {
         method: "GET",
         headers: {
@@ -219,6 +222,7 @@ function createToolExecutor(
         body: JSON.stringify({
           toolName: spec.name,
           arguments: params as Record<string, unknown>,
+          ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
         }),
         signal: AbortSignal.timeout(EXECUTE_TIMEOUT_MS),
       });

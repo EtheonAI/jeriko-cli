@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -11,18 +11,26 @@ import {
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarMenuButton,
   SidebarSeparator,
+  useSidebar,
 } from "@repo/design-system/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@repo/design-system/components/ui/collapsible";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { MessageSquareIcon } from "lucide-react";
+import { ChevronUpIcon, MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { trpc } from "@/lib/trpc/client";
 import { useAppSelector } from "@/lib/store/hooks";
 import { NavSection } from "./nav-section";
 import { NewTaskButton } from "./new-task-button";
 import { SearchButton } from "./search-button";
 import { SidebarFooter } from "./sidebar-footer";
 import { ChatItem } from "./chat-item";
+import { ProjectsSection } from "./projects-section";
+import { TaskFilter, type TaskFilterType } from "./task-filter";
 
 type UserInfo = {
   name: string | null;
@@ -39,122 +47,172 @@ type Session = {
   id: string;
   title: string | null;
   status?: string | null;
+  projectId?: string | null;
+  isShared?: boolean;
+  isFavorite?: boolean;
   metadata?: Record<string, unknown> | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
 
-function groupSessionsByDate(sessions: Session[]) {
-  const groups: { label: string; sessions: Session[] }[] = [];
-  const buckets: Record<string, Session[]> = {};
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const lastWeek = new Date(today.getTime() - 7 * 86400000);
-
-  const order = ["Today", "Yesterday", "Last 7 days", "Older"];
-
-  for (const session of sessions) {
-    const date = new Date(session.updatedAt);
-    let label: string;
-    if (date >= today) label = "Today";
-    else if (date >= yesterday) label = "Yesterday";
-    else if (date >= lastWeek) label = "Last 7 days";
-    else label = "Older";
-
-    if (!buckets[label]) buckets[label] = [];
-    buckets[label]!.push(session);
+/** Apply the Manus-style filter to session list */
+function filterSessions(sessions: Session[], filter: TaskFilterType): Session[] {
+  switch (filter) {
+    case "non-project":
+      return sessions.filter((s) => !s.projectId && !(s.metadata as any)?.projectId);
+    case "favorites":
+      return sessions.filter(
+        (s) => s.isFavorite || (s.metadata as any)?.isFavorite
+      );
+    case "scheduled":
+      return sessions.filter(
+        (s) =>
+          s.status === "paused" ||
+          (s.metadata as any)?.isScheduled ||
+          (s.metadata as any)?.scheduledAt
+      );
+    case "shared":
+      return sessions.filter(
+        (s) => s.isShared || (s.metadata as any)?.isShared
+      );
+    case "all":
+    default:
+      return sessions;
   }
+}
 
-  for (const label of order) {
-    if (buckets[label]?.length) {
-      groups.push({ label, sessions: buckets[label] });
-    }
+/** Get filter label for the section header */
+function getFilterLabel(filter: TaskFilterType): string {
+  switch (filter) {
+    case "non-project":
+      return "Non-project tasks";
+    case "favorites":
+      return "Favorites";
+    case "scheduled":
+      return "Scheduled";
+    case "shared":
+      return "Shared";
+    case "all":
+    default:
+      return "All tasks";
   }
-
-  return groups;
 }
 
 export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
-  const { data: trpcSessions, isLoading: trpcLoading } = trpc.sessions.list.useQuery();
-  // Merge: tRPC data as source of truth, with any optimistic Redux additions
-  const reduxSessions = useAppSelector((state) => state.sessions.sessions);
-  const sessions = useMemo(() => {
-    const base = trpcSessions ?? [];
-    const baseIds = new Set(base.map((s) => s.id));
-    const extras = reduxSessions.filter((s: any) => !baseIds.has(s.id));
-    return [...extras, ...base];
-  }, [trpcSessions, reduxSessions]);
-  const isLoading = trpcLoading;
+  const { open } = useSidebar();
+  const sessions = useAppSelector((state) => state.sessions.sessions);
+  const isLoading = useAppSelector((state) => state.sessions.isLoading);
+  const [filter, setFilter] = useState<TaskFilterType>("all");
+  const [tasksOpen, setTasksOpen] = useState(true);
 
-  const grouped = useMemo(() => groupSessionsByDate(sessions ?? []), [sessions]);
+  const filteredSessions = useMemo(
+    () => filterSessions(sessions ?? [], filter),
+    [sessions, filter]
+  );
 
   return (
     <>
       <Sidebar variant="inset" collapsible="icon">
+        {/* Header — Logo only (Manus style) */}
         <SidebarHeader className="p-2">
-          {/* Logo */}
-          <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-              R
+          <div className="flex items-center justify-between h-[44px] py-3 px-1 group-data-[collapsible=icon]:justify-center">
+            <div className="flex items-center gap-1.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
+                R
+              </div>
+              <span className="text-sm font-semibold group-data-[collapsible=icon]:hidden">
+                Rubic
+              </span>
             </div>
-            <span className="text-sm font-semibold group-data-[collapsible=icon]:hidden">
-              Rubic
-            </span>
           </div>
-
-          <SidebarMenu className="gap-1">
-            <SidebarMenuItem>
-              <NewTaskButton />
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SearchButton />
-            </SidebarMenuItem>
-          </SidebarMenu>
         </SidebarHeader>
 
         <SidebarContent className="flex flex-col gap-0">
-          <NavSection />
+          {/* Top navigation — Manus: New task, Search, Library, Automations */}
+          <SidebarGroup className="p-2 pb-0">
+            <SidebarMenu className="gap-px">
+              <NewTaskButton />
+              <SearchButton />
+            </SidebarMenu>
+            <SidebarGroupContent className="mt-px">
+              <NavSection />
+            </SidebarGroupContent>
+          </SidebarGroup>
 
-          <SidebarSeparator className="mx-2" />
+          <SidebarSeparator className="mx-2 opacity-0" />
 
-          {/* Sessions */}
-          <div className="group-data-[collapsible=icon]:hidden flex-1 min-h-0 flex flex-col overflow-y-auto">
-            {isLoading ? (
-              <div className="flex flex-col gap-1 px-4 py-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-9 w-full rounded-lg" />
-                ))}
-              </div>
-            ) : grouped.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-sidebar-foreground/40">
-                <MessageSquareIcon className="h-8 w-8" />
-                <p className="text-sm text-center">No conversations yet</p>
-              </div>
-            ) : (
-              grouped.map((group) => (
-                <SidebarGroup key={group.label} className="p-0">
-                  <SidebarGroupLabel className="px-4 text-sidebar-foreground/60">
-                    {group.label}
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent className="px-2">
-                    <SidebarMenu className="gap-0.5">
-                      {group.sessions.map((session) => (
-                        <ChatItem
-                          key={session.id}
-                          chat={{
-                            id: session.id,
-                            title: session.title || "Untitled",
-                            isFavorite: !!(session.metadata as any)?.isFavorite,
-                            projectId: (session.metadata as any)?.projectId ?? null,
-                          }}
-                        />
-                      ))}
+          {/* Scrollable area: Projects + All tasks */}
+          <div className="group-data-[collapsible=icon]:hidden flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden">
+            {/* Projects section (collapsible) */}
+            <div className="px-2">
+              <ProjectsSection />
+            </div>
+
+            {/* All tasks section (collapsible, with filter) */}
+            <Collapsible open={tasksOpen} onOpenChange={setTasksOpen} className="group/tasks flex-1 min-h-0 px-2">
+              <SidebarGroup className="p-0 pt-[11px] flex flex-col flex-1 min-h-0">
+                <SidebarGroupLabel
+                  asChild
+                  className="h-9 px-[10px] text-[13px] font-medium text-sidebar-foreground/50 tracking-tight cursor-pointer hover:bg-sidebar-accent/50 rounded-[10px] transition-colors"
+                >
+                  <div className="flex items-center w-full">
+                    <CollapsibleTrigger className="flex items-center flex-1 min-w-0 gap-0.5">
+                      <span className="flex-1 min-w-0 truncate text-left text-[13px] font-medium">
+                        {getFilterLabel(filter)}
+                      </span>
+                      <ChevronUpIcon
+                        className={`size-3.5 text-sidebar-foreground/40 transition-all shrink-0 opacity-0 group-hover/tasks:opacity-100 ${
+                          !tasksOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </CollapsibleTrigger>
+                    <TaskFilter value={filter} onChange={setFilter} />
+                  </div>
+                </SidebarGroupLabel>
+
+                <CollapsibleContent>
+                  <SidebarGroupContent>
+                    <SidebarMenu className="gap-px pb-5">
+                      {isLoading ? (
+                        <>
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <SidebarMenuItem key={i}>
+                              <Skeleton className="h-9 w-full rounded-[10px]" />
+                            </SidebarMenuItem>
+                          ))}
+                        </>
+                      ) : filteredSessions.length === 0 ? (
+                        <li className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-sidebar-foreground/30">
+                          <MessageSquareIcon className="size-6" />
+                          <p className="text-xs text-center">
+                            {filter === "all"
+                              ? "No conversations yet"
+                              : `No ${getFilterLabel(filter).toLowerCase()}`}
+                          </p>
+                        </li>
+                      ) : (
+                        filteredSessions.map((session) => (
+                          <ChatItem
+                            key={session.id}
+                            chat={{
+                              id: session.id,
+                              title: session.title || "Untitled",
+                              isFavorite:
+                                !!(session as any).isFavorite ||
+                                !!(session.metadata as any)?.isFavorite,
+                              projectId:
+                                (session as any).projectId ??
+                                (session.metadata as any)?.projectId ??
+                                null,
+                            }}
+                          />
+                        ))
+                      )}
                     </SidebarMenu>
                   </SidebarGroupContent>
-                </SidebarGroup>
-              ))
-            )}
+                </CollapsibleContent>
+              </SidebarGroup>
+            </Collapsible>
           </div>
         </SidebarContent>
 

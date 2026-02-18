@@ -1,9 +1,11 @@
 "use client";
 
-import { Button } from "@repo/design-system/components/ui/button";
-import { useSidebar } from "@repo/design-system/components/ui/sidebar";
-import { cn } from "@repo/design-system/lib/utils";
-import { PlusIcon } from "lucide-react";
+import {
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@repo/design-system/components/ui/sidebar";
+import { SquarePenIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function NewTaskButton() {
@@ -11,16 +13,15 @@ export function NewTaskButton() {
   const router = useRouter();
 
   return (
-    <Button
-      className={cn(
-        "h-9 w-full justify-start gap-3 rounded-lg",
-        "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90",
-        !open && "w-9 justify-center px-0"
-      )}
-      onClick={() => router.push("/")}
-    >
-      <PlusIcon className="h-4 w-4 shrink-0" />
-      {open && <span>New task</span>}
-    </Button>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        tooltip="New task"
+        className="h-9 rounded-[10px] gap-3 ps-[9px] pe-[2px] bg-sidebar-accent/60 hover:bg-sidebar-accent/40 [&>svg]:size-[18px]"
+        onClick={() => router.push("/")}
+      >
+        <SquarePenIcon />
+        {open && <span className="text-sm">New task</span>}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

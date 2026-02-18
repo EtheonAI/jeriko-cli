@@ -5815,7 +5815,7 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
+        }
       },
       "compositePrimaryKeys": {
         "votes_chat_id_message_id_pk": {

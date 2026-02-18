@@ -33,55 +33,44 @@ import {
   type PlaybookInfo,
 } from "../slices/chat.slice";
 import { wsSend } from "../middleware/websocket.middleware";
-import { useGetMessagesQuery, useSendMessageMutation } from "../api/api.slice";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 
 /**
- * Chat Hook - Integrates WebSocket streaming, RTK Query, and chat slice
+ * Chat Hook - Integrates WebSocket streaming and vanilla tRPC with chat slice
  *
- * Action Triggers:
- * - fetchMessages: API Call (RTK Query)
- * - sendMessage: API Call (RTK Query) + WebSocket streaming
- * - setInputValue: State only
- * - setTaskMode: State only
- * - setInputMode: State only
- * - addFile/removeFile: State only
- * - sendTypingIndicator: WebSocket message
- *
- * Streaming events (WebSocket):
- * - message:stream:start -> setStreaming(true)
- * - message:stream -> appendToMessage
- * - message:stream:end -> setStreaming(false)
+ * NOTE: The primary chat flow uses AI SDK's useChat (via useChatSession).
+ * This hook is for supplementary chat state management (input, files, typing, etc.)
+ * and for loading historical messages from the DB.
  */
 export function useChatIntegration(sessionId: string | null) {
   const dispatch = useAppDispatch();
   const chatState = useAppSelector((state) => state.chat);
-  const { status: wsStatus } = useAppSelector((state) => state.websocket);
+  const wsStatus = useAppSelector((state) => state.websocket.status);
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTypingRef = useRef<number>(0);
+  const hasFetchedRef = useRef(false);
 
-  // RTK Query hooks
-  const {
-    data: messagesData,
-    isLoading: isFetchingMessages,
-    refetch: refetchMessages,
-  } = useGetMessagesQuery(sessionId || "", {
-    skip: !sessionId,
-  });
-
-  const [sendMessageMutation, { isLoading: isSendingMessage }] = useSendMessageMutation();
-
-  // Sync messages from RTK Query to Redux state
-  useEffect(() => {
-    if (messagesData && sessionId) {
-      dispatch(setMessages({ sessionId, messages: messagesData }));
-    }
-  }, [messagesData, sessionId, dispatch]);
-
-  // Sync loading state
-  useEffect(() => {
-    dispatch(setChatLoading(isFetchingMessages || isSendingMessage));
-  }, [isFetchingMessages, isSendingMessage, dispatch]);
+  // Fetch historical messages for a session
+  const fetchMessages = useCallback(
+    async (sid?: string) => {
+      const targetId = sid ?? sessionId;
+      if (!targetId) return;
+      dispatch(setChatLoading(true));
+      try {
+        const messages = await getTrpcClient().messages.list.query({ sessionId: targetId });
+        if (messages && Array.isArray(messages)) {
+          dispatch(setMessages({ sessionId: targetId, messages: messages as any }));
+        }
+        hasFetchedRef.current = true;
+      } catch (err: any) {
+        dispatch(setChatError(err?.message || "Failed to load messages"));
+      } finally {
+        dispatch(setChatLoading(false));
+      }
+    },
+    [sessionId, dispatch]
+  );
 
   // Clear typing users on session change + cleanup typing timeout on unmount
   useEffect(() => {
@@ -94,19 +83,14 @@ export function useChatIntegration(sessionId: string | null) {
     };
   }, [sessionId, dispatch]);
 
-  /**
-   * Send a message
-   * Trigger: API Call + WebSocket streaming
-   */
+  // Send a message via tRPC (for non-AI-SDK flows)
   const sendMessage = useCallback(
     async (content: string, attachments?: ChatFile[]) => {
       if (!sessionId || !content.trim()) return { success: false };
 
-      // Clear input immediately for responsive UX
       dispatch(setInputValue(""));
       dispatch(clearChatFiles());
 
-      // Create optimistic message
       const tempMessageId = `temp_${Date.now()}`;
       const userMessage: Message = {
         id: tempMessageId,
@@ -124,218 +108,73 @@ export function useChatIntegration(sessionId: string | null) {
         createdAt: new Date().toISOString(),
       };
 
-      // Add user message optimistically
       dispatch(addMessage(userMessage));
 
       try {
-        // Send via API
-        const result = await sendMessageMutation({
+        const result = await getTrpcClient().messages.create.mutate({
           sessionId,
           content,
-        }).unwrap();
-
-        // Update with real message ID
+          role: "user",
+        } as any);
         dispatch(
           updateMessage({
             sessionId,
             messageId: tempMessageId,
-            updates: { id: result.id },
+            updates: { id: (result as any).id },
           })
         );
-
-        // Response will come via WebSocket streaming
-        return { success: true, messageId: result.id };
+        return { success: true, messageId: (result as any).id };
       } catch (error: any) {
         dispatch(setChatError(error?.message || "Failed to send message"));
         return { success: false, error: error?.message };
       }
     },
-    [sessionId, dispatch, sendMessageMutation]
+    [sessionId, dispatch]
   );
 
-  /**
-   * Send typing indicator (debounced)
-   * Trigger: WebSocket message
-   */
+  // Typing indicator (debounced)
   const sendTypingIndicator = useCallback(() => {
     if (!sessionId || wsStatus !== "connected") return;
-
     const now = Date.now();
-    // Only send if at least 2 seconds have passed since last send
     if (now - lastTypingRef.current < 2000) return;
-
     lastTypingRef.current = now;
     dispatch(wsSend("typing:start", { sessionId }));
-
-    // Clear existing timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Set timeout to send stop typing
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       dispatch(wsSend("typing:stop", { sessionId }));
     }, 3000);
   }, [sessionId, wsStatus, dispatch]);
 
-  /**
-   * Stop typing indicator
-   * Trigger: WebSocket message
-   */
   const stopTypingIndicator = useCallback(() => {
     if (!sessionId || wsStatus !== "connected") return;
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     dispatch(wsSend("typing:stop", { sessionId }));
   }, [sessionId, wsStatus, dispatch]);
 
-  /**
-   * Update input value
-   * Trigger: State only
-   */
   const updateInputValue = useCallback(
     (value: string) => {
       dispatch(setInputValue(value));
-
-      // Send typing indicator if there's content
-      if (value.trim()) {
-        sendTypingIndicator();
-      } else {
-        stopTypingIndicator();
-      }
+      if (value.trim()) sendTypingIndicator();
+      else stopTypingIndicator();
     },
     [dispatch, sendTypingIndicator, stopTypingIndicator]
   );
 
-  /**
-   * Set task mode (standard, adaptive, agent)
-   * Trigger: State only
-   */
-  const updateTaskMode = useCallback(
-    (mode: TaskMode) => {
-      dispatch(setTaskMode(mode));
-    },
-    [dispatch]
-  );
+  const updateTaskMode = useCallback((mode: TaskMode) => dispatch(setTaskMode(mode)), [dispatch]);
+  const updateInputMode = useCallback((mode: InputMode) => dispatch(setInputMode(mode)), [dispatch]);
+  const addFile = useCallback((file: ChatFile) => dispatch(addChatFile(file)), [dispatch]);
+  const updateFile = useCallback((fileId: string, updates: Partial<ChatFile>) => dispatch(updateChatFile({ id: fileId, updates })), [dispatch]);
+  const removeFile = useCallback((fileId: string) => dispatch(removeChatFile(fileId)), [dispatch]);
+  const clearFiles = useCallback(() => dispatch(clearChatFiles()), [dispatch]);
+  const updateChatExtData = useCallback((data: ChatExtData | null) => dispatch(setChatExtData(data)), [dispatch]);
+  const toggleSharePopover = useCallback((show: boolean) => dispatch(setShowSharePopover(show)), [dispatch]);
+  const updatePlaybookInfo = useCallback((playbook: PlaybookInfo | null) => dispatch(setPlaybookInfo(playbook)), [dispatch]);
+  const clearMessages = useCallback(() => { if (sessionId) dispatch(clearSessionMessages(sessionId)); }, [sessionId, dispatch]);
+  const reset = useCallback(() => dispatch(resetChatState()), [dispatch]);
 
-  /**
-   * Set input mode (text, voice)
-   * Trigger: State only
-   */
-  const updateInputMode = useCallback(
-    (mode: InputMode) => {
-      dispatch(setInputMode(mode));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Add file attachment
-   * Trigger: State only
-   */
-  const addFile = useCallback(
-    (file: ChatFile) => {
-      dispatch(addChatFile(file));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Update file upload progress
-   * Trigger: State only
-   */
-  const updateFile = useCallback(
-    (fileId: string, updates: Partial<ChatFile>) => {
-      dispatch(updateChatFile({ id: fileId, updates }));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Remove file attachment
-   * Trigger: State only
-   */
-  const removeFile = useCallback(
-    (fileId: string) => {
-      dispatch(removeChatFile(fileId));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Clear all file attachments
-   * Trigger: State only
-   */
-  const clearFiles = useCallback(() => {
-    dispatch(clearChatFiles());
-  }, [dispatch]);
-
-  /**
-   * Set chat extended data
-   * Trigger: State only
-   */
-  const updateChatExtData = useCallback(
-    (data: ChatExtData | null) => {
-      dispatch(setChatExtData(data));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Show/hide share popover
-   * Trigger: State only
-   */
-  const toggleSharePopover = useCallback(
-    (show: boolean) => {
-      dispatch(setShowSharePopover(show));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Set playbook info
-   * Trigger: State only
-   */
-  const updatePlaybookInfo = useCallback(
-    (playbook: PlaybookInfo | null) => {
-      dispatch(setPlaybookInfo(playbook));
-    },
-    [dispatch]
-  );
-
-  /**
-   * Clear session messages
-   * Trigger: State only
-   */
-  const clearMessages = useCallback(() => {
-    if (sessionId) {
-      dispatch(clearSessionMessages(sessionId));
-    }
-  }, [sessionId, dispatch]);
-
-  /**
-   * Reset chat state for new conversation
-   * Trigger: State only
-   */
-  const reset = useCallback(() => {
-    dispatch(resetChatState());
-  }, [dispatch]);
-
-  /**
-   * Refresh messages from server
-   * Trigger: API Call
-   */
-  const refresh = useCallback(() => {
-    refetchMessages();
-  }, [refetchMessages]);
-
-  // Get messages for current session
   const messages = sessionId ? chatState.messages[sessionId] || [] : [];
 
   return {
-    // State
     messages,
     inputValue: chatState.inputValue,
     files: chatState.files,
@@ -349,9 +188,9 @@ export function useChatIntegration(sessionId: string | null) {
     playbookInfo: chatState.playbookInfo,
     chatExtData: chatState.chatExtData,
     isConnected: wsStatus === "connected",
-
     // Actions
     sendMessage,
+    fetchMessages,
     setInputValue: updateInputValue,
     setTaskMode: updateTaskMode,
     setInputMode: updateInputMode,
@@ -364,7 +203,7 @@ export function useChatIntegration(sessionId: string | null) {
     setPlaybookInfo: updatePlaybookInfo,
     clearMessages,
     reset,
-    refresh,
+    refresh: fetchMessages,
   };
 }
 

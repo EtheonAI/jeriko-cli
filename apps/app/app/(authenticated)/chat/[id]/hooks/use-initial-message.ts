@@ -24,12 +24,13 @@ export function useInitialMessage({ sessionId, sendMessage }: UseInitialMessageO
     sessionStorage.removeItem(key);
 
     try {
-      const { parts, model, attachments, skills, connections } = JSON.parse(stored) as {
+      const { parts, model, attachments, skills, connections, projectId } = JSON.parse(stored) as {
         parts: Array<{ type: string; text?: string }>;
         model?: string;
         attachments?: Attachment[];
         skills?: string[];
         connections?: { id: string; type?: string; name?: string }[];
+        projectId?: string;
       };
 
       const textPart = parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
@@ -38,6 +39,7 @@ export function useInitialMessage({ sessionId, sendMessage }: UseInitialMessageO
         if (model) body.model = model;
         if (skills?.length) body.skills = skills;
         if (connections?.length) body.connections = connections;
+        if (projectId) body.projectId = projectId;
         setTimeout(() => sendMessage(textPart?.text ?? "", { body, attachments }), 100);
       }
     } catch {

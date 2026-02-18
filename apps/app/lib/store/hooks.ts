@@ -235,8 +235,6 @@ export const useIsConnected = () =>
 
 export const useSubscribedRooms = () => useAppSelector((state) => state.websocket.rooms);
 
-export const useDevices = () => useAppSelector((state) => state.devices);
-
 // ================== ADDITIONAL MANUS-STYLE SELECTORS ==================
 export const useWorkspace = () => useAppSelector((state) => state.workspace);
 export const useNavbar = () => useAppSelector((state) => state.navbar);
@@ -279,4 +277,19 @@ export {
   useNotificationsIntegration,
   useChatIntegration,
   useSessionsIntegration,
+} from "./hooks/index";
+
+// Phase 1 data hooks — tRPC → Redux sync
+export {
+  useAgentsData,
+  useScheduledTasksData,
+  useBillingData,
+  useConnectorsData,
+  useLibraryData,
+  useSearchData,
+  useProjectsData,
+  useSkillsData,
+  useMailData,
+  useWebhooksData,
+  useUserData,
 } from "./hooks/index";

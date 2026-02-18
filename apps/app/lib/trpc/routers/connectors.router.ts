@@ -9,6 +9,7 @@ import {
   and,
   desc,
   sql,
+  isNull,
 } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
@@ -923,6 +924,107 @@ export const connectorsRouter = createTRPCRouter({
         }>;
       };
       return data.tools;
+    }),
+
+  // List connectors scoped to a project
+  listForProject: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const connectors = await db
+        .select({
+          connector: userConnectors,
+          definition: connectorDefinitions,
+        })
+        .from(userConnectors)
+        .innerJoin(
+          connectorDefinitions,
+          eq(userConnectors.connectorDefinitionId, connectorDefinitions.id)
+        )
+        .where(
+          and(
+            eq(userConnectors.userId, ctx.user.id),
+            eq(userConnectors.projectId, input.projectId)
+          )
+        )
+        .orderBy(desc(userConnectors.createdAt));
+
+      return connectors;
+    }),
+
+  // Initialize OAuth for a project-scoped connector via connector service (Composio)
+  initializeProjectOAuth: protectedProcedure
+    .input(z.object({ type: z.string(), projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+
+      let response: Response;
+      try {
+        response = await fetch(
+          `${connectorServiceUrl}/connectors/${input.type}/oauth/start?projectId=${input.projectId}`,
+          { headers: { "x-user-id": ctx.user.id } }
+        );
+      } catch (fetchError) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Connector service is not available. Make sure it is running on " + connectorServiceUrl,
+        });
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new TRPCError({
+          code: response.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+          message: (error as { error?: string }).error || "Failed to initialize OAuth",
+        });
+      }
+
+      const data = (await response.json()) as { authUrl: string; connectorId: string };
+      return data;
+    }),
+
+  // Check connection status for a project-scoped connector
+  checkProjectConnection: protectedProcedure
+    .input(z.object({ type: z.string(), projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+
+      try {
+        const response = await fetch(
+          `${connectorServiceUrl}/connectors/${input.type}/status?projectId=${input.projectId}`,
+          { headers: { "x-user-id": ctx.user.id } }
+        );
+
+        if (response.ok) {
+          const data = (await response.json()) as { status: string };
+          return data;
+        }
+      } catch {
+        // Connector service unavailable — check DB directly
+      }
+
+      // Fallback: check DB directly
+      const [definition] = await db
+        .select()
+        .from(connectorDefinitions)
+        .where(eq(connectorDefinitions.type, input.type))
+        .limit(1);
+
+      if (!definition) return { status: "not_found" };
+
+      const [connector] = await db
+        .select()
+        .from(userConnectors)
+        .where(
+          and(
+            eq(userConnectors.userId, ctx.user.id),
+            eq(userConnectors.connectorDefinitionId, definition.id),
+            eq(userConnectors.projectId, input.projectId)
+          )
+        )
+        .limit(1);
+
+      return { status: connector?.status ?? "not_found" };
     }),
 
   // Get sync history

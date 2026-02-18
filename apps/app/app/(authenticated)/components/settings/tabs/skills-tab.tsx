@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Switch } from "@repo/design-system/components/ui/switch";
@@ -24,7 +24,13 @@ import {
   LockIcon,
   RotateCcwIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
+import {
+  setOfficialSkills,
+  toggleSkillEnabled,
+  type Skill as ReduxSkill,
+} from "@/lib/store/slices/skills.slice";
 import { toast } from "sonner";
 import { cn } from "@repo/design-system/lib/utils";
 import { ErrorState } from "./error-state";
@@ -145,27 +151,71 @@ const categories = [
 
 export function SkillsTab() {
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const dispatch = useAppDispatch();
 
-  const {
-    data: preferences,
-    isLoading: prefsLoading,
-    isError: prefsError,
-    refetch: refetchPrefs,
-  } = trpc.user.getPreferences.useQuery(undefined, { retry: 1 });
-  const { data: subscription } = trpc.billing.getSubscription.useQuery(undefined, { retry: false });
-  const utils = trpc.useUtils();
+  const [preferences, setPreferences] = useState<{ enabledSkills?: Record<string, boolean> } | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
+  const [prefsError, setPrefsError] = useState(false);
+  const [updatePending, setUpdatePending] = useState(false);
 
-  const updatePreferences = trpc.user.updatePreferences.useMutation({
-    onSuccess: () => {
-      utils.user.getPreferences.invalidate();
+  const fetchPreferences = useCallback(async () => {
+    try {
+      setPrefsLoading(true);
+      setPrefsError(false);
+      const data = await getTrpcClient().user.getPreferences.query();
+      setPreferences(data);
+    } catch {
+      setPrefsError(true);
+    } finally {
+      setPrefsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPreferences();
+  }, [fetchPreferences]);
+
+  // Read subscription from Redux (hydrated by ReduxDataLoader)
+  const reduxSubscription = useAppSelector((state) => state.billing.subscription);
+
+  // Sync hardcoded skill definitions + enabled state to Redux skills slice
+  useEffect(() => {
+    if (!preferences) return;
+    const enabledSkills = preferences.enabledSkills ?? defaultSkillStates;
+    const reduxSkills: ReduxSkill[] = skills.map((s) => ({
+      id: s.id,
+      uid: s.id,
+      name: s.name,
+      description: s.description,
+      prompt: "",
+      iconUrl: "",
+      category: s.category,
+      isOfficial: true,
+      isEnabled: enabledSkills[s.id] ?? s.defaultEnabled,
+      usageCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+    dispatch(setOfficialSkills(reduxSkills));
+  }, [preferences, dispatch]);
+
+  const updatePreferences = useCallback(
+    async (newPrefs: { enabledSkills: Record<string, boolean> }) => {
+      try {
+        setUpdatePending(true);
+        await getTrpcClient().user.updatePreferences.mutate(newPrefs);
+        await fetchPreferences();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to update skill settings");
+      } finally {
+        setUpdatePending(false);
+      }
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update skill settings");
-    },
-  });
+    [fetchPreferences]
+  );
 
   const skillStates = preferences?.enabledSkills ?? defaultSkillStates;
-  const isPro = subscription?.plan?.type === "pro" || subscription?.plan?.type === "enterprise";
+  const isPro = reduxSubscription?.plan === "pro" || reduxSubscription?.plan === "enterprise";
 
   const filteredSkills =
     selectedCategory === "all" ? skills : skills.filter((s) => s.category === selectedCategory);
@@ -184,14 +234,33 @@ export function SkillsTab() {
       [skillId]: !currentState,
     };
 
-    updatePreferences.mutate({ enabledSkills: newSkillStates });
+    updatePreferences({ enabledSkills: newSkillStates });
+
+    // Optimistically update Redux skills slice
+    dispatch(toggleSkillEnabled({ id: skillId, isOfficial: true }));
 
     const skillName = skills.find((s) => s.id === skillId)?.name;
     toast.success(`${skillName} ${!currentState ? "enabled" : "disabled"}`);
   };
 
   const handleResetDefaults = () => {
-    updatePreferences.mutate({ enabledSkills: defaultSkillStates });
+    updatePreferences({ enabledSkills: defaultSkillStates });
+    // Re-sync Redux with default skill states
+    const reduxSkills: ReduxSkill[] = skills.map((s) => ({
+      id: s.id,
+      uid: s.id,
+      name: s.name,
+      description: s.description,
+      prompt: "",
+      iconUrl: "",
+      category: s.category,
+      isOfficial: true,
+      isEnabled: s.defaultEnabled,
+      usageCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+    dispatch(setOfficialSkills(reduxSkills));
     toast.success("Skills reset to defaults");
   };
 
@@ -229,7 +298,7 @@ export function SkillsTab() {
         <ErrorState
           title="Failed to load skills"
           message="Unable to load your skill preferences. Please try again."
-          onRetry={() => refetchPrefs()}
+          onRetry={() => fetchPreferences()}
         />
       </div>
     );

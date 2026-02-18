@@ -186,6 +186,7 @@ async function main() {
 
   const { app, logger, start } = await createService({
     name: "search",
+    port: parseInt(process.env.PORT || "4013", 10),
   });
 
   // Universal search across all entities

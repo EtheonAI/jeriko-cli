@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
@@ -21,7 +21,9 @@ import {
   SelectValue,
 } from "@repo/design-system/components/ui/select";
 import { Loader2Icon, UserIcon, SparklesIcon, LayoutIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
+import { updateUser } from "@/lib/store/slices/auth.slice";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
@@ -33,20 +35,32 @@ const modelOptions = [
 ];
 
 export function PersonalizationTab() {
-  // Fetch user profile and preferences
-  const {
-    data: profile,
-    isLoading: profileLoading,
-    isError: profileError,
-    refetch: refetchProfile,
-  } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
-  const {
-    data: preferences,
-    isLoading: prefsLoading,
-    isError: prefsError,
-    refetch: refetchPrefs,
-  } = trpc.user.getPreferences.useQuery(undefined, { retry: 1 });
-  const utils = trpc.useUtils();
+  const reduxDispatch = useAppDispatch();
+  // Read profile from Redux auth slice (hydrated by ReduxDataLoader)
+  const profile = useAppSelector((state) => state.auth.user);
+  const profileLoading = !profile; // Loaded before settings open
+  const profileError = false;
+  // Preferences from vanilla tRPC (settings-specific fields like bio, customInstructions)
+  const [preferences, setPreferences] = useState<any>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
+  const [prefsError, setPrefsError] = useState(false);
+
+  const fetchPreferences = useCallback(async () => {
+    setPrefsLoading(true);
+    setPrefsError(false);
+    try {
+      const data = await getTrpcClient().user.getPreferences.query();
+      setPreferences(data);
+    } catch {
+      setPrefsError(true);
+    } finally {
+      setPrefsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPreferences();
+  }, [fetchPreferences]);
 
   const [bio, setBio] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
@@ -56,25 +70,42 @@ export function PersonalizationTab() {
     if (preferences?.customInstructions) setCustomInstructions(preferences.customInstructions);
   }, [preferences]);
 
-  const updateProfile = trpc.user.updateProfile.useMutation({
-    onSuccess: () => {
-      toast.success("Profile updated");
-      utils.user.getProfile.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update profile");
-    },
-  });
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  const updatePreferences = trpc.user.updatePreferences.useMutation({
-    onSuccess: () => {
-      toast.success("Preferences saved");
-      utils.user.getPreferences.invalidate();
+  const handleUpdateProfile = useCallback(
+    async (data: { name?: string }) => {
+      setIsUpdatingProfile(true);
+      try {
+        const result = await getTrpcClient().user.updateProfile.mutate(data);
+        toast.success("Profile updated");
+        // Update Redux auth slice
+        if (result) reduxDispatch(updateUser(result as any));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to update profile");
+      } finally {
+        setIsUpdatingProfile(false);
+      }
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to save preferences");
+    [reduxDispatch],
+  );
+
+  const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
+
+  const handleUpdatePreferences = useCallback(
+    async (data: Record<string, any>) => {
+      setIsUpdatingPreferences(true);
+      try {
+        await getTrpcClient().user.updatePreferences.mutate(data);
+        toast.success("Preferences saved");
+        fetchPreferences();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to save preferences");
+      } finally {
+        setIsUpdatingPreferences(false);
+      }
     },
-  });
+    [fetchPreferences],
+  );
 
   const isLoading = profileLoading || prefsLoading;
   const isError = profileError || prefsError;
@@ -115,8 +146,7 @@ export function PersonalizationTab() {
           title="Failed to load personalization settings"
           message="Unable to load your personalization preferences. Please try again."
           onRetry={() => {
-            refetchProfile();
-            refetchPrefs();
+            fetchPreferences();
           }}
         />
       </div>
@@ -149,7 +179,7 @@ export function PersonalizationTab() {
               placeholder="Your display name"
               onBlur={(e) => {
                 if (e.target.value !== profile?.name) {
-                  updateProfile.mutate({ name: e.target.value });
+                  handleUpdateProfile({ name: e.target.value });
                 }
               }}
             />
@@ -171,10 +201,10 @@ export function PersonalizationTab() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => updatePreferences.mutate({ bio })}
-            disabled={updatePreferences.isPending}
+            onClick={() => handleUpdatePreferences({ bio })}
+            disabled={isUpdatingPreferences}
           >
-            {updatePreferences.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+            {isUpdatingPreferences && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
             Save Bio
           </Button>
         </CardContent>
@@ -194,7 +224,7 @@ export function PersonalizationTab() {
             <Label>Default Model</Label>
             <Select
               value={preferences?.defaultModel || "gpt-4o-mini"}
-              onValueChange={(value) => updatePreferences.mutate({ defaultModel: value })}
+              onValueChange={(value) => handleUpdatePreferences({ defaultModel: value })}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -214,7 +244,7 @@ export function PersonalizationTab() {
             <Select
               value={preferences?.communicationStyle || "balanced"}
               onValueChange={(value) =>
-                updatePreferences.mutate({
+                handleUpdatePreferences({
                   communicationStyle: value as "concise" | "balanced" | "detailed",
                 })
               }
@@ -235,7 +265,7 @@ export function PersonalizationTab() {
             <Select
               value={preferences?.expertiseLevel || "intermediate"}
               onValueChange={(value) =>
-                updatePreferences.mutate({
+                handleUpdatePreferences({
                   expertiseLevel: value as "beginner" | "intermediate" | "expert",
                 })
               }
@@ -269,10 +299,10 @@ export function PersonalizationTab() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => updatePreferences.mutate({ customInstructions })}
-            disabled={updatePreferences.isPending}
+            onClick={() => handleUpdatePreferences({ customInstructions })}
+            disabled={isUpdatingPreferences}
           >
-            {updatePreferences.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+            {isUpdatingPreferences && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
             Save Instructions
           </Button>
         </CardContent>
@@ -293,7 +323,7 @@ export function PersonalizationTab() {
             <Select
               value={preferences?.fontSize || "medium"}
               onValueChange={(value) =>
-                updatePreferences.mutate({ fontSize: value as "small" | "medium" | "large" })
+                handleUpdatePreferences({ fontSize: value as "small" | "medium" | "large" })
               }
             >
               <SelectTrigger className="w-full md:w-[300px]">
@@ -312,7 +342,7 @@ export function PersonalizationTab() {
             <Select
               value={preferences?.chatDensity || "comfortable"}
               onValueChange={(value) =>
-                updatePreferences.mutate({
+                handleUpdatePreferences({
                   chatDensity: value as "compact" | "comfortable" | "spacious",
                 })
               }

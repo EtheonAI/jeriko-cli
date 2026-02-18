@@ -10,7 +10,7 @@ import {
 import { Button } from "@repo/design-system/components/ui/button";
 import { DownloadIcon } from "lucide-react";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { trpc } from "@/lib/trpc/client";
+import { useLibraryData } from "@/lib/store/hooks";
 import type { FileItem } from "./file-card";
 
 interface FilePreviewModalProps {
@@ -20,10 +20,21 @@ interface FilePreviewModalProps {
 }
 
 export function FilePreviewModal({ file, onClose, onDownload }: FilePreviewModalProps) {
-  const { data: downloadData, isLoading } = trpc.files.getDownloadUrl.useQuery(
-    { id: file?.id ?? "" },
-    { enabled: !!file && file.mimeType !== "application/folder" }
-  );
+  const { getDownloadUrl } = useLibraryData({ autoFetch: false });
+  const [downloadData, setDownloadData] = useState<{ url?: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!file || file.mimeType === "application/folder") {
+      setDownloadData(null);
+      return;
+    }
+    setIsLoading(true);
+    getDownloadUrl(file.id)
+      .then((data) => setDownloadData(data as any))
+      .catch(() => setDownloadData(null))
+      .finally(() => setIsLoading(false));
+  }, [file?.id, file?.mimeType, getDownloadUrl]);
 
   const url = downloadData?.url;
 

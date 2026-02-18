@@ -21,7 +21,6 @@ export type SettingsTab =
   | "skills"
   | "connectors"
   | "integrations"
-  | "devices"
   | "help";
 
 // Valid tab names for URL hash
@@ -37,7 +36,6 @@ const validTabs: SettingsTab[] = [
   "skills",
   "connectors",
   "integrations",
-  "devices",
   "help",
 ];
 

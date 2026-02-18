@@ -26,7 +26,7 @@ const executeTask = inngest.createFunction(
   {
     id: "execute-task",
     name: "Execute Task",
-    retries: 3,
+    retries: 2, // Safe with idempotency key — orchestrator Redis lock prevents duplicate tool executions
     onFailure: async ({ event, error }) => {
       const { taskId, executionId, userId } = event.data.event.data as {
         taskId: string;
@@ -58,7 +58,7 @@ const executeTask = inngest.createFunction(
             .where(eq(taskExecutions.id, executionId));
         }
 
-        // Mark linked chat session as failed + save error message
+        // Log error to the shared session (don't mark session failed — it's reused)
         if (linkedSessionId) {
           await db.insert(messages).values({
             id: createId(),
@@ -66,12 +66,8 @@ const executeTask = inngest.createFunction(
             role: "assistant",
             content: `Automation failed: ${error.message}`,
             parts: [{ type: "text", text: `Automation failed: ${error.message}` }],
-            metadata: { source: "automation", error: true },
+            metadata: { source: "automation", error: true, executionId },
           });
-          await db
-            .update(agentSessions)
-            .set({ status: "failed", updatedAt: new Date() })
-            .where(eq(agentSessions.id, linkedSessionId));
         }
 
         // Reset scheduled task to pending so cron can retry
@@ -156,49 +152,58 @@ const executeTask = inngest.createFunction(
       userContent += `\n\n[Target device: ${targetDeviceId}]`;
     }
 
-    // Step 1: Create chat session, save user message, mark running
+    // Step 1: Reuse existing session or create one, save user message, mark running
     const sessionId = await step.run("create-session", async () => {
-      // Fetch task for session title
+      // Fetch task — check if it already has a linked session
       const [task] = await db
-        .select({ name: scheduledTasks.name })
+        .select({ name: scheduledTasks.name, sessionId: scheduledTasks.sessionId })
         .from(scheduledTasks)
         .where(eq(scheduledTasks.id, taskId))
         .limit(1);
       const taskName = task?.name || "Automated Task";
 
-      // Generate a date label for the session title (distinguishes runs of the same task)
-      const dateLabel = new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      let sid = task?.sessionId as string | null;
 
-      const sid = createId();
+      if (sid) {
+        // Reuse existing session — make sure it's active
+        await db
+          .update(agentSessions)
+          .set({ status: "active", updatedAt: new Date() })
+          .where(eq(agentSessions.id, sid));
+      } else {
+        // First execution — create session and link it to the scheduled task
+        sid = createId();
+        await db.insert(agentSessions).values({
+          id: sid,
+          userId,
+          status: "active",
+          title: taskName,
+          metadata: {
+            scheduledTaskId: taskId,
+            source: "automation",
+            ...(skillIds?.length ? { skills: skillIds } : {}),
+          },
+        });
 
-      // Create chat session in DB
-      await db.insert(agentSessions).values({
-        id: sid,
-        userId,
-        status: "active",
-        title: `${taskName} — ${dateLabel}`,
-        metadata: {
-          scheduledTaskId: taskId,
-          executionId: executionId ?? undefined,
-          source: "automation",
-          ...(triggerEvent ? { triggerEvent: { slug: triggerEvent.slug } } : {}),
-          ...(skillIds?.length ? { skills: skillIds } : {}),
-        },
-      });
+        // Save sessionId back to the scheduled task so all future executions reuse it
+        await db
+          .update(scheduledTasks)
+          .set({ sessionId: sid })
+          .where(eq(scheduledTasks.id, taskId));
+      }
 
-      // Save user message
+      // Save user message (each execution adds a new message to the shared session)
       await db.insert(messages).values({
         id: createId(),
         sessionId: sid,
         role: "user",
         content: userContent,
         parts: [{ type: "text", text: userContent }],
+        metadata: {
+          executionId: executionId ?? undefined,
+          source: "automation",
+          ...(triggerEvent ? { triggerEvent: { slug: triggerEvent.slug } } : {}),
+        },
       });
 
       // Mark execution running + link to session
@@ -214,9 +219,6 @@ const executeTask = inngest.createFunction(
         .update(scheduledTasks)
         .set({ status: "running" })
         .where(eq(scheduledTasks.id, taskId));
-
-      // Note: trigger tracking (lastTriggerAt, lastTriggerEventId) is updated
-      // by the connector webhook handler BEFORE dispatching here — do NOT overwrite.
 
       await publish(`user:${userId}`, {
         type: "scheduledTask:running",
@@ -237,6 +239,10 @@ const executeTask = inngest.createFunction(
         "x-user-id": userId,
         "x-task-id": taskId,
       };
+      // Idempotency key prevents duplicate tool executions on Inngest retry
+      if (executionId) {
+        headers["x-idempotency-key"] = executionId;
+      }
       if (gatewaySecret) {
         headers["x-gateway-secret"] = gatewaySecret;
       }
@@ -258,9 +264,24 @@ const executeTask = inngest.createFunction(
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
+        // 409 = idempotency lock (already in progress) — throw retryable error
+        if (response.status === 409) {
+          throw new Error(`Orchestrator busy (idempotency lock) — will retry`);
+        }
+        // 200 with already-completed is handled below
         throw new Error(
           `Orchestrator error: ${response.status} - ${errorText}`,
         );
+      }
+
+      // Check for idempotency already-completed response (JSON, not SSE)
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const json = await response.json().catch(() => ({}));
+        if (json.status === "already-completed") {
+          logger.info({ executionId }, "Orchestrator returned already-completed (idempotency)");
+          return { text: "[Execution already completed]", toolCalls: [] };
+        }
       }
 
       // Orchestrator returns SSE stream — consume it and collect text + tool calls
@@ -379,10 +400,10 @@ const executeTask = inngest.createFunction(
         metadata: { model: "agent", source: "automation" },
       });
 
-      // Mark session completed
+      // Keep session active (shared across all executions of this task)
       await db
         .update(agentSessions)
-        .set({ status: "completed", updatedAt: now })
+        .set({ updatedAt: now })
         .where(eq(agentSessions.id, sessionId));
 
       // Mark execution success

@@ -126,7 +126,7 @@ describe("Tool → view type resolution for canvas", () => {
     expect(TOOL_VIEW_MAP["code_execute"]).toBe("terminal");
   });
 
-  it("file tools resolve to 'terminal' view", () => {
+  it("file tools resolve to 'editor' view (Manus FileToolView parity)", () => {
     const fileTools = [
       "file_read",
       "file_write",
@@ -135,7 +135,7 @@ describe("Tool → view type resolution for canvas", () => {
       "file_find_by_name",
     ];
     for (const tool of fileTools) {
-      expect(TOOL_VIEW_MAP[tool]).toBe("terminal");
+      expect(TOOL_VIEW_MAP[tool]).toBe("editor");
     }
   });
 
@@ -333,11 +333,11 @@ describe("Terminal state — output accumulation", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// 5. File State Extraction (rendered in terminal view)
+// 5. File State Extraction (rendered in code view — Manus FileToolView parity)
 // ═════════════════════════════════════════════════════════════════════════
 
 describe("File state — file contents, tree, tabs, language detection", () => {
-  it("file_write input has path + content for terminal view", () => {
+  it("file_write input has path + content for editor view", () => {
     const part = toolPart(
       "file_write",
       "tc_fw",
@@ -349,7 +349,7 @@ describe("File state — file contents, tree, tabs, language detection", () => {
     expect(input.content).toBe("console.log('hello');");
   });
 
-  it("file_read output has content for terminal view", () => {
+  it("file_read output has content for editor view", () => {
     const part = toolPart(
       "file_read",
       "tc_fr",
@@ -501,8 +501,9 @@ describe("View switching — auto-detect + available views", () => {
 
     expect(available.has("terminal")).toBe(true);
     expect(available.has("browser")).toBe(true);
-    // file_write now maps to "terminal", so only 2 unique views
-    expect(available.size).toBe(2);
+    expect(available.has("editor")).toBe(true);
+    // shell_exec → terminal, browser_navigate → browser, file_write → editor = 3 unique views
+    expect(available.size).toBe(3);
   });
 
   it("inline-only tools do not add to available views", () => {
@@ -522,11 +523,11 @@ describe("View switching — auto-detect + available views", () => {
     const toolSequence = [
       "browser_navigate", // → browser
       "shell_exec",       // → terminal
-      "file_write",       // → terminal (latest)
+      "file_write",       // → editor (latest)
     ];
 
     const latestView = TOOL_VIEW_MAP[toolSequence[toolSequence.length - 1]!];
-    expect(latestView).toBe("terminal");
+    expect(latestView).toBe("editor");
   });
 });
 

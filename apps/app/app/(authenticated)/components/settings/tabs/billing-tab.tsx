@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -18,7 +18,14 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import { CheckIcon, CreditCardIcon, CrownIcon, PlusIcon, Loader2Icon, ExternalLinkIcon } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
+import {
+  setSubscription as setSubscriptionAction,
+  setPaymentMethods as setPaymentMethodsAction,
+  setInvoices as setInvoicesAction,
+  type Subscription,
+} from "@/lib/store/slices/billing.slice";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -30,104 +37,163 @@ type BillingTabProps = {
 export function BillingTab({ isPro = false }: BillingTabProps) {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const dispatch = useAppDispatch();
 
-  // Fetch data with error handling
-  const { data: plans, isLoading: isLoadingPlans, isError: isPlansError, refetch: refetchPlans } = trpc.billing.listPlans.useQuery(undefined, { retry: 1 });
-  const { data: subscription, isLoading: isLoadingSubscription, isError: isSubscriptionError, refetch: refetchSubscription } = trpc.billing.getSubscription.useQuery(undefined, { retry: 1 });
-  const { data: paymentMethods, isLoading: isLoadingPayments } = trpc.billing.listPaymentMethods.useQuery(undefined, { retry: 1 });
-  const { data: invoices, isLoading: isLoadingInvoices } = trpc.billing.listInvoices.useQuery({ limit: 5 }, { retry: 1 });
-  const { data: creditPackages } = trpc.billing.listCreditPackages.useQuery(undefined, { retry: 1 });
+  // Read core billing data from Redux (hydrated by ReduxDataLoader)
+  const plans = useAppSelector((state) => state.billing.personalPlanTiers);
+  const reduxSubscription = useAppSelector((state) => state.billing.subscription);
+  const isLoadingPlans = useAppSelector((state) => state.billing.isSubscriptionLoading);
+  const creditPackages = useAppSelector((state) => state.billing.creditPackages);
 
-  // Mutations
-  const utils = trpc.useUtils();
+  // Lazy-fetch data only needed in this tab (not app-critical)
+  const [paymentMethods, setPaymentMethods] = useState<any[] | null>(null);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(true);
+  const [invoices, setInvoices] = useState<any[] | null>(null);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
 
-  const createCheckout = trpc.billing.createSubscriptionCheckout.useMutation({
-    onSuccess: (data) => {
+  // Mutation pending states
+  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
+  const [isCancellingSubscription, setIsCancellingSubscription] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+
+  const fetchPaymentMethods = useCallback(async () => {
+    try {
+      const data = await getTrpcClient().billing.listPaymentMethods.query();
+      setPaymentMethods(data);
+    } catch {
+      setPaymentMethods([]);
+    } finally {
+      setIsLoadingPayments(false);
+    }
+  }, []);
+
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const data = await getTrpcClient().billing.listInvoices.query({ limit: 5 });
+      setInvoices(data);
+    } catch {
+      setInvoices([]);
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPaymentMethods();
+    fetchInvoices();
+  }, [fetchPaymentMethods, fetchInvoices]);
+
+  // Mutations as async callbacks
+
+  const handleCreateCheckout = useCallback(async (planId: string, interval: "monthly" | "yearly") => {
+    setSelectedPlan(planId);
+    setIsCreatingCheckout(true);
+    try {
+      const data = await getTrpcClient().billing.createSubscriptionCheckout.mutate({
+        planId,
+        interval,
+        successUrl: `${window.location.origin}/settings?tab=billing&success=true`,
+        cancelUrl: `${window.location.origin}/settings?tab=billing`,
+      });
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       } else {
         toast.info("Stripe checkout not yet configured");
       }
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to create checkout");
-    },
-  });
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to create checkout");
+    } finally {
+      setIsCreatingCheckout(false);
+    }
+  }, []);
 
-  const cancelSubscription = trpc.billing.cancelSubscription.useMutation({
-    onSuccess: () => {
+  const handleCancelSubscription = useCallback(async () => {
+    setIsCancellingSubscription(true);
+    try {
+      await getTrpcClient().billing.cancelSubscription.mutate({
+        cancelAtPeriodEnd: true,
+        reason: cancelReason,
+      });
       toast.success("Subscription cancelled. You'll have access until the end of your billing period.");
-      utils.billing.getSubscription.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to cancel subscription");
-    },
-  });
+      if (reduxSubscription) dispatch(setSubscriptionAction({ ...reduxSubscription, cancelAtPeriodEnd: true }));
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to cancel subscription");
+    } finally {
+      setIsCancellingSubscription(false);
+    }
+  }, [cancelReason, reduxSubscription, dispatch]);
 
-  const reactivateSubscription = trpc.billing.reactivateSubscription.useMutation({
-    onSuccess: () => {
+  const handleReactivateSubscription = useCallback(async () => {
+    setIsReactivating(true);
+    try {
+      await getTrpcClient().billing.reactivateSubscription.mutate();
       toast.success("Subscription reactivated");
-      utils.billing.getSubscription.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to reactivate subscription");
-    },
-  });
+      if (reduxSubscription) dispatch(setSubscriptionAction({ ...reduxSubscription, cancelAtPeriodEnd: false }));
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to reactivate subscription");
+    } finally {
+      setIsReactivating(false);
+    }
+  }, [reduxSubscription, dispatch]);
 
-  const setDefaultPayment = trpc.billing.setDefaultPaymentMethod.useMutation({
-    onSuccess: () => {
+  const handleSetDefaultPayment = useCallback(async (id: string) => {
+    setIsSettingDefault(true);
+    try {
+      await getTrpcClient().billing.setDefaultPaymentMethod.mutate({ id });
       toast.success("Default payment method updated");
-      utils.billing.listPaymentMethods.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update payment method");
-    },
-  });
+      await fetchPaymentMethods();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update payment method");
+    } finally {
+      setIsSettingDefault(false);
+    }
+  }, [fetchPaymentMethods]);
 
-  const deletePayment = trpc.billing.deletePaymentMethod.useMutation({
-    onSuccess: () => {
+  const handleDeletePayment = useCallback(async (id: string) => {
+    setIsDeletingPayment(true);
+    try {
+      await getTrpcClient().billing.deletePaymentMethod.mutate({ id });
       toast.success("Payment method removed");
-      utils.billing.listPaymentMethods.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to remove payment method");
-    },
-  });
+      await fetchPaymentMethods();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to remove payment method");
+    } finally {
+      setIsDeletingPayment(false);
+    }
+  }, [fetchPaymentMethods]);
 
-  const getBillingPortal = trpc.billing.getBillingPortalUrl.useMutation({
-    onSuccess: (data) => {
+  const handleGetBillingPortal = useCallback(async (returnUrl: string) => {
+    setIsOpeningPortal(true);
+    try {
+      const data = await getTrpcClient().billing.getBillingPortalUrl.mutate({ returnUrl });
       if (data.url) {
         window.open(data.url, "_blank");
       } else {
         toast.info("Billing portal not yet configured");
       }
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to open billing portal");
-    },
-  });
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to open billing portal");
+    } finally {
+      setIsOpeningPortal(false);
+    }
+  }, []);
 
-  const isLoading = isLoadingPlans || isLoadingSubscription || isLoadingPayments;
+  const isLoading = isLoadingPlans || isLoadingPayments;
 
-  const currentPlan = subscription?.plan;
-  const isSubscribed = subscription !== null;
-  const isCancelling = subscription?.subscription?.cancelAtPeriodEnd;
+  const isSubscribed = reduxSubscription !== null;
+  const isCancelling = reduxSubscription?.cancelAtPeriodEnd;
+  const currentPlanType = reduxSubscription?.plan || "free";
+  const currentPlanName = currentPlanType.charAt(0).toUpperCase() + currentPlanType.slice(1);
 
   const handleUpgrade = (planId: string, interval: "monthly" | "yearly") => {
-    setSelectedPlan(planId);
-    createCheckout.mutate({
-      planId,
-      interval,
-      successUrl: `${window.location.origin}/settings?tab=billing&success=true`,
-      cancelUrl: `${window.location.origin}/settings?tab=billing`,
-    });
+    handleCreateCheckout(planId, interval);
   };
 
   const handleCancel = () => {
-    cancelSubscription.mutate({
-      cancelAtPeriodEnd: true,
-      reason: cancelReason,
-    });
+    handleCancelSubscription();
   };
 
   if (isLoading) {
@@ -150,7 +216,9 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
     );
   }
 
-  if (isPlansError || isSubscriptionError) {
+  const billingError = useAppSelector((state) => state.billing.error);
+
+  if (billingError) {
     return (
       <div className="space-y-6">
         <div>
@@ -163,10 +231,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
         <ErrorState
           title="Failed to load billing information"
           message="Unable to load your billing details. Please try again."
-          onRetry={() => {
-            refetchPlans();
-            refetchSubscription();
-          }}
+          onRetry={() => window.location.reload()}
         />
       </div>
     );
@@ -193,7 +258,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-semibold">{currentPlan?.name || "Free"} Plan</span>
+              <span className="font-semibold">{currentPlanName} Plan</span>
               {isSubscribed && !isCancelling && (
                 <Badge variant="secondary" className="text-xs">
                   Active
@@ -208,8 +273,8 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
             <p className="text-sm text-muted-foreground">
               {isSubscribed
                 ? isCancelling
-                  ? `Access until ${subscription?.subscription?.currentPeriodEnd ? format(new Date(subscription.subscription.currentPeriodEnd), "MMM d, yyyy") : "end of period"}`
-                  : `Renews on ${subscription?.subscription?.currentPeriodEnd ? format(new Date(subscription.subscription.currentPeriodEnd), "MMM d, yyyy") : "soon"}`
+                  ? `Access until ${reduxSubscription?.currentPeriodEnd ? format(new Date(reduxSubscription.currentPeriodEnd), "MMM d, yyyy") : "end of period"}`
+                  : `Renews on ${reduxSubscription?.currentPeriodEnd ? format(new Date(reduxSubscription.currentPeriodEnd), "MMM d, yyyy") : "soon"}`
                 : "Upgrade to unlock more features"
               }
             </p>
@@ -219,20 +284,20 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => reactivateSubscription.mutate()}
-                disabled={reactivateSubscription.isPending}
+                onClick={() => handleReactivateSubscription()}
+                disabled={isReactivating}
               >
-                {reactivateSubscription.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                {isReactivating && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
                 Reactivate
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => getBillingPortal.mutate({ returnUrl: window.location.href })}
-                disabled={getBillingPortal.isPending}
+                onClick={() => handleGetBillingPortal(window.location.href)}
+                disabled={isOpeningPortal}
               >
-                {getBillingPortal.isPending ? (
+                {isOpeningPortal ? (
                   <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <ExternalLinkIcon className="h-4 w-4 mr-2" />
@@ -256,7 +321,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {plans?.map((plan) => {
-            const isCurrentPlan = currentPlan?.id === plan.id;
+            const isCurrentPlan = currentPlanType === plan.plan;
             const monthlyPrice = (plan.priceMonthly || 0) / 100;
             const yearlyPrice = (plan.priceYearly || 0) / 100;
 
@@ -302,10 +367,10 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
                   <Button
                     className="w-full"
                     variant={plan.isPopular ? "default" : "outline"}
-                    disabled={isCurrentPlan || createCheckout.isPending}
+                    disabled={isCurrentPlan || isCreatingCheckout}
                     onClick={() => handleUpgrade(plan.id, "monthly")}
                   >
-                    {createCheckout.isPending && selectedPlan === plan.id && (
+                    {isCreatingCheckout && selectedPlan === plan.id && (
                       <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
                     )}
                     {isCurrentPlan ? "Current plan" : `Get ${plan.name}`}
@@ -351,8 +416,8 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setDefaultPayment.mutate({ id: method.id })}
-                      disabled={setDefaultPayment.isPending}
+                      onClick={() => handleSetDefaultPayment(method.id)}
+                      disabled={isSettingDefault}
                     >
                       Set default
                     </Button>
@@ -373,7 +438,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => deletePayment.mutate({ id: method.id })}
+                          onClick={() => handleDeletePayment(method.id)}
                         >
                           Remove
                         </AlertDialogAction>
@@ -393,7 +458,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => getBillingPortal.mutate({ returnUrl: window.location.href })}
+            onClick={() => handleGetBillingPortal(window.location.href)}
           >
             <PlusIcon className="h-4 w-4" />
             Add payment method
@@ -411,7 +476,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => getBillingPortal.mutate({ returnUrl: window.location.href })}
+              onClick={() => handleGetBillingPortal(window.location.href)}
             >
               View all
             </Button>
@@ -492,7 +557,7 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
                     onClick={handleCancel}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    {cancelSubscription.isPending && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
+                    {isCancellingSubscription && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
                     Cancel subscription
                   </AlertDialogAction>
                 </AlertDialogFooter>

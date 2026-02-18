@@ -28,7 +28,7 @@ import {
   markAsRead as markNotificationAsRead,
   type Notification,
 } from "../slices/notifications.slice";
-import { updateDeviceStatus } from "../slices/devices.slice";
+
 import { addMessage, appendToMessage, updateMessage, addToolApproval, setChatError, type Message } from "../slices/chat.slice";
 import { startToolCall, completeToolCall, failToolCall, updateToolCallMetadata } from "../slices/toolCalls.slice";
 import { addUsageRecord } from "../slices/billing.slice";
@@ -187,6 +187,77 @@ let lastPingTime = 0;
 // Bounded message queue for offline sends
 const pendingMessages: Array<{ event: string; data: unknown }> = [];
 
+// ─── Conflation buffer for high-frequency events ──────────────────
+// Terminal chunks, message chunks, and tool progress can arrive at 100+ Hz.
+// Dispatching each one individually causes render thrashing. Instead, we
+// accumulate them and flush at ~60fps (16ms).
+
+type ConflationKey = string; // e.g. "terminal:session123:term1" or "chunk:session123:msg456"
+
+interface PendingTerminalChunk {
+  type: "terminal";
+  segmentId: string;
+  sessionId: string;
+  output: string; // accumulated output
+}
+
+interface PendingToolProgress {
+  type: "toolProgress";
+  correlationId: string;
+  progress?: number;
+  message?: string;
+}
+
+type ConflatedEvent = PendingTerminalChunk | PendingToolProgress;
+
+const conflationBuffer = new Map<ConflationKey, ConflatedEvent>();
+let conflationTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushConflationBuffer(dispatch: Dispatch<UnknownAction>) {
+  if (conflationBuffer.size === 0) return;
+  const entries = Array.from(conflationBuffer.values());
+  conflationBuffer.clear();
+  conflationTimer = null;
+
+  for (const entry of entries) {
+    switch (entry.type) {
+      case "terminal":
+        dispatch(
+          addSegmentEvent({
+            segmentId: entry.segmentId,
+            event: {
+              id: `term_${Date.now()}_${entry.segmentId}`,
+              sessionId: entry.sessionId,
+              segmentId: entry.segmentId,
+              type: "shell_exec",
+              title: "Terminal output",
+              data: { output: entry.output },
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+        break;
+      case "toolProgress":
+        dispatch(
+          updateToolCallMetadata({
+            correlationId: entry.correlationId,
+            metadata: {
+              progress: entry.progress,
+              progressMessage: entry.message,
+            },
+          })
+        );
+        break;
+    }
+  }
+}
+
+function scheduleConflationFlush(dispatch: Dispatch<UnknownAction>) {
+  if (!conflationTimer) {
+    conflationTimer = setTimeout(() => flushConflationBuffer(dispatch), 16);
+  }
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 function cleanupSocket() {
@@ -311,6 +382,17 @@ export const websocketMiddleware: Middleware = (store) => (next) => (action) => 
             dispatch(setLastError(null));
             startPingInterval(dispatch);
             drainPendingMessages();
+
+            // Re-join all rooms that were active before disconnect.
+            // This implements the "catch-up + live follow" pattern from
+            // ReactiveTrader — components don't need to know about reconnection.
+            const state = store.getState() as { websocket?: { rooms?: string[] } };
+            const rooms = state.websocket?.rooms;
+            if (rooms && rooms.length > 0 && socket) {
+              for (const roomId of rooms) {
+                socket.send(JSON.stringify({ type: "subscribe", data: { channel: roomId } }));
+              }
+            }
           };
 
           socket.onclose = (event) => {
@@ -357,6 +439,13 @@ export const websocketMiddleware: Middleware = (store) => (next) => (action) => 
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      // Flush any pending conflated events before disconnecting
+      if (conflationTimer) {
+        clearTimeout(conflationTimer);
+        conflationTimer = null;
+      }
+      flushConflationBuffer(dispatch);
+      conflationBuffer.clear();
       cleanupSocket();
       pendingMessages.length = 0;
       reconnectAttempts = 0;
@@ -719,35 +808,36 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
 
     case "sandbox.terminal.chunk":
       if (event.data?.sessionId) {
-        dispatch(
-          addSegmentEvent({
-            segmentId: event.data.terminalId ?? "terminal",
-            event: {
-              id: `term_${Date.now()}`,
-              sessionId: event.data.sessionId,
-              segmentId: event.data.terminalId ?? "terminal",
-              type: "shell_exec",
-              title: "Terminal output",
-              data: { output: event.data.output },
-              timestamp: new Date().toISOString(),
-            },
-          })
-        );
+        // Conflation: accumulate terminal chunks and flush at ~60fps.
+        // Terminal output can arrive at 100+ Hz during active shell execution.
+        const segId = event.data.terminalId ?? "terminal";
+        const termKey: ConflationKey = `terminal:${event.data.sessionId}:${segId}`;
+        const existing = conflationBuffer.get(termKey);
+        if (existing && existing.type === "terminal") {
+          existing.output += event.data.output ?? "";
+        } else {
+          conflationBuffer.set(termKey, {
+            type: "terminal",
+            segmentId: segId,
+            sessionId: event.data.sessionId,
+            output: event.data.output ?? "",
+          });
+        }
+        scheduleConflationFlush(dispatch);
       }
       break;
 
-    // Tool call progress
+    // Tool call progress — conflated at ~60fps to prevent render thrashing
     case "tool_call.progress":
       if (event.data?.toolCallId) {
-        dispatch(
-          updateToolCallMetadata({
-            correlationId: event.data.toolCallId,
-            metadata: {
-              progress: event.data.progress,
-              progressMessage: event.data.message,
-            },
-          })
-        );
+        const progressKey: ConflationKey = `progress:${event.data.toolCallId}`;
+        conflationBuffer.set(progressKey, {
+          type: "toolProgress",
+          correlationId: event.data.toolCallId,
+          progress: event.data.progress,
+          message: event.data.message,
+        });
+        scheduleConflationFlush(dispatch);
       }
       break;
 
@@ -921,17 +1011,8 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
       }
       break;
 
-    // Device events
+    // Device events — slice removed, handled by tRPC
     case "device:status":
-      if (event.data?.deviceId && event.data.status) {
-        dispatch(
-          updateDeviceStatus({
-            deviceId: event.data.deviceId,
-            status: event.data.status as "online" | "offline" | "busy" | "error",
-            lastHeartbeat: event.data.lastHeartbeat,
-          })
-        );
-      }
       break;
 
     // Scheduled task events

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -38,7 +38,11 @@ import {
   SparklesIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
+import {
+  setAgentEmailInfo as setMailAgentEmailInfo,
+} from "@/lib/store/slices/mailAgent.slice";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
@@ -54,49 +58,120 @@ type EmailSettingsForm = z.infer<typeof emailSettingsSchema>;
 
 export function MailManusTab() {
   const [copied, setCopied] = useState(false);
+  const dispatch = useAppDispatch();
 
-  // Provision or fetch AgentMail inbox
-  const {
-    data: mailbox,
-    isLoading: mailboxLoading,
-    isError: mailboxError,
-    refetch: refetchMailbox,
-  } = trpc.mail.getOrCreateMailbox.useQuery(undefined, { retry: 1 });
+  // --- Vanilla tRPC state ---
+  const [mailbox, setMailbox] = useState<any>(null);
+  const [mailboxLoading, setMailboxLoading] = useState(true);
+  const [mailboxError, setMailboxError] = useState(false);
 
-  // Fetch profile for dynamic email and notification preferences
-  const { data: profile } = trpc.user.getProfile.useQuery(undefined, { retry: 1 });
-  const { data: preferences, isLoading: prefsLoading } = trpc.user.getPreferences.useQuery(
-    undefined,
-    { retry: 1 }
-  );
-  const {
-    data: notifPrefs,
-    isLoading: notifLoading,
-    isError: notifError,
-    refetch,
-  } = trpc.notifications.getPreferences.useQuery(undefined, { retry: 1 });
+  const [preferences, setPreferences] = useState<any>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
 
-  const utils = trpc.useUtils();
+  const [notifPrefs, setNotifPrefs] = useState<any>(null);
+  const [notifLoading, setNotifLoading] = useState(true);
+  const [notifError, setNotifError] = useState(false);
 
-  const updateNotifPreferences = trpc.notifications.updatePreferences.useMutation({
-    onSuccess: () => {
+  const [isUpdatingNotifPrefs, setIsUpdatingNotifPrefs] = useState(false);
+  const [isUpdatingUserPrefs, setIsUpdatingUserPrefs] = useState(false);
+
+  // --- Fetch functions ---
+  const fetchMailbox = useCallback(async () => {
+    setMailboxLoading(true);
+    setMailboxError(false);
+    try {
+      const data = await getTrpcClient().mail.getOrCreateMailbox.query();
+      setMailbox(data);
+    } catch {
+      setMailboxError(true);
+    } finally {
+      setMailboxLoading(false);
+    }
+  }, []);
+
+  const fetchPreferences = useCallback(async () => {
+    setPrefsLoading(true);
+    try {
+      const data = await getTrpcClient().user.getPreferences.query();
+      setPreferences(data);
+    } catch {
+      // silently fail — preferences are optional display
+    } finally {
+      setPrefsLoading(false);
+    }
+  }, []);
+
+  const fetchNotifPrefs = useCallback(async () => {
+    setNotifLoading(true);
+    setNotifError(false);
+    try {
+      const data = await getTrpcClient().notifications.getPreferences.query();
+      setNotifPrefs(data);
+    } catch {
+      setNotifError(true);
+    } finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  // --- Fetch on mount ---
+  useEffect(() => {
+    fetchMailbox();
+    fetchPreferences();
+    fetchNotifPrefs();
+  }, [fetchMailbox, fetchPreferences, fetchNotifPrefs]);
+
+  // Sync mailbox to Redux mailAgent slice when loaded
+  useEffect(() => {
+    if (mailbox?.email) {
+      dispatch(setMailAgentEmailInfo({
+        email: mailbox.email,
+        prompt: "",
+        emailType: 0,
+        canEditAgentEmail: true,
+        createdAt: typeof mailbox.createdAt === "string"
+          ? mailbox.createdAt
+          : new Date(mailbox.createdAt).toISOString(),
+        canEditTime: "",
+      }));
+    }
+  }, [mailbox, dispatch]);
+
+  // Read profile from Redux auth slice (hydrated by ReduxDataLoader)
+  const profile = useAppSelector((state) => state.auth.user);
+
+  // --- Mutation callbacks ---
+  const updateNotifPreferences = useCallback(async (input: {
+    emailEnabled: boolean;
+    emailDigest: string;
+    quietHoursEnabled: boolean;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+  }) => {
+    setIsUpdatingNotifPrefs(true);
+    try {
+      await getTrpcClient().notifications.updatePreferences.mutate(input);
       toast.success("Email settings updated");
-      utils.notifications.getPreferences.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update settings");
-    },
-  });
+      fetchNotifPrefs();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update settings");
+    } finally {
+      setIsUpdatingNotifPrefs(false);
+    }
+  }, [fetchNotifPrefs]);
 
-  const updateUserPreferences = trpc.user.updatePreferences.useMutation({
-    onSuccess: () => {
+  const updateUserPreferences = useCallback(async (input: Record<string, unknown>) => {
+    setIsUpdatingUserPrefs(true);
+    try {
+      await getTrpcClient().user.updatePreferences.mutate(input);
       toast.success("Email processing preferences saved");
-      utils.user.getPreferences.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to save preferences");
-    },
-  });
+      fetchPreferences();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save preferences");
+    } finally {
+      setIsUpdatingUserPrefs(false);
+    }
+  }, [fetchPreferences]);
 
   // Form
   const form = useForm<EmailSettingsForm>({
@@ -125,7 +200,7 @@ export function MailManusTab() {
   };
 
   const onSubmit = (data: EmailSettingsForm) => {
-    updateNotifPreferences.mutate({
+    updateNotifPreferences({
       emailEnabled: data.emailEnabled,
       emailDigest: data.emailDigest,
       quietHoursEnabled: data.quietHoursEnabled,
@@ -165,7 +240,7 @@ export function MailManusTab() {
         <ErrorState
           title="Failed to load email settings"
           message="Unable to load your email preferences. Please try again."
-          onRetry={() => refetch()}
+          onRetry={() => fetchNotifPrefs()}
         />
       </div>
     );
@@ -210,7 +285,7 @@ export function MailManusTab() {
                 <AlertCircleIcon className="h-4 w-4 text-destructive" />
                 <span className="text-sm text-destructive">Failed to provision email inbox</span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => refetchMailbox()}>
+              <Button variant="outline" size="sm" onClick={() => fetchMailbox()}>
                 <RefreshCwIcon className="h-4 w-4 mr-1" />
                 Retry
               </Button>
@@ -309,7 +384,7 @@ export function MailManusTab() {
             <Switch
               checked={preferences?.autoSummarizeEmails ?? false}
               onCheckedChange={(checked) =>
-                updateUserPreferences.mutate({ autoSummarizeEmails: checked })
+                updateUserPreferences({ autoSummarizeEmails: checked })
               }
             />
           </div>
@@ -326,7 +401,7 @@ export function MailManusTab() {
             <Switch
               checked={preferences?.autoCategorizeEmails ?? false}
               onCheckedChange={(checked) =>
-                updateUserPreferences.mutate({ autoCategorizeEmails: checked })
+                updateUserPreferences({ autoCategorizeEmails: checked })
               }
             />
           </div>
@@ -428,8 +503,8 @@ export function MailManusTab() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={updateNotifPreferences.isPending}>
-            {updateNotifPreferences.isPending && (
+          <Button type="submit" disabled={isUpdatingNotifPrefs}>
+            {isUpdatingNotifPrefs && (
               <Loader2Icon className="h-4 w-4 animate-spin mr-2" />
             )}
             Save Changes

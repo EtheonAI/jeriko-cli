@@ -9,6 +9,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { ToolContext } from "./types.js";
 import { getRsaHeaders } from "../rsa-auth.js";
+import { meterStep, meterTool } from "../billing-client.js";
 
 /**
  * Task types for model routing — Manus pattern:
@@ -43,7 +44,21 @@ interface ParallelTaskResult {
 const MAX_CONCURRENT_WORKERS = 4;
 
 /**
+ * Plan-based task limits (Manus parity):
+ *   - Rubic Light (free): max 5 parallel subtasks
+ *   - Rubic Pro ($39):    max 10 parallel subtasks
+ *   - Rubic Max ($199):   max 20 parallel subtasks
+ */
+const PLAN_SUBTASK_LIMITS: Record<string, number> = {
+  free: 5,
+  pro: 10,
+  max: 20,
+  enterprise: 50,
+};
+
+/**
  * Execute multiple tasks in parallel using sub-agent LLM (GPT-4.1-mini).
+ * Enforces plan-based limits on number of subtasks.
  */
 async function executeParallelTasks(
   ctx: ToolContext,
@@ -56,6 +71,43 @@ async function executeParallelTasks(
       status: "error" as const,
       error: "No sandbox available",
     }));
+  }
+
+  // ── Plan-based subtask limit enforcement ───────────────────────────
+  const planType = ctx.planLimits?.planType || "free";
+  const maxSubtasks = ctx.planLimits?.maxParallelSubtasks
+    ?? PLAN_SUBTASK_LIMITS[planType]
+    ?? PLAN_SUBTASK_LIMITS.free!;
+
+  if (tasks.length > maxSubtasks) {
+    // Truncate to plan limit and warn
+    const truncated = tasks.slice(0, maxSubtasks);
+    const skipped = tasks.slice(maxSubtasks);
+
+    console.log(
+      `[parallel-tasks] Plan "${planType}" allows max ${maxSubtasks} subtasks. ` +
+      `Requested ${tasks.length}, executing ${truncated.length}, skipping ${skipped.length}.`
+    );
+
+    const results: ParallelTaskResult[] = [];
+
+    // Execute allowed tasks
+    for (let i = 0; i < truncated.length; i += MAX_CONCURRENT_WORKERS) {
+      const wave = truncated.slice(i, i + MAX_CONCURRENT_WORKERS);
+      const waveResults = await Promise.all(wave.map((task) => executeOneTask(ctx, baseUrl, task)));
+      results.push(...waveResults);
+    }
+
+    // Return errors for skipped tasks
+    for (const task of skipped) {
+      results.push({
+        task_id: task.task_id,
+        status: "error",
+        error: `Skipped: your ${planType} plan allows max ${maxSubtasks} parallel subtasks. Upgrade to increase this limit.`,
+      });
+    }
+
+    return results;
   }
 
   // Process in waves of MAX_CONCURRENT_WORKERS
@@ -206,6 +258,7 @@ async function executeOneTask(
             }>;
           };
         }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
       };
 
       const parts = data.candidates?.[0]?.content?.parts || [];
@@ -220,6 +273,26 @@ async function executeOneTask(
         });
       } else {
         content = textPart?.text || "No image generated";
+      }
+
+      // ── Meter: Gemini image generation ──
+      meterTool({
+        userId: ctx.userId,
+        sessionId: ctx.sessionId,
+        toolName: "image_generation",
+        metadata: { subtaskId: task.task_id, model: modelUsed, source: "parallel_tasks" },
+      });
+      // Meter token usage if available from Gemini response
+      if (data.usageMetadata) {
+        meterStep({
+          userId: ctx.userId,
+          sessionId: ctx.sessionId,
+          stepId: `subtask_${task.task_id}`,
+          inputTokens: data.usageMetadata.promptTokenCount,
+          outputTokens: data.usageMetadata.candidatesTokenCount,
+          model: modelUsed,
+          metadata: { source: "parallel_tasks" },
+        });
       }
     } else if (taskType === "image_generation") {
       // Route to DALL-E 3 via images API
@@ -255,6 +328,14 @@ async function executeOneTask(
       const imageUrl = data.data[0]?.url ?? "";
       const revisedPrompt = data.data[0]?.revised_prompt ?? "";
       content = JSON.stringify({ image_url: imageUrl, revised_prompt: revisedPrompt });
+
+      // ── Meter: DALL-E image generation (10 credits) ──
+      meterTool({
+        userId: ctx.userId,
+        sessionId: ctx.sessionId,
+        toolName: "image_generation",
+        metadata: { subtaskId: task.task_id, model: modelUsed, source: "parallel_tasks" },
+      });
     } else {
       // Route to chat completions (gpt-4.1-mini or gpt-4o)
       const llmProxyUrl = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
@@ -287,6 +368,20 @@ async function executeOneTask(
       const data = (await response.json()) as Record<string, unknown>;
       const choices = data.choices as Array<{ message: { content: string } }>;
       content = choices?.[0]?.message?.content || "";
+
+      // ── Meter: subtask LLM token usage ──
+      const usage = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+      if (usage) {
+        meterStep({
+          userId: ctx.userId,
+          sessionId: ctx.sessionId,
+          stepId: `subtask_${task.task_id}`,
+          inputTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+          model: modelUsed,
+          metadata: { source: "parallel_tasks" },
+        });
+      }
     }
 
     // Store result on sandbox

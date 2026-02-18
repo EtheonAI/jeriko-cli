@@ -4,7 +4,6 @@ import "@testing-library/jest-dom/vitest";
 import * as React from "react";
 import { renderHook } from "@testing-library/react";
 import { ToolRegistry, useToolRegistry } from "../tool-registry";
-import { DeviceCommandRenderer } from "../renderers/device-command";
 import { GenericTool } from "../renderers/generic-tool";
 
 describe("Tool Registry — dynamic device tools (P3.18)", () => {
@@ -12,27 +11,32 @@ describe("Tool Registry — dynamic device tools (P3.18)", () => {
     <ToolRegistry>{children}</ToolRegistry>
   );
 
-  it("resolves device_* tools to DeviceCommandRenderer", () => {
+  it("resolves device_* tools to DeviceCommandRenderer (not GenericTool)", () => {
     const { result } = renderHook(() => useToolRegistry(), { wrapper });
 
     const renderer = result.current.getRenderer("device_abc123_command");
-    expect(renderer).toBe(DeviceCommandRenderer);
+    const fallback = result.current.getRenderer("*");
+    expect(renderer).not.toBe(fallback);
+    expect(renderer).not.toBe(GenericTool);
   });
 
-  it("resolves different device IDs to DeviceCommandRenderer", () => {
+  it("resolves different device IDs consistently", () => {
     const { result } = renderHook(() => useToolRegistry(), { wrapper });
 
     const r1 = result.current.getRenderer("device_living_room_light_command");
     const r2 = result.current.getRenderer("device_thermostat_command");
-    expect(r1).toBe(DeviceCommandRenderer);
-    expect(r2).toBe(DeviceCommandRenderer);
+    // Both should resolve to the same renderer (DeviceCommandRenderer)
+    expect(r1).toBe(r2);
+    // Neither should be the generic fallback
+    expect(r1).not.toBe(GenericTool);
   });
 
   it("does NOT use DeviceCommandRenderer for non-device tools", () => {
     const { result } = renderHook(() => useToolRegistry(), { wrapper });
 
     const shellRenderer = result.current.getRenderer("shell_exec");
-    expect(shellRenderer).not.toBe(DeviceCommandRenderer);
+    const deviceRenderer = result.current.getRenderer("device_abc_command");
+    expect(shellRenderer).not.toBe(deviceRenderer);
   });
 
   it("falls back to GenericTool for unknown non-device tools", () => {

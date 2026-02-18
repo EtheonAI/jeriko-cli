@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../hooks";
 import {
   setScheduledTasks,
+  addScheduledTask,
+  updateScheduledTask,
+  deleteScheduledTask,
   setScheduledTasksError,
   setLoading,
   type ScheduledTask,
@@ -56,14 +59,95 @@ export function useScheduledTasksData({ autoFetch = true }: { autoFetch?: boolea
       const data = await getTrpcClient().scheduledTasks.list.query({});
       const normalized = Array.isArray(data) ? data.map(normalizeScheduledTask) : [];
       dispatch(setScheduledTasks(normalized));
-      hasFetchedRef.current = true; // Mark as fetched only after success
+      hasFetchedRef.current = true;
     } catch (err: any) {
       dispatch(setScheduledTasksError(err?.message || "Failed to load scheduled tasks"));
-      // Don't set hasFetchedRef — allows retry
     } finally {
       dispatch(setLoading(false));
     }
   }, [dispatch]);
+
+  // Mutations
+  const createTask = useCallback(
+    async (params: Record<string, unknown>) => {
+      try {
+        const result = await getTrpcClient().scheduledTasks.create.mutate(params as any);
+        if (result) {
+          dispatch(addScheduledTask(normalizeScheduledTask(result)));
+        }
+        return result;
+      } catch (err: any) {
+        dispatch(setScheduledTasksError(err?.message || "Failed to create task"));
+        throw err;
+      }
+    },
+    [dispatch]
+  );
+
+  const updateTask = useCallback(
+    async (id: string, updates: Record<string, unknown>) => {
+      dispatch(updateScheduledTask({ id, updates: updates as any }));
+      try {
+        await getTrpcClient().scheduledTasks.update.mutate({ id, ...updates } as any);
+      } catch {
+        await fetchTasks();
+      }
+    },
+    [dispatch, fetchTasks]
+  );
+
+  const deleteTask = useCallback(
+    async (id: string) => {
+      dispatch(deleteScheduledTask(id));
+      try {
+        await getTrpcClient().scheduledTasks.delete.mutate({ id });
+      } catch {
+        await fetchTasks();
+      }
+    },
+    [dispatch, fetchTasks]
+  );
+
+  const runNow = useCallback(async (id: string) => {
+    return getTrpcClient().scheduledTasks.runNow.mutate({ id });
+  }, []);
+
+  const pauseTask = useCallback(
+    async (id: string) => {
+      dispatch(updateScheduledTask({ id, updates: { status: "paused" } as any }));
+      try {
+        await getTrpcClient().scheduledTasks.pause.mutate({ id });
+      } catch {
+        await fetchTasks();
+      }
+    },
+    [dispatch, fetchTasks]
+  );
+
+  const resumeTask = useCallback(
+    async (id: string) => {
+      dispatch(updateScheduledTask({ id, updates: { status: "active" } as any }));
+      try {
+        await getTrpcClient().scheduledTasks.resume.mutate({ id });
+      } catch {
+        await fetchTasks();
+      }
+    },
+    [dispatch, fetchTasks]
+  );
+
+  const getExecutions = useCallback(async (taskId: string) => {
+    const data = await getTrpcClient().scheduledTasks.getExecutions.query({ taskId });
+    return Array.isArray(data) ? data.map(normalizeScheduledTaskExecution) : [];
+  }, []);
+
+  const listTriggerTypes = useCallback(async () => {
+    return getTrpcClient().scheduledTasks.listTriggerTypes.query();
+  }, []);
+
+  const getTriggerTypeConfig = useCallback(async (type: string) => {
+    return getTrpcClient().scheduledTasks.getTriggerTypeConfig.query({ type });
+  }, []);
 
   useEffect(() => {
     if (!autoFetch) return;
@@ -72,5 +156,21 @@ export function useScheduledTasksData({ autoFetch = true }: { autoFetch?: boolea
     fetchTasks();
   }, [autoFetch, tasks.length, fetchTasks]);
 
-  return { tasks, isLoading, error, refetch: fetchTasks };
+  return {
+    tasks,
+    isLoading,
+    error,
+    // Fetch
+    refetch: fetchTasks,
+    // Mutations
+    createTask,
+    updateTask,
+    deleteTask,
+    runNow,
+    pauseTask,
+    resumeTask,
+    getExecutions,
+    listTriggerTypes,
+    getTriggerTypeConfig,
+  };
 }

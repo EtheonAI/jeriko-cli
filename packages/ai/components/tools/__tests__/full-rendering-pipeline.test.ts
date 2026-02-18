@@ -195,41 +195,41 @@ describe("Full Rendering Pipeline", () => {
         expectedRenderer: "MessageNotifyRenderer",
         expectedCanvasView: undefined,
       },
-      // File System (mapped to terminal view)
+      // File System (mapped to editor view — Manus FileToolView parity)
       {
         name: "file_read",
         input: { file: "/home/user/test.py" },
         result: { content: "print('hello')" },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "terminal",
+        expectedCanvasView: "editor",
       },
       {
         name: "file_write",
         input: { file: "/home/user/test.py", content: "print('hello')" },
         result: { success: true, path: "/home/user/test.py" },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "terminal",
+        expectedCanvasView: "editor",
       },
       {
         name: "file_str_replace",
         input: { file: "/home/user/test.py", old_str: "hello", new_str: "world" },
         result: { success: true },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "terminal",
+        expectedCanvasView: "editor",
       },
       {
         name: "file_find_in_content",
         input: { file: "/home/user/test.py", regex: "def\\s+" },
         result: { matches: ["def main():"] },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "terminal",
+        expectedCanvasView: "editor",
       },
       {
         name: "file_find_by_name",
         input: { path: "/home/user", glob: "*.py" },
         result: { files: ["/home/user/test.py", "/home/user/main.py"] },
         expectedRenderer: "FilePreview",
-        expectedCanvasView: "terminal",
+        expectedCanvasView: "editor",
       },
       // Shell
       {
@@ -954,7 +954,7 @@ describe("Full Rendering Pipeline", () => {
       expect(canvasViews).toEqual([
         undefined, // show_plan — no canvas
         "browser", // web_search
-        "terminal", // file_write
+        "editor", // file_write — Manus FileToolView parity
         "terminal", // shell_exec
         "browser", // browser_navigate
         undefined, // show_plan — no canvas
@@ -1082,7 +1082,10 @@ describe("Full Rendering Pipeline", () => {
     const terminalTools = [
       "shell_exec", "shell_view", "shell_wait", "shell_write_to_process",
       "shell_kill_process", "code_execute",
-      // File tools + text_editor now map to terminal (not code)
+    ];
+
+    const codeTools = [
+      // File tools + text_editor map to code (Manus FileToolView parity)
       "file_read", "file_write", "file_str_replace",
       "file_find_in_content", "file_find_by_name",
       "text_editor",
@@ -1102,6 +1105,12 @@ describe("Full Rendering Pipeline", () => {
     for (const tool of terminalTools) {
       it(`${tool} → terminal canvas`, () => {
         expect(TOOL_VIEW_MAP[tool]).toBe("terminal");
+      });
+    }
+
+    for (const tool of codeTools) {
+      it(`${tool} → editor canvas (Manus FileToolView parity)`, () => {
+        expect(TOOL_VIEW_MAP[tool]).toBe("editor");
       });
     }
 
@@ -1266,7 +1275,7 @@ describe("Full Rendering Pipeline", () => {
       // Verify canvas views: show_plan has NO canvas view
       const canvasViews = toolParts.map((p) => TOOL_VIEW_MAP[getToolNameFromPart(p)]);
       expect(canvasViews).toEqual([
-        undefined, "browser", "browser", undefined, "terminal",
+        undefined, "browser", "browser", undefined, "editor",
       ]);
 
       // Verify the updated plan part has output with 'plan' field

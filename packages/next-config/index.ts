@@ -35,7 +35,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://us-assets.i.posthog.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://us-assets.i.posthog.com https://www.googletagmanager.com https://www.google-analytics.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' blob: data: https:",
       "font-src 'self' data:",
@@ -91,6 +91,9 @@ export const config: NextConfig = {
       "lodash-es",
       "@radix-ui/react-icons",
       "react-icons",
+      "motion",
+      "react-markdown",
+      "shiki",
     ],
   },
 
@@ -109,9 +112,6 @@ export const config: NextConfig = {
     "@repo/seo",
     "@repo/webhooks",
     "ai",
-    "@ai-sdk/openai",
-    "@ai-sdk/anthropic",
-    "@ai-sdk/google",
   ],
 
   images: {

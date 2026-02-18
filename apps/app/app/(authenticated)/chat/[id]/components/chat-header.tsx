@@ -31,13 +31,12 @@ import {
   Trash2Icon,
   InfoIcon,
 } from "lucide-react";
-import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
+import { useAppDispatch, useAppSelector, useSessionsIntegration } from "@/lib/store/hooks";
 import {
   updateSession as updateSessionInStore,
   removeSession,
   toggleSessionFavorite,
 } from "@/lib/store/slices/sessions.slice";
-import { trpc } from "@/lib/trpc/client";
 import { toast } from "sonner";
 import { CollaboratePopover } from "./collaborate-popover";
 import { SharePopover } from "./share-popover";
@@ -79,27 +78,10 @@ export function ChatHeader({
   const [showTaskDetails, setShowTaskDetails] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const utils = trpc.useUtils();
-
-  const updateSession = trpc.sessions.update.useMutation({
-    onSuccess: (updated) => {
-      if (updated) {
-        dispatch(updateSessionInStore({ id: updated.id, updates: updated as any }));
-      }
-    },
-    onError: () => utils.sessions.list.invalidate(),
-  });
-
-  const deleteSession = trpc.sessions.delete.useMutation({
-    onSuccess: () => {
-      dispatch(removeSession(sessionId));
-      router.push("/");
-    },
-    onError: () => {
-      toast.error("Failed to delete conversation");
-      utils.sessions.list.invalidate();
-    },
-  });
+  const {
+    updateSession: updateSessionApi,
+    deleteSession: deleteSessionApi,
+  } = useSessionsIntegration();
 
   // Auto-focus rename input
   useEffect(() => {
@@ -118,11 +100,10 @@ export function ChatHeader({
   const handleRenameSubmit = useCallback(() => {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== session?.title) {
-      dispatch(updateSessionInStore({ id: sessionId, updates: { title: trimmed } }));
-      updateSession.mutate({ id: sessionId, title: trimmed });
+      updateSessionApi(sessionId, { title: trimmed } as any);
     }
     setIsRenaming(false);
-  }, [renameValue, session?.title, sessionId, dispatch, updateSession]);
+  }, [renameValue, session?.title, sessionId, updateSessionApi]);
 
   const handleRenameKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -135,46 +116,29 @@ export function ChatHeader({
   const handleToggleFavorite = useCallback(() => {
     dispatch(toggleSessionFavorite(sessionId));
     const isFav = !session?.isFavorite;
-    updateSession.mutate({
-      id: sessionId,
-      metadata: { isFavorite: isFav },
-    });
+    updateSessionApi(sessionId, { metadata: { isFavorite: isFav } } as any);
     toast.success(isFav ? "Added to favorites" : "Removed from favorites");
-  }, [sessionId, session?.isFavorite, dispatch, updateSession]);
+  }, [sessionId, session?.isFavorite, dispatch, updateSessionApi]);
 
-  const handleDelete = useCallback(() => {
-    dispatch(removeSession(sessionId));
-    deleteSession.mutate({ id: sessionId });
+  const handleDelete = useCallback(async () => {
+    await deleteSessionApi(sessionId);
     setShowDeleteDialog(false);
-  }, [sessionId, dispatch, deleteSession]);
+    router.push("/");
+  }, [sessionId, deleteSessionApi, router]);
 
   const handleShareChange = useCallback(
     (isPublic: boolean) => {
       const shareId = isPublic ? sessionId : null;
-      dispatch(
-        updateSessionInStore({
-          id: sessionId,
-          updates: { isShared: isPublic, shareId },
-        })
-      );
-      updateSession.mutate({
-        id: sessionId,
-        metadata: { isShared: isPublic, shareId },
-      });
+      updateSessionApi(sessionId, { isShared: isPublic, shareId } as any);
     },
-    [sessionId, dispatch, updateSession]
+    [sessionId, updateSessionApi]
   );
 
   const handleMoved = useCallback(
-    (projectId: string, projectName: string) => {
-      dispatch(
-        updateSessionInStore({
-          id: sessionId,
-          updates: { projectId },
-        })
-      );
+    (projectId: string, _projectName: string) => {
+      updateSessionApi(sessionId, { projectId } as any);
     },
-    [sessionId, dispatch]
+    [sessionId, updateSessionApi]
   );
 
   const isFavorite = session?.isFavorite ?? false;
@@ -229,16 +193,7 @@ export function ChatHeader({
                 return;
               }
               const updated = [...current, email];
-              dispatch(
-                updateSessionInStore({
-                  id: sessionId,
-                  updates: { sharedWith: updated },
-                })
-              );
-              updateSession.mutate({
-                id: sessionId,
-                metadata: { sharedWith: updated },
-              });
+              updateSessionApi(sessionId, { sharedWith: updated } as any);
             }}
           />
 

@@ -251,12 +251,17 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
         metadata: m.metadata as Record<string, unknown> | undefined,
       }));
       dispatch(setReduxMessages({ sessionId, messages: reduxMsgs }));
-      dispatch(
-        updateSessionInStore({
-          id: sessionId,
-          updates: { updatedAt: new Date().toISOString() },
-        })
-      );
+      // Only update sidebar date when user actually sent a new message,
+      // NOT on stream resume (opening an old chat)
+      if (userSentMessageRef.current) {
+        userSentMessageRef.current = false;
+        dispatch(
+          updateSessionInStore({
+            id: sessionId,
+            updates: { updatedAt: new Date().toISOString() },
+          })
+        );
+      }
     },
     onError: (err) => {
       console.error("Chat error:", err);
@@ -285,6 +290,9 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
     return localFiles.length > 0 ? localFiles : undefined;
   }
 
+  // Track whether the user actually sent a new message (vs stream resume)
+  const userSentMessageRef = useRef(false);
+
   // Wrap sendMessage to always include chatId in body
   const sendMessage = useCallback(
     (
@@ -294,6 +302,7 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
         attachments?: Attachment[];
       },
     ) => {
+      userSentMessageRef.current = true;
       const body = { chatId: sessionId, ...(options?.body ?? {}) };
       const files = mapAttachmentsToFiles(options?.attachments);
       return sdkSendMessage(
@@ -319,31 +328,46 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
   // Resume active streams on mount — manually guarded to prevent
   // React 19 strict mode from double-invoking (which causes the
   // "Cannot read properties of undefined (reading 'state')" crash).
+  //
+  // isResumingRef suppresses the transient "submitted" status that the SDK
+  // fires synchronously when resumeStream() is called. Without this,
+  // historical chats flash a thinking indicator + sidebar spinner because
+  // "submitted" → isStreaming=true before the resume GET returns 404.
   const resumeCalledRef = useRef(false);
+  const isResumingRef = useRef(true);
   useEffect(() => {
     if (resumeCalledRef.current) return;
     resumeCalledRef.current = true;
-    resumeStream().catch(() => {
-      // Swallow resume errors — most common case is "no active stream"
-      // which is expected for historical chats.
-    });
+    resumeStream()
+      .catch(() => {
+        // Swallow resume errors — most common case is "no active stream"
+        // which is expected for historical chats.
+      })
+      .finally(() => {
+        isResumingRef.current = false;
+      });
   }, [resumeStream]);
+
+  // Compute effective status — suppress false "submitted" during resume.
+  // "streaming" passes through even during resume (real active stream).
+  const effectiveStatus =
+    isResumingRef.current && status === "submitted" ? "ready" : status;
 
   // Sync streaming state to Redux
   useEffect(() => {
-    const isActive = status === "streaming" || status === "submitted";
+    const isActive = effectiveStatus === "streaming" || effectiveStatus === "submitted";
     dispatch(setStreaming(isActive));
     dispatch(setCurrentStreamingSession(isActive ? sessionId : null));
-  }, [status, sessionId, dispatch]);
+  }, [effectiveStatus, sessionId, dispatch]);
 
-  const isStreaming = status === "streaming" || status === "submitted";
+  const isStreaming = effectiveStatus === "streaming" || effectiveStatus === "submitted";
 
   return {
     messages: messages as UIMessage[],
     setMessages: setMessages as unknown as (
       msgs: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])
     ) => void,
-    status,
+    status: effectiveStatus,
     isStreaming,
     sendMessage,
     stop: customStop,

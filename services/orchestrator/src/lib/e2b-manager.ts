@@ -22,6 +22,7 @@
 
 import crypto from "node:crypto";
 import { getRsaHeaders } from "./rsa-auth.js";
+import { meterVmTime } from "./billing-client.js";
 
 const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
 
@@ -58,6 +59,7 @@ interface SandboxInfo {
   codeServerPassword: string | null;
   databaseName: string | null;
   projectPath: string | null;
+  userId: string;
   createdAt: number;
   lastUsedAt: number;
 }
@@ -191,6 +193,7 @@ export async function getOrCreateSandbox(
       codeServerPassword: null,
       databaseName: null,
       projectPath: null,
+      userId,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     });
@@ -240,6 +243,7 @@ export async function getOrCreateSandbox(
           codeServerPassword: null,
           databaseName: null,
           projectPath: null,
+          userId,
           createdAt: Date.now(),
           lastUsedAt: Date.now(),
         });
@@ -327,6 +331,7 @@ export async function getOrCreateSandbox(
     codeServerPassword,
     databaseName: null,
     projectPath: null,
+    userId,
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
   });
@@ -589,12 +594,35 @@ async function initializeSandbox(
 
 /**
  * Destroy a sandbox for a session.
- * Cleans up the proxy token from the validation map.
+ * Meters VM time (2 credits/minute), cleans up proxy token, and deletes sandbox.
  * If a per-project database was created, drops it via the registered cleanup callback.
  */
 export async function destroySandbox(sessionId: string): Promise<void> {
   const cached = sandboxCache.get(sessionId);
   if (!cached) return;
+
+  // ── Meter sandbox VM time before cleanup ──
+  // Calculate active duration: from creation to last use (not now, since idle time shouldn't count)
+  const durationMs = cached.lastUsedAt - cached.createdAt;
+  const durationMinutes = durationMs / (60 * 1000);
+
+  if (durationMinutes > 0 && cached.userId) {
+    meterVmTime({
+      userId: cached.userId,
+      sessionId,
+      sandboxId: cached.sandboxId,
+      durationMinutes,
+      metadata: {
+        e2bSandboxId: cached.e2bSandboxId,
+        createdAt: cached.createdAt,
+        lastUsedAt: cached.lastUsedAt,
+      },
+    });
+    console.log(
+      `[e2b-manager] Metered VM time: session=${sessionId} duration=${durationMinutes.toFixed(1)}min ` +
+      `(${Math.ceil(durationMinutes) * 2} credits)`
+    );
+  }
 
   // Clean up proxy token
   if (cached.proxyToken) {

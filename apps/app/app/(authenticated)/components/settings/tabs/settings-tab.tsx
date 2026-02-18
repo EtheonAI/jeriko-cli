@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Label } from "@repo/design-system/components/ui/label";
 import {
   Select,
@@ -24,7 +24,7 @@ import {
   ChevronUpIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
-import { trpc } from "@/lib/trpc/client";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
@@ -62,27 +62,43 @@ export function SettingsTab() {
   const [language, setLanguage] = useState("en");
 
   // Fetch notification preferences
-  const {
-    data: preferences,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = trpc.notifications.getPreferences.useQuery(undefined, {
-    retry: 1,
-    retryDelay: 1000,
-  });
+  const [preferences, setPreferences] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchPreferences = useCallback(async () => {
+    try {
+      const data = await getTrpcClient().notifications.getPreferences.query();
+      setPreferences(data);
+      setIsError(false);
+      setError(null);
+    } catch (err: any) {
+      setIsError(true);
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPreferences();
+  }, [fetchPreferences]);
 
   // Update preferences mutation
-  const utils = trpc.useUtils();
-  const updatePreferences = trpc.notifications.updatePreferences.useMutation({
-    onSuccess: () => {
-      utils.notifications.getPreferences.invalidate();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update preferences");
-    },
-  });
+  const [isUpdatingPrefs, setIsUpdatingPrefs] = useState(false);
+  const doUpdatePreferences = useCallback(async (data: Record<string, any>, opts?: { onError?: () => void }) => {
+    setIsUpdatingPrefs(true);
+    try {
+      await getTrpcClient().notifications.updatePreferences.mutate(data);
+      await fetchPreferences(); // re-fetch instead of invalidate
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update preferences");
+      opts?.onError?.();
+    } finally {
+      setIsUpdatingPrefs(false);
+    }
+  }, [fetchPreferences]);
 
   // Local state for switches (optimistic updates)
   const [emailEnabled, setEmailEnabled] = useState(true);
@@ -130,7 +146,7 @@ export function SettingsTab() {
     setState(value);
 
     // Update server
-    updatePreferences.mutate(
+    doUpdatePreferences(
       { [field]: value },
       {
         onError: () => {
@@ -147,12 +163,12 @@ export function SettingsTab() {
     setState: (value: string) => void
   ) => {
     setState(value);
-    updatePreferences.mutate({ [field]: value });
+    doUpdatePreferences({ [field]: value });
   };
 
   const handleTimezoneChange = (value: string) => {
     setQuietHoursTimezone(value);
-    updatePreferences.mutate({ quietHoursTimezone: value });
+    doUpdatePreferences({ quietHoursTimezone: value });
   };
 
   const handleTypeSettingToggle = (
@@ -168,7 +184,7 @@ export function SettingsTab() {
       },
     };
     setTypeSettings(updated);
-    updatePreferences.mutate({ typeSettings: updated });
+    doUpdatePreferences({ typeSettings: updated });
   };
 
   const handleLanguageChange = (value: string) => {
@@ -221,7 +237,7 @@ export function SettingsTab() {
           message={
             error?.message || "Unable to load your notification preferences. Please try again."
           }
-          onRetry={() => refetch()}
+          onRetry={() => fetchPreferences()}
         />
       </div>
     );
@@ -309,7 +325,7 @@ export function SettingsTab() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {updatePreferences.isPending && (
+              {isUpdatingPrefs && (
                 <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
@@ -328,7 +344,7 @@ export function SettingsTab() {
               <p className="text-xs text-muted-foreground">Get notified in your browser</p>
             </div>
             <div className="flex items-center gap-2">
-              {updatePreferences.isPending && (
+              {isUpdatingPrefs && (
                 <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
@@ -345,7 +361,7 @@ export function SettingsTab() {
               <p className="text-xs text-muted-foreground">Show notifications within the app</p>
             </div>
             <div className="flex items-center gap-2">
-              {updatePreferences.isPending && (
+              {isUpdatingPrefs && (
                 <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
@@ -364,7 +380,7 @@ export function SettingsTab() {
               <p className="text-xs text-muted-foreground">Play a sound for new notifications</p>
             </div>
             <div className="flex items-center gap-2">
-              {updatePreferences.isPending && (
+              {isUpdatingPrefs && (
                 <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
               )}
               <Switch
@@ -388,7 +404,7 @@ export function SettingsTab() {
         <Select
           defaultValue={preferences?.emailDigest || "daily"}
           onValueChange={(value) => {
-            updatePreferences.mutate({
+            doUpdatePreferences({
               emailDigest: value as "instant" | "hourly" | "daily" | "weekly" | "never",
             });
           }}
@@ -422,7 +438,7 @@ export function SettingsTab() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {updatePreferences.isPending && (
+            {isUpdatingPrefs && (
               <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
             )}
             <Switch

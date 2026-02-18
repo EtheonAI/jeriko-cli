@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
-import { db, messages, agentSessions, votes, documents, eq, and, asc, desc } from "@repo/database";
+import { db, messages, agentSessions, votes, documents, eq, and, asc, desc, lt, sql } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 
 export const messagesRouter = createTRPCRouter({
@@ -27,6 +27,60 @@ export const messagesRouter = createTRPCRouter({
       }
 
       return sessionMessages;
+    }),
+
+  // Cursor-based paginated message list — loads older messages on demand
+  listPaginated: protectedProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        cursor: z.string().optional(), // message ID to paginate before
+        limit: z.number().min(1).max(100).default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      // Verify session ownership
+      const [session] = await db
+        .select()
+        .from(agentSessions)
+        .where(and(eq(agentSessions.id, input.sessionId), eq(agentSessions.userId, ctx.user.id)))
+        .limit(1);
+
+      if (!session) {
+        throw new Error("Session not found");
+      }
+
+      // Build WHERE clause: session_id = ? AND (optional) created_at < cursor's created_at
+      const conditions = [eq(messages.sessionId, input.sessionId)];
+
+      if (input.cursor) {
+        // Get the cursor message's created_at for keyset pagination
+        conditions.push(
+          lt(
+            messages.createdAt,
+            sql`(SELECT created_at FROM messages WHERE id = ${input.cursor})`
+          )
+        );
+      }
+
+      // Fetch limit+1 to detect if there are more pages
+      const rows = await db
+        .select()
+        .from(messages)
+        .where(and(...conditions))
+        .orderBy(desc(messages.createdAt))
+        .limit(input.limit + 1);
+
+      const hasMore = rows.length > input.limit;
+      if (hasMore) rows.pop();
+
+      // Reverse to chronological order
+      rows.reverse();
+
+      return {
+        messages: rows,
+        nextCursor: hasMore && rows.length > 0 ? rows[0]!.id : null,
+      };
     }),
 
   // Send a message (creates user message)

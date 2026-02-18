@@ -80,6 +80,7 @@
       "parse5": "^7.2.1",
       "@types/react": "19.2.13",
       "@types/react-dom": "19.2.3",
+      "ai": "6.0.77",
       "drizzle-orm": "0.38.4",
       "zod": "4.3.6"
     },

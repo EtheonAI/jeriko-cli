@@ -512,6 +512,7 @@ export const POST = async (req: Request) => {
       metadata,
       skills,
       connections,
+      projectId,
     } = body as {
       messages: UIMessage[];
       id?: string;
@@ -519,6 +520,7 @@ export const POST = async (req: Request) => {
       metadata?: { sessionId?: string; model?: string };
       skills?: string[];
       connections?: { id: string; type?: string; name?: string }[];
+      projectId?: string;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -588,6 +590,7 @@ export const POST = async (req: Request) => {
           const newMeta: Record<string, unknown> = {};
           if (skills?.length) newMeta.skills = skills;
           if (connections?.length) newMeta.connections = connections;
+          if (projectId) newMeta.projectId = projectId;
           await db.insert(agentSessions).values({
             id: sessionId,
             userId,
@@ -598,10 +601,11 @@ export const POST = async (req: Request) => {
         } else {
           // Carry forward existing metadata (includes sandboxId for resume)
           sessionMeta = (existing.metadata ?? {}) as Record<string, unknown>;
-          if (skills?.length || connections?.length) {
+          if (skills?.length || connections?.length || projectId) {
             const updatedMeta = { ...sessionMeta };
             if (skills?.length) updatedMeta.skills = skills;
             if (connections?.length) updatedMeta.connections = connections;
+            if (projectId) updatedMeta.projectId = projectId;
             await db
               .update(agentSessions)
               .set({ metadata: updatedMeta, updatedAt: new Date() })
@@ -662,6 +666,8 @@ export const POST = async (req: Request) => {
         ...(fileContext.length > 0 ? { fileContext } : {}),
         // Forward session metadata (sandboxId, nekoUrl) for sandbox resume/recovery
         ...(sessionMeta.sandboxId ? { sessionMeta } : {}),
+        // Project-scoped Composio entity routing
+        ...(projectId ? { projectId } : {}),
       }),
       signal: timeoutSignal,
     });

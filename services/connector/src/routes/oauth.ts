@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { createId, getEnv } from "@repo/service-utils";
-import { db, connectorDefinitions, userConnectors, eq, and } from "../lib/db.js";
+import { db, connectorDefinitions, userConnectors, eq, and, isNull } from "../lib/db.js";
 import { getComposioClient } from "../lib/composio.js";
 import { getUserId, logger } from "../lib/helpers.js";
+import { getComposioEntityId } from "../lib/entity.js";
 
 // In-memory cache for auth config IDs (toolkit → authConfigId)
 const authConfigCache = new Map<string, string>();
@@ -77,6 +78,12 @@ export async function oauthRoutes(app: FastifyInstance) {
     try {
       const userId = getUserId(request);
       const { type } = request.params;
+      const projectId = (request.query as Record<string, string>).projectId as string | undefined;
+
+      // Project-scoped filter: match projectId if given, else match NULL (user-level)
+      const projectFilter = projectId
+        ? eq(userConnectors.projectId, projectId)
+        : isNull(userConnectors.projectId);
 
       // Parallel: look up definition + existing user connector at the same time
       const [[definition], [existing]] = await Promise.all([
@@ -95,7 +102,8 @@ export async function oauthRoutes(app: FastifyInstance) {
           .where(
             and(
               eq(userConnectors.userId, userId),
-              eq(connectorDefinitions.type, type)
+              eq(connectorDefinitions.type, type),
+              projectFilter
             )
           )
           .limit(1),
@@ -135,6 +143,7 @@ export async function oauthRoutes(app: FastifyInstance) {
             id: connectorId,
             userId,
             connectorDefinitionId: definition.id,
+            projectId: projectId ?? null,
             status: "pending",
           }),
           authConfigPromise,
@@ -146,9 +155,11 @@ export async function oauthRoutes(app: FastifyInstance) {
       // Initiate OAuth via Composio
       const composio = getComposioClient();
       const appUrl = getEnv("APP_URL", "http://localhost:3000");
-      const callbackUrl = `${appUrl}/api/connectors/callback?type=${type}`;
+      let callbackUrl = `${appUrl}/api/connectors/callback?type=${type}`;
+      if (projectId) callbackUrl += `&projectId=${projectId}`;
 
-      const connRequest = await composio.connectedAccounts.initiate(userId, authConfigId, {
+      const entityId = getComposioEntityId(userId, projectId);
+      const connRequest = await composio.connectedAccounts.initiate(entityId, authConfigId, {
         callbackUrl,
         allowMultiple: true,
       });
@@ -180,6 +191,11 @@ export async function oauthRoutes(app: FastifyInstance) {
     try {
       const userId = getUserId(request);
       const { type } = request.params;
+      const projectId = (request.query as Record<string, string>).projectId as string | undefined;
+
+      const projectFilter = projectId
+        ? eq(userConnectors.projectId, projectId)
+        : isNull(userConnectors.projectId);
 
       // Single join query instead of two separate queries
       const [result] = await db
@@ -194,7 +210,8 @@ export async function oauthRoutes(app: FastifyInstance) {
         .where(
           and(
             eq(userConnectors.userId, userId),
-            eq(connectorDefinitions.type, type)
+            eq(connectorDefinitions.type, type),
+            projectFilter
           )
         )
         .limit(1);

@@ -10,6 +10,7 @@ async function main() {
 
   const { app, logger: _logger, start } = await createService({
     name: "task",
+    port: parseInt(process.env.PORT || "4002", 10),
     publicRoutes: ["/inngest"],
   });
 
