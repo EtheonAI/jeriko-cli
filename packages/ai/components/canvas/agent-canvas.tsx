@@ -119,6 +119,8 @@ export interface AgentCanvasProps {
   streamUrl?: string;
   /** Called when user control mode changes (Take Control on/off) */
   onUserControlChange?: (active: boolean) => void;
+  /** Whether agent is actively executing a browser tool (auto-shows Neko live stream) */
+  isAgentBrowsing?: boolean;
 
   // File preview
   previewFileName?: string;
@@ -375,6 +377,7 @@ export function AgentCanvas({
   nekoUrl,
   streamUrl,
   onUserControlChange,
+  isAgentBrowsing,
   previewFileName,
   previewContent,
   previewFileType,
@@ -524,6 +527,7 @@ export function AgentCanvas({
             nekoUrl={nekoUrl}
             streamUrl={streamUrl}
             onUserControlChange={onUserControlChange}
+            isAgentBrowsing={isAgentBrowsing}
           />
         )}
         {viewType === "editor" && (

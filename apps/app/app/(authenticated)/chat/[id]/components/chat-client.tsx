@@ -320,6 +320,7 @@ export function ChatClient({
               nekoUrl={canvasState.nekoUrl}
               streamUrl={canvasState.streamUrl}
               onUserControlChange={setUserControlActive}
+              isAgentBrowsing={canvasState.isAgentBrowsing}
               sandboxId={canvasState.sandboxId}
               previewFileName={canvasState.previewFileName}
               previewContent={canvasState.previewContent}

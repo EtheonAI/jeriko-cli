@@ -42,6 +42,8 @@ export interface BrowserViewProps {
   streamUrl?: string;
   /** Called when user control mode changes (Take Control on/off) — used to pause prompt */
   onUserControlChange?: (active: boolean) => void;
+  /** Whether the agent is actively working on a browser tool (auto-shows Neko live stream) */
+  isAgentBrowsing?: boolean;
 }
 
 // ============================================================================
@@ -230,6 +232,7 @@ export function BrowserView({
   nekoUrl,
   streamUrl,
   onUserControlChange,
+  isAgentBrowsing,
 }: BrowserViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [userControlActive, setUserControlActive] = useState(false);
@@ -237,10 +240,13 @@ export function BrowserView({
 
   // Live stream URL — Neko WebRTC (primary) or E2B noVNC stream (fallback)
   const liveStreamUrl = nekoUrl || streamUrl || null;
-  // Only enter live stream iframe mode when user explicitly clicks "Take Control"
-  // AND a Neko/noVNC URL is available. Default view shows S3 screenshots from tool results.
-  // This avoids the 404 when Neko isn't ready at sandbox start.
-  const isLiveStreamMode = userControlActive && !!liveStreamUrl;
+  // Show Neko live stream in TWO cases:
+  // 1. User explicitly clicked "Take Control" (interactive mode)
+  // 2. Agent is actively browsing AND Neko URL is available (read-only live view)
+  // This matches Manus: live desktop stream during agent work, screenshots for history.
+  const isLiveStreamMode = (userControlActive || !!isAgentBrowsing) && !!liveStreamUrl;
+  // User has interactive control (can click/type in browser) — only via Take Control button
+  const isInteractiveMode = userControlActive && !!liveStreamUrl;
 
   const toggleUserControl = useCallback(() => {
     setUserControlActive((prev) => {
@@ -380,17 +386,25 @@ export function BrowserView({
         ref={containerRef}
         className={cn(
           "relative flex-1 overflow-hidden bg-canvas-deep",
-          userControlActive && !isLiveStreamMode && "cursor-crosshair"
+          isInteractiveMode && !isLiveStreamMode && "cursor-crosshair"
         )}
-        tabIndex={userControlActive && !isLiveStreamMode ? 0 : undefined}
-        onKeyDown={userControlActive && !isLiveStreamMode ? handleKeyDown : undefined}
+        tabIndex={isInteractiveMode && !isLiveStreamMode ? 0 : undefined}
+        onKeyDown={isInteractiveMode && !isLiveStreamMode ? handleKeyDown : undefined}
       >
-        {/* Priority 1: Live desktop stream — Neko WebRTC (primary) or E2B noVNC (fallback) */}
+        {/* Priority 1: Live desktop stream — Neko WebRTC (primary) or E2B noVNC (fallback)
+            Shown in two modes:
+            - Agent browsing: read-only view (pointer-events-none on iframe, agent drives)
+            - Take Control: interactive mode (user can click/type via Neko WebRTC) */}
         {isLiveStreamMode ? (
           <iframe
             src={liveStreamUrl}
             title="Rubic Virtual Computer — Live Desktop"
-            className="size-full border-0"
+            className={cn(
+              "size-full border-0",
+              // Read-only during agent browsing — block mouse/keyboard to iframe
+              // Interactive when user explicitly clicks "Take Control"
+              !isInteractiveMode && "pointer-events-none"
+            )}
             allow="clipboard-read; clipboard-write; autoplay; microphone; camera; display-capture"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
             referrerPolicy="no-referrer"
@@ -450,9 +464,9 @@ export function BrowserView({
             alt="Browser view"
             className={cn(
               "size-full object-contain",
-              userControlActive && "cursor-crosshair"
+              isInteractiveMode && "cursor-crosshair"
             )}
-            onClick={userControlActive ? handleScreenshotClick : undefined}
+            onClick={isInteractiveMode ? handleScreenshotClick : undefined}
             draggable={false}
           />
         ) : content ? (
@@ -500,17 +514,24 @@ export function BrowserView({
           </div>
         )}
         {/* User control indicator — screenshot-based Take Control (non-VNC mode) */}
-        {userControlActive && !isLiveStreamMode && (
+        {isInteractiveMode && !isLiveStreamMode && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-blue-500/90 px-2.5 py-1 text-xs font-medium text-white shadow-lg">
             <MousePointerIcon className="size-3" />
             You have control
+          </div>
+        )}
+        {/* Interactive control indicator — shown over live Neko stream */}
+        {isInteractiveMode && isLiveStreamMode && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-blue-500/90 px-2.5 py-1 text-xs font-medium text-white shadow-lg">
+            <MousePointerIcon className="size-3" />
+            You have control — click the browser to interact
           </div>
         )}
         {/* Live indicator badge */}
         {isLiveStreamMode && (
           <div className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded-full bg-green-500/80 px-2 py-0.5 text-[10px] font-medium text-white shadow-lg">
             <div className="size-1.5 animate-pulse rounded-full bg-white" />
-            {nekoUrl ? "LIVE DESKTOP" : "LIVE STREAM"}
+            {isInteractiveMode ? "TAKE CONTROL" : isAgentBrowsing ? "AGENT BROWSING" : "LIVE DESKTOP"}
           </div>
         )}
       </div>

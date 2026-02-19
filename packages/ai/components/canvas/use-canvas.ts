@@ -66,6 +66,8 @@ export interface CanvasState {
   onSelectView?: (view: CanvasViewType) => void;
 
   // Browser view
+  /** Whether agent is actively executing a browser tool — auto-shows Neko live stream */
+  isAgentBrowsing?: boolean;
   browserUrl?: string;
   browserScreenshot?: string;
   browserLoading?: boolean;
@@ -1271,6 +1273,14 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   // Browser view data — use persistent state (populate when browser view available, not just active)
   // When pinned to a browser tool, extract data from the pinned tool directly
   if (effectiveViewType === "browser" || availableViews.includes("browser")) {
+    // Detect if agent is actively executing a browser tool right now.
+    // When true AND nekoUrl is available, BrowserView auto-shows the Neko live stream.
+    const isBrowserToolActive =
+      !pinnedTool &&
+      latestTool?.isWorking === true &&
+      latestTool?.viewType === "browser";
+    state.isAgentBrowsing = isBrowserToolActive;
+
     if (pinnedTool && pinnedTool.viewType === "browser") {
       // Pinned: extract browser data from the pinned tool
       state.browserUrl = extractBrowserUrl(pinnedTool.output, pinnedTool.args);
