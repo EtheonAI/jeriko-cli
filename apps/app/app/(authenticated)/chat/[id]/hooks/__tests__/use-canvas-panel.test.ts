@@ -2,11 +2,12 @@
  * useCanvasPanel — tests
  *
  * Validates the canvas panel open/close/fullscreen logic including:
- * - Auto-open during REAL streaming (new messages)
- * - NOT auto-opening on resume hydration (same message count)
+ * - Auto-open when canvas content appears (Manus parity: always show)
+ * - Re-open during streaming when user closed and new messages arrive
  * - Session reset when navigating between chats
  * - Force open via callback
  * - Fullscreen toggle
+ * - User close sets userClosed flag (suppresses re-open until next message)
  */
 
 import { describe, it, expect } from "vitest";
@@ -14,7 +15,7 @@ import { renderHook, act } from "@testing-library/react";
 import { useCanvasPanel } from "../use-canvas-panel";
 
 describe("useCanvasPanel", () => {
-  it("should start closed", () => {
+  it("should start closed when no canvas content", () => {
     const { result } = renderHook(() =>
       useCanvasPanel({
         sessionId: "s1",
@@ -28,7 +29,7 @@ describe("useCanvasPanel", () => {
     expect(result.current.canvasFullscreen).toBe(false);
   });
 
-  it("should auto-open when streaming + canvas content + new messages", () => {
+  it("should auto-open when canvas content appears (Manus parity)", () => {
     const { result, rerender } = renderHook(
       (props) => useCanvasPanel(props),
       {
@@ -43,12 +44,12 @@ describe("useCanvasPanel", () => {
 
     expect(result.current.showCanvas).toBe(false);
 
-    // User sends message → messageCount increases + streaming starts + canvas tool arrives
+    // Canvas tool arrives — hasCanvasContent becomes true
     rerender({
       sessionId: "s1",
       hasCanvasContent: true,
       isStreaming: true,
-      messageCount: 4, // new message
+      messageCount: 4,
     });
 
     expect(result.current.showCanvas).toBe(true);
@@ -69,6 +70,20 @@ describe("useCanvasPanel", () => {
     expect(result.current.showCanvas).toBe(true);
   });
 
+  it("should auto-open even when messageCount is 0 if hasCanvasContent is true", () => {
+    // Manus parity: panel shows whenever there's canvas content, regardless of messageCount
+    const { result } = renderHook(() =>
+      useCanvasPanel({
+        sessionId: "s1",
+        hasCanvasContent: true,
+        isStreaming: false,
+        messageCount: 0,
+      })
+    );
+
+    expect(result.current.showCanvas).toBe(true);
+  });
+
   it("should NOT auto-open when no canvas content even with messages", () => {
     const { result } = renderHook(() =>
       useCanvasPanel({
@@ -82,36 +97,22 @@ describe("useCanvasPanel", () => {
     expect(result.current.showCanvas).toBe(false);
   });
 
-  it("should NOT auto-open when messageCount is 0", () => {
+  it("should force open via callback", () => {
     const { result } = renderHook(() =>
       useCanvasPanel({
         sessionId: "s1",
         hasCanvasContent: true,
         isStreaming: false,
-        messageCount: 0,
+        messageCount: 5,
       })
     );
 
-    expect(result.current.showCanvas).toBe(false);
-  });
-
-  it("should force open via callback (when auto-open hasn't fired)", () => {
-    // messageCount=0 prevents auto-open, so we can test forceOpen in isolation
-    const { result } = renderHook(() =>
-      useCanvasPanel({
-        sessionId: "s1",
-        hasCanvasContent: true,
-        isStreaming: false,
-        messageCount: 0,
-      })
-    );
-
+    // Already auto-opened — close it first
+    act(() => result.current.onClose());
     expect(result.current.showCanvas).toBe(false);
 
-    act(() => {
-      result.current.forceOpen();
-    });
-
+    // Force open
+    act(() => result.current.forceOpen());
     expect(result.current.showCanvas).toBe(true);
   });
 
@@ -125,9 +126,8 @@ describe("useCanvasPanel", () => {
       })
     );
 
-    // Open and make fullscreen
+    // Make fullscreen
     act(() => {
-      result.current.forceOpen();
       result.current.onToggleFullscreen();
     });
 
@@ -153,8 +153,6 @@ describe("useCanvasPanel", () => {
       })
     );
 
-    act(() => result.current.forceOpen());
-
     expect(result.current.canvasFullscreen).toBe(false);
 
     act(() => result.current.onToggleFullscreen());
@@ -177,11 +175,10 @@ describe("useCanvasPanel", () => {
       }
     );
 
-    // Open canvas in session 1
-    act(() => result.current.forceOpen());
+    // Canvas is auto-opened in session 1
     expect(result.current.showCanvas).toBe(true);
 
-    // Navigate to session 2
+    // Navigate to session 2 (hasCanvasContent still true — dep doesn't change)
     rerender({
       sessionId: "s2",
       hasCanvasContent: true,
@@ -189,8 +186,46 @@ describe("useCanvasPanel", () => {
       messageCount: 3,
     });
 
+    // Reset effect closes the panel. hasCanvasContent effect doesn't re-fire
+    // because the dep value (true) didn't change between renders.
     expect(result.current.showCanvas).toBe(false);
     expect(result.current.canvasFullscreen).toBe(false);
+  });
+
+  it("should re-open after session reset when hasCanvasContent transitions false→true", () => {
+    const { result, rerender } = renderHook(
+      (props) => useCanvasPanel(props),
+      {
+        initialProps: {
+          sessionId: "s1",
+          hasCanvasContent: true,
+          isStreaming: false,
+          messageCount: 5,
+        },
+      }
+    );
+
+    expect(result.current.showCanvas).toBe(true);
+
+    // Navigate to session 2 — no canvas content initially
+    rerender({
+      sessionId: "s2",
+      hasCanvasContent: false,
+      isStreaming: false,
+      messageCount: 0,
+    });
+
+    expect(result.current.showCanvas).toBe(false);
+
+    // Tool arrives in new session — hasCanvasContent transitions false→true
+    rerender({
+      sessionId: "s2",
+      hasCanvasContent: true,
+      isStreaming: true,
+      messageCount: 1,
+    });
+
+    expect(result.current.showCanvas).toBe(true);
   });
 
   it("should show false when open but no canvas content", () => {
@@ -207,5 +242,36 @@ describe("useCanvasPanel", () => {
 
     // Even though open=true, showCanvas=false because hasCanvasContent=false
     expect(result.current.showCanvas).toBe(false);
+  });
+
+  it("should re-open during streaming when new messages arrive after user closed", () => {
+    const { result, rerender } = renderHook(
+      (props) => useCanvasPanel(props),
+      {
+        initialProps: {
+          sessionId: "s1",
+          hasCanvasContent: true,
+          isStreaming: true,
+          messageCount: 3,
+        },
+      }
+    );
+
+    // Auto-opened
+    expect(result.current.showCanvas).toBe(true);
+
+    // User closes
+    act(() => result.current.onClose());
+    expect(result.current.showCanvas).toBe(false);
+
+    // New message arrives during streaming → re-opens
+    rerender({
+      sessionId: "s1",
+      hasCanvasContent: true,
+      isStreaming: true,
+      messageCount: 4,
+    });
+
+    expect(result.current.showCanvas).toBe(true);
   });
 });

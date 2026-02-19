@@ -213,7 +213,16 @@ const sessionsSlice = createSlice({
     ) => {
       const index = state.sessions.findIndex((s) => s.id === action.payload.id);
       if (index !== -1 && state.sessions[index]) {
-        Object.assign(state.sessions[index], action.payload.updates, {
+        const { metadata, ...rest } = action.payload.updates;
+        // Deep-merge metadata to prevent losing sandboxId/nekoUrl/streamUrl
+        // across separate dispatches (e.g. sandbox.status WS event vs SSE metadata)
+        if (metadata) {
+          state.sessions[index].metadata = {
+            ...(state.sessions[index].metadata ?? {}),
+            ...metadata,
+          };
+        }
+        Object.assign(state.sessions[index], rest, {
           updatedAt: new Date().toISOString(),
         });
       }

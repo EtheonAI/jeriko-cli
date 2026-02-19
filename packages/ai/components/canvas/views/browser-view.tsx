@@ -12,8 +12,10 @@ import {
   MousePointerIcon,
   MonitorIcon,
   SearchIcon,
+  XIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
+import { ScreenshotOverlay } from "./screenshot-overlay";
 
 // ============================================================================
 // Types
@@ -44,6 +46,8 @@ export interface BrowserViewProps {
   onUserControlChange?: (active: boolean) => void;
   /** Whether the agent is actively working on a browser tool (auto-shows Neko live stream) */
   isAgentBrowsing?: boolean;
+  /** Called when user clicks "Edit in canvas" on a screenshot overlay */
+  onEditInCanvas?: (imageUrl: string) => void;
 }
 
 // ============================================================================
@@ -233,10 +237,12 @@ export function BrowserView({
   streamUrl,
   onUserControlChange,
   isAgentBrowsing,
+  onEditInCanvas,
 }: BrowserViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [userControlActive, setUserControlActive] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
+  const [overlayImage, setOverlayImage] = useState<string | null>(null);
 
   // Live stream URL — Neko WebRTC (primary) or E2B noVNC stream (fallback)
   const liveStreamUrl = nekoUrl || streamUrl || null;
@@ -464,9 +470,13 @@ export function BrowserView({
             alt="Browser view"
             className={cn(
               "size-full object-contain",
-              isInteractiveMode && "cursor-crosshair"
+              isInteractiveMode ? "cursor-crosshair" : "cursor-pointer"
             )}
-            onClick={isInteractiveMode ? handleScreenshotClick : undefined}
+            onClick={
+              isInteractiveMode
+                ? handleScreenshotClick
+                : () => setOverlayImage(screenshot)
+            }
             draggable={false}
           />
         ) : content ? (
@@ -520,11 +530,22 @@ export function BrowserView({
             You have control
           </div>
         )}
-        {/* Interactive control indicator — shown over live Neko stream */}
+        {/* Interactive control indicator — shown over live Neko stream with Exit button */}
         {isInteractiveMode && isLiveStreamMode && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-blue-500/90 px-2.5 py-1 text-xs font-medium text-white shadow-lg">
             <MousePointerIcon className="size-3" />
-            You have control — click the browser to interact
+            <span>You have control</span>
+            <button
+              type="button"
+              className="ml-1 flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-white/30"
+              onClick={(e) => {
+                e.stopPropagation();
+                deactivateUserControl();
+              }}
+            >
+              <XIcon className="size-2.5" />
+              Exit &amp; Resume
+            </button>
           </div>
         )}
         {/* Live indicator badge */}
@@ -535,6 +556,18 @@ export function BrowserView({
           </div>
         )}
       </div>
+
+      {/* Screenshot overlay — shown when user clicks a screenshot (non-control mode) */}
+      {overlayImage && (
+        <ScreenshotOverlay
+          imageUrl={overlayImage}
+          onClose={() => setOverlayImage(null)}
+          onEditInCanvas={() => {
+            onEditInCanvas?.(overlayImage);
+            setOverlayImage(null);
+          }}
+        />
+      )}
     </div>
   );
 }

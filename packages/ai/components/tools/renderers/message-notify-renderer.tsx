@@ -91,12 +91,36 @@ export function MessageNotifyRenderer({
   input,
   output,
 }: ToolRendererProps<MessageNotifyInput, MessageNotifyOutput>) {
-  // Loading state
-  if (state === "input-streaming" || state === "input-available") {
+  // Streaming state — args still being received (partial JSON)
+  if (state === "input-streaming") {
     return (
       <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
         <LoaderIcon className="size-3.5 animate-spin" />
         <span>Sending message...</span>
+      </div>
+    );
+  }
+
+  // Input available — we have the full text, show it immediately (Manus parity).
+  // The tool is still "executing" on the server (uploading attachments), but the
+  // text content is already known. Don't make the user wait for output-available.
+  if (state === "input-available") {
+    const previewText = input?.text || "";
+    if (!previewText) {
+      return (
+        <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
+          <LoaderIcon className="size-3.5 animate-spin" />
+          <span>Sending message...</span>
+        </div>
+      );
+    }
+    return (
+      <div className="text-sm leading-relaxed text-foreground/80">
+        <Suspense fallback={<p className="whitespace-pre-wrap">{previewText}</p>}>
+          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {previewText}
+          </Markdown>
+        </Suspense>
       </div>
     );
   }

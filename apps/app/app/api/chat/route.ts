@@ -621,25 +621,30 @@ export const POST = async (req: Request) => {
     // Convert UIMessages to CoreMessages for the orchestrator.
     // Include text content from parts. For user messages, also include file
     // references so the LLM knows about attached files.
-    const coreMessages = messages.map((m) => {
-      const textParts: string[] = [];
+    // IMPORTANT: Filter out messages with empty content — assistant messages
+    // that only had tool parts (no text) would otherwise become { content: "" }
+    // which the Anthropic API rejects with "text content blocks must be non-empty".
+    const coreMessages = messages
+      .map((m) => {
+        const textParts: string[] = [];
 
-      for (const p of m.parts ?? []) {
-        const part = p as unknown as Record<string, unknown>;
-        if (part.type === "text" && typeof part.text === "string") {
-          textParts.push(part.text);
-        } else if (m.role === "user" && (part.type === "file" || part.type === "image")) {
-          const name = (part.filename as string) || (part.name as string) || "file";
-          const mime = (part.mediaType as string) || (part.mimeType as string) || "";
-          textParts.push(`[Attached: ${name}${mime ? ` (${mime})` : ""}]`);
+        for (const p of m.parts ?? []) {
+          const part = p as unknown as Record<string, unknown>;
+          if (part.type === "text" && typeof part.text === "string") {
+            textParts.push(part.text);
+          } else if (m.role === "user" && (part.type === "file" || part.type === "image")) {
+            const name = (part.filename as string) || (part.name as string) || "file";
+            const mime = (part.mediaType as string) || (part.mimeType as string) || "";
+            textParts.push(`[Attached: ${name}${mime ? ` (${mime})` : ""}]`);
+          }
         }
-      }
 
-      return {
-        role: m.role as "user" | "assistant" | "system",
-        content: textParts.join(""),
-      };
-    });
+        return {
+          role: m.role as "user" | "assistant" | "system",
+          content: textParts.join(""),
+        };
+      })
+      .filter((m) => m.content.length > 0);
 
     // Hard 10-min timeout only — do NOT pass req.signal so the agent loop
     // continues even when the browser tab closes. Stop is explicit via

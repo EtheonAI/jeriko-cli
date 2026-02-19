@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import { WrapTextIcon } from "lucide-react";
 
@@ -120,41 +120,53 @@ export function ShikiCodeBlock({
   className,
 }: ShikiCodeBlockProps) {
   const [html, setHtml] = useState<string | null>(null);
+  const [highlightedCode, setHighlightedCode] = useState<string>("");
   const [wordWrap, setWordWrap] = useState(false);
   const resolvedLang = useMemo(() => resolveLanguage(language), [language]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     let cancelled = false;
 
-    async function highlight() {
-      try {
-        const langAvailable = await ensureLanguage(resolvedLang);
-        if (cancelled) return;
+    // Clear any pending debounce
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-        if (!langAvailable) {
-          setHtml(null);
-          return;
+    // 150ms debounce prevents 60x/sec codeToHtml calls during SSE streaming.
+    // Previous html stays displayed (no flash). Highlights at most ~6x/sec.
+    // After streaming stops, final highlight within 150ms.
+    debounceRef.current = setTimeout(() => {
+      async function highlight() {
+        try {
+          const langAvailable = await ensureLanguage(resolvedLang);
+          if (cancelled) return;
+
+          if (!langAvailable) {
+            setHtml(null);
+            return;
+          }
+
+          const highlighter = await getHighlighter();
+          if (cancelled) return;
+
+          const result = highlighter.codeToHtml(code, {
+            lang: resolvedLang,
+            theme: "vitesse-dark",
+          });
+
+          if (!cancelled) {
+            setHtml(result);
+            setHighlightedCode(code);
+          }
+        } catch {
+          if (!cancelled) setHtml(null);
         }
-
-        const highlighter = await getHighlighter();
-        if (cancelled) return;
-
-        const result = highlighter.codeToHtml(code, {
-          lang: resolvedLang,
-          theme: "vitesse-dark",
-        });
-
-        if (!cancelled) {
-          setHtml(result);
-        }
-      } catch {
-        if (!cancelled) setHtml(null);
       }
-    }
+      highlight();
+    }, 150);
 
-    highlight();
     return () => {
       cancelled = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [code, resolvedLang]);
 
@@ -172,8 +184,9 @@ export function ShikiCodeBlock({
     );
   }
 
-  const lines = code.split("\n");
-  const lineCount = lines.length;
+  // Use the code that produced the current HTML for line count — prevents mismatch
+  // during streaming when `code` is ahead of the debounced `html`.
+  const lineCount = (highlightedCode || code).split("\n").length;
 
   return (
     <div className={cn("relative group", className)}>

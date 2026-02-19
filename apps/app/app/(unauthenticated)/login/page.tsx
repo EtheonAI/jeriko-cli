@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,6 +14,19 @@ import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
 import { signIn, signUp, sendVerificationEmail } from "@repo/auth/client";
 import { Icons } from "@/components/icons";
+import { useAppDispatch, useLogin } from "@/lib/store/hooks";
+import {
+  setStep,
+  setEmail as setLoginEmail,
+  setLoadingEmailCheck,
+  toggleShowPassword,
+  setLastSendTime,
+  decrementVerifyCodeTimeout,
+  setLoginPlatform,
+  setLoadingOAuth,
+  resetToEmailCheck,
+  type LoginStep,
+} from "@/lib/store/slices/login.slice";
 
 import { AuthHeader } from "../components/auth-header";
 import { AuthFooter } from "../components/auth-footer";
@@ -76,28 +89,30 @@ function PasswordStrength({ password }: { password: string }) {
 
 // Social login buttons
 function SocialButtons({ disabled }: { disabled: boolean }) {
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isGitHubLoading, setIsGitHubLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { loginPlatform, loadingOAuth } = useLogin();
 
-  const isLoading = isGoogleLoading || isGitHubLoading || disabled;
+  const isGoogleLoading = loginPlatform === "google" && loadingOAuth;
+  const isGitHubLoading = loginPlatform === "github" && loadingOAuth;
+  const isLoading = loadingOAuth || disabled;
 
   const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true);
+    dispatch(setLoginPlatform("google"));
     try {
       await signIn.social({ provider: "google", callbackURL: "/" });
     } catch (error) {
       console.error("Google sign in error:", error);
-      setIsGoogleLoading(false);
+      dispatch(setLoadingOAuth(false));
     }
   };
 
   const handleGitHubSignIn = async () => {
-    setIsGitHubLoading(true);
+    dispatch(setLoginPlatform("github"));
     try {
       await signIn.social({ provider: "github", callbackURL: "/" });
     } catch (error) {
       console.error("GitHub sign in error:", error);
-      setIsGitHubLoading(false);
+      dispatch(setLoadingOAuth(false));
     }
   };
 
@@ -136,15 +151,34 @@ function SocialButtons({ disabled }: { disabled: boolean }) {
   );
 }
 
+/** Map Redux LoginStep to local AuthStep for rendering */
+function loginStepToAuthStep(step: LoginStep, isNewUser: boolean): AuthStep {
+  switch (step) {
+    case "emailCheck":
+      return "email";
+    case "emailLogin":
+    case "emailRegister":
+      return "password";
+    case "verifyCode":
+      return "verify";
+    default:
+      return "email";
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<AuthStep>("email");
-  const [email, setEmail] = useState("");
-  const [isNewUser, setIsNewUser] = useState(false);
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const dispatch = useAppDispatch();
+  const loginState = useLogin();
   const [isPending, startTransition] = useTransition();
-  const [showPassword, setShowPassword] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Derive local aliases from Redux state
+  const email = loginState.email;
+  const isCheckingEmail = loginState.loadingEmailCheck;
+  const showPassword = loginState.showPassword;
+  const resendCooldown = loginState.lastSendTime > 0 ? loginState.verifyCodeTimeout : 0;
+  const isNewUser = loginState.step === "emailRegister";
+  const step = loginStepToAuthStep(loginState.step, isNewUser);
 
   // Email form
   const emailForm = useForm<EmailFormData>({
@@ -168,7 +202,7 @@ export default function LoginPage() {
 
   // Check if email exists
   async function handleEmailSubmit(data: EmailFormData) {
-    setIsCheckingEmail(true);
+    dispatch(setLoadingEmailCheck(true));
 
     try {
       const response = await fetch("/api/auth/check-email", {
@@ -184,17 +218,15 @@ export default function LoginPage() {
       const result = await response.json();
       const normalizedEmail = data.email.toLowerCase();
 
-      setEmail(normalizedEmail);
+      dispatch(setLoginEmail(normalizedEmail));
 
       // If the user exists but hasn't verified their email, go straight to verify step
       if (result.exists && !result.emailVerified) {
-        setIsNewUser(false);
-        setStep("verify");
+        dispatch(setStep("verifyCode"));
         return;
       }
 
-      setIsNewUser(!result.exists);
-      setStep("password");
+      dispatch(setStep(result.exists ? "emailLogin" : "emailRegister"));
 
       // Reset password forms
       signUpForm.reset({ password: "" });
@@ -202,7 +234,7 @@ export default function LoginPage() {
     } catch {
       toast.error("Something went wrong. Please try again.");
     } finally {
-      setIsCheckingEmail(false);
+      dispatch(setLoadingEmailCheck(false));
     }
   }
 
@@ -245,7 +277,7 @@ export default function LoginPage() {
         }
 
         toast.success("Account created! Please check your email to verify.");
-        setStep("verify");
+        dispatch(setStep("verifyCode"));
       } catch (error) {
         const raw = error instanceof Error ? error.message : "";
         if (raw.toLowerCase().includes("failed to fetch")) {
@@ -272,7 +304,7 @@ export default function LoginPage() {
           switch (code) {
             case "EMAIL_NOT_VERIFIED":
               toast.error("Please verify your email address before signing in.");
-              setStep("verify");
+              dispatch(setStep("verifyCode"));
               return;
             case "INVALID_EMAIL_OR_PASSWORD":
               toast.error("Incorrect email or password.");
@@ -318,24 +350,18 @@ export default function LoginPage() {
 
       toast.success("Verification email sent!");
 
-      setResendCooldown(60);
+      dispatch(setLastSendTime(Date.now()));
       const interval = setInterval(() => {
-        setResendCooldown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
+        dispatch(decrementVerifyCodeTimeout());
       }, 1000);
+      // Clean up after 60s
+      setTimeout(() => clearInterval(interval), 61_000);
     });
   };
 
   // Go back to email step
   const handleEditEmail = () => {
-    setStep("email");
-    setEmail("");
-    setIsNewUser(false);
+    dispatch(resetToEmailCheck());
     emailForm.reset();
     signUpForm.reset();
     signInForm.reset();
@@ -459,7 +485,7 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => dispatch(toggleShowPassword())}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-sm"
                 tabIndex={-1}
               >

@@ -344,22 +344,25 @@ async function handleShellExec(
     120000
   );
 
-  // Wait for output to accumulate — poll until stable (max 15s)
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Manus parity: exec_command() waits max 5 seconds for completion.
+  // If done → returns status="completed" with output.
+  // If still running → returns status="running" with partial output.
+  // Agent then calls shell_view() to poll — each poll = new tool event = frontend update.
+  await new Promise((resolve) => setTimeout(resolve, 500));
   let lastOutput = "";
   let stableCount = 0;
   const pollStart = Date.now();
-  while (Date.now() - pollStart < 15000) {
+  while (Date.now() - pollStart < 5000) {
     const result = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
     const currentOutput = (result.output ?? result.content ?? "") as string;
     if (currentOutput === lastOutput) {
       stableCount++;
-      if (stableCount >= 2) break;
+      if (stableCount >= 2) break; // Output stabilized = command done
     } else {
       stableCount = 0;
       lastOutput = currentOutput;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   // Read final output and return only the NEW portion (after the pre-snapshot)
@@ -367,15 +370,25 @@ async function handleShellExec(
   const fullOutput = (viewResult.output ?? viewResult.content ?? "") as string;
   const newOutput = fullOutput.length > preLen ? fullOutput.slice(preLen) : fullOutput.slice(-2000);
 
-  // Trim to last 100 lines if still too long
-  const outputLines = newOutput.split("\n");
-  const trimmedOutput = outputLines.length > 100
-    ? outputLines.slice(-100).join("\n")
-    : newOutput;
+  if (stableCount >= 2) {
+    // Command completed within 5s — return full output (Manus: status="completed")
+    const outputLines = newOutput.split("\n");
+    const trimmedOutput = outputLines.length > 100
+      ? outputLines.slice(-100).join("\n")
+      : newOutput;
+    return { status: "completed", output: trimmedOutput };
+  }
 
+  // Command still running — return immediately with partial output (Manus parity)
+  // Agent will call shell_view() to poll → each poll is a new tool event → progressive terminal updates
+  const partialLines = newOutput.split("\n");
+  const trimmedPartial = partialLines.length > 50
+    ? partialLines.slice(-50).join("\n")
+    : newOutput;
   return {
-    status: "success",
-    output: trimmedOutput,
+    status: "running",
+    output: trimmedPartial || "(command still running — use shell_view to check output)",
+    session_id: id,
   };
 }
 

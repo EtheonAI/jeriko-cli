@@ -20,6 +20,7 @@ import { SkillsButton } from "./skills-button";
 import { VoiceInputButton } from "./voice-input-button";
 import { AnimatedPlaceholder } from "./animated-placeholder";
 import { QuickActions, ACTION_PREFILLS } from "./quick-actions";
+import { PlaybookButton } from "./playbook-button";
 
 export const ChatPrompt = forwardRef<ChatPromptRef, ChatPromptProps>(function ChatPrompt(
   {
@@ -280,6 +281,7 @@ export const ChatPrompt = forwardRef<ChatPromptRef, ChatPromptProps>(function Ch
                 onToggle={toggleSkill}
                 disabled={disabled}
               />
+              <PlaybookButton disabled={disabled} />
               {showVoice && (
                 <VoiceInputButton disabled={disabled} onTranscript={handleVoiceTranscript} />
               )}

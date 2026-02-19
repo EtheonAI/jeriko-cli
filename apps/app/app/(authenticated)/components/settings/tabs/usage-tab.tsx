@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@repo/design-system/co
 import { Progress } from "@repo/design-system/components/ui/progress";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { CrownIcon, SparklesIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
+import { CrownIcon, SparklesIcon, TrendingUpIcon, AlertCircleIcon, CpuIcon, HardDriveIcon, GlobeIcon, HammerIcon, XIcon } from "lucide-react";
 import {
   useGetUsageSummaryQuery,
   useGetUsageRecordsQuery,
 } from "@/lib/store/api/api.slice";
-import { useAppSelector } from "@/lib/store/hooks";
+import { useAppSelector, useAppDispatch, useWebDevUsage } from "@/lib/store/hooks";
+import { dismissAlert } from "@/lib/store/slices/webDevUsage.slice";
 import { useSettings } from "../settings-context";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -279,6 +280,118 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
           </div>
         </>
       )}
+
+      {/* WebDev Usage Section */}
+      <WebDevUsageSection />
     </div>
+  );
+}
+
+function WebDevUsageSection() {
+  const dispatch = useAppDispatch();
+  const webDevUsage = useWebDevUsage();
+  const { usageInfo, budgetSettings, usageAlerts } = webDevUsage;
+
+  const activeAlerts = usageAlerts.filter((a) => !a.dismissed);
+
+  // Only render if there's WebDev usage data
+  if (!usageInfo) return null;
+
+  const breakdown = usageInfo.breakdown;
+  const breakdownItems = [
+    { label: "Compute", value: breakdown.compute, icon: CpuIcon },
+    { label: "Storage", value: breakdown.storage, icon: HardDriveIcon },
+    { label: "Bandwidth", value: breakdown.bandwidth, icon: GlobeIcon },
+    { label: "Builds", value: breakdown.builds, icon: HammerIcon },
+  ];
+
+  return (
+    <>
+      <Separator />
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">WebDev Usage</h3>
+
+        {/* Usage Alerts */}
+        {activeAlerts.length > 0 && (
+          <div className="space-y-2">
+            {activeAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={`flex items-center justify-between rounded-lg border p-3 text-sm ${
+                  alert.severity === "critical"
+                    ? "border-destructive/50 bg-destructive/5 text-destructive"
+                    : "border-amber-500/50 bg-amber-500/5 text-amber-600"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircleIcon className="h-4 w-4 shrink-0" />
+                  <span>{alert.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dispatch(dismissAlert(alert.id))}
+                  className="shrink-0 p-1 hover:opacity-70"
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Breakdown */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {breakdownItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className="rounded-lg border p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </div>
+                <div className="text-xl font-semibold">{item.value.toLocaleString()}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Overall Progress */}
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">
+                {usageInfo.totalUsed.toLocaleString()} / {usageInfo.totalLimit.toLocaleString()} credits
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {usageInfo.usedPercentage}%
+              </span>
+            </div>
+            <Progress value={usageInfo.usedPercentage} className="h-2" />
+          </CardContent>
+        </Card>
+
+        {/* Budget Settings */}
+        <div className="rounded-lg border p-4 space-y-2">
+          <h4 className="text-sm font-medium">Budget Settings</h4>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Alert threshold</span>
+            <span>{budgetSettings.alertThreshold}%</span>
+          </div>
+          {budgetSettings.globalLimit && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Global limit</span>
+              <span>{budgetSettings.globalLimit.toLocaleString()} credits</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Auto-stop on limit</span>
+            <Badge variant={budgetSettings.autoStopOnLimit ? "default" : "secondary"} className="text-xs">
+              {budgetSettings.autoStopOnLimit ? "Enabled" : "Disabled"}
+            </Badge>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Command, User2, Eye, Heart, Clock, Lock } from "lucide-react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { cn } from "@repo/design-system/lib/utils";
+import { useAppDispatch, useGuestPage } from "@/lib/store/hooks";
+import {
+  enterGuestMode,
+  incrementMessagesUsed,
+  setReferralSource,
+  setReferralCode,
+  exitGuestMode,
+} from "@/lib/store/slices/guestPage.slice";
 
 interface SharedMessage {
   id: string;
@@ -78,6 +87,24 @@ export function SharedSessionView({
   messageDisplayLimit,
 }: SharedSessionViewProps) {
   const [showAll, setShowAll] = useState(false);
+  const dispatch = useAppDispatch();
+  const guestState = useGuestPage();
+  const searchParams = useSearchParams();
+
+  // Enter guest mode on mount, exit on unmount
+  useEffect(() => {
+    dispatch(enterGuestMode());
+
+    // Parse referral params from URL
+    const ref = searchParams.get("ref");
+    const code = searchParams.get("code");
+    if (ref) dispatch(setReferralSource(ref));
+    if (code) dispatch(setReferralCode(code));
+
+    return () => {
+      dispatch(exitGuestMode());
+    };
+  }, [dispatch, searchParams]);
 
   const visibleMessages = showAll
     ? messages
@@ -85,6 +112,11 @@ export function SharedSessionView({
 
   const hasMoreMessages = messages.length > messageDisplayLimit;
   const hiddenCount = messages.length - messageDisplayLimit;
+
+  const handleContinueAsGuest = () => {
+    dispatch(incrementMessagesUsed());
+    setShowAll(true);
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-black">
@@ -163,7 +195,7 @@ export function SharedSessionView({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setShowAll(true)}
+                  onClick={handleContinueAsGuest}
                   className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
                 >
                   Continue viewing as guest
@@ -173,6 +205,22 @@ export function SharedSessionView({
           </div>
         )}
       </main>
+
+      {/* Login prompt from Redux (shown when guest hits message limit) */}
+      {guestState.showLoginPrompt && showAll && (
+        <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-4 text-center">
+            <p className="text-sm text-neutral-300 mb-3">
+              You've viewed {guestState.messagesUsed} messages as a guest. Sign up to get unlimited access.
+            </p>
+            <Link href="/login">
+              <Button size="sm" className="bg-white text-black hover:bg-neutral-200">
+                Sign up for free
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* CTA footer */}
       <footer className="border-t border-neutral-800 bg-neutral-950">

@@ -40,6 +40,7 @@ const REGISTERED_RENDERERS: Record<string, string> = {
   file_str_replace: "FilePreview",
   file_find_in_content: "FilePreview",
   file_find_by_name: "FilePreview",
+  file_view: "FilePreview",
   browser_navigate: "BrowserViewerEnhanced",
   browser_view: "BrowserViewerEnhanced",
   browser_click: "BrowserViewerEnhanced",
@@ -615,10 +616,10 @@ describe("SSE → UI Rendering Pipeline", () => {
       expect(failures).toEqual([]);
     });
 
-    it("all 47 agent tools have explicit renderers", () => {
+    it("all 48 agent tools have explicit renderers", () => {
       const agentTools = [
         "show_plan", "message_notify_user", "message_ask_user",
-        "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name",
+        "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name", "file_view",
         "shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process",
         "code_execute", "web_search",
         "browser_navigate", "browser_view", "browser_click", "browser_input",

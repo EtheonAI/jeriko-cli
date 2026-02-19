@@ -38,7 +38,7 @@ if (fs.existsSync(envPath)) {
 }
 
 const S3_PREFIX = "neko-client";
-const WWW_DIR = path.resolve(__dirname, "../../../../e2b-templates/desktop/www");
+const WWW_DIR = path.resolve(__dirname, "../../../../e2b-templates/desktop/rubic-files/neko/client");
 
 const MIME_MAP: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

@@ -46,8 +46,21 @@ export function TerminalView({
   const inputRef = useRef<HTMLInputElement>(null);
   const [interactiveMode, setInteractiveMode] = useState(false);
 
-  // Use live output when connected, otherwise fall back to static output
-  const displayOutput = liveConnected && liveOutput ? liveOutput : output;
+  // Agent tool output from shell_exec/shell_view takes priority over E2B default PTY
+  // EXCEPT when the output is ONLY a "Running..." placeholder with no actual command
+  // results. In that case, fall through to E2B live PTY for real-time output.
+  //
+  // Manus parity: agent tool output is the primary source (shell_view polling).
+  // E2B live PTY serves as real-time fallback during the initial execution gap
+  // (before the first shell_view result arrives) and for user "Take Control" mode.
+  const hasRealAgentOutput = output && output.length > 0 && output.some(
+    (line) => line !== "" && !line.startsWith("$") && !line.includes("\u23F3 Running...")
+  );
+  const displayOutput = hasRealAgentOutput
+    ? output
+    : (liveConnected && liveOutput && liveOutput.length > 0)
+      ? liveOutput
+      : (output ?? []);
 
   // Determine if we have multiple sessions to show tabs
   const hasMultipleSessions = sessionIds && sessionIds.length > 1;

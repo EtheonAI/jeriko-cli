@@ -115,13 +115,27 @@ const DEFAULT_SKILLS: Array<{
 ];
 
 let seeded = false;
+/** Whether the skill_definitions table exists in the DB */
+let tableExists: boolean | null = null;
+
+async function checkTableExists(): Promise<boolean> {
+  if (tableExists !== null) return tableExists;
+  try {
+    await db.select({ count: sql<number>`count(*)` }).from(skillDefinitions).limit(0);
+    tableExists = true;
+  } catch {
+    tableExists = false;
+  }
+  return tableExists;
+}
 
 async function ensureSkillsSeeded() {
   if (seeded) return;
+  if (!(await checkTableExists())) return;
   const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: sql<number>`count(*)` })
     .from(skillDefinitions);
-  if (row && row.count > 0) {
+  if (row && Number(row.count) > 0) {
     seeded = true;
     return;
   }
@@ -144,9 +158,29 @@ async function ensureSkillsSeeded() {
   seeded = true;
 }
 
+/** In-memory fallback when skill_definitions table doesn't exist */
+function getFallbackSkills() {
+  return DEFAULT_SKILLS.map((s) => ({
+    id: s.type,
+    type: s.type,
+    name: s.name,
+    description: s.description,
+    category: s.category,
+    icon: s.icon,
+    isPremium: s.isPremium,
+    defaultEnabled: s.defaultEnabled,
+    isEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+}
+
 export const skillsRouter = createTRPCRouter({
   // List all enabled skill definitions
   list: protectedProcedure.query(async () => {
+    if (!(await checkTableExists())) {
+      return getFallbackSkills();
+    }
     await ensureSkillsSeeded();
 
     const definitions = await db

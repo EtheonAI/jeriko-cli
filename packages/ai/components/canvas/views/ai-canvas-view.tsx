@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   useState,
-  useReducer,
   useRef,
   useCallback,
   useEffect,
@@ -22,8 +21,21 @@ import {
   RotateCcwIcon,
   Trash2Icon,
   GridIcon,
+  ArrowUpIcon,
+  ImageOffIcon,
+  CrosshairIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
+
+// Konva.js — dynamic import for SSR safety (Konva requires window/document)
+let Stage: typeof import("react-konva").Stage;
+let Layer: typeof import("react-konva").Layer;
+let Rect: typeof import("react-konva").Rect;
+let Line: typeof import("react-konva").Line;
+let Text: typeof import("react-konva").Text;
+let Image: typeof import("react-konva").Image;
+let Transformer: typeof import("react-konva").Transformer;
+let Group: typeof import("react-konva").Group;
 
 // ============================================================================
 // Types
@@ -32,6 +44,7 @@ import { cn } from "@repo/design-system/lib/utils";
 export type CanvasToolType =
   | "select"
   | "pan"
+  | "mark"
   | "draw"
   | "text"
   | "rectangle"
@@ -62,7 +75,8 @@ export type ShapeKind =
   | "ellipse"
   | "path"
   | "text"
-  | "image";
+  | "image"
+  | "mark";
 
 export interface CanvasShape {
   id: string;
@@ -73,62 +87,70 @@ export interface CanvasShape {
   height: number;
   rotation: number;
   style: ShapeStyle;
-  // For text shapes
   text?: string;
-  // For image shapes
   imageUrl?: string;
-  // For path/freehand shapes
   points?: Point[];
-  // Visibility/order
   visible: boolean;
   zIndex: number;
 }
 
-// ============================================================================
-// Reducer (local state -- no Redux dependency)
-// ============================================================================
-
-interface CanvasEditorState {
-  shapes: CanvasShape[];
-  selectedIds: string[];
-  camera: Camera;
-  activeTool: CanvasToolType;
-  isDrawing: boolean;
-  drawingPoints: Point[];
-  drawingStart: Point | null;
-  brushing: {
-    active: boolean;
-    start: Point | null;
-    current: Point | null;
-  };
-  showGrid: boolean;
-  nextZIndex: number;
-  editingTextId: string | null;
+export interface Annotation {
+  id: string;
+  imageId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
 }
 
-type CanvasAction =
-  | { type: "SET_TOOL"; tool: CanvasToolType }
-  | { type: "ADD_SHAPE"; shape: CanvasShape }
-  | { type: "UPDATE_SHAPE"; id: string; updates: Partial<CanvasShape> }
-  | { type: "DELETE_SHAPES"; ids: string[] }
-  | { type: "SET_SELECTED"; ids: string[] }
-  | { type: "TOGGLE_SELECT"; id: string }
-  | { type: "SET_CAMERA"; camera: Partial<Camera> }
-  | { type: "ZOOM"; delta: number; center: Point }
-  | { type: "PAN"; dx: number; dy: number }
-  | { type: "RESET_VIEW" }
-  | { type: "START_DRAWING"; point: Point }
-  | { type: "CONTINUE_DRAWING"; point: Point }
-  | { type: "FINISH_DRAWING" }
-  | { type: "START_RECT"; point: Point }
-  | { type: "CONTINUE_RECT"; point: Point }
-  | { type: "FINISH_RECT" }
-  | { type: "START_BRUSHING"; point: Point }
-  | { type: "CONTINUE_BRUSHING"; point: Point }
-  | { type: "FINISH_BRUSHING"; shapeIds: string[] }
-  | { type: "TOGGLE_GRID" }
-  | { type: "SET_EDITING_TEXT"; id: string | null }
-  | { type: "MOVE_SHAPES"; ids: string[]; dx: number; dy: number };
+/** Subset of canvas state exposed to external consumers (e.g. Redux sync) */
+export interface CanvasStateSnapshot {
+  shapes: CanvasShape[];
+  selectedIds: string[];
+  activeTool: CanvasToolType;
+  zoom: number;
+  showGrid: boolean;
+}
+
+export interface AICanvasViewProps {
+  /** Image URL or data URI from generate_image tool output or screenshot */
+  content?: string;
+  /** Called whenever canvas state changes — use to sync with external state (e.g. Redux) */
+  onStateChange?: (snapshot: CanvasStateSnapshot) => void;
+  /** Manus toolbar: upscale image */
+  onUpscale?: (imageUrl: string) => void;
+  /** Manus toolbar: remove background */
+  onRemoveBg?: (imageUrl: string) => void;
+  /** Called when a marking annotation rectangle is completed */
+  onMarkingComplete?: (annotation: {
+    imageId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
+  /** Called when annotations change */
+  onAnnotationsChange?: (annotations: Annotation[]) => void;
+  /** Pre-loaded annotations for restoring state */
+  initialAnnotations?: Annotation[];
+  /** OCR edit text mode */
+  editTextMode?: boolean;
+  /** OCR annotation regions */
+  ocrAnnotations?: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    text: string;
+  }>;
+  /** Callback when OCR text changes */
+  onOcrTextChange?: (index: number, text: string) => void;
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
 
 function generateId(): string {
   return `shape_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -143,358 +165,14 @@ const DEFAULT_STYLE: ShapeStyle = {
   fontFamily: "sans-serif",
 };
 
-function createInitialState(): CanvasEditorState {
-  return {
-    shapes: [],
-    selectedIds: [],
-    camera: { x: 0, y: 0, z: 1 },
-    activeTool: "select",
-    isDrawing: false,
-    drawingPoints: [],
-    drawingStart: null,
-    brushing: { active: false, start: null, current: null },
-    showGrid: false,
-    nextZIndex: 1,
-    editingTextId: null,
-  };
-}
-
-function canvasReducer(
-  state: CanvasEditorState,
-  action: CanvasAction
-): CanvasEditorState {
-  switch (action.type) {
-    case "SET_TOOL":
-      return {
-        ...state,
-        activeTool: action.tool,
-        isDrawing: false,
-        drawingPoints: [],
-        drawingStart: null,
-        editingTextId: null,
-      };
-
-    case "ADD_SHAPE":
-      return {
-        ...state,
-        shapes: [...state.shapes, action.shape],
-        nextZIndex: state.nextZIndex + 1,
-      };
-
-    case "UPDATE_SHAPE":
-      return {
-        ...state,
-        shapes: state.shapes.map((s) =>
-          s.id === action.id ? { ...s, ...action.updates } : s
-        ),
-      };
-
-    case "DELETE_SHAPES":
-      return {
-        ...state,
-        shapes: state.shapes.filter((s) => !action.ids.includes(s.id)),
-        selectedIds: state.selectedIds.filter(
-          (id) => !action.ids.includes(id)
-        ),
-      };
-
-    case "SET_SELECTED":
-      return { ...state, selectedIds: action.ids };
-
-    case "TOGGLE_SELECT": {
-      const idx = state.selectedIds.indexOf(action.id);
-      return {
-        ...state,
-        selectedIds:
-          idx === -1
-            ? [...state.selectedIds, action.id]
-            : state.selectedIds.filter((id) => id !== action.id),
-      };
-    }
-
-    case "SET_CAMERA":
-      return {
-        ...state,
-        camera: { ...state.camera, ...action.camera },
-      };
-
-    case "ZOOM": {
-      const newZ = Math.min(5, Math.max(0.1, state.camera.z + action.delta));
-      const scaleFactor = newZ / state.camera.z;
-      return {
-        ...state,
-        camera: {
-          x: action.center.x - (action.center.x - state.camera.x) * scaleFactor,
-          y: action.center.y - (action.center.y - state.camera.y) * scaleFactor,
-          z: newZ,
-        },
-      };
-    }
-
-    case "PAN":
-      return {
-        ...state,
-        camera: {
-          ...state.camera,
-          x: state.camera.x + action.dx,
-          y: state.camera.y + action.dy,
-        },
-      };
-
-    case "RESET_VIEW":
-      return {
-        ...state,
-        camera: { x: 0, y: 0, z: 1 },
-      };
-
-    case "START_DRAWING":
-      return {
-        ...state,
-        isDrawing: true,
-        drawingPoints: [action.point],
-      };
-
-    case "CONTINUE_DRAWING":
-      return {
-        ...state,
-        drawingPoints: [...state.drawingPoints, action.point],
-      };
-
-    case "FINISH_DRAWING": {
-      if (state.drawingPoints.length < 2) {
-        return { ...state, isDrawing: false, drawingPoints: [] };
-      }
-      const bounds = getBoundsFromPoints(state.drawingPoints);
-      const newShape: CanvasShape = {
-        id: generateId(),
-        kind: "path",
-        x: bounds.minX,
-        y: bounds.minY,
-        width: bounds.maxX - bounds.minX,
-        height: bounds.maxY - bounds.minY,
-        rotation: 0,
-        style: { ...DEFAULT_STYLE },
-        points: state.drawingPoints.map((p) => ({
-          x: p.x - bounds.minX,
-          y: p.y - bounds.minY,
-        })),
-        visible: true,
-        zIndex: state.nextZIndex,
-      };
-      return {
-        ...state,
-        isDrawing: false,
-        drawingPoints: [],
-        shapes: [...state.shapes, newShape],
-        nextZIndex: state.nextZIndex + 1,
-      };
-    }
-
-    case "START_RECT":
-      return {
-        ...state,
-        isDrawing: true,
-        drawingStart: action.point,
-      };
-
-    case "CONTINUE_RECT":
-      return {
-        ...state,
-        drawingPoints: [action.point],
-      };
-
-    case "FINISH_RECT": {
-      if (!state.drawingStart || state.drawingPoints.length === 0) {
-        return { ...state, isDrawing: false, drawingStart: null, drawingPoints: [] };
-      }
-      const end = state.drawingPoints[0]!;
-      const rx = Math.min(state.drawingStart.x, end.x);
-      const ry = Math.min(state.drawingStart.y, end.y);
-      const rw = Math.abs(end.x - state.drawingStart.x);
-      const rh = Math.abs(end.y - state.drawingStart.y);
-      if (rw < 3 && rh < 3) {
-        return { ...state, isDrawing: false, drawingStart: null, drawingPoints: [] };
-      }
-      const rectShape: CanvasShape = {
-        id: generateId(),
-        kind: "rect",
-        x: rx,
-        y: ry,
-        width: rw,
-        height: rh,
-        rotation: 0,
-        style: { ...DEFAULT_STYLE, fill: "rgba(59, 130, 246, 0.1)" },
-        visible: true,
-        zIndex: state.nextZIndex,
-      };
-      return {
-        ...state,
-        isDrawing: false,
-        drawingStart: null,
-        drawingPoints: [],
-        shapes: [...state.shapes, rectShape],
-        nextZIndex: state.nextZIndex + 1,
-      };
-    }
-
-    case "START_BRUSHING":
-      return {
-        ...state,
-        brushing: {
-          active: true,
-          start: action.point,
-          current: action.point,
-        },
-      };
-
-    case "CONTINUE_BRUSHING":
-      return {
-        ...state,
-        brushing: {
-          ...state.brushing,
-          current: action.point,
-        },
-      };
-
-    case "FINISH_BRUSHING":
-      return {
-        ...state,
-        brushing: { active: false, start: null, current: null },
-        selectedIds: action.shapeIds,
-      };
-
-    case "TOGGLE_GRID":
-      return { ...state, showGrid: !state.showGrid };
-
-    case "SET_EDITING_TEXT":
-      return { ...state, editingTextId: action.id };
-
-    case "MOVE_SHAPES":
-      return {
-        ...state,
-        shapes: state.shapes.map((s) =>
-          action.ids.includes(s.id)
-            ? { ...s, x: s.x + action.dx, y: s.y + action.dy }
-            : s
-        ),
-      };
-
-    default:
-      return state;
-  }
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function getBoundsFromPoints(points: Point[]): {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-} {
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  for (const p of points) {
-    if (p.x < minX) minX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y > maxY) maxY = p.y;
-  }
-  return { minX, minY, maxX, maxY };
-}
-
-function pointsToSvgPath(points: Point[]): string {
-  if (points.length === 0) return "";
-  const [first, ...rest] = points;
-  let d = `M ${first!.x} ${first!.y}`;
-  for (const p of rest) {
-    d += ` L ${p.x} ${p.y}`;
-  }
-  return d;
-}
-
-function screenToCanvas(
-  screenX: number,
-  screenY: number,
-  camera: Camera,
-  svgRect: DOMRect
-): Point {
-  return {
-    x: (screenX - svgRect.left - camera.x) / camera.z,
-    y: (screenY - svgRect.top - camera.y) / camera.z,
-  };
-}
-
-function hitTestShape(shape: CanvasShape, point: Point): boolean {
-  if (shape.kind === "path" && shape.points) {
-    // Check proximity to path segments
-    for (let i = 1; i < shape.points.length; i++) {
-      const a = shape.points[i - 1]!;
-      const b = shape.points[i]!;
-      const ax = a.x + shape.x;
-      const ay = a.y + shape.y;
-      const bx = b.x + shape.x;
-      const by = b.y + shape.y;
-      const dist = distToSegment(point, { x: ax, y: ay }, { x: bx, y: by });
-      if (dist < 8) return true;
-    }
-    return false;
-  }
-  // Bounding box test for rect, text, image, ellipse
-  return (
-    point.x >= shape.x &&
-    point.x <= shape.x + shape.width &&
-    point.y >= shape.y &&
-    point.y <= shape.y + shape.height
-  );
-}
-
-function distToSegment(p: Point, a: Point, b: Point): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y);
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  const projX = a.x + t * dx;
-  const projY = a.y + t * dy;
-  return Math.hypot(p.x - projX, p.y - projY);
-}
-
-function shapesInRect(
-  shapes: CanvasShape[],
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): string[] {
-  const minX = Math.min(x1, x2);
-  const maxX = Math.max(x1, x2);
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  return shapes
-    .filter((s) => {
-      const sx = s.x;
-      const sy = s.y;
-      const sx2 = s.x + s.width;
-      const sy2 = s.y + s.height;
-      return sx < maxX && sx2 > minX && sy < maxY && sy2 > minY;
-    })
-    .map((s) => s.id);
-}
-
-// ============================================================================
-// Props
-// ============================================================================
-
-export interface AICanvasViewProps {
-  /** Image URL or data URI from generate_image tool output */
-  content?: string;
-}
+const MARK_STYLE: ShapeStyle = {
+  fill: "rgba(59, 130, 246, 0.08)",
+  stroke: "#3b82f6",
+  strokeWidth: 2,
+  opacity: 1,
+  fontSize: 16,
+  fontFamily: "sans-serif",
+};
 
 // ============================================================================
 // Toolbar Button
@@ -506,20 +184,24 @@ function ToolbarButton({
   active,
   onClick,
   shortcutHint,
+  disabled,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   active?: boolean;
   onClick: () => void;
   shortcutHint?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       title={shortcutHint ? `${label} (${shortcutHint})` : label}
       className={cn(
         "relative flex items-center justify-center rounded-md p-1.5 transition-colors",
+        disabled && "pointer-events-none opacity-30",
         active
           ? "bg-blue-500/20 text-blue-400"
           : "text-muted-foreground/60 hover:bg-muted/20 hover:text-muted-foreground"
@@ -530,228 +212,59 @@ function ToolbarButton({
   );
 }
 
-// ============================================================================
-// SVG Shape Renderers
-// ============================================================================
-
-function RenderShape({
-  shape,
-  isSelected,
-  isHovered,
-  onMouseDown,
-  onMouseEnter,
-  onMouseLeave,
-  onDoubleClick,
+/** Manus action button — larger, with label */
+function ActionButton({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
 }: {
-  shape: CanvasShape;
-  isSelected: boolean;
-  isHovered: boolean;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  onDoubleClick: (e: React.MouseEvent) => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
 }) {
-  if (!shape.visible) return null;
-
-  const selectionStroke = isSelected ? "#3b82f6" : isHovered ? "#60a5fa" : "none";
-  const selectionWidth = isSelected ? 1.5 : isHovered ? 1 : 0;
-
-  const commonGroupProps = {
-    onMouseDown,
-    onMouseEnter,
-    onMouseLeave,
-    onDoubleClick,
-    style: {
-      cursor: "pointer",
-      opacity: shape.style.opacity,
-    } as React.CSSProperties,
-  };
-
-  switch (shape.kind) {
-    case "rect":
-      return (
-        <g {...commonGroupProps}>
-          {/* Selection outline */}
-          {(isSelected || isHovered) && (
-            <rect
-              x={shape.x - 2}
-              y={shape.y - 2}
-              width={shape.width + 4}
-              height={shape.height + 4}
-              fill="none"
-              stroke={selectionStroke}
-              strokeWidth={selectionWidth}
-              strokeDasharray={isSelected ? "none" : "4 2"}
-              rx={2}
-            />
-          )}
-          <rect
-            x={shape.x}
-            y={shape.y}
-            width={shape.width}
-            height={shape.height}
-            fill={shape.style.fill}
-            stroke={shape.style.stroke}
-            strokeWidth={shape.style.strokeWidth}
-            rx={2}
-          />
-        </g>
-      );
-
-    case "ellipse":
-      return (
-        <g {...commonGroupProps}>
-          {(isSelected || isHovered) && (
-            <ellipse
-              cx={shape.x + shape.width / 2}
-              cy={shape.y + shape.height / 2}
-              rx={shape.width / 2 + 2}
-              ry={shape.height / 2 + 2}
-              fill="none"
-              stroke={selectionStroke}
-              strokeWidth={selectionWidth}
-              strokeDasharray={isSelected ? "none" : "4 2"}
-            />
-          )}
-          <ellipse
-            cx={shape.x + shape.width / 2}
-            cy={shape.y + shape.height / 2}
-            rx={shape.width / 2}
-            ry={shape.height / 2}
-            fill={shape.style.fill}
-            stroke={shape.style.stroke}
-            strokeWidth={shape.style.strokeWidth}
-          />
-        </g>
-      );
-
-    case "path": {
-      if (!shape.points || shape.points.length < 2) return null;
-      const translatedPoints = shape.points.map((p) => ({
-        x: p.x + shape.x,
-        y: p.y + shape.y,
-      }));
-      const d = pointsToSvgPath(translatedPoints);
-      return (
-        <g {...commonGroupProps}>
-          {/* Wider invisible stroke for easier selection */}
-          <path
-            d={d}
-            fill="none"
-            stroke="transparent"
-            strokeWidth={Math.max(12, shape.style.strokeWidth + 8)}
-          />
-          {(isSelected || isHovered) && (
-            <path
-              d={d}
-              fill="none"
-              stroke={selectionStroke}
-              strokeWidth={shape.style.strokeWidth + 3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-          <path
-            d={d}
-            fill="none"
-            stroke={shape.style.stroke}
-            strokeWidth={shape.style.strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
-      );
-    }
-
-    case "text":
-      return (
-        <g {...commonGroupProps}>
-          {(isSelected || isHovered) && (
-            <rect
-              x={shape.x - 4}
-              y={shape.y - 4}
-              width={shape.width + 8}
-              height={shape.height + 8}
-              fill="none"
-              stroke={selectionStroke}
-              strokeWidth={selectionWidth}
-              strokeDasharray={isSelected ? "none" : "4 2"}
-              rx={2}
-            />
-          )}
-          <foreignObject
-            x={shape.x}
-            y={shape.y}
-            width={Math.max(shape.width, 20)}
-            height={Math.max(shape.height, 20)}
-          >
-            <div
-              style={{
-                fontSize: shape.style.fontSize,
-                fontFamily: shape.style.fontFamily,
-                color: shape.style.stroke,
-                width: "100%",
-                height: "100%",
-                overflow: "hidden",
-                wordBreak: "break-word",
-                lineHeight: 1.3,
-              }}
-            >
-              {shape.text || ""}
-            </div>
-          </foreignObject>
-        </g>
-      );
-
-    case "image":
-      return (
-        <g {...commonGroupProps}>
-          {(isSelected || isHovered) && (
-            <rect
-              x={shape.x - 2}
-              y={shape.y - 2}
-              width={shape.width + 4}
-              height={shape.height + 4}
-              fill="none"
-              stroke={selectionStroke}
-              strokeWidth={selectionWidth}
-              strokeDasharray={isSelected ? "none" : "4 2"}
-              rx={2}
-            />
-          )}
-          <image
-            href={shape.imageUrl}
-            x={shape.x}
-            y={shape.y}
-            width={shape.width}
-            height={shape.height}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        </g>
-      );
-
-    default:
-      return null;
-  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+        disabled
+          ? "pointer-events-none opacity-30"
+          : "text-muted-foreground/70 hover:bg-muted/20 hover:text-muted-foreground"
+      )}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  );
 }
 
 // ============================================================================
-// Text Edit Overlay
+// Text Edit Overlay (positioned in screen space above Konva stage)
 // ============================================================================
 
 function TextEditOverlay({
-  shape,
-  camera,
-  svgRect,
+  x,
+  y,
+  width,
+  height,
+  text,
+  fontSize,
   onFinish,
 }: {
-  shape: CanvasShape;
-  camera: Camera;
-  svgRect: DOMRect | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  fontSize: number;
   onFinish: (text: string) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [value, setValue] = useState(shape.text || "");
+  const [value, setValue] = useState(text);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -767,7 +280,6 @@ function TextEditOverlay({
       if (e.key === "Escape") {
         onFinish(value);
       }
-      // Allow Enter for multiline, Shift+Enter or Cmd+Enter finishes
       if (e.key === "Enter" && (e.shiftKey || e.metaKey)) {
         e.preventDefault();
         onFinish(value);
@@ -775,13 +287,6 @@ function TextEditOverlay({
     },
     [value, onFinish]
   );
-
-  if (!svgRect) return null;
-
-  const screenX = shape.x * camera.z + camera.x + svgRect.left;
-  const screenY = shape.y * camera.z + camera.y + svgRect.top;
-  const screenW = Math.max(shape.width * camera.z, 80);
-  const screenH = Math.max(shape.height * camera.z, 30);
 
   return (
     <textarea
@@ -792,12 +297,11 @@ function TextEditOverlay({
       onKeyDown={handleKeyDown}
       className="fixed z-50 resize-none rounded border border-blue-500 bg-background/95 p-1 text-foreground outline-none"
       style={{
-        left: screenX,
-        top: screenY,
-        width: screenW,
-        height: screenH,
-        fontSize: shape.style.fontSize * camera.z,
-        fontFamily: shape.style.fontFamily,
+        left: x,
+        top: y,
+        width: Math.max(width, 80),
+        height: Math.max(height, 30),
+        fontSize,
         lineHeight: 1.3,
       }}
     />
@@ -808,136 +312,192 @@ function TextEditOverlay({
 // Main Component
 // ============================================================================
 
-export function AICanvasView({ content }: AICanvasViewProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
+export function AICanvasView({
+  content,
+  onStateChange,
+  onUpscale,
+  onRemoveBg,
+  onMarkingComplete,
+  onAnnotationsChange,
+  initialAnnotations,
+  editTextMode: editTextModeProp,
+  ocrAnnotations,
+  onOcrTextChange,
+}: AICanvasViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [state, dispatch] = useReducer(canvasReducer, undefined, createInitialState);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [svgRect, setSvgRect] = useState<DOMRect | null>(null);
-  const [temporaryPan, setTemporaryPan] = useState(false);
+  const stageRef = useRef<any>(null);
+  const transformerRef = useRef<any>(null);
 
-  // Track drag state with refs to avoid stale closure issues in event handlers
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef<Point | null>(null);
-  const dragTypeRef = useRef<"pan" | "move" | "none">("none");
-
-  // Effective tool considering temporary pan (space key)
-  const effectiveTool: CanvasToolType = temporaryPan ? "pan" : state.activeTool;
-
-  // Update SVG rect on resize
+  // Konva SSR guard — dynamically import react-konva
+  const [konvaLoaded, setKonvaLoaded] = useState(false);
   useEffect(() => {
-    const updateRect = () => {
-      if (svgRef.current) {
-        setSvgRect(svgRef.current.getBoundingClientRect());
+    import("react-konva").then((mod) => {
+      Stage = mod.Stage;
+      Layer = mod.Layer;
+      Rect = mod.Rect;
+      Line = mod.Line;
+      Text = mod.Text;
+      Image = mod.Image;
+      Transformer = mod.Transformer;
+      Group = mod.Group;
+      setKonvaLoaded(true);
+    });
+  }, []);
+
+  // Canvas dimensions (from container)
+  const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setStageSize({ width: rect.width, height: rect.height });
       }
     };
-    updateRect();
-    const observer = new ResizeObserver(updateRect);
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
     if (containerRef.current) {
       observer.observe(containerRef.current);
     }
     return () => observer.disconnect();
   }, []);
 
-  // Add initial image shape from content prop (generate_image output)
+  // State
+  const [shapes, setShapes] = useState<CanvasShape[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activeTool, setActiveTool] = useState<CanvasToolType>("select");
+  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, z: 1 });
+  const [showGrid, setShowGrid] = useState(false);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [temporaryPan, setTemporaryPan] = useState(false);
+  const [nextZIndex, setNextZIndex] = useState(1);
+  const [annotations, setAnnotations] = useState<Annotation[]>(
+    initialAnnotations ?? []
+  );
+  const [editTextMode, setEditTextMode] = useState(false);
+
+  // Drawing state
+  const [isDrawing, setIsDrawing] = useState(false);
+  const drawingPointsRef = useRef<number[]>([]);
+  const drawingStartRef = useRef<Point | null>(null);
+  const [drawingPreviewPoints, setDrawingPreviewPoints] = useState<number[]>([]);
+  const [markPreview, setMarkPreview] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [rectPreview, setRectPreview] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  // Background image
+  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(
+    null
+  );
+  const [imageDimensions, setImageDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const contentProcessedRef = useRef<string | null>(null);
+
+  // Effective tool (considering temporary pan via space bar)
+  const effectiveTool: CanvasToolType = temporaryPan ? "pan" : activeTool;
+
+  // Sync state to external consumer (e.g. Redux aiCanvasEditor slice)
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
   useEffect(() => {
-    if (
-      !content ||
-      content === contentProcessedRef.current
-    ) {
-      return;
-    }
+    onStateChangeRef.current?.({
+      shapes,
+      selectedIds,
+      activeTool,
+      zoom: camera.z,
+      showGrid,
+    });
+  }, [shapes, selectedIds, activeTool, camera.z, showGrid]);
+
+  // Load background image from content prop
+  useEffect(() => {
+    if (!content || content === contentProcessedRef.current) return;
     contentProcessedRef.current = content;
 
-    // Place the image centered at origin
-    const imgWidth = 512;
-    const imgHeight = 512;
-    const imageShape: CanvasShape = {
-      id: generateId(),
-      kind: "image",
-      x: -imgWidth / 2,
-      y: -imgHeight / 2,
-      width: imgWidth,
-      height: imgHeight,
-      rotation: 0,
-      style: { ...DEFAULT_STYLE },
-      imageUrl: content,
-      visible: true,
-      zIndex: state.nextZIndex,
-    };
-    dispatch({ type: "ADD_SHAPE", shape: imageShape });
-    // Center camera on the image
-    if (svgRect) {
-      dispatch({
-        type: "SET_CAMERA",
-        camera: {
-          x: svgRect.width / 2 - imgWidth / 2,
-          y: svgRect.height / 2 - imgHeight / 2,
-          z: 1,
-        },
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      setImageElement(img);
+      setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+
+      // Auto-fit: center the image in the viewport
+      const scaleX = stageSize.width / img.naturalWidth;
+      const scaleY = stageSize.height / img.naturalHeight;
+      const scale = Math.min(scaleX, scaleY, 1) * 0.9; // 90% fit with margin
+      setCamera({
+        x: (stageSize.width - img.naturalWidth * scale) / 2,
+        y: (stageSize.height - img.naturalHeight * scale) / 2,
+        z: scale,
       });
-    }
-  }, [content, svgRect]);
+    };
+    img.src = content;
+  }, [content, stageSize.width, stageSize.height]);
 
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Space for temporary pan mode
-      if (e.code === "Space" && !e.repeat && state.editingTextId === null) {
+      // Space for temporary pan
+      if (e.code === "Space" && !e.repeat && editingTextId === null) {
         e.preventDefault();
         setTemporaryPan(true);
         return;
       }
 
-      // Delete/Backspace to remove selected shapes
+      // Delete/Backspace to remove selected
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
-        state.selectedIds.length > 0 &&
-        state.editingTextId === null
+        selectedIds.length > 0 &&
+        editingTextId === null
       ) {
         e.preventDefault();
-        dispatch({ type: "DELETE_SHAPES", ids: state.selectedIds });
+        setShapes((prev) => prev.filter((s) => !selectedIds.includes(s.id)));
+        setSelectedIds([]);
         return;
       }
 
-      // Escape to deselect or cancel
+      // Escape to deselect
       if (e.key === "Escape") {
-        dispatch({ type: "SET_SELECTED", ids: [] });
-        dispatch({ type: "SET_EDITING_TEXT", id: null });
+        setSelectedIds([]);
+        setEditingTextId(null);
         return;
       }
 
       // Tool shortcuts
-      if (state.editingTextId !== null) return;
-      switch (e.key) {
+      if (editingTextId !== null) return;
+      switch (e.key.toLowerCase()) {
         case "v":
-        case "V":
-          dispatch({ type: "SET_TOOL", tool: "select" });
+          setActiveTool("select");
           break;
         case "h":
-        case "H":
-          dispatch({ type: "SET_TOOL", tool: "pan" });
+          setActiveTool("pan");
+          break;
+        case "m":
+          setActiveTool("mark");
           break;
         case "p":
-        case "P":
-          dispatch({ type: "SET_TOOL", tool: "draw" });
+          setActiveTool("draw");
           break;
         case "t":
-        case "T":
-          dispatch({ type: "SET_TOOL", tool: "text" });
+          setActiveTool("text");
           break;
         case "r":
-        case "R":
-          dispatch({ type: "SET_TOOL", tool: "rectangle" });
+          setActiveTool("rectangle");
           break;
         case "e":
-        case "E":
-          dispatch({ type: "SET_TOOL", tool: "eraser" });
+          setActiveTool("eraser");
           break;
         case "g":
-        case "G":
-          dispatch({ type: "TOGGLE_GRID" });
+          setShowGrid((prev) => !prev);
           break;
       }
     };
@@ -954,307 +514,420 @@ export function AICanvasView({ content }: AICanvasViewProps) {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [state.selectedIds, state.editingTextId]);
+  }, [selectedIds, editingTextId]);
 
-  // ── Mouse wheel zoom ──
+  // ── Scroll wheel zoom ──
   const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      if (!svgRect) return;
-      const mousePos = screenToCanvas(e.clientX, e.clientY, state.camera, svgRect);
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      dispatch({
-        type: "ZOOM",
-        delta,
-        center: { x: e.clientX - svgRect.left, y: e.clientY - svgRect.top },
+    (e: any) => {
+      e.evt.preventDefault();
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+
+      const oldScale = camera.z;
+      const scaleBy = 1.08;
+      const newScale =
+        e.evt.deltaY > 0
+          ? Math.max(0.1, oldScale / scaleBy)
+          : Math.min(5, oldScale * scaleBy);
+
+      const mousePointTo = {
+        x: (pointer.x - camera.x) / oldScale,
+        y: (pointer.y - camera.y) / oldScale,
+      };
+
+      setCamera({
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+        z: newScale,
       });
     },
-    [state.camera, svgRect]
+    [camera]
   );
 
-  // ── Pointer event handlers ──
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      if (!svgRef.current || !svgRect) return;
+  // ── Stage mouse handlers ──
+  const handleStageMouseDown = useCallback(
+    (e: any) => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
 
-      const canvasPoint = screenToCanvas(
-        e.clientX,
-        e.clientY,
-        state.camera,
-        svgRect
-      );
-
-      isDraggingRef.current = true;
-      dragStartRef.current = { x: e.clientX, y: e.clientY };
-
-      // Capture pointer for smooth dragging
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      // Convert to canvas coordinates
+      const canvasX = (pointer.x - camera.x) / camera.z;
+      const canvasY = (pointer.y - camera.y) / camera.z;
 
       switch (effectiveTool) {
         case "pan": {
-          dragTypeRef.current = "pan";
+          // Pan is handled by Konva stage draggable
           break;
         }
 
         case "select": {
-          // Check if clicking on a shape
-          const sortedShapes = [...state.shapes].sort(
-            (a, b) => b.zIndex - a.zIndex
-          );
-          let hitShape: CanvasShape | null = null;
-          for (const shape of sortedShapes) {
-            if (hitTestShape(shape, canvasPoint)) {
-              hitShape = shape;
-              break;
+          // Check if clicking on a shape — Konva handles click on individual shapes
+          const clickedShape = e.target;
+          if (clickedShape === stage || clickedShape.getLayer() === clickedShape) {
+            // Clicked on empty stage — deselect
+            setSelectedIds([]);
+            if (transformerRef.current) {
+              transformerRef.current.nodes([]);
             }
           }
+          break;
+        }
 
-          if (hitShape) {
-            if (e.shiftKey) {
-              dispatch({ type: "TOGGLE_SELECT", id: hitShape.id });
-            } else if (!state.selectedIds.includes(hitShape.id)) {
-              dispatch({ type: "SET_SELECTED", ids: [hitShape.id] });
-            }
-            dragTypeRef.current = "move";
-          } else {
-            // Start rubber-band selection
-            dispatch({ type: "SET_SELECTED", ids: [] });
-            dispatch({ type: "START_BRUSHING", point: canvasPoint });
-            dragTypeRef.current = "none";
-          }
+        case "mark": {
+          setIsDrawing(true);
+          drawingStartRef.current = { x: canvasX, y: canvasY };
+          setMarkPreview({
+            x: canvasX,
+            y: canvasY,
+            width: 0,
+            height: 0,
+          });
           break;
         }
 
         case "draw": {
-          dispatch({ type: "START_DRAWING", point: canvasPoint });
-          dragTypeRef.current = "none";
+          setIsDrawing(true);
+          drawingPointsRef.current = [canvasX, canvasY];
+          setDrawingPreviewPoints([canvasX, canvasY]);
           break;
         }
 
         case "rectangle": {
-          dispatch({ type: "START_RECT", point: canvasPoint });
-          dragTypeRef.current = "none";
+          setIsDrawing(true);
+          drawingStartRef.current = { x: canvasX, y: canvasY };
+          setRectPreview({
+            x: canvasX,
+            y: canvasY,
+            width: 0,
+            height: 0,
+          });
           break;
         }
 
         case "text": {
-          // Place a text shape at click position
           const textShape: CanvasShape = {
             id: generateId(),
             kind: "text",
-            x: canvasPoint.x,
-            y: canvasPoint.y,
+            x: canvasX,
+            y: canvasY,
             width: 150,
             height: 30,
             rotation: 0,
-            style: {
-              ...DEFAULT_STYLE,
-              stroke: "#e5e7eb",
-              fill: "transparent",
-            },
+            style: { ...DEFAULT_STYLE, stroke: "#e5e7eb" },
             text: "Text",
             visible: true,
-            zIndex: state.nextZIndex,
+            zIndex: nextZIndex,
           };
-          dispatch({ type: "ADD_SHAPE", shape: textShape });
-          dispatch({ type: "SET_EDITING_TEXT", id: textShape.id });
-          dragTypeRef.current = "none";
+          setShapes((prev) => [...prev, textShape]);
+          setNextZIndex((n) => n + 1);
+          setEditingTextId(textShape.id);
           break;
         }
 
         case "eraser": {
-          // Delete shape under cursor
-          const sortedForErase = [...state.shapes].sort(
-            (a, b) => b.zIndex - a.zIndex
-          );
-          for (const shape of sortedForErase) {
-            if (hitTestShape(shape, canvasPoint)) {
-              dispatch({ type: "DELETE_SHAPES", ids: [shape.id] });
-              break;
-            }
+          const clicked = e.target;
+          if (clicked !== stage && clicked.id?.()) {
+            const shapeId = clicked.id();
+            setShapes((prev) => prev.filter((s) => s.id !== shapeId));
           }
-          dragTypeRef.current = "none";
           break;
         }
       }
     },
-    [effectiveTool, state.camera, state.shapes, state.selectedIds, state.nextZIndex, svgRect]
+    [effectiveTool, camera, nextZIndex]
   );
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isDraggingRef.current || !dragStartRef.current || !svgRect) return;
+  const handleStageMouseMove = useCallback(
+    (e: any) => {
+      if (!isDrawing) return;
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
 
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      const canvasPoint = screenToCanvas(
-        e.clientX,
-        e.clientY,
-        state.camera,
-        svgRect
-      );
+      const canvasX = (pointer.x - camera.x) / camera.z;
+      const canvasY = (pointer.y - camera.y) / camera.z;
 
-      switch (dragTypeRef.current) {
-        case "pan":
-          dispatch({ type: "PAN", dx, dy });
-          dragStartRef.current = { x: e.clientX, y: e.clientY };
-          break;
-
-        case "move":
-          if (state.selectedIds.length > 0) {
-            dispatch({
-              type: "MOVE_SHAPES",
-              ids: state.selectedIds,
-              dx: dx / state.camera.z,
-              dy: dy / state.camera.z,
-            });
-            dragStartRef.current = { x: e.clientX, y: e.clientY };
-          }
-          break;
-
-        default:
-          // Handle tool-specific drags
-          if (effectiveTool === "draw" && state.isDrawing) {
-            dispatch({ type: "CONTINUE_DRAWING", point: canvasPoint });
-          } else if (effectiveTool === "rectangle" && state.isDrawing) {
-            dispatch({ type: "CONTINUE_RECT", point: canvasPoint });
-          } else if (effectiveTool === "select" && state.brushing.active) {
-            dispatch({ type: "CONTINUE_BRUSHING", point: canvasPoint });
-          } else if (effectiveTool === "eraser") {
-            // Continuous erasing while dragging
-            const sortedForErase = [...state.shapes].sort(
-              (a, b) => b.zIndex - a.zIndex
-            );
-            for (const shape of sortedForErase) {
-              if (hitTestShape(shape, canvasPoint)) {
-                dispatch({ type: "DELETE_SHAPES", ids: [shape.id] });
-                break;
-              }
-            }
-          }
-          break;
+      if (effectiveTool === "draw") {
+        drawingPointsRef.current = [
+          ...drawingPointsRef.current,
+          canvasX,
+          canvasY,
+        ];
+        setDrawingPreviewPoints([...drawingPointsRef.current]);
+      } else if (effectiveTool === "mark" && drawingStartRef.current) {
+        const start = drawingStartRef.current;
+        setMarkPreview({
+          x: Math.min(start.x, canvasX),
+          y: Math.min(start.y, canvasY),
+          width: Math.abs(canvasX - start.x),
+          height: Math.abs(canvasY - start.y),
+        });
+      } else if (effectiveTool === "rectangle" && drawingStartRef.current) {
+        const start = drawingStartRef.current;
+        setRectPreview({
+          x: Math.min(start.x, canvasX),
+          y: Math.min(start.y, canvasY),
+          width: Math.abs(canvasX - start.x),
+          height: Math.abs(canvasY - start.y),
+        });
       }
     },
-    [state.camera, state.selectedIds, state.isDrawing, state.brushing.active, state.shapes, effectiveTool, svgRect]
+    [isDrawing, effectiveTool, camera]
   );
 
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      dragStartRef.current = null;
+  const handleStageMouseUp = useCallback(() => {
+    if (!isDrawing) return;
 
-      if (!svgRect) return;
-
-      if (effectiveTool === "draw" && state.isDrawing) {
-        dispatch({ type: "FINISH_DRAWING" });
-      } else if (effectiveTool === "rectangle" && state.isDrawing) {
-        dispatch({ type: "FINISH_RECT" });
-      } else if (effectiveTool === "select" && state.brushing.active) {
-        // Finish rubber-band: select shapes inside the rectangle
-        if (state.brushing.start && state.brushing.current) {
-          const ids = shapesInRect(
-            state.shapes,
-            state.brushing.start.x,
-            state.brushing.start.y,
-            state.brushing.current.x,
-            state.brushing.current.y
-          );
-          dispatch({ type: "FINISH_BRUSHING", shapeIds: ids });
-        } else {
-          dispatch({ type: "FINISH_BRUSHING", shapeIds: [] });
+    if (effectiveTool === "draw") {
+      const points = drawingPointsRef.current;
+      if (points.length >= 4) {
+        // Find bounds
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        for (let i = 0; i < points.length; i += 2) {
+          if (points[i]! < minX) minX = points[i]!;
+          if (points[i + 1]! < minY) minY = points[i + 1]!;
+          if (points[i]! > maxX) maxX = points[i]!;
+          if (points[i + 1]! > maxY) maxY = points[i + 1]!;
         }
+        // Normalize points relative to shape origin
+        const normalizedPoints: number[] = [];
+        for (let i = 0; i < points.length; i += 2) {
+          normalizedPoints.push(points[i]! - minX, points[i + 1]! - minY);
+        }
+        const pathShape: CanvasShape = {
+          id: generateId(),
+          kind: "path",
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
+          rotation: 0,
+          style: { ...DEFAULT_STYLE },
+          points: [], // stored as flat array in Konva
+          visible: true,
+          zIndex: nextZIndex,
+        };
+        // Store flat points array for Konva Line
+        (pathShape as any)._flatPoints = normalizedPoints;
+        setShapes((prev) => [...prev, pathShape]);
+        setNextZIndex((n) => n + 1);
       }
+      drawingPointsRef.current = [];
+      setDrawingPreviewPoints([]);
+    } else if (effectiveTool === "mark" && markPreview) {
+      if (markPreview.width > 5 && markPreview.height > 5) {
+        const markShape: CanvasShape = {
+          id: generateId(),
+          kind: "mark",
+          x: markPreview.x,
+          y: markPreview.y,
+          width: markPreview.width,
+          height: markPreview.height,
+          rotation: 0,
+          style: { ...MARK_STYLE },
+          visible: true,
+          zIndex: nextZIndex,
+        };
+        setShapes((prev) => [...prev, markShape]);
+        setNextZIndex((n) => n + 1);
 
-      dragTypeRef.current = "none";
+        // Create annotation entry
+        const newAnnotation: Annotation = {
+          id: markShape.id,
+          imageId: content ?? "",
+          x: markPreview.x,
+          y: markPreview.y,
+          width: markPreview.width,
+          height: markPreview.height,
+          text: "",
+        };
+        setAnnotations((prev) => {
+          const next = [...prev, newAnnotation];
+          onAnnotationsChange?.(next);
+          return next;
+        });
+
+        onMarkingComplete?.({
+          imageId: content ?? "",
+          x: markPreview.x,
+          y: markPreview.y,
+          width: markPreview.width,
+          height: markPreview.height,
+        });
+      }
+      setMarkPreview(null);
+    } else if (effectiveTool === "rectangle" && rectPreview) {
+      if (rectPreview.width > 3 && rectPreview.height > 3) {
+        const rectShape: CanvasShape = {
+          id: generateId(),
+          kind: "rect",
+          x: rectPreview.x,
+          y: rectPreview.y,
+          width: rectPreview.width,
+          height: rectPreview.height,
+          rotation: 0,
+          style: {
+            ...DEFAULT_STYLE,
+            fill: "rgba(59, 130, 246, 0.1)",
+          },
+          visible: true,
+          zIndex: nextZIndex,
+        };
+        setShapes((prev) => [...prev, rectShape]);
+        setNextZIndex((n) => n + 1);
+      }
+      setRectPreview(null);
+    }
+
+    setIsDrawing(false);
+    drawingStartRef.current = null;
+  }, [
+    isDrawing,
+    effectiveTool,
+    markPreview,
+    rectPreview,
+    nextZIndex,
+    content,
+    onMarkingComplete,
+    onAnnotationsChange,
+  ]);
+
+  // ── Shape click handler ──
+  const handleShapeClick = useCallback(
+    (e: any, shapeId: string) => {
+      if (effectiveTool === "eraser") {
+        setShapes((prev) => prev.filter((s) => s.id !== shapeId));
+        return;
+      }
+      if (effectiveTool !== "select") return;
+
+      e.cancelBubble = true;
+      const isShift = e.evt.shiftKey;
+
+      if (isShift) {
+        setSelectedIds((prev) =>
+          prev.includes(shapeId)
+            ? prev.filter((id) => id !== shapeId)
+            : [...prev, shapeId]
+        );
+      } else {
+        setSelectedIds([shapeId]);
+      }
     },
-    [effectiveTool, state.isDrawing, state.brushing, state.shapes, svgRect]
+    [effectiveTool]
   );
 
-  // ── Double-click handler for text editing ──
-  const handleShapeDoubleClick = useCallback(
+  // ── Shape double-click for text editing ──
+  const handleShapeDblClick = useCallback(
     (shapeId: string) => {
-      const shape = state.shapes.find((s) => s.id === shapeId);
+      const shape = shapes.find((s) => s.id === shapeId);
       if (shape?.kind === "text") {
-        dispatch({ type: "SET_EDITING_TEXT", id: shapeId });
+        setEditingTextId(shapeId);
       }
     },
-    [state.shapes]
+    [shapes]
   );
 
   // ── Text edit finish ──
   const handleTextEditFinish = useCallback(
     (text: string) => {
-      if (state.editingTextId) {
-        dispatch({
-          type: "UPDATE_SHAPE",
-          id: state.editingTextId,
-          updates: { text },
-        });
+      if (editingTextId) {
+        setShapes((prev) =>
+          prev.map((s) => (s.id === editingTextId ? { ...s, text } : s))
+        );
       }
-      dispatch({ type: "SET_EDITING_TEXT", id: null });
+      setEditingTextId(null);
     },
-    [state.editingTextId]
+    [editingTextId]
   );
 
-  // ── Render current freehand drawing preview ──
-  const drawingPreviewPath = useMemo(() => {
-    if (!state.isDrawing || effectiveTool !== "draw" || state.drawingPoints.length < 2) {
-      return null;
-    }
-    return pointsToSvgPath(state.drawingPoints);
-  }, [state.isDrawing, effectiveTool, state.drawingPoints]);
+  // ── Transformer update (selection handles) ──
+  useEffect(() => {
+    if (!konvaLoaded || !transformerRef.current || !stageRef.current) return;
+    const stage = stageRef.current;
+    const nodes = selectedIds
+      .map((id) => stage.findOne(`#${id}`))
+      .filter(Boolean);
+    transformerRef.current.nodes(nodes);
+    transformerRef.current.getLayer()?.batchDraw();
+  }, [selectedIds, konvaLoaded, shapes]);
 
-  // ── Render current rectangle drawing preview ──
-  const rectPreview = useMemo(() => {
-    if (!state.isDrawing || effectiveTool !== "rectangle" || !state.drawingStart || state.drawingPoints.length === 0) {
-      return null;
-    }
-    const end = state.drawingPoints[0]!;
-    return {
-      x: Math.min(state.drawingStart.x, end.x),
-      y: Math.min(state.drawingStart.y, end.y),
-      width: Math.abs(end.x - state.drawingStart.x),
-      height: Math.abs(end.y - state.drawingStart.y),
-    };
-  }, [state.isDrawing, effectiveTool, state.drawingStart, state.drawingPoints]);
+  // ── Shape drag end (update position in state) ──
+  const handleDragEnd = useCallback((e: any, shapeId: string) => {
+    const node = e.target;
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === shapeId ? { ...s, x: node.x(), y: node.y() } : s
+      )
+    );
+  }, []);
 
-  // ── Rubber-band selection rectangle ──
-  const brushRect = useMemo(() => {
-    if (!state.brushing.active || !state.brushing.start || !state.brushing.current) {
-      return null;
-    }
-    return {
-      x: Math.min(state.brushing.start.x, state.brushing.current.x),
-      y: Math.min(state.brushing.start.y, state.brushing.current.y),
-      width: Math.abs(state.brushing.current.x - state.brushing.start.x),
-      height: Math.abs(state.brushing.current.y - state.brushing.start.y),
-    };
-  }, [state.brushing]);
+  // ── Transform end (update size/rotation) ──
+  const handleTransformEnd = useCallback((e: any, shapeId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+    // Reset scale and apply to width/height
+    node.scaleX(1);
+    node.scaleY(1);
+    setShapes((prev) =>
+      prev.map((s) =>
+        s.id === shapeId
+          ? {
+              ...s,
+              x: node.x(),
+              y: node.y(),
+              width: Math.max(5, node.width() * scaleX),
+              height: Math.max(5, node.height() * scaleY),
+              rotation: node.rotation(),
+            }
+          : s
+      )
+    );
+  }, []);
 
-  // Sorted shapes for rendering (lowest zIndex first)
+  // ── Stage drag (pan) ──
+  const handleStageDragEnd = useCallback((e: any) => {
+    if (e.target === stageRef.current) {
+      setCamera((prev) => ({
+        ...prev,
+        x: e.target.x(),
+        y: e.target.y(),
+      }));
+    }
+  }, []);
+
+  // Sorted shapes for rendering
   const sortedShapes = useMemo(
-    () => [...state.shapes].sort((a, b) => a.zIndex - b.zIndex),
-    [state.shapes]
+    () => [...shapes].sort((a, b) => a.zIndex - b.zIndex),
+    [shapes]
   );
 
-  // The editing text shape
-  const editingShape = state.editingTextId
-    ? state.shapes.find((s) => s.id === state.editingTextId) ?? null
+  // Editing text shape info (for overlay positioning)
+  const editingShape = editingTextId
+    ? shapes.find((s) => s.id === editingTextId) ?? null
     : null;
 
-  // ── Cursor style based on active tool ──
+  // Cursor style
   const cursorStyle = useMemo(() => {
     switch (effectiveTool) {
       case "pan":
         return "grab";
       case "draw":
+      case "mark":
+      case "rectangle":
         return "crosshair";
       case "text":
         return "text";
-      case "rectangle":
-        return "crosshair";
       case "eraser":
         return "pointer";
       case "select":
@@ -1262,6 +935,9 @@ export function AICanvasView({ content }: AICanvasViewProps) {
         return "default";
     }
   }, [effectiveTool]);
+
+  // Manus toolbar actions
+  const hasImage = !!content;
 
   return (
     <div ref={containerRef} className="flex h-full flex-col">
@@ -1274,47 +950,71 @@ export function AICanvasView({ content }: AICanvasViewProps) {
           AI Canvas
         </span>
 
-        {/* Shape count */}
-        {state.shapes.length > 0 && (
+        {shapes.length > 0 && (
           <span className="text-xs text-muted-foreground/40">
-            {state.shapes.length} shape{state.shapes.length !== 1 ? "s" : ""}
+            {shapes.length} shape{shapes.length !== 1 ? "s" : ""}
           </span>
         )}
 
         <div className="flex-1" />
 
+        {/* Manus action buttons */}
+        {hasImage && (
+          <div className="flex items-center gap-0.5 border-r border-border/10 pr-2">
+            <ActionButton
+              icon={ArrowUpIcon}
+              label="Upscale"
+              onClick={() => onUpscale?.(content!)}
+              disabled={!onUpscale}
+            />
+            <ActionButton
+              icon={ImageOffIcon}
+              label="Remove bg"
+              onClick={() => onRemoveBg?.(content!)}
+              disabled={!onRemoveBg}
+            />
+            <ActionButton
+              icon={TypeIcon}
+              label="Edit text"
+              onClick={() => setEditTextMode((prev) => !prev)}
+            />
+          </div>
+        )}
+
         {/* Zoom controls */}
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            onClick={() =>
-              dispatch({
-                type: "ZOOM",
-                delta: -0.15,
-                center: svgRect
-                  ? { x: svgRect.width / 2, y: svgRect.height / 2 }
-                  : { x: 0, y: 0 },
-              })
-            }
+            onClick={() => {
+              const newZ = Math.max(0.1, camera.z / 1.2);
+              const cx = stageSize.width / 2;
+              const cy = stageSize.height / 2;
+              setCamera((prev) => ({
+                x: cx - ((cx - prev.x) / prev.z) * newZ,
+                y: cy - ((cy - prev.y) / prev.z) * newZ,
+                z: newZ,
+              }));
+            }}
             className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted/20"
             title="Zoom out"
           >
             <ZoomOutIcon className="size-3.5" />
           </button>
           <span className="min-w-[3rem] text-center text-xs tabular-nums text-muted-foreground/50">
-            {Math.round(state.camera.z * 100)}%
+            {Math.round(camera.z * 100)}%
           </span>
           <button
             type="button"
-            onClick={() =>
-              dispatch({
-                type: "ZOOM",
-                delta: 0.15,
-                center: svgRect
-                  ? { x: svgRect.width / 2, y: svgRect.height / 2 }
-                  : { x: 0, y: 0 },
-              })
-            }
+            onClick={() => {
+              const newZ = Math.min(5, camera.z * 1.2);
+              const cx = stageSize.width / 2;
+              const cy = stageSize.height / 2;
+              setCamera((prev) => ({
+                x: cx - ((cx - prev.x) / prev.z) * newZ,
+                y: cy - ((cy - prev.y) / prev.z) * newZ,
+                z: newZ,
+              }));
+            }}
             className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted/20"
             title="Zoom in"
           >
@@ -1322,7 +1022,9 @@ export function AICanvasView({ content }: AICanvasViewProps) {
           </button>
           <button
             type="button"
-            onClick={() => dispatch({ type: "RESET_VIEW" })}
+            onClick={() =>
+              setCamera({ x: 0, y: 0, z: 1 })
+            }
             className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted/20"
             title="Reset view"
           >
@@ -1339,39 +1041,46 @@ export function AICanvasView({ content }: AICanvasViewProps) {
           icon={MousePointerIcon}
           label="Select"
           shortcutHint="V"
-          active={state.activeTool === "select" && !temporaryPan}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "select" })}
+          active={activeTool === "select" && !temporaryPan}
+          onClick={() => setActiveTool("select")}
         />
         <ToolbarButton
           icon={HandIcon}
           label="Pan"
           shortcutHint="H"
-          active={state.activeTool === "pan" || temporaryPan}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "pan" })}
+          active={activeTool === "pan" || temporaryPan}
+          onClick={() => setActiveTool("pan")}
         />
 
         <div className="mx-1 h-4 w-px bg-border/20" />
 
         <ToolbarButton
+          icon={CrosshairIcon}
+          label="Mark"
+          shortcutHint="M"
+          active={activeTool === "mark"}
+          onClick={() => setActiveTool("mark")}
+        />
+        <ToolbarButton
           icon={PenToolIcon}
           label="Draw"
           shortcutHint="P"
-          active={state.activeTool === "draw"}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "draw" })}
+          active={activeTool === "draw"}
+          onClick={() => setActiveTool("draw")}
         />
         <ToolbarButton
           icon={TypeIcon}
           label="Text"
           shortcutHint="T"
-          active={state.activeTool === "text"}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "text" })}
+          active={activeTool === "text"}
+          onClick={() => setActiveTool("text")}
         />
         <ToolbarButton
           icon={SquareIcon}
           label="Rectangle"
           shortcutHint="R"
-          active={state.activeTool === "rectangle"}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "rectangle" })}
+          active={activeTool === "rectangle"}
+          onClick={() => setActiveTool("rectangle")}
         />
 
         <div className="mx-1 h-4 w-px bg-border/20" />
@@ -1380,8 +1089,8 @@ export function AICanvasView({ content }: AICanvasViewProps) {
           icon={EraserIcon}
           label="Eraser"
           shortcutHint="E"
-          active={state.activeTool === "eraser"}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: "eraser" })}
+          active={activeTool === "eraser"}
+          onClick={() => setActiveTool("eraser")}
         />
 
         <div className="mx-1 h-4 w-px bg-border/20" />
@@ -1390,166 +1099,344 @@ export function AICanvasView({ content }: AICanvasViewProps) {
           icon={GridIcon}
           label="Toggle grid"
           shortcutHint="G"
-          active={state.showGrid}
-          onClick={() => dispatch({ type: "TOGGLE_GRID" })}
+          active={showGrid}
+          onClick={() => setShowGrid((prev) => !prev)}
         />
 
-        {state.selectedIds.length > 0 && (
+        {selectedIds.length > 0 && (
           <>
             <div className="mx-1 h-4 w-px bg-border/20" />
             <ToolbarButton
               icon={Trash2Icon}
               label="Delete selected"
               shortcutHint="Del"
-              onClick={() =>
-                dispatch({ type: "DELETE_SHAPES", ids: state.selectedIds })
-              }
+              onClick={() => {
+                setShapes((prev) =>
+                  prev.filter((s) => !selectedIds.includes(s.id))
+                );
+                setSelectedIds([]);
+              }}
             />
             <span className="text-xs text-muted-foreground/40">
-              {state.selectedIds.length} selected
+              {selectedIds.length} selected
             </span>
           </>
         )}
       </div>
 
       {/* ================================================================= */}
-      {/* SVG Canvas */}
+      {/* OCR Edit Text Mode indicator */}
       {/* ================================================================= */}
-      <div className="relative flex-1 overflow-hidden bg-canvas-deep">
-        <svg
-          ref={svgRef}
-          className="h-full w-full"
-          style={{ cursor: cursorStyle }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onWheel={handleWheel}
-        >
-          {/* Transform group: camera pan + zoom */}
-          <g
-            transform={`translate(${state.camera.x}, ${state.camera.y}) scale(${state.camera.z})`}
-          >
-            {/* Grid pattern */}
-            {state.showGrid && (
-              <>
-                <defs>
-                  <pattern
-                    id="ai-canvas-grid"
-                    width={20}
-                    height={20}
-                    patternUnits="userSpaceOnUse"
-                  >
-                    <path
-                      d="M 20 0 L 0 0 0 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={0.3}
-                      className="text-muted-foreground/20"
+      {(editTextMode || editTextModeProp) && (
+        <div className="flex items-center gap-2 border-b border-blue-500/20 bg-blue-500/5 px-3 py-1.5">
+          <TypeIcon className="size-3 text-blue-400" />
+          <span className="text-xs text-blue-400">
+            Edit Text mode — OCR processing...
+          </span>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* Konva Canvas */}
+      {/* ================================================================= */}
+      <div
+        className="relative flex-1 overflow-hidden bg-canvas-deep"
+        style={{ cursor: cursorStyle }}
+      >
+        {konvaLoaded ? (
+          <>
+            <Stage
+              ref={stageRef}
+              width={stageSize.width}
+              height={stageSize.height}
+              scaleX={camera.z}
+              scaleY={camera.z}
+              x={camera.x}
+              y={camera.y}
+              draggable={effectiveTool === "pan"}
+              onWheel={handleWheel}
+              onMouseDown={handleStageMouseDown}
+              onMouseMove={handleStageMouseMove}
+              onMouseUp={handleStageMouseUp}
+              onDragEnd={handleStageDragEnd}
+            >
+              {/* Layer 1: Background image + grid */}
+              <Layer>
+                {/* Grid pattern */}
+                {showGrid &&
+                  (() => {
+                    const gridSize = 20;
+                    const gridLines: React.ReactElement[] = [];
+                    const viewWidth = stageSize.width / camera.z + 100;
+                    const viewHeight = stageSize.height / camera.z + 100;
+                    const startX =
+                      Math.floor(-camera.x / camera.z / gridSize) * gridSize -
+                      gridSize;
+                    const startY =
+                      Math.floor(-camera.y / camera.z / gridSize) * gridSize -
+                      gridSize;
+
+                    for (
+                      let x = startX;
+                      x < startX + viewWidth + gridSize * 2;
+                      x += gridSize
+                    ) {
+                      gridLines.push(
+                        <Line
+                          key={`gv-${x}`}
+                          points={[x, startY, x, startY + viewHeight + gridSize * 2]}
+                          stroke="rgba(128, 128, 128, 0.12)"
+                          strokeWidth={0.5}
+                          listening={false}
+                        />
+                      );
+                    }
+                    for (
+                      let y = startY;
+                      y < startY + viewHeight + gridSize * 2;
+                      y += gridSize
+                    ) {
+                      gridLines.push(
+                        <Line
+                          key={`gh-${y}`}
+                          points={[startX, y, startX + viewWidth + gridSize * 2, y]}
+                          stroke="rgba(128, 128, 128, 0.12)"
+                          strokeWidth={0.5}
+                          listening={false}
+                        />
+                      );
+                    }
+                    return gridLines;
+                  })()}
+
+                {/* Background image */}
+                {imageElement && (
+                  <Image
+                    image={imageElement}
+                    x={0}
+                    y={0}
+                    width={imageDimensions?.width ?? imageElement.naturalWidth}
+                    height={
+                      imageDimensions?.height ?? imageElement.naturalHeight
+                    }
+                    listening={false}
+                  />
+                )}
+              </Layer>
+
+              {/* Layer 2: Shapes (annotations, drawings, text) */}
+              <Layer>
+                {sortedShapes.map((shape) => {
+                  if (!shape.visible) return null;
+
+                  const isSelected = selectedIds.includes(shape.id);
+                  const isDraggable = effectiveTool === "select";
+                  const commonProps = {
+                    id: shape.id,
+                    x: shape.x,
+                    y: shape.y,
+                    rotation: shape.rotation,
+                    draggable: isDraggable,
+                    onClick: (e: any) => handleShapeClick(e, shape.id),
+                    onDblClick: () => handleShapeDblClick(shape.id),
+                    onDragEnd: (e: any) => handleDragEnd(e, shape.id),
+                    onTransformEnd: (e: any) =>
+                      handleTransformEnd(e, shape.id),
+                  };
+
+                  switch (shape.kind) {
+                    case "rect":
+                      return (
+                        <Rect
+                          key={shape.id}
+                          {...commonProps}
+                          width={shape.width}
+                          height={shape.height}
+                          fill={shape.style.fill}
+                          stroke={shape.style.stroke}
+                          strokeWidth={shape.style.strokeWidth}
+                          cornerRadius={2}
+                          opacity={shape.style.opacity}
+                        />
+                      );
+
+                    case "mark":
+                      return (
+                        <Rect
+                          key={shape.id}
+                          {...commonProps}
+                          width={shape.width}
+                          height={shape.height}
+                          fill={shape.style.fill}
+                          stroke={shape.style.stroke}
+                          strokeWidth={shape.style.strokeWidth}
+                          dash={[6, 3]}
+                          opacity={shape.style.opacity}
+                        />
+                      );
+
+                    case "path": {
+                      const flatPts =
+                        (shape as any)._flatPoints ??
+                        (shape.points
+                          ? shape.points.flatMap((p) => [p.x, p.y])
+                          : []);
+                      if (flatPts.length < 4) return null;
+                      return (
+                        <Line
+                          key={shape.id}
+                          {...commonProps}
+                          points={flatPts}
+                          stroke={shape.style.stroke}
+                          strokeWidth={shape.style.strokeWidth}
+                          lineCap="round"
+                          lineJoin="round"
+                          tension={0.3}
+                          opacity={shape.style.opacity}
+                        />
+                      );
+                    }
+
+                    case "text":
+                      return (
+                        <Text
+                          key={shape.id}
+                          {...commonProps}
+                          text={shape.text ?? ""}
+                          width={shape.width}
+                          fontSize={shape.style.fontSize}
+                          fontFamily={shape.style.fontFamily}
+                          fill={shape.style.stroke}
+                          opacity={shape.style.opacity}
+                        />
+                      );
+
+                    case "image":
+                      // Individual image shapes (not background)
+                      return null;
+
+                    default:
+                      return null;
+                  }
+                })}
+
+                {/* Drawing preview (freehand) */}
+                {isDrawing &&
+                  effectiveTool === "draw" &&
+                  drawingPreviewPoints.length >= 4 && (
+                    <Line
+                      points={drawingPreviewPoints}
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      lineCap="round"
+                      lineJoin="round"
+                      tension={0.3}
+                      opacity={0.7}
+                      listening={false}
                     />
-                  </pattern>
-                </defs>
-                <rect
-                  x={-10000}
-                  y={-10000}
-                  width={20000}
-                  height={20000}
-                  fill="url(#ai-canvas-grid)"
+                  )}
+
+                {/* Mark preview (dashed blue rect) */}
+                {markPreview && (
+                  <Rect
+                    x={markPreview.x}
+                    y={markPreview.y}
+                    width={markPreview.width}
+                    height={markPreview.height}
+                    fill="rgba(59, 130, 246, 0.08)"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dash={[6, 3]}
+                    listening={false}
+                  />
+                )}
+
+                {/* Rectangle drawing preview */}
+                {rectPreview && (
+                  <Rect
+                    x={rectPreview.x}
+                    y={rectPreview.y}
+                    width={rectPreview.width}
+                    height={rectPreview.height}
+                    fill="rgba(59, 130, 246, 0.1)"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dash={[6, 3]}
+                    cornerRadius={2}
+                    listening={false}
+                  />
+                )}
+
+                {/* OCR annotation overlays */}
+                {(editTextMode || editTextModeProp) &&
+                  ocrAnnotations?.map((ann, i) => (
+                    <Group key={`ocr-${i}`}>
+                      <Rect
+                        x={ann.x}
+                        y={ann.y}
+                        width={ann.width}
+                        height={ann.height}
+                        fill="rgba(59, 130, 246, 0.05)"
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                      />
+                      <Text
+                        x={ann.x + 2}
+                        y={ann.y + 2}
+                        text={ann.text}
+                        fontSize={12}
+                        fill="#3b82f6"
+                        width={ann.width - 4}
+                      />
+                    </Group>
+                  ))}
+              </Layer>
+
+              {/* Layer 3: Selection transformer */}
+              <Layer>
+                <Transformer
+                  ref={transformerRef}
+                  boundBoxFunc={(_oldBox: any, newBox: any) => {
+                    // Minimum size
+                    if (newBox.width < 5 || newBox.height < 5) {
+                      return _oldBox;
+                    }
+                    return newBox;
+                  }}
+                  borderStroke="#3b82f6"
+                  borderStrokeWidth={1}
+                  anchorFill="#3b82f6"
+                  anchorStroke="#fff"
+                  anchorSize={8}
+                  anchorCornerRadius={2}
+                  rotateEnabled={true}
+                  keepRatio={false}
                 />
-              </>
-            )}
+              </Layer>
+            </Stage>
 
-            {/* Origin crosshair */}
-            <line
-              x1={-20}
-              y1={0}
-              x2={20}
-              y2={0}
-              stroke="currentColor"
-              strokeWidth={0.5}
-              className="text-muted-foreground/15"
-            />
-            <line
-              x1={0}
-              y1={-20}
-              x2={0}
-              y2={20}
-              stroke="currentColor"
-              strokeWidth={0.5}
-              className="text-muted-foreground/15"
-            />
-
-            {/* Render shapes */}
-            {sortedShapes.map((shape) => (
-              <RenderShape
-                key={shape.id}
-                shape={shape}
-                isSelected={state.selectedIds.includes(shape.id)}
-                isHovered={hoveredId === shape.id}
-                onMouseDown={(e) => {
-                  // Let pointer handler manage selection
-                }}
-                onMouseEnter={() => setHoveredId(shape.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onDoubleClick={() => handleShapeDoubleClick(shape.id)}
-              />
-            ))}
-
-            {/* Drawing preview (freehand) */}
-            {drawingPreviewPath && (
-              <path
-                d={drawingPreviewPath}
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                opacity={0.7}
+            {/* Text editing overlay (positioned in screen space) */}
+            {editingShape && (
+              <TextEditOverlay
+                x={editingShape.x * camera.z + camera.x}
+                y={editingShape.y * camera.z + camera.y}
+                width={editingShape.width * camera.z}
+                height={editingShape.height * camera.z}
+                text={editingShape.text ?? ""}
+                fontSize={editingShape.style.fontSize * camera.z}
+                onFinish={handleTextEditFinish}
               />
             )}
-
-            {/* Rectangle drawing preview */}
-            {rectPreview && (
-              <rect
-                x={rectPreview.x}
-                y={rectPreview.y}
-                width={rectPreview.width}
-                height={rectPreview.height}
-                fill="rgba(59, 130, 246, 0.1)"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                rx={2}
-              />
-            )}
-
-            {/* Rubber-band selection */}
-            {brushRect && (
-              <rect
-                x={brushRect.x}
-                y={brushRect.y}
-                width={brushRect.width}
-                height={brushRect.height}
-                fill="rgba(59, 130, 246, 0.08)"
-                stroke="#3b82f6"
-                strokeWidth={1}
-                strokeDasharray="4 2"
-              />
-            )}
-          </g>
-        </svg>
-
-        {/* Text editing overlay (positioned in screen space) */}
-        {editingShape && (
-          <TextEditOverlay
-            shape={editingShape}
-            camera={state.camera}
-            svgRect={svgRect}
-            onFinish={handleTextEditFinish}
-          />
+          </>
+        ) : (
+          /* Loading state while Konva imports */
+          <div className="flex h-full items-center justify-center">
+            <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-muted-foreground/60" />
+          </div>
         )}
 
         {/* Empty state */}
-        {state.shapes.length === 0 && !content && (
+        {shapes.length === 0 && !content && konvaLoaded && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-center text-muted-foreground/40">
               <PaintbrushIcon className="mx-auto mb-3 size-12 opacity-30" />
@@ -1558,7 +1445,7 @@ export function AICanvasView({ content }: AICanvasViewProps) {
                 Draw, annotate, and create with AI
               </p>
               <p className="mt-2 text-xs text-muted-foreground/25">
-                Space to pan -- Scroll to zoom -- V/H/P/T/R/E for tools
+                Space to pan -- Scroll to zoom -- V/H/M/P/T/R/E for tools
               </p>
             </div>
           </div>

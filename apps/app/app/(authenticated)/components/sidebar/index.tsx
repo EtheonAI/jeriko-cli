@@ -23,7 +23,8 @@ import {
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { ChevronUpIcon, MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAppSelector } from "@/lib/store/hooks";
+import { useAppDispatch, useNavbar } from "@/lib/store/hooks";
+import { toggleNavTasksFolded } from "@/lib/store/slices/navbar.slice";
 import { useGetSessionsQuery } from "@/lib/store/api/api.slice";
 import { NavSection } from "./nav-section";
 import { NewTaskButton } from "./new-task-button";
@@ -108,8 +109,10 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
       ...rest,
     }),
   });
+  const dispatch = useAppDispatch();
+  const { navTasksFolded } = useNavbar();
   const [filter, setFilter] = useState<TaskFilterType>("all");
-  const [tasksOpen, setTasksOpen] = useState(true);
+  const tasksOpen = !navTasksFolded;
 
   const filteredSessions = useMemo(
     () => filterSessions(sessions ?? [], filter),
@@ -155,7 +158,7 @@ export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
             </div>
 
             {/* All tasks section (collapsible, with filter) */}
-            <Collapsible open={tasksOpen} onOpenChange={setTasksOpen} className="group/tasks flex-1 min-h-0 px-2">
+            <Collapsible open={tasksOpen} onOpenChange={() => dispatch(toggleNavTasksFolded())} className="group/tasks flex-1 min-h-0 px-2">
               <SidebarGroup className="p-0 pt-[11px] flex flex-col flex-1 min-h-0">
                 <SidebarGroupLabel
                   asChild

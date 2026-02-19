@@ -6,4 +6,5 @@ export { EmptyView } from "./empty-view";
 export { SlidesView, type SlidesViewProps } from "./slides-view";
 export { WebDevIDEView, type WebDevIDEViewProps } from "./web-dev-ide-view";
 export { MapReduceView, type MapReduceViewProps } from "./map-reduce-view";
-export { AICanvasView, type AICanvasViewProps } from "./ai-canvas-view";
+export { AICanvasView, type AICanvasViewProps, type CanvasStateSnapshot, type Annotation } from "./ai-canvas-view";
+export { ScreenshotOverlay, type ScreenshotOverlayProps } from "./screenshot-overlay";

@@ -97,9 +97,9 @@ describe("canvas.selectors", () => {
       expect(browserTools.length).toBe(28);
     });
 
-    it("should map all 6 editor tools", () => {
+    it("should map all 7 editor tools", () => {
       const editorTools = Object.entries(TOOL_VIEW_MAP).filter(([, v]) => v === "editor");
-      expect(editorTools.length).toBe(6);
+      expect(editorTools.length).toBe(7);
     });
 
     it("should map all 6 terminal tools", () => {
@@ -746,9 +746,9 @@ describe("canvas.selectors", () => {
       expect(mrTools.length).toBe(1);
       expect(mrTools[0]![0]).toBe("parallel_tasks");
     });
-    it("should have total 55 mapped tools", () => {
-      // 28 browser + 6 editor + 6 terminal + 9 webDevIDE + 2 aiCanvas + 3 slides + 1 mapReduce = 55
-      expect(Object.keys(TOOL_VIEW_MAP).length).toBe(55);
+    it("should have total 56 mapped tools", () => {
+      // 28 browser + 7 editor + 6 terminal + 9 webDevIDE + 2 aiCanvas + 3 slides + 1 mapReduce = 56
+      expect(Object.keys(TOOL_VIEW_MAP).length).toBe(56);
     });
   });
 

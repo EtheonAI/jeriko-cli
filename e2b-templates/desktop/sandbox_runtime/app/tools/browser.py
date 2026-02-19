@@ -810,6 +810,149 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
                 return {"ok": True, "message": "Browser restarted but navigation failed", "error": str(e)}
         return {"ok": True, "message": "Browser restarted"}
 
+    elif action == "save_image":
+        # Save an image from the page to a file on disk
+        page = await _ensure_browser()
+        image_url = body.get("url", "")
+        save_path = body.get("path", "")
+        if not image_url:
+            return {"error": "url is required"}
+        if not save_path:
+            # Default to ~/downloads/<filename>
+            from urllib.parse import urlparse
+            parsed = urlparse(image_url)
+            fname = os.path.basename(parsed.path) or "image.png"
+            save_path = os.path.join("/home/ubuntu/downloads", fname)
+        try:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            # Use Playwright to download the image via page context
+            resp = await page.request.get(image_url)
+            if resp.ok:
+                img_bytes = await resp.body()
+                with open(save_path, "wb") as f:
+                    f.write(img_bytes)
+                screenshot = await _take_screenshot()
+                return {"ok": True, "path": save_path, "size": len(img_bytes), "screenshot": screenshot}
+            else:
+                return {"error": f"Failed to download image: HTTP {resp.status}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "upload_file":
+        # Upload a file to a file input element on the page
+        page = await _ensure_browser()
+        file_path = body.get("path", "")
+        index = body.get("index")
+        selector = body.get("selector", "")
+        if not file_path:
+            return {"error": "path (local file path) is required"}
+        if not os.path.exists(file_path):
+            return {"error": f"File not found: {file_path}"}
+        try:
+            if index is not None:
+                # Find the file input by element index
+                found = await _find_element_by_index(int(index))
+                if found:
+                    # Use set_input_files on the located element
+                    el_handle = await page.evaluate_handle(
+                        f'document.querySelector(\'[data-manus-id="{index}"]\')'
+                    )
+                    await el_handle.as_element().set_input_files(file_path)
+                else:
+                    return {"error": f"Element with index {index} not found"}
+            elif selector:
+                await page.set_input_files(selector, file_path)
+            else:
+                # Try to find any visible file input
+                await page.set_input_files('input[type="file"]', file_path)
+            await asyncio.sleep(0.5)
+            screenshot = await _take_screenshot()
+            return {"ok": True, "path": file_path, "screenshot": screenshot}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "fill_form":
+        # Fill multiple form fields at once
+        page = await _ensure_browser()
+        fields = body.get("fields", [])
+        if not fields or not isinstance(fields, list):
+            return {"error": "fields (list of {index or selector, value}) is required"}
+        results = []
+        for field in fields:
+            try:
+                idx = field.get("index")
+                sel = field.get("selector", "")
+                val = field.get("value", "")
+                if idx is not None:
+                    found = await _find_element_by_index(int(idx))
+                    if found:
+                        await page.mouse.click(found["x"], found["y"])
+                        await asyncio.sleep(0.1)
+                        await page.keyboard.press("Control+a")
+                        await page.keyboard.type(str(val))
+                        results.append({"index": idx, "ok": True})
+                    else:
+                        results.append({"index": idx, "error": "Element not found"})
+                elif sel:
+                    await page.fill(sel, str(val))
+                    results.append({"selector": sel, "ok": True})
+            except Exception as e:
+                results.append({"error": str(e)})
+        await asyncio.sleep(0.3)
+        screenshot = await _take_screenshot()
+        return {"ok": True, "results": results, "screenshot": screenshot}
+
+    elif action == "find_keyword":
+        # Find and highlight a keyword on the page (Ctrl+F equivalent)
+        page = await _ensure_browser()
+        keyword = body.get("keyword", "")
+        if not keyword:
+            return {"error": "keyword is required"}
+        try:
+            # Use Ctrl+F to trigger browser find and type the keyword
+            await page.keyboard.press("Control+f")
+            await asyncio.sleep(0.3)
+            await page.keyboard.type(keyword)
+            await asyncio.sleep(0.5)
+            # Count matches via JS
+            match_count = await page.evaluate("""() => {
+                // Use window.find for basic match counting
+                let count = 0;
+                const sel = window.getSelection();
+                if (sel) sel.removeAllRanges();
+                while (window.find(arguments[0] || '', false, false, true)) {
+                    count++;
+                    if (count > 1000) break;
+                }
+                if (sel) sel.removeAllRanges();
+                return count;
+            }""")
+            screenshot = await _take_screenshot()
+            # Close the find bar
+            await page.keyboard.press("Escape")
+            return {"ok": True, "keyword": keyword, "matches": match_count, "screenshot": screenshot}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif action == "close":
+        # Close the browser (destroy Playwright instance without restarting)
+        global _browser, _context, _page, _playwright_instance
+        if _browser:
+            try:
+                await _browser.close()
+            except Exception:
+                pass
+        if _playwright_instance:
+            try:
+                await _playwright_instance.__aexit__(None, None, None)
+            except Exception:
+                pass
+        _browser = None
+        _context = None
+        _page = None
+        _playwright_instance = None
+        return {"ok": True, "message": "Browser closed"}
+
     else:
         return {"error": f"Unknown browser action: {action}"}
 

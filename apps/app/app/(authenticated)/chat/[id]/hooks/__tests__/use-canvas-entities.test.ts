@@ -1036,4 +1036,354 @@ describe("useCanvasFromEntities", () => {
       expect(result.current.mapReduceTasks).toBeUndefined();
     });
   });
+
+  // ============================================================================
+  // isAgentBrowsing — Neko Live Stream Auto-Show
+  //
+  // The isAgentBrowsing flag tells AgentCanvas to auto-show the Neko live WebRTC
+  // stream instead of a static screenshot. It is true ONLY when:
+  //   1. The session is currently streaming (isStreaming=true)
+  //   2. The latest tool is a browser tool in pending/running state
+  //   3. No tool is pinned (user is not viewing history)
+  // ============================================================================
+
+  describe("isAgentBrowsing (Neko live stream auto-show)", () => {
+    it("should be true when streaming and browser tool is actively running (not pinned)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "running",
+          input: { url: "https://example.com" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(true);
+    });
+
+    it("should be true when streaming and browser tool is in pending state", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_click",
+          state: "pending",
+          input: { selector: "#submit" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(true);
+    });
+
+    it("should be false when streaming but the active tool is a terminal tool (not browser)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "shell_exec",
+          state: "running",
+          input: { command: "npm install" },
+          output: { stdout: "" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+
+    it("should be false when streaming but the active tool is an editor tool (not browser)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "file_write",
+          state: "running",
+          input: { path: "/app.ts", content: "..." },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+
+    it("should be false when the browser tool is complete (not actively running)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://example.com",
+          screenshot: "data:image/png;base64,abc",
+        }),
+      ]);
+
+      // Even while streaming is true, a complete tool means browsing is done
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+
+    it("should be false when not streaming (agent is idle)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "running",
+          input: { url: "https://example.com" },
+        }),
+      ]);
+
+      // isStreaming=false means the SSE has ended — agent is no longer active
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", false));
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+
+    it("should be false when a tool is pinned (user is viewing history)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://first.com",
+          screenshot: "data:image/png;base64,first",
+        }),
+        makeEvent({
+          id: "tc-2",
+          toolName: "browser_navigate",
+          state: "running",
+          input: { url: "https://second.com" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+
+      // Before pinning: tc-2 is running browser tool → should be true
+      expect(result.current.isAgentBrowsing).toBe(true);
+
+      // Pin tc-1 — user is now viewing a historical tool call
+      act(() => result.current.onPinToolCall?.("tc-1"));
+
+      // After pinning: pinnedTool is set → isAgentBrowsing must be false
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+
+    it("should be false/undefined when no tool events exist at all", () => {
+      mockState = buildMockState([]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+
+      // No tool events → early return path → isAgentBrowsing not set
+      expect(result.current.isAgentBrowsing).toBeFalsy();
+    });
+
+    it("should be true for browser_click tool in running state (not just navigate)", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_click",
+          state: "running",
+          input: { selector: "button.submit" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(true);
+    });
+
+    it("should be true for browser_input tool in running state", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_input",
+          state: "running",
+          input: { selector: "input#search", text: "hello world" },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", true));
+      expect(result.current.isAgentBrowsing).toBe(true);
+    });
+
+    it("should transition from true to false when tool completes", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "running",
+          input: { url: "https://example.com" },
+        }),
+      ]);
+
+      const { result, rerender } = renderHook(
+        ({ isStreaming }: { isStreaming: boolean }) =>
+          useCanvasFromEntities("session-1", isStreaming),
+        { initialProps: { isStreaming: true } }
+      );
+
+      // Running + streaming → true
+      expect(result.current.isAgentBrowsing).toBe(true);
+
+      // Simulate tool completing and streaming ending
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-1",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://example.com",
+          screenshot: "data:image/png;base64,done",
+        }),
+      ]);
+      rerender({ isStreaming: false });
+
+      // Complete + not streaming → false
+      expect(result.current.isAgentBrowsing).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Pinned search results — timeline scrubbing
+  //
+  // When a user pins a search tool call via timeline, the canvas should show
+  // that specific tool's search results (not the latest search or nothing).
+  // ============================================================================
+
+  describe("pinned search results (timeline scrubbing)", () => {
+    it("should show search results from the PINNED search tool, not the latest", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-search-1",
+          toolName: "web_search",
+          state: "complete",
+          output: {
+            results: [
+              { title: "First Search Result", url: "https://first.com", snippet: "First snippet" },
+            ],
+          },
+        }),
+        makeEvent({
+          id: "tc-search-2",
+          toolName: "web_search",
+          state: "complete",
+          output: {
+            results: [
+              { title: "Second Search Result", url: "https://second.com", snippet: "Second snippet" },
+            ],
+          },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", false));
+
+      // Without pinning — shows latest search results
+      expect(result.current.browserSearchResults).toHaveLength(1);
+      expect(result.current.browserSearchResults![0]!.title).toBe("Second Search Result");
+
+      // Pin the FIRST search — should show that tool's results
+      act(() => result.current.onPinToolCall?.("tc-search-1"));
+
+      expect(result.current.browserSearchResults).toHaveLength(1);
+      expect(result.current.browserSearchResults![0]!.title).toBe("First Search Result");
+      expect(result.current.browserSearchResults![0]!.url).toBe("https://first.com");
+    });
+
+    it("should show search results when pinning a search tool after browsing", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-search",
+          toolName: "web_search",
+          state: "complete",
+          output: {
+            results: [
+              { title: "Result A", url: "https://a.com", snippet: "A" },
+              { title: "Result B", url: "https://b.com", snippet: "B" },
+            ],
+          },
+        }),
+        makeEvent({
+          id: "tc-browse",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://example.com",
+          screenshot: "data:image/png;base64,test",
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", false));
+
+      // Latest tool is browser_navigate — global search results still available
+      // (selectLatestSearchResults walks backwards and finds tc-search)
+      expect(result.current.viewType).toBe("browser");
+      expect(result.current.browserSearchResults).toHaveLength(2);
+
+      // Pin the search tool → should show THAT tool's results specifically
+      act(() => result.current.onPinToolCall?.("tc-search"));
+
+      expect(result.current.browserSearchResults).toHaveLength(2);
+      expect(result.current.browserSearchResults![0]!.title).toBe("Result A");
+    });
+
+    it("should NOT show search results when pinning a non-search browser tool", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-search",
+          toolName: "web_search",
+          state: "complete",
+          output: {
+            results: [
+              { title: "Search Result", url: "https://s.com", snippet: "S" },
+            ],
+          },
+        }),
+        makeEvent({
+          id: "tc-browse",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://example.com",
+          screenshot: "data:image/png;base64,test",
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", false));
+
+      // Pin the browser_navigate tool (not a search tool)
+      act(() => result.current.onPinToolCall?.("tc-browse"));
+
+      // Should show the browser data, NOT search results
+      expect(result.current.browserUrl).toBe("https://example.com");
+      expect(result.current.browserSearchResults).toBeUndefined();
+    });
+
+    it("should clear pinned search results when unpinning", () => {
+      mockState = buildMockState([
+        makeEvent({
+          id: "tc-search",
+          toolName: "web_search",
+          state: "complete",
+          output: {
+            results: [
+              { title: "Pinned Result", url: "https://pinned.com", snippet: "P" },
+            ],
+          },
+        }),
+        makeEvent({
+          id: "tc-browse",
+          toolName: "browser_navigate",
+          state: "complete",
+          url: "https://example.com",
+          screenshot: "data:image/png;base64,test",
+        }),
+      ]);
+
+      const { result } = renderHook(() => useCanvasFromEntities("session-1", false));
+
+      // Pin search
+      act(() => result.current.onPinToolCall?.("tc-search"));
+      expect(result.current.browserSearchResults).toHaveLength(1);
+
+      // Unpin — should go back to non-pinned behavior (latest results if any)
+      act(() => result.current.onUnpin?.());
+      // Latest tool is browser_navigate, which doesn't have search results
+      // The global selectLatestSearchResults should still return the search results
+      expect(result.current.browserSearchResults).toHaveLength(1);
+      expect(result.current.browserSearchResults![0]!.title).toBe("Pinned Result");
+    });
+  });
 });

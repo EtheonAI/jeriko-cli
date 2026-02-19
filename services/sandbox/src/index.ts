@@ -470,10 +470,10 @@ async function main() {
 
       // ─── Post-creation TURN setup for Neko desktop template ─────────────
       // E2B's `envs` parameter only injects vars for `exec` commands, NOT
-      // for the boot `start_command.sh`. The template's start_command.sh has
-      // a TURN watcher that polls for /tmp/turn_credentials.json — when it
-      // detects TURN servers in the file, it restarts Neko automatically.
-      // We just need to fetch the credentials and write them to that file.
+      // for the boot `start_command.sh`. The start-neko-with-turn.sh reads
+      // ICE servers from /opt/.rubic/neko/config/ice_servers.json on startup.
+      // If we write the file before Neko starts, it picks up TURN automatically.
+      // If Neko already started with STUN-only, a restart may be needed.
       if (isNekoTemplate && CLOUDFLARE_TURN_KEY_ID && CLOUDFLARE_TURN_TOKEN) {
         // Fetch Cloudflare TURN credentials from our service (not from inside sandbox)
         fetch(
@@ -489,11 +489,11 @@ async function main() {
         )
           .then((res) => res.json())
           .then((turnData) => {
-            // Write TURN credentials to the sandbox filesystem
-            // The TURN watcher in start_command.sh will detect this and restart Neko
+            // Write TURN credentials to the path that start-neko-with-turn.sh reads
+            // (ice_servers.json at the Neko config directory — Neko reads on startup)
             return e2bSandbox.files.write(
-              "/tmp/turn_credentials.json",
-              JSON.stringify(turnData)
+              "/opt/.rubic/neko/config/ice_servers.json",
+              JSON.stringify(turnData.iceServers ?? turnData)
             );
           })
           .then(() => {

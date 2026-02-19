@@ -1,6 +1,7 @@
 import type React from "react";
 import type { Metadata } from "next";
 import { GlowingStarsBackground } from "./components/ui/glowing-stars";
+import { StoreProvider } from "../providers";
 
 export const metadata: Metadata = {
   title: {
@@ -33,5 +34,9 @@ export default function AuthLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <GlowingStarsBackground>{children}</GlowingStarsBackground>;
+  return (
+    <StoreProvider>
+      <GlowingStarsBackground>{children}</GlowingStarsBackground>
+    </StoreProvider>
+  );
 }

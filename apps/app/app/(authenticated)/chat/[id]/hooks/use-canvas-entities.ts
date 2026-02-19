@@ -38,6 +38,7 @@ import {
   selectToolCallStats,
   TOOL_VIEW_MAP,
   SEARCH_TOOLS,
+  extractSearchResults,
   type CanvasViewType,
 } from "@/lib/store/selectors/canvas.selectors";
 import type { CanvasState, ToolAction, ToolActionType } from "@repo/ai/components/canvas/use-canvas";
@@ -461,6 +462,8 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
     sandboxId: sessionMeta.sandboxId,
     nekoUrl: sessionMeta.nekoUrl,
     streamUrl: sessionMeta.streamUrl,
+    // Manus parity: auto-show Neko live stream when agent is actively browsing
+    isAgentBrowsing: !pinnedTool && (isBrowserToolActive ?? false),
     pinnedToolCallId,
     onPinToolCall,
     onUnpin,
@@ -476,6 +479,10 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       state.browserContent = pinnedTool.content;
       state.browserTitle = pinnedTool.title;
       state.browserLoading = false;
+      // Pinned search tool — extract results from THIS tool's output, not the global latest
+      if (SEARCH_TOOLS.has(pinnedTool.toolName) && pinnedTool.state === "complete" && pinnedTool.output) {
+        state.browserSearchResults = extractSearchResults(pinnedTool.output as Record<string, unknown>);
+      }
     } else {
       // Use latest tool's data, falling back to the most recent completed browser
       // event with a screenshot. This prevents losing screenshots when tools chain
@@ -506,7 +513,7 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       const rawOut = typeof pinnedTool.output === "string" ? pinnedTool.output : ((pinnedTool.output.stdout ?? JSON.stringify(pinnedTool.output, null, 2)) as string);
       const outStr = typeof rawOut === "string" ? rawOut : String(rawOut);
       state.terminalOutput = cmd ? [`$ ${cmd}`, ...outStr.split("\n")] : outStr.split("\n");
-      state.activeTerminalSession = (pinnedTool.input?.id as string) || "default";
+      state.activeTerminalSession = (pinnedTool.input?.id as string) || (pinnedTool.input?.session as string) || "default";
     } else {
       const effectiveActiveSession = activeTerminalSessionOverride ?? terminalData.activeSession;
       state.terminalOutput = terminalData.sessions[effectiveActiveSession] ?? [];
@@ -515,6 +522,21 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
     state.terminalSessions = terminalData.sessions;
     state.terminalSessionIds = terminalData.sessionOrder;
     state.onSelectTerminalSession = onSelectTerminalSession;
+
+    // Manus parity: show currently running command BEFORE shell_exec returns.
+    // "pending" = input still streaming, "running" = input complete, tool executing (waiting 5s).
+    // Once it returns with status:"running", entity becomes "complete" and the selector takes over.
+    if (!pinnedTool && latestTool && isActive &&
+        (latestTool.toolName.startsWith("shell_") || latestTool.toolName === "code_execute") &&
+        (latestTool.state === "pending" || latestTool.state === "running")) {
+      const cmd = (latestTool.input?.command as string) ?? "";
+      const sessionIdForPending = (latestTool.input?.id as string) || (latestTool.input?.session as string) || "default";
+      if (cmd) {
+        const existingLines = state.terminalOutput ?? [];
+        state.terminalOutput = [...existingLines, `$ ${cmd}`, "  \u23F3 Running..."];
+        state.activeTerminalSession = sessionIdForPending;
+      }
+    }
   }
 
   // Editor view data (Manus FileToolView: simple filename header + read-only syntax highlighting)

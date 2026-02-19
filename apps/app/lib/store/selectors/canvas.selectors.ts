@@ -217,8 +217,13 @@ export const selectTerminalSessions = createSelector(
       if (!event || !SHELL_TOOLS.has(event.toolName)) continue;
       if (event.state !== "complete" || !event.output) continue;
 
-      const shellSessionId = (event.input?.id as string) || "default";
-      const cmd = (event.input?.command as string) ?? "";
+      const shellSessionId = (event.input?.id as string) || (event.input?.session as string) || "default";
+
+      if (!sessions[shellSessionId]) {
+        sessions[shellSessionId] = [];
+        sessionOrder.push(shellSessionId);
+      }
+
       const output = event.output;
       const rawOutput =
         typeof output === "string"
@@ -226,16 +231,42 @@ export const selectTerminalSessions = createSelector(
           : ((output.stdout ?? output.output ?? JSON.stringify(output, null, 2)) as string);
       const outputStr = typeof rawOutput === "string" ? rawOutput : String(rawOutput);
 
-      if (!sessions[shellSessionId]) {
-        sessions[shellSessionId] = [];
-        sessionOrder.push(shellSessionId);
-      }
-
-      // Deduplicate: skip if last command is the same
-      const lines = sessions[shellSessionId]!;
-      const lastCmd = lines.findLast((l) => l.startsWith("$"));
-      if (lastCmd !== `$ ${cmd}`) {
-        lines.push(`$ ${cmd}`, ...outputStr.split("\n"));
+      if (event.toolName === "shell_exec") {
+        const cmd = (event.input?.command as string) ?? "";
+        const status = typeof output === "object" ? (output.status as string) : undefined;
+        const lines = sessions[shellSessionId]!;
+        const lastCmd = lines.findLast((l) => l.startsWith("$"));
+        if (lastCmd !== `$ ${cmd}`) {
+          if (status === "running") {
+            // Command still running — show command + partial output + indicator
+            lines.push(`$ ${cmd}`);
+            if (outputStr && outputStr !== "(command still running — use shell_view to check output)") {
+              lines.push(...outputStr.split("\n"));
+            }
+            lines.push("  \u23F3 Running...");
+          } else {
+            lines.push(`$ ${cmd}`, ...outputStr.split("\n"));
+          }
+        }
+      } else if (event.toolName === "shell_view" || event.toolName === "shell_wait") {
+        // shell_view returns the FULL terminal buffer — replace output below the last command
+        // Manus parity: each shell_view is a new tool event → progressive terminal updates
+        const lines = sessions[shellSessionId]!;
+        const lastCmdIndex = lines.findLastIndex((l) => l.startsWith("$"));
+        if (lastCmdIndex >= 0) {
+          // Keep everything up to and including the command prompt, replace output below
+          const keptLines = lines.slice(0, lastCmdIndex + 1);
+          sessions[shellSessionId] = [...keptLines, ...outputStr.split("\n")];
+        } else {
+          // No command prompt yet — just show the full buffer
+          sessions[shellSessionId] = outputStr.split("\n");
+        }
+      } else {
+        // Other shell tools (shell_write_to_process, shell_kill_process, code_execute)
+        const cmd = (event.input?.command as string) ?? "";
+        const lines = sessions[shellSessionId]!;
+        if (cmd) lines.push(`$ ${cmd}`);
+        lines.push(...outputStr.split("\n"));
       }
 
       activeSession = shellSessionId;
@@ -432,7 +463,7 @@ export const selectLatestGeneratedImage = createSelector(
 // Helper: Extract search results from tool output
 // ============================================================================
 
-function extractSearchResults(
+export function extractSearchResults(
   output: Record<string, unknown> | string | unknown[] | undefined
 ): Array<{ title: string; url: string; snippet: string }> | undefined {
   if (!output) return undefined;

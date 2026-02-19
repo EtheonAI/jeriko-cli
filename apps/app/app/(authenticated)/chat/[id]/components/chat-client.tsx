@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useSocket } from "@/lib/socket/provider";
-import { ToolRegistry, AgentCanvas, usePlannerState, PlannerBar } from "@repo/ai/components";
+import { ToolRegistry, AgentCanvas, usePlannerState, PlannerBar, type CanvasStateSnapshot } from "@repo/ai/components";
+import {
+  setShapes,
+  setSelectedShapeIds,
+  setCurrentTool,
+  setZoom,
+  setShowGrid,
+} from "@/lib/store/slices/aiCanvasEditor.slice";
+import {
+  addShape as addCanvasAnnotation,
+  setActiveTool as setCanvasActiveTool,
+  setCamera as setCanvasCamera,
+} from "@/lib/store/slices/aiCanvas.slice";
 import { useE2BStream } from "@repo/ai/hooks/use-e2b-stream";
 import { useE2BTerminal } from "@repo/ai/hooks/use-e2b-terminal";
 import type { UIMessage as RepoUIMessage, SourceUrlUIPart, SourceDocumentUIPart, FileUIPart } from "@repo/ai/lib/types";
@@ -114,9 +126,16 @@ export function ChatClient({
   }, [e2bBrowser.screenshot, e2bBrowser.url, e2bBrowser.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live E2B terminal — WebSocket PTY stream
+  // Connect as soon as terminal becomes an available view (i.e., any shell tool has been
+  // used in this session), NOT only when terminal is the active view. This ensures the
+  // WebSocket is connected BEFORE the view switches to terminal, so real-time output is
+  // available immediately when shell_exec starts running.
   const e2bTerminal = useE2BTerminal({
     sandboxId: canvasState.sandboxId,
-    enabled: canvasState.viewType === "terminal" && canvasState.isVisible,
+    enabled: canvasState.isVisible && (
+      canvasState.viewType === "terminal" ||
+      (canvasState.availableViews?.includes("terminal") ?? false)
+    ),
   });
 
   const { showCanvas, canvasFullscreen, onClose, onToggleFullscreen, forceOpen } =
@@ -134,8 +153,83 @@ export function ChatClient({
   useInitialMessage({ sessionId, sendMessage });
 
   // User control state — when user clicks "Take Control" in browser canvas,
-  // the prompt pauses and the canvas switches to live Neko WebRTC stream.
+  // the LLM pauses (stream aborted) and the canvas switches to live Neko WebRTC.
+  // When user exits Take Control, a resume message is sent to continue the agent.
   const [userControlActive, setUserControlActive] = useState(false);
+  // Track whether the agent was streaming when user took control (to know if we should resume)
+  const wasStreamingRef = useRef(false);
+
+  // Handle Take Control activation/deactivation
+  const handleUserControlChange = useCallback((active: boolean) => {
+    if (active) {
+      // User taking control — pause the LLM if it's streaming
+      wasStreamingRef.current = isStreaming;
+      if (isStreaming) {
+        stop();
+      }
+      setUserControlActive(true);
+    } else {
+      // User releasing control — send resume message so agent continues
+      setUserControlActive(false);
+      // Give the agent context about what happened, then let it continue
+      sendMessage(
+        "I've finished using the computer. Please continue from where you left off."
+      );
+    }
+  }, [isStreaming, stop, sendMessage]);
+
+  // Handle "Edit in canvas" from screenshot overlay — switch to AI Canvas view
+  const handleEditInCanvas = useCallback(
+    (imageUrl: string) => {
+      // Inject the screenshot as AI Canvas content and switch view
+      canvasState.onSelectView?.("aiCanvas");
+      // Update the canvas content by setting it as aiCanvasContent
+      // The canvasState hook exposes this through the entity updates
+      canvasState.onBrowserScreenshotUpdate?.(imageUrl);
+      forceOpen();
+    },
+    [canvasState, forceOpen]
+  );
+
+  // Handle marking completion — sync to Redux aiCanvas slice
+  const handleMarkingComplete = useCallback(
+    (annotation: { imageId: string; x: number; y: number; width: number; height: number }) => {
+      dispatch(
+        addCanvasAnnotation({
+          id: `mark_${Date.now()}`,
+          type: "shape",
+          shapeType: "rectangle",
+          x: annotation.x,
+          y: annotation.y,
+          width: annotation.width,
+          height: annotation.height,
+          rotation: 0,
+          style: {
+            fill: "rgba(59, 130, 246, 0.08)",
+            stroke: "#3b82f6",
+            strokeWidth: 2,
+            opacity: 1,
+          },
+          locked: false,
+          visible: true,
+          zIndex: Date.now(),
+        })
+      );
+    },
+    [dispatch]
+  );
+
+  // Sync AI Canvas editor state → Redux aiCanvasEditor slice
+  const handleCanvasStateChange = useCallback(
+    (snapshot: CanvasStateSnapshot) => {
+      dispatch(setShapes(snapshot.shapes as any));
+      dispatch(setSelectedShapeIds(snapshot.selectedIds));
+      dispatch(setCurrentTool(snapshot.activeTool as any));
+      dispatch(setZoom(snapshot.zoom));
+      dispatch(setShowGrid(snapshot.showGrid));
+    },
+    [dispatch]
+  );
 
   // Pagination — load earlier messages on demand
   const [hasMore, setHasMore] = useState(hasMoreMessages);
@@ -319,7 +413,7 @@ export function ChatClient({
               onSelectTerminalSession={canvasState.onSelectTerminalSession}
               nekoUrl={canvasState.nekoUrl}
               streamUrl={canvasState.streamUrl}
-              onUserControlChange={setUserControlActive}
+              onUserControlChange={handleUserControlChange}
               isAgentBrowsing={canvasState.isAgentBrowsing}
               sandboxId={canvasState.sandboxId}
               previewFileName={canvasState.previewFileName}
@@ -330,6 +424,9 @@ export function ChatClient({
               mapReduceTasks={canvasState.mapReduceTasks}
               mapReduceOverallProgress={canvasState.mapReduceOverallProgress}
               aiCanvasContent={canvasState.aiCanvasContent}
+              onCanvasStateChange={handleCanvasStateChange}
+              onCanvasMarkingComplete={handleMarkingComplete}
+              onEditInCanvas={handleEditInCanvas}
               timelinePercentage={canvasState.timelinePercentage}
               onTimelineChange={canvasState.onTimelineChange}
               currentStep={canvasState.currentStep}

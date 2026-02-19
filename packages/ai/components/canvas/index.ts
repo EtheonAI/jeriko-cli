@@ -25,4 +25,5 @@ export { EmptyView } from "./views/empty-view";
 export { SlidesView } from "./views/slides-view";
 export { WebDevIDEView } from "./views/web-dev-ide-view";
 export { MapReduceView } from "./views/map-reduce-view";
-export { AICanvasView } from "./views/ai-canvas-view";
+export { AICanvasView, type CanvasStateSnapshot, type Annotation } from "./views/ai-canvas-view";
+export { ScreenshotOverlay } from "./views/screenshot-overlay";

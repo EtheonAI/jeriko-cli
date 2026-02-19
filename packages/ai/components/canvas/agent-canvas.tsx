@@ -36,18 +36,39 @@ import { ViewTabs } from "./view-tabs";
 import { lazy, Suspense } from "react";
 import type { FileNode, FileTab } from "./views/code-view";
 import { EmptyView } from "./views/empty-view";
+import type { CanvasStateSnapshot } from "./views/ai-canvas-view";
 
 // Lazy-load heavy canvas views — only the active view's JS is loaded.
 // EmptyView stays eager since it's the default (lightweight).
-const BrowserView = lazy(() => import("./views/browser-view").then(m => ({ default: m.BrowserView })));
+//
+// Preloading: The 3 most common views (Browser, Editor, Terminal) are preloaded
+// as soon as the canvas mounts. This eliminates the visible Suspense fallback
+// delay when the agent first calls a browser/file/shell tool. The import()
+// promise is cached by the bundler — calling it again via lazy() resolves instantly.
+const browserImport = () => import("./views/browser-view");
+const editorImport = () => import("./views/editor-view");
+const terminalImport = () => import("./views/terminal-view");
+
+const BrowserView = lazy(() => browserImport().then(m => ({ default: m.BrowserView })));
 const CodeView = lazy(() => import("./views/code-view").then(m => ({ default: m.CodeView })));
-const EditorView = lazy(() => import("./views/editor-view").then(m => ({ default: m.EditorView })));
-const TerminalView = lazy(() => import("./views/terminal-view").then(m => ({ default: m.TerminalView })));
+const EditorView = lazy(() => editorImport().then(m => ({ default: m.EditorView })));
+const TerminalView = lazy(() => terminalImport().then(m => ({ default: m.TerminalView })));
 const FilePreviewView = lazy(() => import("./views/file-preview-view").then(m => ({ default: m.FilePreviewView })));
 const SlidesView = lazy(() => import("./views/slides-view").then(m => ({ default: m.SlidesView })));
 const WebDevIDEView = lazy(() => import("./views/web-dev-ide-view").then(m => ({ default: m.WebDevIDEView })));
 const AICanvasView = lazy(() => import("./views/ai-canvas-view").then(m => ({ default: m.AICanvasView })));
 const MapReduceView = lazy(() => import("./views/map-reduce-view").then(m => ({ default: m.MapReduceView })));
+
+/** Preload the 3 most common canvas views (Browser, Editor, Terminal). */
+let _preloaded = false;
+function preloadCommonViews() {
+  if (_preloaded) return;
+  _preloaded = true;
+  // Fire-and-forget — bundler caches the module, lazy() resolves instantly later
+  browserImport().catch(() => {});
+  editorImport().catch(() => {});
+  terminalImport().catch(() => {});
+}
 
 // ============================================================================
 // Types
@@ -137,6 +158,24 @@ export interface AgentCanvasProps {
 
   // AI Canvas view (Manus parity: generated image content)
   aiCanvasContent?: string;
+  /** Called when AI Canvas editor state changes (for Redux sync) */
+  onCanvasStateChange?: (snapshot: CanvasStateSnapshot) => void;
+  /** Manus toolbar: upscale image */
+  onCanvasUpscale?: (imageUrl: string) => void;
+  /** Manus toolbar: remove background */
+  onCanvasRemoveBg?: (imageUrl: string) => void;
+  /** Called when a marking annotation rectangle is completed */
+  onCanvasMarkingComplete?: (annotation: {
+    imageId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
+  /** Called when annotations change */
+  onCanvasAnnotationsChange?: (annotations: any[]) => void;
+  /** Called when user clicks "Edit in canvas" from screenshot overlay */
+  onEditInCanvas?: (imageUrl: string) => void;
 
   // Timeline
   timelinePercentage?: number;
@@ -386,6 +425,12 @@ export function AgentCanvas({
   mapReduceTasks,
   mapReduceOverallProgress,
   aiCanvasContent,
+  onCanvasStateChange,
+  onCanvasUpscale,
+  onCanvasRemoveBg,
+  onCanvasMarkingComplete,
+  onCanvasAnnotationsChange,
+  onEditInCanvas,
   availableViews,
   onSelectView,
   pinnedToolCallId,
@@ -401,9 +446,12 @@ export function AgentCanvas({
   const viewInfo = VIEW_INFO[viewType];
   const [mounted, setMounted] = useState(false);
 
-  // Track mount state for SSR-safe portal rendering
+  // Track mount state for SSR-safe portal rendering.
+  // Also preload the 3 most common canvas views so there's no lazy-loading
+  // delay when the agent first calls a browser/file/shell tool.
   useEffect(() => {
     setMounted(true);
+    preloadCommonViews();
   }, []);
 
   const canvasContent = (
@@ -528,6 +576,7 @@ export function AgentCanvas({
             streamUrl={streamUrl}
             onUserControlChange={onUserControlChange}
             isAgentBrowsing={isAgentBrowsing}
+            onEditInCanvas={onEditInCanvas}
           />
         )}
         {viewType === "editor" && (
@@ -573,7 +622,16 @@ export function AgentCanvas({
             currentIndex={currentSlideIndex}
           />
         )}
-        {viewType === "aiCanvas" && <AICanvasView content={aiCanvasContent} />}
+        {viewType === "aiCanvas" && (
+          <AICanvasView
+            content={aiCanvasContent}
+            onStateChange={onCanvasStateChange}
+            onUpscale={onCanvasUpscale}
+            onRemoveBg={onCanvasRemoveBg}
+            onMarkingComplete={onCanvasMarkingComplete}
+            onAnnotationsChange={onCanvasAnnotationsChange}
+          />
+        )}
         {viewType === "webDevIDE" && (
           <WebDevIDEView
             fileTree={fileTree}

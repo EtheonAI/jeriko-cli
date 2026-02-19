@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -76,6 +76,15 @@ import {
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ErrorState } from "./error-state";
+import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
+import {
+  setApiKeys,
+  addApiKey,
+  removeApiKey,
+  setApiKeysLoading,
+  setEnterpriseTeamError,
+  type ApiKey,
+} from "@/lib/store/slices/enterpriseTeam.slice";
 
 const createWebhookSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -719,11 +728,38 @@ function ApiKeysSection() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const reduxDispatch = useAppDispatch();
+  const enterpriseTeamState = useAppSelector((state) => state.enterpriseTeam);
 
   // RTK Query for API keys
   const { data: apiKeysList, isLoading: isLoadingKeys, isError: isKeysError, refetch: refetchKeys } = useGetApiKeysQuery(undefined, {
     selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }),
   });
+
+  // Sync RTK Query data into enterpriseTeam Redux slice
+  const apiKeysRef = useRef(apiKeysList);
+  if (apiKeysList !== apiKeysRef.current) {
+    apiKeysRef.current = apiKeysList;
+    if (apiKeysList) {
+      reduxDispatch(setApiKeys(apiKeysList.map((k: any) => ({
+        id: k.id,
+        name: k.name,
+        key: "",
+        prefix: k.keyPrefix,
+        permissions: [],
+        lastUsedAt: k.lastUsedAt,
+        expiresAt: k.expiresAt ?? null,
+        createdAt: k.createdAt,
+        createdBy: "",
+      }))));
+    }
+  }
+  if (isLoadingKeys !== enterpriseTeamState.apiKeysLoading) {
+    reduxDispatch(setApiKeysLoading(isLoadingKeys));
+  }
+  if (isKeysError && !enterpriseTeamState.error) {
+    reduxDispatch(setEnterpriseTeamError("Failed to load API keys"));
+  }
 
   // RTK Query mutations
   const [createApiKeyMutation, { isLoading: isCreateKeyPending }] = useCreateApiKeyMutation();
@@ -736,7 +772,19 @@ function ApiKeysSection() {
     async (name: string) => {
       try {
         const data = await createApiKeyMutation({ name }).unwrap();
-        setRevealedKey((data as any).key);
+        const d = data as any;
+        setRevealedKey(d.key);
+        reduxDispatch(addApiKey({
+          id: d.id,
+          name: d.name,
+          key: d.key,
+          prefix: d.keyPrefix,
+          permissions: [],
+          lastUsedAt: null,
+          expiresAt: null,
+          createdAt: d.createdAt,
+          createdBy: "",
+        }));
         setIsCreateOpen(false);
         setNewKeyName("Default");
         toast.success("API key created. Copy it now — it won't be shown again.");
@@ -744,7 +792,7 @@ function ApiKeysSection() {
         toast.error(error?.data || error?.message || "Failed to create API key");
       }
     },
-    [createApiKeyMutation]
+    [createApiKeyMutation, reduxDispatch]
   );
 
   const revokeKey = useCallback(
@@ -766,13 +814,14 @@ function ApiKeysSection() {
     async (id: string) => {
       try {
         await deleteApiKeyMutation({ id }).unwrap();
+        reduxDispatch(removeApiKey(id));
         toast.success("API key deleted");
         refetchKeys();
       } catch (error: any) {
         toast.error(error?.message || "Failed to delete API key");
       }
     },
-    [deleteApiKeyMutation, refetchKeys]
+    [deleteApiKeyMutation, refetchKeys, reduxDispatch]
   );
 
   const renameKey = useCallback(
