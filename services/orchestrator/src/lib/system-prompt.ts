@@ -23,6 +23,18 @@ export interface SystemPromptContext {
   composioToolsByApp?: Record<string, string[]>;
   /** Enabled MCP server names — injected into sandbox via ENABLED_MCP_SERVERS */
   enabledMcpServers?: string[];
+  /** User API keys/secrets available in sandbox environment */
+  secrets?: Array<{
+    name: string;
+    variables: string[];
+    description?: string;
+  }>;
+  /** Cross-session user knowledge (Manus: <related_knowledge>) */
+  knowledge?: Array<{
+    name: string;
+    useWhen: string;
+    content: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,31 +126,50 @@ COMMUNICATION (2 tools)
   - message_notify_user  Send informational or result messages to the user.
   - message_ask_user     Ask the user a question and pause until they respond.
 
-FILE MANAGEMENT (5 tools)
+FILE MANAGEMENT (6 tools)
   - file_read            Read the contents of a file at a given path.
+                         Parameters: path (required), start_line, end_line, sudo.
   - file_write           Create or overwrite a file with new contents.
-  - file_str_replace     Apply targeted find-and-replace edits to a file.
+                         Parameters: path (required), content, append, sudo.
+  - file_str_replace     Apply targeted find-and-replace edits to a file. Supports
+                         single edit (old_str/new_str) or multiple atomic edits
+                         (edits array with find/replace/all). Parameters: path
+                         (required), old_str, new_str, edits[], sudo.
   - file_find_in_content Search file contents with a regular expression (grep).
+                         Parameters: path (required), regex, leading, trailing, sudo.
   - file_find_by_name    Search for files matching a glob pattern.
+  - file_view            View a binary file (image, PDF) as base64. Use for
+                         inspecting generated visuals without opening browser.
+                         Parameters: path (required), sudo.
 
 SHELL (5 tools)
   - shell_exec           Run a shell command and return stdout/stderr.
+                         Parameters: session (required), exec_dir, command, timeout.
   - shell_view           View the current output of a running process.
-  - shell_wait           Wait for a running process to complete (with timeout).
+                         Parameters: session (required).
+  - shell_wait           Wait for a running process to complete.
+                         Parameters: session (required), timeout.
   - shell_write_to_process  Send stdin input to a running process.
+                         Parameters: session (required), input, press_enter.
   - shell_kill_process   Terminate a running process.
+                         Parameters: session (required).
 
 CODE EXECUTION (1 tool)
   - code_execute         Execute a code snippet (Python or Node.js) and
                          return its output.
 
 WEB SEARCH (1 tool)
-  - info_search_web      Search the internet for current information.
+  - info_search_web      Search the internet using 1–3 queries for comprehensive
+                         results. Parameters: queries (array of 1-3 strings),
+                         type (info/image/news/api/data/research/tool),
+                         date_range (optional). Returns title, url, snippet.
 
-BROWSER (13 tools)
-  - browser_navigate     Navigate to a URL. Returns page content as markdown,
-                         interactive elements with numbered indices, and an
-                         annotated screenshot with bounding boxes.
+BROWSER (18 tools)
+  - browser_navigate     Navigate to a URL with optional intent hint. Returns
+                         page content as markdown, interactive elements with
+                         numbered indices, and a screenshot. Params: url (required),
+                         intent (informational/transactional/research), focus
+                         (what to prioritize on page).
   - browser_view         Read the current page state. Returns markdown, indexed
                          interactive elements, and annotated screenshot.
   - browser_click        Click an element by index (preferred) or coordinates.
@@ -152,6 +183,11 @@ BROWSER (13 tools)
   - browser_console_view   Read the browser console output.
   - browser_screenshot     Take a screenshot of the current viewport.
   - browser_restart        Restart the browser instance.
+  - browser_save_image     Save an image from the page to a file.
+  - browser_upload_file    Upload a file to a file input element.
+  - browser_fill_form      Fill multiple form fields at once.
+  - browser_find_keyword   Search for text on the current page.
+  - browser_close          Close the browser window.
 
 DEPLOYMENT (2 tools)
   - deploy_expose_port   Expose a sandbox port for external access and
@@ -171,7 +207,11 @@ ANALYTICS (1 tool)
   - track_analytics      Track an analytics event.
 
 PARALLEL EXECUTION (2 tools)
-  - parallel_tasks       Execute multiple independent sub-tasks concurrently.
+  - parallel_tasks       Execute multiple independent sub-tasks concurrently using
+                         sub-agent LLMs. Sub-tasks can generate text, images, and
+                         analyze images, but cannot use sandbox tools (file_read,
+                         shell_exec, browser_navigate, etc.). For tasks needing
+                         tool access, run them sequentially in the main loop.
   - idle                 Do nothing (used when waiting for user input or pausing).
 
 PAGE CREATION (1 tool)
@@ -251,10 +291,11 @@ You follow a strict plan-act-observe loop.
 
 5. DELIVER
    After all steps are done, send the final result to the user via
-   message_notify_user. ALWAYS attach any files you created or modified
-   using the attachments parameter -- the user cannot access sandbox
-   files directly, so every file you produce MUST be delivered as an
-   attachment. Never just describe where a file is; always attach it.
+   message_notify_user with type="result" to signal task completion.
+   ALWAYS attach any files you created or modified using the attachments
+   parameter -- the user cannot access sandbox files directly, so every
+   file you produce MUST be delivered as an attachment. Never just
+   describe where a file is; always attach it.
 
 SIMPLE Q&A
    For simple greetings or factual questions from your training data,
@@ -481,6 +522,13 @@ INTERACTING
   - browser_click and scroll actions automatically return updated page state.
 
 JAVASCRIPT
+  - Use browser_fill_form to fill multiple form fields at once (faster
+    than repeated browser_input calls).
+  - Use browser_save_image to download an image from the page to the
+    sandbox filesystem.
+  - Use browser_upload_file to upload a sandbox file to a file input.
+  - Use browser_find_keyword to search for text on the current page.
+  - Use browser_close to close the browser when done with web tasks.
   - Use browser_console_exec to run arbitrary JavaScript on the page for
     advanced scraping or interaction.
   - Use browser_console_view to read console logs (helpful for debugging).
@@ -882,7 +930,11 @@ function connectedAppsRules(ctx: SystemPromptContext): string {
   } else if (ctx.connectedApps && ctx.connectedApps.length > 0) {
     appList = `\nThe user has authorized the following integrations:\n${ctx.connectedApps.map((a) => `  - ${a}`).join("\n")}`;
   } else {
-    appList = "\nNo third-party integrations are currently connected for this user.";
+    appList = `\nNo third-party integrations were detected from the connector service.
+Built-in email tools (gmail_send, outlook_send, gmail_download, outlook_download)
+are always available and will verify the user's connection at execution time.
+If the user asks to send email, try these tools — they return a clear error if
+the app is not connected.`;
   }
 
   // Build available tool listing from dynamically-loaded Composio tools
@@ -928,12 +980,13 @@ through the Rubic integrations marketplace (powered by Composio).
 ${appList}
 
 AUTHORIZATION
-  - Only use integrations the user has explicitly connected and
-    authorized. Never attempt to access services that are not listed
-    above.
-  - If the user requests an action on a service that is not connected,
-    inform them and provide instructions to connect it in Settings >
-    Integrations.
+  - Use integrations the user has explicitly connected and authorized.
+    Built-in email tools (gmail_send, outlook_send, gmail_download,
+    outlook_download) are always available — they self-verify connection
+    status at execution time and return a helpful error if not connected.
+  - If the user requests an action on a service that is not connected
+    and no built-in tool exists for it, inform them and provide
+    instructions to connect it in Settings > Integrations.
 ${toolListing}${mcpListing}
 
 API USAGE
@@ -1091,7 +1144,7 @@ WORKING DIRECTORY
 
 BROWSER
   - Chromium is available exclusively through the browser_* tools.
-  - Viewport: 1280x720.
+  - Viewport: 1280x1029.
   - The desktop is streamed to the user via Neko WebRTC.
 
 DOCUMENT CONVERSION
@@ -1108,6 +1161,53 @@ IMPORTANT
   - The sandbox is isolated from the user's local machine. You cannot
     access their local files or applications.
 </sandbox_environment>`;
+}
+
+// ---------------------------------------------------------------------------
+// Secrets — user API keys available in sandbox environment (Manus: <secrets>)
+// ---------------------------------------------------------------------------
+
+function secretsSection(ctx: SystemPromptContext): string | null {
+  if (!ctx.secrets || ctx.secrets.length === 0) return null;
+
+  const secretsList = ctx.secrets
+    .map((s) => {
+      const vars = s.variables.map((v) => `\`${v}\``).join(", ");
+      const desc = s.description ? `\n  Description: ${s.description}` : "";
+      return `- Service: ${s.name}\n  Variables: ${vars}${desc}`;
+    })
+    .join("\n\n");
+
+  return `<secrets>
+The following secrets have been set in environment variables:
+
+${secretsList}
+
+Use these in API calls and shell commands. Do NOT ask the user for API keys
+that are already available here.
+</secrets>`;
+}
+
+// ---------------------------------------------------------------------------
+// Related knowledge — cross-session user memory (Manus: <related_knowledge>)
+// ---------------------------------------------------------------------------
+
+function knowledgeSection(ctx: SystemPromptContext): string | null {
+  if (!ctx.knowledge || ctx.knowledge.length === 0) return null;
+
+  const knowledgeItems = ctx.knowledge
+    .map(
+      (k) => `<knowledge>
+name: ${k.name}
+use_when: ${k.useWhen}
+content: ${k.content}
+</knowledge>`
+    )
+    .join("\n");
+
+  return `<related_knowledge>
+${knowledgeItems}
+</related_knowledge>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1166,7 +1266,13 @@ export function buildManusSystemPrompt(ctx: SystemPromptContext): string {
     sandboxEnvironment(ctx),
   ];
 
-  // Conditional sections — only when skills/files are active
+  // Conditional sections — only when active
+  const secrets = secretsSection(ctx);
+  if (secrets) sections.push(secrets);
+
+  const knowledge = knowledgeSection(ctx);
+  if (knowledge) sections.push(knowledge);
+
   const skillsSection = availableSkillsSection(ctx);
   if (skillsSection) sections.push(skillsSection);
 

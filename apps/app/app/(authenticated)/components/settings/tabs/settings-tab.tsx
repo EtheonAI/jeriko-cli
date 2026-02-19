@@ -24,7 +24,10 @@ import {
   ChevronUpIcon,
 } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetNotificationPreferencesQuery,
+  useUpdateNotificationPreferencesMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
@@ -61,44 +64,21 @@ export function SettingsTab() {
   const { theme, setTheme } = useTheme();
   const [language, setLanguage] = useState("en");
 
-  // Fetch notification preferences
-  const [preferences, setPreferences] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchPreferences = useCallback(async () => {
-    try {
-      const data = await getTrpcClient().notifications.getPreferences.query();
-      setPreferences(data);
-      setIsError(false);
-      setError(null);
-    } catch (err: any) {
-      setIsError(true);
-      setError(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
+  // Fetch notification preferences via RTK Query
+  const { data: preferences, isLoading, isError, error, refetch: refetchPreferences } = useGetNotificationPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
 
   // Update preferences mutation
-  const [isUpdatingPrefs, setIsUpdatingPrefs] = useState(false);
+  const [updateNotificationPreferences, { isLoading: isUpdatingPrefs }] = useUpdateNotificationPreferencesMutation();
   const doUpdatePreferences = useCallback(async (data: Record<string, any>, opts?: { onError?: () => void }) => {
-    setIsUpdatingPrefs(true);
     try {
-      await getTrpcClient().notifications.updatePreferences.mutate(data);
-      await fetchPreferences(); // re-fetch instead of invalidate
+      await updateNotificationPreferences(data as any).unwrap();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update preferences");
+      toast.error(error?.data || error?.message || "Failed to update preferences");
       opts?.onError?.();
-    } finally {
-      setIsUpdatingPrefs(false);
     }
-  }, [fetchPreferences]);
+  }, [updateNotificationPreferences]);
 
   // Local state for switches (optimistic updates)
   const [emailEnabled, setEmailEnabled] = useState(true);
@@ -235,9 +215,9 @@ export function SettingsTab() {
         <ErrorState
           title="Failed to load preferences"
           message={
-            error?.message || "Unable to load your notification preferences. Please try again."
+            (error as any)?.data || (error as any)?.message || "Unable to load your notification preferences. Please try again."
           }
-          onRetry={() => fetchPreferences()}
+          onRetry={() => refetchPreferences()}
         />
       </div>
     );

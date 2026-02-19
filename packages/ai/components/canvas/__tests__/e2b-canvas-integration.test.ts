@@ -1034,7 +1034,6 @@ describe("E2B + Canvas Integration", () => {
       "show_plan",
       "message_notify_user",
       "message_ask_user",
-      "generate_image",
       "schedule_task",
       "track_analytics",
     ];

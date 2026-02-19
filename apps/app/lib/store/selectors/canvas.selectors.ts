@@ -2,6 +2,12 @@ import { createSelector } from "@reduxjs/toolkit";
 import type { RootState } from "../index";
 import type { ToolEventEntity } from "../slices/websocket.slice";
 
+// Re-export the canonical TOOL_VIEW_MAP + CanvasViewType from packages/ai.
+// This is the SINGLE SOURCE OF TRUTH — no duplicate definitions.
+export { TOOL_VIEW_MAP, type CanvasViewType } from "@repo/ai/components/canvas/use-canvas";
+import { TOOL_VIEW_MAP } from "@repo/ai/components/canvas/use-canvas";
+import type { CanvasViewType } from "@repo/ai/components/canvas/use-canvas";
+
 /**
  * Canvas Selectors — Manus-parity
  *
@@ -14,71 +20,7 @@ import type { ToolEventEntity } from "../slices/websocket.slice";
  * normalized store — no useMemo scanning of messages[].
  */
 
-// ============================================================================
-// TOOL_VIEW_MAP — which tools map to which canvas view
-// Re-exported here so selectors and hooks share one source of truth.
-// (Canonical definition is in packages/ai/components/canvas/use-canvas.ts)
-// ============================================================================
-
-export type CanvasViewType =
-  | "browser"
-  | "editor"
-  | "code"
-  | "terminal"
-  | "filePreview"
-  | "slides"
-  | "aiCanvas"
-  | "webDevIDE"
-  | "mapReduce"
-  | "empty";
-
-export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
-  browser_navigate: "browser",
-  browser_view: "browser",
-  browser_click: "browser",
-  browser_input: "browser",
-  browser_scroll: "browser",
-  browser_scroll_up: "browser",
-  browser_scroll_down: "browser",
-  browser_move_mouse: "browser",
-  browser_key_press: "browser",
-  browser_press_key: "browser",
-  browser_select_option: "browser",
-  browser_console_exec: "browser",
-  browser_console_view: "browser",
-  browser_screenshot: "browser",
-  browser_restart: "browser",
-  shell_exec: "terminal",
-  shell_view: "terminal",
-  shell_wait: "terminal",
-  shell_write_to_process: "terminal",
-  shell_kill_process: "terminal",
-  file_read: "editor",
-  file_write: "editor",
-  file_str_replace: "editor",
-  file_find_in_content: "editor",
-  file_find_by_name: "editor",
-  code_execute: "terminal",
-  info_search_web: "browser",
-  web_search: "browser",
-  search_web: "browser",
-  deploy_expose_port: "browser",
-  deploy_apply_deployment: "browser",
-  make_manus_page: "browser",
-  text_editor: "editor",
-  slide_present: "browser",
-  webdev_init_project: "webDevIDE",
-  webdev_save_checkpoint: "webDevIDE",
-  webdev_check_status: "webDevIDE",
-  webdev_restart_server: "webDevIDE",
-  webdev_rollback_checkpoint: "webDevIDE",
-  webdev_execute_sql: "webDevIDE",
-  webdev_push_schema: "webDevIDE",
-  webdev_list_versions: "webDevIDE",
-  webdev_add_feature: "webDevIDE",
-};
-
-const SEARCH_TOOLS = new Set(["info_search_web", "web_search", "search_web"]);
+export const SEARCH_TOOLS = new Set(["info_search_web", "web_search", "search_web"]);
 const BROWSER_TOOLS_PREFIX = "browser_";
 const SHELL_TOOLS = new Set(["shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process", "code_execute"]);
 const FILE_TOOLS = new Set(["file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name", "text_editor"]);
@@ -227,6 +169,36 @@ export const selectBrowserHistory = createSelector(
   }
 );
 
+/** Latest browser-view event with a screenshot — used as fallback when the latest tool is
+ * still executing (no output yet). Walks backwards to find the most recent screenshot. */
+export const selectLatestBrowserScreenshot = createSelector(
+  [selectToolEvents, selectToolEventsBySession, (_: RootState, sessionId: string) => sessionId],
+  (events, bySession, sessionId): {
+    screenshot?: string;
+    url?: string;
+    title?: string;
+    content?: string;
+  } => {
+    const sessionIds = bySession[sessionId] ?? [];
+    for (let i = sessionIds.length - 1; i >= 0; i--) {
+      const event = events[sessionIds[i]!];
+      if (!event) continue;
+      const viewType = TOOL_VIEW_MAP[event.toolName];
+      if (viewType !== "browser") continue;
+      // Only completed events with screenshots
+      if (event.state === "complete" && event.screenshot) {
+        return {
+          screenshot: event.screenshot,
+          url: event.url,
+          title: event.title,
+          content: event.content,
+        };
+      }
+    }
+    return {};
+  }
+);
+
 /** All terminal events for a session, grouped by shell session ID (Manus PTY parity) */
 export const selectTerminalSessions = createSelector(
   [selectToolEvents, selectToolEventsBySession, (_: RootState, sessionId: string) => sessionId],
@@ -301,7 +273,10 @@ export const selectAllFileContents = createSelector(
               JSON.stringify(output));
         if (path) contents[path] = typeof content === "string" ? content : String(content);
       }
-      if (event.toolName === "file_str_replace" && event.state === "complete") {
+      if (event.toolName === "file_str_replace") {
+        // Only apply patches once the operation is complete — during input-streaming
+        // the old_str/new_str may be partial and would corrupt the cached content.
+        if (event.state !== "complete" && event.state !== "running") continue;
         const path = ((event.input?.path ?? event.input?.file) as string) ?? "";
         const oldStr = (event.input?.old_str as string) ?? "";
         const newStr = (event.input?.new_str as string) ?? "";
@@ -332,19 +307,22 @@ export const selectAllFileContents = createSelector(
   }
 );
 
-/** Get set of available view types for a session (accumulated from all tools seen) */
+/** Get available view types for a session (accumulated from all tools seen).
+ * Returns a sorted array (not Set) so createSelector can memoize correctly —
+ * Sets always create new references which defeats useSelector equality checks. */
 export const selectAvailableViews = createSelector(
   [selectToolEvents, selectToolEventsBySession, (_: RootState, sessionId: string) => sessionId],
-  (events, bySession, sessionId): Set<CanvasViewType> => {
+  (events, bySession, sessionId): CanvasViewType[] => {
     const sessionIds = bySession[sessionId] ?? [];
-    const views = new Set<CanvasViewType>();
+    const seen = new Set<CanvasViewType>();
     for (const id of sessionIds) {
       const event = events[id];
       if (!event) continue;
       const viewType = TOOL_VIEW_MAP[event.toolName];
-      if (viewType) views.add(viewType);
+      if (viewType) seen.add(viewType);
     }
-    return views;
+    // Sort for stable output — same views in same order = same reference via memoization
+    return Array.from(seen).sort();
   }
 );
 
@@ -389,7 +367,7 @@ export const selectWebdevPreviewUrl = createSelector(
 
 /** Session metadata (sandboxId, nekoUrl, streamUrl) — from message metadata stored in session */
 export const selectSessionMetadata = createSelector(
-  [(state: RootState) => state.sessions.sessions, (_: RootState, sessionId: string) => sessionId],
+  [(state: RootState) => state.sessions?.sessions ?? [], (_: RootState, sessionId: string) => sessionId],
   (sessions, sessionId): { sandboxId?: string; nekoUrl?: string; streamUrl?: string } => {
     const session = sessions.find((s) => s.id === sessionId);
     const meta = session?.metadata as Record<string, unknown> | undefined;
@@ -398,6 +376,55 @@ export const selectSessionMetadata = createSelector(
       nekoUrl: meta?.nekoUrl as string | undefined,
       streamUrl: (meta?.streamUrl as string | undefined) ?? (meta?.vncUrl as string | undefined),
     };
+  }
+);
+
+// ============================================================================
+// Domain Slice Selectors — Manus Parity
+//
+// These selectors read from dedicated domain slices (NOT websocket.toolEvents).
+// In Manus, domain slices are the authoritative source for rich view state:
+// - slideEditor → slides, presentation mode, current slide
+// - mapReduce → parallel task progress, subtask completion
+// - webDev → project metadata, active tab, database state
+// - aiCanvas → generated images, OCR cache
+//
+// The websocket.toolEvents selectors above handle the "raw event log" side
+// (latest tool, browser history, terminal sessions, file contents).
+// These domain selectors handle "aggregated feature state".
+// ============================================================================
+
+/** Slides from slideEditor slice (populated by useSSEToEntities when slide_present tool fires) */
+export const selectSlideEditorSlides = (state: RootState) => state.slideEditor.slides;
+export const selectSlideEditorCurrentIndex = (state: RootState) => state.slideEditor.currentSlideIndex;
+export const selectSlideEditorIsPresentationMode = (state: RootState) => state.slideEditor.isPresentationMode;
+
+/** MapReduce from mapReduce slice (populated by useSSEToEntities from message metadata) */
+export const selectMapReduceCurrentTask = (state: RootState) => state.mapReduce.currentTask;
+export const selectMapReduceOverallProgress = (state: RootState) => state.mapReduce.overallProgress;
+export const selectMapReduceCurrentPhase = (state: RootState) => state.mapReduce.currentPhase;
+export const selectMapReduceResults = (state: RootState) => state.mapReduce.results;
+
+/** WebDev from webDev slice (populated by useSSEToEntities when webdev_* tools fire) */
+export const selectWebDevProject = (state: RootState) => state.webDev.project;
+export const selectWebDevActiveTab = (state: RootState) => state.webDev.activeTab;
+export const selectWebDevProjectInited = (state: RootState) => state.webDev.projectInited;
+
+/** AI Canvas generated image — from the latest generate_image OR image_rmbg tool output in websocket.toolEvents */
+export const selectLatestGeneratedImage = createSelector(
+  [selectToolEvents, selectToolEventsBySession, (_: RootState, sessionId: string) => sessionId],
+  (events, bySession, sessionId): string | undefined => {
+    const sessionIds = bySession[sessionId] ?? [];
+    for (let i = sessionIds.length - 1; i >= 0; i--) {
+      const event = events[sessionIds[i]!];
+      if (!event || (event.toolName !== "generate_image" && event.toolName !== "image_rmbg")) continue;
+      if (event.state !== "complete" || !event.output) continue;
+      // Extract image URL/data from output
+      const output = event.output;
+      const image = (output.url as string) ?? (output.image_url as string) ?? (output.image as string) ?? (output.data as string);
+      if (typeof image === "string" && image.length > 0) return image;
+    }
+    return undefined;
   }
 );
 
@@ -453,3 +480,110 @@ function extractSearchResults(
       snippet: String(r.snippet || r.description || r.abstract || ""),
     }));
 }
+
+// ============================================================================
+// CodeViewer Slice Selectors — Manus Parity
+//
+// Manus reads file content, tabs, and directory tree from the dedicated
+// codeViewer domain slice (NOT re-derived from websocket.toolEvents).
+// The codeViewer slice is the authoritative source for file viewer state.
+// ============================================================================
+
+/** File contents from codeViewer domain slice (Manus: authoritative file data source) */
+export const selectCodeViewerFileDataSource = (state: RootState) => state.codeViewer.fileDataSource;
+
+/** Open file tabs from codeViewer domain slice */
+export const selectCodeViewerFileTabs = (state: RootState) => state.codeViewer.fileTabList;
+
+/** Active tab ID from codeViewer domain slice */
+export const selectCodeViewerActiveTabId = (state: RootState) => state.codeViewer.activeTabId;
+
+/** Directory tree from codeViewer domain slice */
+export const selectCodeViewerDirectoryList = (state: RootState) => state.codeViewer.directoryList;
+
+// ============================================================================
+// AgentWorkspace Selectors — Manus Parity
+//
+// Manus uses agentWorkspace.sidebarType to determine which canvas view
+// renders. We use it as a fallback when no tool has been called yet.
+// ============================================================================
+
+/** Current sidebar type from agentWorkspace slice */
+export const selectAgentWorkspaceSidebarType = (state: RootState) => state.agentWorkspace.sidebarType;
+
+/** Mapping from sidebar type → canvas view type */
+export const SIDEBAR_TO_VIEW: Partial<Record<string, CanvasViewType>> = {
+  browser: "browser",
+  computer: "terminal",
+  files: "editor",
+  webdev: "webDevIDE",
+};
+
+// ============================================================================
+// Timeline Selectors — Manus Parity
+//
+// Manus uses timeline.segmentEventsMap for the scrubber — each event has
+// a type, title, and timestamp. We expose these for richer scrubber tooltips.
+// ============================================================================
+
+/** Timeline events for the current session (Manus: segment-based event history) */
+export const selectTimelineEvents = (state: RootState, sessionId: string) =>
+  state.timeline.segmentEventsMap[sessionId] ?? [];
+
+/** Timeline event count for a session */
+export const selectTimelineEventCount = (state: RootState, sessionId: string) =>
+  (state.timeline.segmentEventsMap[sessionId] ?? []).length;
+
+// ============================================================================
+// ToolCalls Selectors — Manus Parity
+//
+// Manus tracks active tool calls for UI status indicators (spinner badges,
+// step counters). We expose active and session-scoped tool call data.
+// ============================================================================
+
+/** Active tool call correlation IDs (currently running) */
+export const selectActiveToolCallIds = (state: RootState) => state.toolCalls.activeCorrelationIds;
+
+/** Tool calls for a specific session */
+export const selectSessionToolCalls = createSelector(
+  [(state: RootState) => state.toolCalls.byCorrelationId,
+   (state: RootState) => state.toolCalls.bySessionId,
+   (_: RootState, sessionId: string) => sessionId],
+  (byCorrelation, bySession, sessionId) => {
+    const ids = bySession[sessionId] ?? [];
+    return ids.map((id) => byCorrelation[id]).filter(Boolean);
+  }
+);
+
+/** Tool call stats (total, success, error counts) */
+export const selectToolCallStats = (state: RootState) => state.toolCalls.stats;
+
+// ============================================================================
+// AI Canvas Selectors — Manus Whiteboard Parity
+//
+// These selectors read from the dedicated aiCanvas + aiCanvasEditor slices.
+// The AI Canvas is a freeform whiteboard for image annotation, triggered by
+// the `generate_image` tool — separate from the tool-streaming canvas.
+// ============================================================================
+
+/** All shapes in the AI canvas (Record<id, shape>) */
+export const selectAICanvasShapes = (state: RootState) => state.aiCanvas.shapes;
+
+/** Camera position (pan x/y + zoom z) */
+export const selectAICanvasCamera = (state: RootState) => state.aiCanvas.camera;
+
+/** Active drawing/interaction tool */
+export const selectAICanvasEditorActiveTool = (state: RootState) => state.aiCanvas.interaction.activeTool;
+
+/** Currently selected shape IDs */
+export const selectAICanvasEditorSelectedIds = (state: RootState) => state.aiCanvas.selectedShapeIds;
+
+/** Whether user is currently drawing */
+export const selectAICanvasEditorIsDrawing = (state: RootState) =>
+  state.aiCanvas.interaction.activeTool === "draw" && state.aiCanvas.brushing.isBrushing;
+
+/** Canvas ID */
+export const selectAICanvasId = (state: RootState) => state.aiCanvas.canvasId;
+
+/** OCR cache from aiCanvas slice */
+export const selectAICanvasOcrCache = (state: RootState) => state.aiCanvas.ocrCache;

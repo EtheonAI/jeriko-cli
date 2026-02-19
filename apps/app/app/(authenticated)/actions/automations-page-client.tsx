@@ -15,7 +15,7 @@ import {
   SearchIcon,
   ListTodoIcon,
 } from "lucide-react";
-import { useScheduledTasksData } from "@/lib/store/hooks/useScheduledTasksData";
+import { useGetScheduledTasksQuery } from "@/lib/store/api/api.slice";
 import type { ScheduledTask } from "@/lib/store/slices/scheduledTasks.slice";
 import { AutomationCard } from "./components/automation-card";
 import { CreateAutomationDialog } from "./components/create-automation-dialog";
@@ -61,7 +61,9 @@ export function AutomationsPageClient() {
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { tasks, isLoading, error, refetch } = useScheduledTasksData();
+  const { data: tasksData, isLoading, error: queryError, refetch } = useGetScheduledTasksQuery();
+  const tasks = (tasksData ?? []) as ScheduledTask[];
+  const error = queryError ? (typeof queryError === "object" && "data" in queryError ? String((queryError as any).data) : "Failed to load scheduled tasks") : null;
 
   // Find the task name for the history sheet
   const historyTaskName = useMemo(

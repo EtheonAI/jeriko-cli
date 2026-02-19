@@ -24,6 +24,7 @@ import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { ChevronUpIcon, MessageSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAppSelector } from "@/lib/store/hooks";
+import { useGetSessionsQuery } from "@/lib/store/api/api.slice";
 import { NavSection } from "./nav-section";
 import { NewTaskButton } from "./new-task-button";
 import { SearchButton } from "./search-button";
@@ -100,8 +101,13 @@ function getFilterLabel(filter: TaskFilterType): string {
 
 export function GlobalSidebar({ children, user }: GlobalSidebarProps) {
   const { open } = useSidebar();
-  const sessions = useAppSelector((state) => state.sessions.sessions);
-  const isLoading = useAppSelector((state) => state.sessions.isLoading);
+  // RTK Query auto-fetches sessions on mount, caches for 5 min
+  const { data: sessions = [], isLoading } = useGetSessionsQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({
+      data: data as Session[] | undefined,
+      ...rest,
+    }),
+  });
   const [filter, setFilter] = useState<TaskFilterType>("all");
   const [tasksOpen, setTasksOpen] = useState(true);
 

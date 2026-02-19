@@ -3,7 +3,6 @@ import { createSelector } from "@reduxjs/toolkit";
 import type { AppDispatch, RootState, AppStore } from "./index";
 import { selectIsFeatureEnabled, selectVariant } from "./slices/experiment.slice";
 import type { AgentSession } from "./slices/sessions.slice";
-import type { Agent } from "./slices/agents.slice";
 import type { Connector, InstalledConnector } from "./slices/connectors.slice";
 import type { Notification } from "./slices/notifications.slice";
 import type { Project } from "./slices/projects.slice";
@@ -19,7 +18,6 @@ export const useAppStore = useStore.withTypes<AppStore>();
 export const useAuth = () => useAppSelector((state) => state.auth);
 export const useSessions = () => useAppSelector((state) => state.sessions);
 export const useChat = () => useAppSelector((state) => state.chat);
-export const useAgents = () => useAppSelector((state) => state.agents);
 // files merged into library — use useLibrary() instead
 export const useWebSocket = () => useAppSelector((state) => state.websocket);
 export const useUI = () => useAppSelector((state) => state.ui);
@@ -42,8 +40,8 @@ export const useAuthLoading = () => useAppSelector((state) => state.auth.isLoadi
 // ================== SESSION SELECTORS (memoized) ==================
 const selectCurrentSession = createSelector(
   [
-    (state: RootState) => state.sessions.sessions,
-    (state: RootState) => state.sessions.currentSessionId,
+    (state: RootState) => state.sessions?.sessions ?? [],
+    (state: RootState) => state.sessions?.currentSessionId ?? null,
   ],
   (sessions, currentSessionId): AgentSession | null =>
     currentSessionId
@@ -58,16 +56,10 @@ export const useSessionMessages = (sessionId: string | null) =>
     return state.chat.messages[sessionId] || [];
   });
 
-export const useSessionAgents = (sessionId: string | null) =>
-  useAppSelector((state) => {
-    if (!sessionId) return [];
-    return state.agents.agents[sessionId] || [];
-  });
-
 const selectRecentSessions = createSelector(
   [
-    (state: RootState) => state.sessions.sessions,
-    (state: RootState) => state.sessions.recentSessionIds,
+    (state: RootState) => state.sessions?.sessions ?? [],
+    (state: RootState) => state.sessions?.recentSessionIds ?? [],
   ],
   (sessions, recentSessionIds): AgentSession[] =>
     recentSessionIds
@@ -77,31 +69,10 @@ const selectRecentSessions = createSelector(
 export const useRecentSessions = () => useAppSelector(selectRecentSessions);
 
 const selectPinnedSessions = createSelector(
-  [(state: RootState) => state.sessions.sessions],
+  [(state: RootState) => state.sessions?.sessions ?? []],
   (sessions): AgentSession[] => sessions.filter((s: AgentSession) => s.isPinned)
 );
 export const usePinnedSessions = () => useAppSelector(selectPinnedSessions);
-
-// ================== AGENT SELECTORS (memoized) ==================
-const selectSelectedAgent = createSelector(
-  [(state: RootState) => state.agents.agents, (state: RootState) => state.agents.selectedAgentId],
-  (agents, selectedAgentId) => {
-    if (!selectedAgentId) return null;
-    for (const sessionAgents of Object.values(agents)) {
-      if (!Array.isArray(sessionAgents)) continue;
-      const agent = sessionAgents.find((a: Agent) => a.id === selectedAgentId);
-      if (agent) return agent;
-    }
-    return null;
-  }
-);
-export const useSelectedAgent = () => useAppSelector(selectSelectedAgent);
-
-export const useAgentTasks = (agentId: string | null) =>
-  useAppSelector((state) => {
-    if (!agentId) return [];
-    return state.agents.tasks[agentId] || [];
-  });
 
 // ================== UI SELECTORS ==================
 export const useToasts = () => useAppSelector((state) => state.ui.toasts);
@@ -236,7 +207,6 @@ export const useIsConnected = () =>
 export const useSubscribedRooms = () => useAppSelector((state) => state.websocket.rooms);
 
 // ================== ADDITIONAL MANUS-STYLE SELECTORS ==================
-export const useWorkspace = () => useAppSelector((state) => state.workspace);
 export const useNavbar = () => useAppSelector((state) => state.navbar);
 export const useWebDev = () => useAppSelector((state) => state.webDev);
 export const useCodeViewer = () => useAppSelector((state) => state.codeViewer);
@@ -268,28 +238,11 @@ export const useAgentWorkspace = () => useAppSelector((state) => state.agentWork
 export const useWebdevAuth = () => useAppSelector((state) => state.webdevAuth);
 export const useAiCanvasEditor = () => useAppSelector((state) => state.aiCanvasEditor);
 export const useToolCalls = () => useAppSelector((state) => state.toolCalls);
+export const useMeeting = () => useAppSelector((state) => state.meeting);
 
-// ================== INTEGRATION HOOKS ==================
-// Re-export integration hooks that combine better-auth, WebSocket, and RTK Query
+// ================== NORMALIZER UTILITIES ==================
+// Re-export normalizers for scheduled tasks (used by automation components)
 export {
-  useAuthIntegration,
-  useWebSocketIntegration,
-  useNotificationsIntegration,
-  useChatIntegration,
-  useSessionsIntegration,
-} from "./hooks/index";
-
-// Phase 1 data hooks — tRPC → Redux sync
-export {
-  useAgentsData,
-  useScheduledTasksData,
-  useBillingData,
-  useConnectorsData,
-  useLibraryData,
-  useSearchData,
-  useProjectsData,
-  useSkillsData,
-  useMailData,
-  useWebhooksData,
-  useUserData,
+  normalizeScheduledTask,
+  normalizeScheduledTaskExecution,
 } from "./hooks/index";

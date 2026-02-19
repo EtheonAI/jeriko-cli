@@ -185,6 +185,14 @@ export default function LoginPage() {
       const normalizedEmail = data.email.toLowerCase();
 
       setEmail(normalizedEmail);
+
+      // If the user exists but hasn't verified their email, go straight to verify step
+      if (result.exists && !result.emailVerified) {
+        setIsNewUser(false);
+        setStep("verify");
+        return;
+      }
+
       setIsNewUser(!result.exists);
       setStep("password");
 
@@ -201,41 +209,98 @@ export default function LoginPage() {
   // Handle sign up
   async function handleSignUp(data: SignUpFormData) {
     startTransition(async () => {
-      // Use email prefix as default name
-      const name = email.split("@")[0]!;
+      try {
+        // Use email prefix as default name
+        const name = email.split("@")[0]!;
 
-      const result = await signUp.email({
-        email,
-        password: data.password,
-        name,
-      });
+        const result = await signUp.email({
+          email,
+          password: data.password,
+          name,
+        });
 
-      if (result.error) {
-        toast.error(result.error.message || "Failed to create account");
-        return;
+        if (result.error) {
+          const code = result.error.code;
+
+          switch (code) {
+            case "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL":
+              toast.error("An account with this email already exists. Try signing in instead.");
+              return;
+            case "PASSWORD_TOO_SHORT":
+              toast.error("Password must be at least 12 characters.");
+              return;
+            case "PASSWORD_TOO_LONG":
+              toast.error("Password must be less than 128 characters.");
+              return;
+            case "TOO_MANY_REQUESTS":
+              toast.error("Too many attempts. Please wait a moment and try again.");
+              return;
+            case "VALIDATION_ERROR":
+              toast.error("Please check your email and password.");
+              return;
+            default:
+              toast.error(result.error.message || "Failed to create account. Please try again.");
+              return;
+          }
+        }
+
+        toast.success("Account created! Please check your email to verify.");
+        setStep("verify");
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : "";
+        if (raw.toLowerCase().includes("failed to fetch")) {
+          toast.error("Unable to reach the server. Please check your connection and try again.");
+        } else {
+          toast.error("Failed to create account. Please try again.");
+        }
       }
-
-      toast.success("Account created! Please check your email to verify.");
-      setStep("verify");
     });
   }
 
   // Handle sign in
   async function handleSignIn(data: SignInFormData) {
     startTransition(async () => {
-      const result = await signIn.email({
-        email,
-        password: data.password,
-      });
+      try {
+        const result = await signIn.email({
+          email,
+          password: data.password,
+        });
 
-      if (result.error) {
-        toast.error(result.error.message || "Invalid password");
-        return;
+        if (result.error) {
+          const code = result.error.code;
+
+          switch (code) {
+            case "EMAIL_NOT_VERIFIED":
+              toast.error("Please verify your email address before signing in.");
+              setStep("verify");
+              return;
+            case "INVALID_EMAIL_OR_PASSWORD":
+              toast.error("Incorrect email or password.");
+              return;
+            case "TOO_MANY_REQUESTS":
+              toast.error("Too many attempts. Please wait a moment and try again.");
+              return;
+            case "VALIDATION_ERROR":
+              toast.error("Please enter a valid email and password.");
+              return;
+            default:
+              toast.error(result.error.message || "Sign in failed. Please try again.");
+              return;
+          }
+        }
+
+        toast.success("Signed in successfully");
+        router.push("/");
+        router.refresh();
+      } catch (error) {
+        // Better-Auth throws TypeError("Failed to fetch") on network/server errors
+        const raw = error instanceof Error ? error.message : "";
+        if (raw.toLowerCase().includes("failed to fetch")) {
+          toast.error("Unable to reach the server. Please check your connection and try again.");
+        } else {
+          toast.error("Something went wrong. Please try again.");
+        }
       }
-
-      toast.success("Signed in successfully");
-      router.push("/");
-      router.refresh();
     });
   }
 

@@ -20,6 +20,7 @@ import {
   AgentCanvas,
 } from "@repo/ai/components";
 import type { UIMessage as RepoUIMessage } from "@repo/ai/lib/types";
+import type { CanvasViewType } from "@repo/ai/components/canvas/use-canvas";
 import { ToolCard } from "@repo/ai/components/tools/tool-card";
 import { SourcesGroup } from "@repo/ai/components/parts/sources-group";
 import { TEST_MESSAGES } from "../[id]/fixtures/test-messages";
@@ -707,7 +708,7 @@ function CanvasDemoSection() {
           previewContent={activeView === "filePreview" ? MOCK_FILE_CONTENTS["/README.md"] : undefined}
           previewFileType={activeView === "filePreview" ? "markdown" : undefined}
           // Common
-          availableViews={new Set(["browser", "code", "terminal", "filePreview", "webDevIDE", "empty"] as CanvasDemoView[])}
+          availableViews={["browser", "code", "empty", "filePreview", "terminal", "webDevIDE"] as CanvasViewType[]}
           onSelectView={(v) => setActiveView(v as CanvasDemoView)}
           isWorking={activeView !== "empty"}
           statusText={activeView === "code" ? `Editing ${activeFilePath.split("/").pop()}` : activeView === "webDevIDE" ? `IDE: ${activeFilePath.split("/").pop()}` : activeView === "browser" ? "Browsing react.dev" : activeView === "terminal" ? "Running build" : undefined}

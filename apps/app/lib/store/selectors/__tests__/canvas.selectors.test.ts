@@ -25,6 +25,20 @@ import {
   selectLatestSearchResults,
   selectWebdevPreviewUrl,
   selectSessionMetadata,
+  // Domain slice selectors — Manus parity
+  selectSlideEditorSlides,
+  selectMapReduceCurrentTask,
+  selectWebDevProject,
+  selectLatestGeneratedImage,
+  // CodeViewer selectors — Manus parity
+  selectCodeViewerFileDataSource,
+  // AgentWorkspace selectors — Manus parity
+  selectAgentWorkspaceSidebarType,
+  // Timeline selectors — Manus parity
+  selectTimelineEvents,
+  // ToolCalls selectors — Manus parity
+  selectActiveToolCallIds,
+  selectToolCallStats,
   TOOL_VIEW_MAP,
 } from "../canvas.selectors";
 
@@ -76,9 +90,11 @@ function buildState(events: ToolEventEntity[], sessions: any[] = []) {
 
 describe("canvas.selectors", () => {
   describe("TOOL_VIEW_MAP", () => {
-    it("should map all 22 browser tools", () => {
+    it("should map all 28 browser tools", () => {
       const browserTools = Object.entries(TOOL_VIEW_MAP).filter(([, v]) => v === "browser");
-      expect(browserTools.length).toBe(22);
+      // 15 core + 5 new Manus (save_image, upload_file, fill_form, find_keyword, close)
+      // + 3 search aliases + 2 deploy + make_manus_page + slide_present + image_search_upload = 28
+      expect(browserTools.length).toBe(28);
     });
 
     it("should map all 6 editor tools", () => {
@@ -435,7 +451,7 @@ describe("canvas.selectors", () => {
   });
 
   describe("selectAvailableViews", () => {
-    it("should collect unique view types from all tools", () => {
+    it("should collect unique view types from all tools as sorted array", () => {
       const events = [
         makeEvent({ toolName: "browser_navigate" }),
         makeEvent({ toolName: "shell_exec" }),
@@ -446,10 +462,22 @@ describe("canvas.selectors", () => {
       const state = buildState(events);
       const views = selectAvailableViews(state, "session-1");
 
-      expect(views.has("browser")).toBe(true);
-      expect(views.has("terminal")).toBe(true);
-      expect(views.has("editor")).toBe(true);
-      expect(views.has("webDevIDE")).toBe(false);
+      // Returns sorted array (not Set) for Redux-friendly memoization
+      expect(Array.isArray(views)).toBe(true);
+      expect(views).toContain("browser");
+      expect(views).toContain("terminal");
+      expect(views).toContain("editor");
+      expect(views).not.toContain("webDevIDE");
+    });
+
+    it("should return stable reference when re-invoked with same input (memoization)", () => {
+      const events = [makeEvent({ toolName: "browser_navigate" })];
+      const state = buildState(events);
+
+      const views1 = selectAvailableViews(state, "session-1");
+      const views2 = selectAvailableViews(state, "session-1");
+
+      expect(views1).toBe(views2); // Same reference = memoized
     });
   });
 
@@ -551,6 +579,282 @@ describe("canvas.selectors", () => {
 
       const state = buildState([], sessions);
       expect(selectSessionMetadata(state, "session-1").streamUrl).toBe("https://vnc.e2b.dev");
+    });
+  });
+
+  // ============================================================================
+  // Domain Slice Selectors — Manus Parity
+  // ============================================================================
+
+  describe("TOOL_VIEW_MAP — generate_image", () => {
+    it("should map generate_image to aiCanvas view", () => {
+      expect(TOOL_VIEW_MAP["generate_image"]).toBe("aiCanvas");
+    });
+
+    it("should have exactly 2 aiCanvas tools", () => {
+      const canvasTools = Object.entries(TOOL_VIEW_MAP).filter(([, v]) => v === "aiCanvas");
+      expect(canvasTools.length).toBe(2); // generate_image + image_rmbg
+      const names = canvasTools.map(([k]) => k).sort();
+      expect(names).toEqual(["generate_image", "image_rmbg"]);
+    });
+  });
+
+  describe("selectLatestGeneratedImage", () => {
+    it("should return image URL from generate_image tool output", () => {
+      const e = makeEvent({
+        id: "tc-gen",
+        toolName: "generate_image",
+        state: "complete",
+        output: { url: "https://cdn.example.com/cat.png" },
+      });
+      const state = buildState([e]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBe("https://cdn.example.com/cat.png");
+    });
+
+    it("should return image_url as fallback", () => {
+      const e = makeEvent({
+        id: "tc-gen",
+        toolName: "generate_image",
+        state: "complete",
+        output: { image_url: "https://cdn.example.com/alt.png" },
+      });
+      const state = buildState([e]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBe("https://cdn.example.com/alt.png");
+    });
+
+    it("should return undefined when no generate_image tool exists", () => {
+      const e = makeEvent({ id: "tc-1", toolName: "browser_navigate", state: "complete" });
+      const state = buildState([e]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBeUndefined();
+    });
+
+    it("should return undefined when generate_image is still running", () => {
+      const e = makeEvent({
+        id: "tc-gen",
+        toolName: "generate_image",
+        state: "running",
+      });
+      const state = buildState([e]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBeUndefined();
+    });
+
+    it("should return the latest generate_image when multiple exist", () => {
+      const e1 = makeEvent({
+        id: "tc-gen1",
+        toolName: "generate_image",
+        state: "complete",
+        output: { url: "https://cdn.example.com/old.png" },
+      });
+      const e2 = makeEvent({
+        id: "tc-gen2",
+        toolName: "generate_image",
+        state: "complete",
+        output: { url: "https://cdn.example.com/new.png" },
+      });
+      const state = buildState([e1, e2]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBe("https://cdn.example.com/new.png");
+    });
+  });
+
+  describe("selectSlideEditorSlides", () => {
+    it("should read slides from slideEditor slice", () => {
+      const state = {
+        ...buildState([]),
+        slideEditor: {
+          slides: [{ id: "s1", index: 0, elements: [] }],
+          currentSlideIndex: 0,
+          isPresentationMode: true,
+        },
+      } as any;
+      expect(selectSlideEditorSlides(state)).toEqual([{ id: "s1", index: 0, elements: [] }]);
+    });
+
+    it("should return empty array when no slides", () => {
+      const state = {
+        ...buildState([]),
+        slideEditor: { slides: [], currentSlideIndex: 0, isPresentationMode: false },
+      } as any;
+      expect(selectSlideEditorSlides(state)).toEqual([]);
+    });
+  });
+
+  describe("selectMapReduceCurrentTask", () => {
+    it("should read current task from mapReduce slice", () => {
+      const task = { id: "mr-1", name: "Analyze", status: "running", progress: 30, totalItems: 10, processedItems: 3 };
+      const state = {
+        ...buildState([]),
+        mapReduce: { currentTask: task, overallProgress: 30, currentPhase: "map", results: [] },
+      } as any;
+      expect(selectMapReduceCurrentTask(state)).toEqual(task);
+    });
+
+    it("should return null when no current task", () => {
+      const state = {
+        ...buildState([]),
+        mapReduce: { currentTask: null, overallProgress: 0, currentPhase: "idle", results: [] },
+      } as any;
+      expect(selectMapReduceCurrentTask(state)).toBeNull();
+    });
+  });
+
+  describe("selectWebDevProject", () => {
+    it("should read project from webDev slice", () => {
+      const project = { id: "p1", name: "MyApp", status: "deployed", createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+      const state = {
+        ...buildState([]),
+        webDev: { project, activeTab: "preview", projectInited: true },
+      } as any;
+      expect(selectWebDevProject(state)).toEqual(project);
+    });
+
+    it("should return null when no project", () => {
+      const state = {
+        ...buildState([]),
+        webDev: { project: null, activeTab: "preview", projectInited: false },
+      } as any;
+      expect(selectWebDevProject(state)).toBeNull();
+    });
+  });
+
+  // ── New tool mappings (6 missing tools added for Manus parity) ──
+
+  describe("TOOL_VIEW_MAP — new tools", () => {
+    it("should map slide_init to slides", () => {
+      expect(TOOL_VIEW_MAP["slide_init"]).toBe("slides");
+    });
+    it("should map slide_modify to slides", () => {
+      expect(TOOL_VIEW_MAP["slide_modify"]).toBe("slides");
+    });
+    it("should map slide_add_notes to slides", () => {
+      expect(TOOL_VIEW_MAP["slide_add_notes"]).toBe("slides");
+    });
+    it("should map parallel_tasks to mapReduce", () => {
+      expect(TOOL_VIEW_MAP["parallel_tasks"]).toBe("mapReduce");
+    });
+    it("should map image_rmbg to aiCanvas", () => {
+      expect(TOOL_VIEW_MAP["image_rmbg"]).toBe("aiCanvas");
+    });
+    it("should map image_search_upload to browser", () => {
+      expect(TOOL_VIEW_MAP["image_search_upload"]).toBe("browser");
+    });
+    it("should have exactly 3 slides tools", () => {
+      const slideTools = Object.entries(TOOL_VIEW_MAP).filter(([, v]) => v === "slides");
+      expect(slideTools.length).toBe(3);
+    });
+    it("should have exactly 1 mapReduce tool", () => {
+      const mrTools = Object.entries(TOOL_VIEW_MAP).filter(([, v]) => v === "mapReduce");
+      expect(mrTools.length).toBe(1);
+      expect(mrTools[0]![0]).toBe("parallel_tasks");
+    });
+    it("should have total 55 mapped tools", () => {
+      // 28 browser + 6 editor + 6 terminal + 9 webDevIDE + 2 aiCanvas + 3 slides + 1 mapReduce = 55
+      expect(Object.keys(TOOL_VIEW_MAP).length).toBe(55);
+    });
+  });
+
+  describe("selectLatestGeneratedImage — image_rmbg", () => {
+    it("should return image from image_rmbg tool", () => {
+      const e = makeEvent({
+        id: "tc-rmbg",
+        toolName: "image_rmbg",
+        state: "complete",
+        output: { url: "https://cdn.example.com/nobg.png" },
+      });
+      const state = buildState([e]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBe("https://cdn.example.com/nobg.png");
+    });
+
+    it("should prefer latest between generate_image and image_rmbg", () => {
+      const e1 = makeEvent({
+        id: "tc-gen",
+        toolName: "generate_image",
+        state: "complete",
+        output: { url: "https://cdn.example.com/gen.png" },
+      });
+      const e2 = makeEvent({
+        id: "tc-rmbg",
+        toolName: "image_rmbg",
+        state: "complete",
+        output: { url: "https://cdn.example.com/rmbg.png" },
+      });
+      const state = buildState([e1, e2]);
+      expect(selectLatestGeneratedImage(state, "session-1")).toBe("https://cdn.example.com/rmbg.png");
+    });
+  });
+
+  // ── CodeViewer selectors ──
+
+  describe("selectCodeViewerFileDataSource", () => {
+    it("should read file data from codeViewer slice", () => {
+      const state = {
+        ...buildState([]),
+        codeViewer: { fileDataSource: { "/app.ts": "const x = 1;" }, fileTabList: [], activeTabId: null, directoryList: [] },
+      } as any;
+      expect(selectCodeViewerFileDataSource(state)).toEqual({ "/app.ts": "const x = 1;" });
+    });
+  });
+
+  // ── AgentWorkspace selectors ──
+
+  describe("selectAgentWorkspaceSidebarType", () => {
+    it("should read sidebarType from agentWorkspace slice", () => {
+      const state = {
+        ...buildState([]),
+        agentWorkspace: { sidebarType: "browser" },
+      } as any;
+      expect(selectAgentWorkspaceSidebarType(state)).toBe("browser");
+    });
+
+    it("should return null when no sidebar type", () => {
+      const state = {
+        ...buildState([]),
+        agentWorkspace: { sidebarType: null },
+      } as any;
+      expect(selectAgentWorkspaceSidebarType(state)).toBeNull();
+    });
+  });
+
+  // ── Timeline selectors ──
+
+  describe("selectTimelineEvents", () => {
+    it("should read events for session from timeline slice", () => {
+      const events = [{ id: "ev-1", type: "browser_navigate", title: "Navigate", timestamp: "2026-01-01" }];
+      const state = {
+        ...buildState([]),
+        timeline: { segmentEventsMap: { "session-1": events } },
+      } as any;
+      expect(selectTimelineEvents(state, "session-1")).toEqual(events);
+    });
+
+    it("should return empty array for unknown session", () => {
+      const state = {
+        ...buildState([]),
+        timeline: { segmentEventsMap: {} },
+      } as any;
+      expect(selectTimelineEvents(state, "session-1")).toEqual([]);
+    });
+  });
+
+  // ── ToolCalls selectors ──
+
+  describe("selectActiveToolCallIds", () => {
+    it("should return active tool call IDs", () => {
+      const state = {
+        ...buildState([]),
+        toolCalls: { activeCorrelationIds: ["tc-1", "tc-2"], byCorrelationId: {}, bySessionId: {}, stats: { totalCalls: 0, successCount: 0, errorCount: 0, cancelledCount: 0 } },
+      } as any;
+      expect(selectActiveToolCallIds(state)).toEqual(["tc-1", "tc-2"]);
+    });
+  });
+
+  describe("selectToolCallStats", () => {
+    it("should return tool call stats", () => {
+      const stats = { totalCalls: 10, successCount: 8, errorCount: 1, cancelledCount: 1 };
+      const state = {
+        ...buildState([]),
+        toolCalls: { activeCorrelationIds: [], byCorrelationId: {}, bySessionId: {}, stats },
+      } as any;
+      expect(selectToolCallStats(state)).toEqual(stats);
     });
   });
 });

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Switch } from "@repo/design-system/components/ui/switch";
-import { Label } from "@repo/design-system/components/ui/label";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { Card, CardContent } from "@repo/design-system/components/ui/card";
@@ -23,9 +22,15 @@ import {
   CalendarIcon,
   LockIcon,
   RotateCcwIcon,
+  type LucideIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
-import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
+import {
+  useGetUserPreferencesQuery,
+  useGetSubscriptionQuery,
+  useUpdatePreferencesMutation,
+  useGetSkillDefinitionsQuery,
+} from "@/lib/store/api/api.slice";
+import { useAppDispatch } from "@/lib/store/hooks";
 import {
   setOfficialSkills,
   toggleSkillEnabled,
@@ -35,110 +40,20 @@ import { toast } from "sonner";
 import { cn } from "@repo/design-system/lib/utils";
 import { ErrorState } from "./error-state";
 
-// Skill definitions
-const skills = [
-  {
-    id: "web_browsing",
-    name: "Web Browsing",
-    description: "Search the web and extract information from websites",
-    icon: GlobeIcon,
-    category: "research",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "code_execution",
-    name: "Code Execution",
-    description: "Write and execute code in multiple languages",
-    icon: CodeIcon,
-    category: "development",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "file_operations",
-    name: "File Operations",
-    description: "Read, write, and manage files on your devices",
-    icon: FileTextIcon,
-    category: "productivity",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "image_generation",
-    name: "Image Generation",
-    description: "Generate images using AI models",
-    icon: ImageIcon,
-    category: "creative",
-    defaultEnabled: false,
-    isPremium: true,
-  },
-  {
-    id: "deep_research",
-    name: "Deep Research",
-    description: "Comprehensive research with multiple sources",
-    icon: SearchIcon,
-    category: "research",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "terminal_access",
-    name: "Terminal Access",
-    description: "Execute shell commands on connected devices",
-    icon: TerminalIcon,
-    category: "development",
-    defaultEnabled: false,
-    isPremium: false,
-  },
-  {
-    id: "database_queries",
-    name: "Database Queries",
-    description: "Query and manage connected databases",
-    icon: DatabaseIcon,
-    category: "development",
-    defaultEnabled: false,
-    isPremium: true,
-  },
-  {
-    id: "advanced_reasoning",
-    name: "Advanced Reasoning",
-    description: "Complex multi-step reasoning and analysis",
-    icon: BrainIcon,
-    category: "analysis",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "conversation_memory",
-    name: "Conversation Memory",
-    description: "Remember context from previous conversations",
-    icon: MessageSquareIcon,
-    category: "productivity",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "data_analysis",
-    name: "Data Analysis",
-    description: "Analyze data and create visualizations",
-    icon: BarChartIcon,
-    category: "analysis",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-  {
-    id: "scheduling",
-    name: "Task Scheduling",
-    description: "Schedule tasks to run automatically",
-    icon: CalendarIcon,
-    category: "productivity",
-    defaultEnabled: true,
-    isPremium: false,
-  },
-];
-
-const defaultSkillStates = Object.fromEntries(skills.map((s) => [s.id, s.defaultEnabled]));
+// Icon string → lucide component mapping
+const ICON_MAP: Record<string, LucideIcon> = {
+  globe: GlobeIcon,
+  code: CodeIcon,
+  "file-text": FileTextIcon,
+  image: ImageIcon,
+  search: SearchIcon,
+  terminal: TerminalIcon,
+  database: DatabaseIcon,
+  brain: BrainIcon,
+  "message-square": MessageSquareIcon,
+  "bar-chart": BarChartIcon,
+  calendar: CalendarIcon,
+};
 
 const categories = [
   { id: "all", label: "All Skills" },
@@ -153,76 +68,76 @@ export function SkillsTab() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const dispatch = useAppDispatch();
 
-  const [preferences, setPreferences] = useState<{ enabledSkills?: Record<string, boolean> } | null>(null);
-  const [prefsLoading, setPrefsLoading] = useState(true);
-  const [prefsError, setPrefsError] = useState(false);
-  const [updatePending, setUpdatePending] = useState(false);
+  // Fetch skill definitions from DB
+  const {
+    data: skillDefinitions,
+    isLoading: skillsLoading,
+    isError: skillsError,
+    refetch: refetchSkills,
+  } = useGetSkillDefinitionsQuery();
 
-  const fetchPreferences = useCallback(async () => {
-    try {
-      setPrefsLoading(true);
-      setPrefsError(false);
-      const data = await getTrpcClient().user.getPreferences.query();
-      setPreferences(data);
-    } catch {
-      setPrefsError(true);
-    } finally {
-      setPrefsLoading(false);
-    }
-  }, []);
+  const { data: rawPreferences, isLoading: prefsLoading, isError: prefsError, refetch: refetchPreferences } = useGetUserPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as { enabledSkills?: Record<string, boolean> } | undefined, ...rest }),
+  });
+  const preferences = rawPreferences ?? null;
+  const [updatePreferencesMutation] = useUpdatePreferencesMutation();
 
+  const { data: subscriptionData } = useGetSubscriptionQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({
+      data: data as { subscription: { plan?: string } | null } | null | undefined,
+      ...rest,
+    }),
+  });
+  const reduxSubscription = subscriptionData?.subscription ?? null;
+
+  // Build default skill states from API data
+  const defaultSkillStates = useMemo(() => {
+    if (!skillDefinitions) return {};
+    return Object.fromEntries(skillDefinitions.map((s) => [s.type, s.defaultEnabled]));
+  }, [skillDefinitions]);
+
+  // Sync skill definitions + enabled state to Redux skills slice
   useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
-
-  // Read subscription from Redux (hydrated by ReduxDataLoader)
-  const reduxSubscription = useAppSelector((state) => state.billing.subscription);
-
-  // Sync hardcoded skill definitions + enabled state to Redux skills slice
-  useEffect(() => {
-    if (!preferences) return;
+    if (!preferences || !skillDefinitions) return;
     const enabledSkills = preferences.enabledSkills ?? defaultSkillStates;
-    const reduxSkills: ReduxSkill[] = skills.map((s) => ({
-      id: s.id,
-      uid: s.id,
+    const reduxSkills: ReduxSkill[] = skillDefinitions.map((s) => ({
+      id: s.type,
+      uid: s.type,
       name: s.name,
-      description: s.description,
+      description: s.description ?? "",
       prompt: "",
       iconUrl: "",
       category: s.category,
       isOfficial: true,
-      isEnabled: enabledSkills[s.id] ?? s.defaultEnabled,
+      isEnabled: enabledSkills[s.type] ?? s.defaultEnabled,
       usageCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
     }));
     dispatch(setOfficialSkills(reduxSkills));
-  }, [preferences, dispatch]);
+  }, [preferences, skillDefinitions, defaultSkillStates, dispatch]);
 
   const updatePreferences = useCallback(
     async (newPrefs: { enabledSkills: Record<string, boolean> }) => {
       try {
-        setUpdatePending(true);
-        await getTrpcClient().user.updatePreferences.mutate(newPrefs);
-        await fetchPreferences();
+        await updatePreferencesMutation(newPrefs).unwrap();
       } catch (error: any) {
-        toast.error(error.message || "Failed to update skill settings");
-      } finally {
-        setUpdatePending(false);
+        toast.error(error?.data || error?.message || "Failed to update skill settings");
       }
     },
-    [fetchPreferences]
+    [updatePreferencesMutation]
   );
 
   const skillStates = preferences?.enabledSkills ?? defaultSkillStates;
   const isPro = reduxSubscription?.plan === "pro" || reduxSubscription?.plan === "enterprise";
 
+  const skills = skillDefinitions ?? [];
   const filteredSkills =
     selectedCategory === "all" ? skills : skills.filter((s) => s.category === selectedCategory);
 
-  const handleToggleSkill = (skillId: string, isPremium: boolean) => {
-    const currentState =
-      skillStates[skillId] ?? skills.find((s) => s.id === skillId)?.defaultEnabled ?? false;
+  const handleToggleSkill = (skillType: string, isPremium: boolean) => {
+    const skill = skills.find((s) => s.type === skillType);
+    const currentState = skillStates[skillType] ?? skill?.defaultEnabled ?? false;
 
     if (isPremium && !currentState && !isPro) {
       toast.error("This skill requires a Pro subscription");
@@ -231,42 +146,43 @@ export function SkillsTab() {
 
     const newSkillStates = {
       ...skillStates,
-      [skillId]: !currentState,
+      [skillType]: !currentState,
     };
 
     updatePreferences({ enabledSkills: newSkillStates });
 
     // Optimistically update Redux skills slice
-    dispatch(toggleSkillEnabled({ id: skillId, isOfficial: true }));
+    dispatch(toggleSkillEnabled({ id: skillType, isOfficial: true }));
 
-    const skillName = skills.find((s) => s.id === skillId)?.name;
-    toast.success(`${skillName} ${!currentState ? "enabled" : "disabled"}`);
+    toast.success(`${skill?.name} ${!currentState ? "enabled" : "disabled"}`);
   };
 
   const handleResetDefaults = () => {
     updatePreferences({ enabledSkills: defaultSkillStates });
     // Re-sync Redux with default skill states
-    const reduxSkills: ReduxSkill[] = skills.map((s) => ({
-      id: s.id,
-      uid: s.id,
-      name: s.name,
-      description: s.description,
-      prompt: "",
-      iconUrl: "",
-      category: s.category,
-      isOfficial: true,
-      isEnabled: s.defaultEnabled,
-      usageCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }));
-    dispatch(setOfficialSkills(reduxSkills));
+    if (skillDefinitions) {
+      const reduxSkills: ReduxSkill[] = skillDefinitions.map((s) => ({
+        id: s.type,
+        uid: s.type,
+        name: s.name,
+        description: s.description ?? "",
+        prompt: "",
+        iconUrl: "",
+        category: s.category,
+        isOfficial: true,
+        isEnabled: s.defaultEnabled,
+        usageCount: 0,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      }));
+      dispatch(setOfficialSkills(reduxSkills));
+    }
     toast.success("Skills reset to defaults");
   };
 
   const enabledCount = Object.values(skillStates).filter(Boolean).length;
 
-  if (prefsLoading) {
+  if (skillsLoading || prefsLoading) {
     return (
       <div className="space-y-6">
         <div>
@@ -285,7 +201,7 @@ export function SkillsTab() {
     );
   }
 
-  if (prefsError) {
+  if (skillsError || prefsError) {
     return (
       <div className="space-y-6">
         <div>
@@ -298,7 +214,10 @@ export function SkillsTab() {
         <ErrorState
           title="Failed to load skills"
           message="Unable to load your skill preferences. Please try again."
-          onRetry={() => fetchPreferences()}
+          onRetry={() => {
+            refetchSkills();
+            refetchPreferences();
+          }}
         />
       </div>
     );
@@ -346,8 +265,8 @@ export function SkillsTab() {
       {/* Skills Grid */}
       <div className="grid gap-4 md:grid-cols-2">
         {filteredSkills.map((skill) => {
-          const Icon = skill.icon;
-          const isEnabled = skillStates[skill.id] ?? skill.defaultEnabled;
+          const Icon = ICON_MAP[skill.icon ?? ""] ?? SparklesIcon;
+          const isEnabled = skillStates[skill.type] ?? skill.defaultEnabled;
 
           return (
             <Card
@@ -385,7 +304,7 @@ export function SkillsTab() {
                   </div>
                   <Switch
                     checked={isEnabled}
-                    onCheckedChange={() => handleToggleSkill(skill.id, skill.isPremium)}
+                    onCheckedChange={() => handleToggleSkill(skill.type, skill.isPremium)}
                   />
                 </div>
               </CardContent>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Popover,
   PopoverContent,
@@ -13,8 +13,9 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@repo/design-system/components/ui/tabs";
-import { ShareIcon, CopyIcon, CheckIcon, GlobeIcon, LockIcon } from "lucide-react";
+import { ShareIcon, CopyIcon, CheckIcon, GlobeIcon, LockIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getTrpcClient } from "@/lib/trpc/vanilla";
 
 interface SharePopoverProps {
   sessionId: string;
@@ -31,10 +32,11 @@ export function SharePopover({
 }: SharePopoverProps) {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(isShared ? "public" : "private");
+  const [isLoading, setIsLoading] = useState(false);
 
   const getShareLink = () => {
     const origin = window.location.origin;
-    return shareId ? `${origin}/share/${shareId}` : `${origin}/chat/${sessionId}`;
+    return `${origin}/share/${shareId ?? sessionId}`;
   };
 
   const handleCopyLink = () => {
@@ -44,10 +46,31 @@ export function SharePopover({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-    onShareChange?.(value === "public");
-  };
+  const handleTabChange = useCallback(
+    async (value: string) => {
+      setActiveTab(value);
+      setIsLoading(true);
+
+      try {
+        const client = getTrpcClient();
+        if (value === "public") {
+          await client.sessions.shareSession.mutate({ sessionId });
+          toast.success("Session shared publicly");
+        } else {
+          await client.sessions.unshareSession.mutate({ sessionId });
+          toast.success("Session is now private");
+        }
+        onShareChange?.(value === "public");
+      } catch {
+        toast.error("Failed to update sharing settings");
+        // Revert tab on error
+        setActiveTab(value === "public" ? "private" : "public");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [sessionId, onShareChange]
+  );
 
   const handleShareOnX = () => {
     const text = encodeURIComponent(
@@ -75,11 +98,11 @@ export function SharePopover({
 
           <Tabs value={activeTab} onValueChange={handleTabChange}>
             <TabsList className="w-full">
-              <TabsTrigger value="public" className="flex-1 gap-1.5 text-xs">
+              <TabsTrigger value="public" className="flex-1 gap-1.5 text-xs" disabled={isLoading}>
                 <GlobeIcon className="h-3.5 w-3.5" />
                 Public Access
               </TabsTrigger>
-              <TabsTrigger value="private" className="flex-1 gap-1.5 text-xs">
+              <TabsTrigger value="private" className="flex-1 gap-1.5 text-xs" disabled={isLoading}>
                 <LockIcon className="h-3.5 w-3.5" />
                 Only Me
               </TabsTrigger>
@@ -89,38 +112,50 @@ export function SharePopover({
               <p className="text-xs text-muted-foreground">
                 Anyone with the link can view this conversation.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2"
-                onClick={handleCopyLink}
-              >
-                {copied ? (
-                  <CheckIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <CopyIcon className="h-3.5 w-3.5" />
-                )}
-                {copied ? "Copied!" : "Copy link"}
-              </Button>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={handleCopyLink}
+                >
+                  {copied ? (
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <CopyIcon className="h-3.5 w-3.5" />
+                  )}
+                  {copied ? "Copied!" : "Copy link"}
+                </Button>
+              )}
             </TabsContent>
 
             <TabsContent value="private" className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">
                 Only you can access this conversation.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2"
-                onClick={handleCopyLink}
-              >
-                {copied ? (
-                  <CheckIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <CopyIcon className="h-3.5 w-3.5" />
-                )}
-                {copied ? "Copied!" : "Copy link"}
-              </Button>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={handleCopyLink}
+                >
+                  {copied ? (
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  ) : (
+                    <CopyIcon className="h-3.5 w-3.5" />
+                  )}
+                  {copied ? "Copied!" : "Copy link"}
+                </Button>
+              )}
             </TabsContent>
           </Tabs>
         </div>

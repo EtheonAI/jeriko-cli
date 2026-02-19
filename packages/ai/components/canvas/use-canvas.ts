@@ -62,7 +62,7 @@ export interface CanvasState {
   onUnpin?: () => void;
 
   // View switching
-  availableViews: Set<CanvasViewType>;
+  availableViews: CanvasViewType[];
   onSelectView?: (view: CanvasViewType) => void;
 
   // Browser view
@@ -109,6 +109,13 @@ export interface CanvasState {
   slides?: string[];
   currentSlideIndex?: number;
 
+  // MapReduce view (Manus parity: parallel task tracking from mapReduce slice)
+  mapReduceTasks?: Array<{ id: string; label: string; status: string; progress?: number }>;
+  mapReduceOverallProgress?: number;
+
+  // AI Canvas view (Manus parity: generated images from generate_image tool)
+  aiCanvasContent?: string;
+
   // Preview (deployed app iframe)
   previewUrl?: string;
 
@@ -120,6 +127,14 @@ export interface CanvasState {
   currentStep?: number;
   totalSteps?: number;
   onTimelineChange?: (percentage: number) => void;
+
+  // Timeline event count (Manus parity: from timeline slice)
+  timelineEventCount?: number;
+
+  // Active tool call count (Manus parity: from toolCalls slice, for status badge)
+  activeToolCallCount?: number;
+  /** Tool call aggregate stats (total, success, error counts) */
+  toolCallStats?: { totalCalls: number; successCount: number; errorCount: number; cancelledCount: number };
 }
 
 // ============================================================================
@@ -143,6 +158,11 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   browser_console_view: "browser",
   browser_screenshot: "browser",
   browser_restart: "browser",
+  browser_save_image: "browser",
+  browser_upload_file: "browser",
+  browser_fill_form: "browser",
+  browser_find_keyword: "browser",
+  browser_close: "browser",
 
   // Shell tools
   shell_exec: "terminal",
@@ -157,6 +177,7 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   file_str_replace: "editor",
   file_find_in_content: "editor",
   file_find_by_name: "editor",
+  file_view: "editor",
 
   // Code execution
   code_execute: "terminal",
@@ -189,6 +210,21 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   webdev_push_schema: "webDevIDE",
   webdev_list_versions: "webDevIDE",
   webdev_add_feature: "webDevIDE",
+
+  // Image generation / processing -> AI Canvas
+  generate_image: "aiCanvas",
+  image_rmbg: "aiCanvas",
+
+  // Image reverse search -> Browser (shows search results)
+  image_search_upload: "browser",
+
+  // Slide authoring tools -> Slides view (not just slide_present)
+  slide_init: "slides",
+  slide_modify: "slides",
+  slide_add_notes: "slides",
+
+  // Parallel tasks -> MapReduce view
+  parallel_tasks: "mapReduce",
 };
 
 // ============================================================================
@@ -229,6 +265,17 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
     type: "browsing",
     label: `Restarting browser ${args.url ? `→ ${tryHostname(args.url as string)}` : ""}`,
   }),
+  browser_save_image: (args) => ({
+    type: "viewing",
+    label: `Saving image ${args.path ? `to ${fileName(args.path as string)}` : ""}`,
+  }),
+  browser_upload_file: () => ({ type: "clicking", label: "Uploading file" }),
+  browser_fill_form: () => ({ type: "typing", label: "Filling form" }),
+  browser_find_keyword: (args) => ({
+    type: "searching",
+    label: `Finding "${truncate((args.keyword as string) ?? "", 20)}"`,
+  }),
+  browser_close: () => ({ type: "viewing", label: "Closing browser" }),
   shell_exec: (args) => ({
     type: "typing",
     label: `Running ${truncate((args.command as string)?.split(" ")[0] ?? "", 20)}`,
@@ -257,21 +304,25 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
     type: "searching",
     label: "Finding files",
   }),
+  file_view: (args) => ({
+    type: "viewing",
+    label: `Viewing ${typeof args?.path === "string" ? args.path.split("/").pop() : "file"}`,
+  }),
   code_execute: () => ({
     type: "typing",
     label: "Executing code",
   }),
   info_search_web: (args) => ({
     type: "searching",
-    label: `Searching "${truncate(args.query as string, 30)}"`,
+    label: `Searching "${truncate(Array.isArray(args.queries) ? (args.queries as string[])[0] : (args.query as string), 30)}"`,
   }),
   web_search: (args) => ({
     type: "searching",
-    label: `Searching "${truncate(args.query as string, 30)}"`,
+    label: `Searching "${truncate(Array.isArray(args.queries) ? (args.queries as string[])[0] : (args.query as string), 30)}"`,
   }),
   search_web: (args) => ({
     type: "searching",
-    label: `Searching "${truncate(args.query as string, 30)}"`,
+    label: `Searching "${truncate(Array.isArray(args.queries) ? (args.queries as string[])[0] : (args.query as string), 30)}"`,
   }),
   deploy_expose_port: () => ({
     type: "browsing",
@@ -309,6 +360,16 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
   webdev_push_schema: () => ({ type: "creating" as ToolActionType, label: "Pushing database schema" }),
   webdev_list_versions: () => ({ type: "viewing" as ToolActionType, label: "Listing versions" }),
   webdev_add_feature: (args) => ({ type: "creating" as ToolActionType, label: `Adding ${(args.feature as string) || "feature"}` }),
+  // Image tools
+  generate_image: (args) => ({ type: "creating" as ToolActionType, label: `Generating ${truncate((args.prompt as string) || "image", 30)}` }),
+  image_rmbg: () => ({ type: "editing" as ToolActionType, label: "Removing background" }),
+  image_search_upload: () => ({ type: "searching" as ToolActionType, label: "Reverse image search" }),
+  // Slide authoring tools
+  slide_init: (args) => ({ type: "creating" as ToolActionType, label: `Creating presentation ${truncate((args.title as string) || "", 25)}` }),
+  slide_modify: () => ({ type: "editing" as ToolActionType, label: "Modifying slide" }),
+  slide_add_notes: () => ({ type: "editing" as ToolActionType, label: "Adding speaker notes" }),
+  // Parallel tasks
+  parallel_tasks: (args) => ({ type: "creating" as ToolActionType, label: `Running ${truncate((args.description as string) || "parallel tasks", 25)}` }),
 };
 
 // ============================================================================
@@ -456,7 +517,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
 
   // View switching — track which views have been activated + user override
-  const [availableViews, setAvailableViews] = useState<Set<CanvasViewType>>(new Set());
+  const [availableViews, setAvailableViews] = useState<CanvasViewType[]>([]);
   const [viewOverride, setViewOverride] = useState<CanvasViewType | null>(null);
   const prevAutoView = useRef<CanvasViewType | null>(null);
 
@@ -641,7 +702,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }, [messages]);
 
   // Count total tool calls and find the latest one
-  const { latestTool, totalToolCalls } = useMemo(() => {
+  const { latestTool, totalToolCalls, latestScreenshot } = useMemo(() => {
     let toolCount = 0;
 
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -678,6 +739,15 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
             toolPart.state === "input-available" ||
             toolPart.state === "approval-responded");
 
+        // FIX: Extract screenshot IN the same memo where isActive flips,
+        // so both the label state AND the screenshot update in the same render cycle.
+        // Previously, screenshot was extracted in a useEffect (one render later),
+        // causing "done" label to appear before the screenshot arrived.
+        let screenshot: string | undefined;
+        if (viewType === "browser" && toolPart.state === "output-available" && output) {
+          screenshot = extractScreenshot(output);
+        }
+
         // Count all tool calls across all messages for the step counter
         let total = 0;
         for (const m of messages) {
@@ -699,23 +769,40 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
             state: toolPart.state,
           },
           totalToolCalls: total,
+          latestScreenshot: screenshot,
         };
       }
     }
-    return { latestTool: null, totalToolCalls: 0 };
+    return { latestTool: null, totalToolCalls: 0, latestScreenshot: undefined };
     // CRITICAL: isStreaming must be in deps — isActive depends on it.
     // Without it, when streaming stops the memo won't recompute and
     // isWorking stays true forever (loading bar loop).
   }, [messages, isStreaming]);
 
+  // FIX 2.3: Extract streaming content from tool args during input-streaming state.
+  // AI SDK v6 populates `input` progressively via tool-input-delta events, so
+  // args.content grows as the stream progresses. This gives the editor real-time
+  // content updates instead of waiting for input-available.
+  const streamingEditorContent = useMemo(() => {
+    if (!latestTool || latestTool.state !== "input-streaming") return null;
+    if (
+      latestTool.toolName !== "file_write" &&
+      latestTool.toolName !== "create_file" &&
+      !(latestTool.toolName === "text_editor" &&
+        (latestTool.args?.command === "create" || latestTool.args?.command === "insert"))
+    ) {
+      return null;
+    }
+    const content = (latestTool.args?.content ?? latestTool.args?.file_text) as string | undefined;
+    return content || null;
+  }, [latestTool]);
+
   // Populate availableViews as tools activate new view types
   useEffect(() => {
     if (!latestTool || !latestTool.viewType || latestTool.viewType === "empty") return;
     setAvailableViews((prev) => {
-      if (prev.has(latestTool.viewType)) return prev;
-      const next = new Set(prev);
-      next.add(latestTool.viewType);
-      return next;
+      if (prev.includes(latestTool.viewType)) return prev;
+      return [...prev, latestTool.viewType];
     });
 
     // Track the auto-detected view type (but don't clear user override).
@@ -880,7 +967,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     // When a search tool is active but hasn't returned results yet, show loading state
     // immediately so the user sees activity during streaming (not just after)
     if (isSearchTool && !latestTool.output) {
-      const query = (latestTool.args?.query as string) ?? "";
+      const query = (Array.isArray(latestTool.args?.queries) ? (latestTool.args.queries as string[])[0] : (latestTool.args?.query as string)) ?? "";
       if (query) {
         setBrowserUrl(`search://${query}`);
       }
@@ -910,7 +997,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         const title = extractBrowserTitle(latestTool.output);
         if (title) setBrowserTitle(title);
         // Set URL to search query for display
-        const query = (latestTool.args?.query as string) ?? "";
+        const query = (Array.isArray(latestTool.args?.queries) ? (latestTool.args.queries as string[])[0] : (latestTool.args?.query as string)) ?? "";
         if (query) {
           setBrowserUrl(`search://${query}`);
         }
@@ -1183,7 +1270,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // Browser view data — use persistent state (populate when browser view available, not just active)
   // When pinned to a browser tool, extract data from the pinned tool directly
-  if (effectiveViewType === "browser" || availableViews.has("browser")) {
+  if (effectiveViewType === "browser" || availableViews.includes("browser")) {
     if (pinnedTool && pinnedTool.viewType === "browser") {
       // Pinned: extract browser data from the pinned tool
       state.browserUrl = extractBrowserUrl(pinnedTool.output, pinnedTool.args);
@@ -1196,8 +1283,21 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.browserLoading = false;
     } else {
       state.browserUrl = browserUrl;
-      state.browserLoading = (latestTool?.isWorking ?? false) || browserLoading;
-      state.browserScreenshot = browserScreenshot;
+      // Only show loading bar during actual page loads (navigate, restart, search),
+      // NOT during interaction tools (click, scroll, view, type, etc.).
+      // Real browsers don't show a loading bar when clicking a button.
+      const isNavigationTool =
+        latestTool?.toolName === "browser_navigate" ||
+        latestTool?.toolName === "browser_restart" ||
+        latestTool?.toolName === "info_search_web" ||
+        latestTool?.toolName === "web_search" ||
+        latestTool?.toolName === "search_web";
+      state.browserLoading =
+        ((latestTool?.isWorking && isNavigationTool) ?? false) || browserLoading;
+      // FIX 2.1: Prefer latestScreenshot (extracted in the same memo where isWorking
+      // flips to false) so the canvas updates screenshot in the SAME render cycle.
+      // Falls back to browserScreenshot state for user-navigated / history screenshots.
+      state.browserScreenshot = latestScreenshot ?? browserScreenshot;
       state.browserContent = browserContent;
       state.browserTitle = browserTitle;
       state.browserSearchResults = browserSearchResults;
@@ -1213,7 +1313,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // Terminal view data — populate when terminal is available (for view switching)
   // Per-session: Manus uses named PTY sessions; we track each session separately.
-  if (effectiveViewType === "terminal" || availableViews.has("terminal")) {
+  if (effectiveViewType === "terminal" || availableViews.includes("terminal")) {
     if (pinnedTool && pinnedTool.viewType === "terminal" && pinnedTool.output) {
       // Pinned: extract terminal output from the pinned tool
       const pinOutput = pinnedTool.output as Record<string, unknown>;
@@ -1237,7 +1337,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }
 
   // Editor view data — simple Manus-style: one file at a time, no tree/tabs
-  if (effectiveViewType === "editor" || availableViews.has("editor")) {
+  if (effectiveViewType === "editor" || availableViews.includes("editor")) {
     const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
 
     if (pinnedTool && pinnedTool.viewType === "editor") {
@@ -1261,11 +1361,23 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         allPaths[allPaths.length - 1] ??
         null;
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        // FIX 2.3: When agent is streaming a file write, show progressive content
+        // from tool args instead of the stale accumulated content.
+        state.activeFileContent =
+          (streamingEditorContent && agentPath === activePath)
+            ? streamingEditorContent
+            : allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
         state.fileTabs = [{ id: "0", name: activePath.split("/").pop() || activePath, path: activePath, isActive: true }];
       }
       state.allFileContents = allFileContents;
+    } else if (streamingEditorContent) {
+      // FIX 2.3: Show streaming content even before allFileContents is populated
+      state.activeFileContent = streamingEditorContent;
+      state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
+      if (agentPath) {
+        state.fileTabs = [{ id: "0", name: agentPath.split("/").pop() || agentPath, path: agentPath, isActive: true }];
+      }
     } else if (
       (activeTool?.toolName === "file_write" && activeTool?.args?.content) ||
       (activeTool?.toolName === "text_editor" && activeTool?.args?.command === "create" && activeTool?.args?.file_text)
@@ -1280,7 +1392,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }
 
   // Code view data — populate when code is available (for view switching)
-  if (effectiveViewType === "code" || availableViews.has("code")) {
+  if (effectiveViewType === "code" || availableViews.includes("code")) {
     const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
 
     if (pinnedTool && pinnedTool.viewType === "code") {
@@ -1317,7 +1429,11 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
         null;
 
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        // FIX 2.3: Streaming content override for code view
+        state.activeFileContent =
+          (streamingEditorContent && agentPath === activePath)
+            ? streamingEditorContent
+            : allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
 
@@ -1337,6 +1453,14 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
       state.allFileContents = allFileContents;
+    } else if (streamingEditorContent) {
+      // FIX 2.3: Show streaming content even before allFileContents is populated (code view)
+      state.activeFileContent = streamingEditorContent;
+      state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
+      if (agentPath) {
+        state.fileTabs = [{ id: "0", name: agentPath.split("/").pop() || agentPath, path: agentPath, isActive: true }];
+        state.fileTree = buildFileTree([agentPath]);
+      }
     } else if (
       (activeTool?.toolName === "file_write" && activeTool?.args?.content) ||
       (activeTool?.toolName === "text_editor" && activeTool?.args?.command === "create" && activeTool?.args?.file_text)
@@ -1349,7 +1473,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   }
 
   // WebDev IDE view data — reuse file tree + add preview URL
-  if (effectiveViewType === "webDevIDE" || availableViews.has("webDevIDE")) {
+  if (effectiveViewType === "webDevIDE" || availableViews.includes("webDevIDE")) {
     if (Object.keys(allFileContents).length > 0) {
       const allPaths = Object.keys(allFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));

@@ -23,35 +23,40 @@ const COLORS = [
 ];
 
 export const POST = async () => {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({
+      headers: headersList,
+    });
 
-  if (!session?.user) {
-    return new Response("Unauthorized", { status: 401 });
+    if (!session?.user) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    // Use user ID as orgId for now (can be updated when organizations are fully implemented)
+    const orgId = session.user.id;
+
+    // Liveblocks enforces a 2048-byte limit on userInfo.
+    // Only send essential fields. Skip avatar if it's a data URI or too long.
+    const rawAvatar = session.user.image;
+    const avatar =
+      typeof rawAvatar === "string" &&
+      rawAvatar.length <= 500 &&
+      !rawAvatar.startsWith("data:")
+        ? rawAvatar
+        : undefined;
+
+    return authenticate({
+      userId: session.user.id,
+      orgId,
+      userInfo: {
+        name: (session.user.name ?? session.user.email ?? "User").slice(0, 100),
+        avatar,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
+      },
+    });
+  } catch {
+    // Liveblocks auth failed (invalid/expired key, network error, etc.)
+    return new Response("Collaboration auth unavailable", { status: 503 });
   }
-
-  // Use user ID as orgId for now (can be updated when organizations are fully implemented)
-  const orgId = session.user.id;
-
-  // Liveblocks enforces a 2048-byte limit on userInfo.
-  // Only send essential fields. Skip avatar if it's a data URI or too long.
-  const rawAvatar = session.user.image;
-  const avatar =
-    typeof rawAvatar === "string" &&
-    rawAvatar.length <= 500 &&
-    !rawAvatar.startsWith("data:")
-      ? rawAvatar
-      : undefined;
-
-  return authenticate({
-    userId: session.user.id,
-    orgId,
-    userInfo: {
-      name: (session.user.name ?? session.user.email ?? "User").slice(0, 100),
-      avatar,
-      color: COLORS[Math.floor(Math.random() * COLORS.length)]!,
-    },
-  });
 };

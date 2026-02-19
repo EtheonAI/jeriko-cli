@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAppSelector } from "@/lib/store/hooks";
 import {
   selectLatestCanvasToolEvent,
@@ -10,11 +10,34 @@ import {
   selectAllFileContents,
   selectTerminalSessions,
   selectBrowserHistory,
+  selectLatestBrowserScreenshot,
   selectAvailableViews,
   selectLatestSearchResults,
   selectWebdevPreviewUrl,
   selectSessionMetadata,
+  // Domain slice selectors — Manus parity: rich feature state from dedicated slices
+  selectSlideEditorSlides,
+  selectSlideEditorCurrentIndex,
+  selectSlideEditorIsPresentationMode,
+  selectMapReduceCurrentTask,
+  selectMapReduceOverallProgress,
+  selectWebDevProject,
+  selectLatestGeneratedImage,
+  // CodeViewer slice selectors — Manus parity: authoritative file data source
+  selectCodeViewerFileDataSource,
+  selectCodeViewerFileTabs,
+  selectCodeViewerActiveTabId,
+  selectCodeViewerDirectoryList,
+  // AgentWorkspace slice selectors — Manus parity: sidebar type → view fallback
+  selectAgentWorkspaceSidebarType,
+  SIDEBAR_TO_VIEW,
+  // Timeline slice selectors — Manus parity: event-based scrubber data
+  selectTimelineEvents,
+  // ToolCalls slice selectors — Manus parity: active tool status indicators
+  selectActiveToolCallIds,
+  selectToolCallStats,
   TOOL_VIEW_MAP,
+  SEARCH_TOOLS,
   type CanvasViewType,
 } from "@/lib/store/selectors/canvas.selectors";
 import type { CanvasState, ToolAction, ToolActionType } from "@repo/ai/components/canvas/use-canvas";
@@ -73,6 +96,11 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
   browser_console_view: () => ({ type: "viewing", label: "Viewing console output" }),
   browser_screenshot: () => ({ type: "viewing", label: "Taking screenshot" }),
   browser_restart: (args) => ({ type: "browsing", label: `Restarting browser ${args.url ? `→ ${tryHostname(args.url as string)}` : ""}` }),
+  browser_save_image: (args) => ({ type: "viewing", label: `Saving image ${args.path ? `to ${fileName(args.path as string)}` : ""}` }),
+  browser_upload_file: () => ({ type: "clicking", label: "Uploading file" }),
+  browser_fill_form: () => ({ type: "typing", label: "Filling form" }),
+  browser_find_keyword: (args) => ({ type: "searching", label: `Finding "${truncate((args.keyword as string) ?? "", 20)}"` }),
+  browser_close: () => ({ type: "viewing", label: "Closing browser" }),
   shell_exec: (args) => ({ type: "typing", label: `Running ${truncate((args.command as string)?.split(" ")[0] ?? "", 20)}` }),
   shell_view: () => ({ type: "viewing", label: "Viewing terminal" }),
   shell_wait: () => ({ type: "viewing", label: "Waiting for process" }),
@@ -101,6 +129,13 @@ const TOOL_ACTION_MAP: Record<string, (args: Record<string, unknown>) => ToolAct
   webdev_push_schema: () => ({ type: "creating" as ToolActionType, label: "Pushing database schema" }),
   webdev_list_versions: () => ({ type: "viewing" as ToolActionType, label: "Listing versions" }),
   webdev_add_feature: (args) => ({ type: "creating" as ToolActionType, label: `Adding ${(args.feature as string) || "feature"}` }),
+  generate_image: (args) => ({ type: "creating" as ToolActionType, label: `Generating ${(args.prompt as string)?.slice(0, 30) || "image"}` }),
+  image_rmbg: () => ({ type: "editing" as ToolActionType, label: "Removing background" }),
+  image_search_upload: () => ({ type: "searching" as ToolActionType, label: "Reverse image search" }),
+  slide_init: (args) => ({ type: "creating" as ToolActionType, label: `Creating presentation ${(args.title as string)?.slice(0, 25) || ""}` }),
+  slide_modify: () => ({ type: "editing" as ToolActionType, label: "Modifying slide" }),
+  slide_add_notes: () => ({ type: "editing" as ToolActionType, label: "Adding speaker notes" }),
+  parallel_tasks: (args) => ({ type: "creating" as ToolActionType, label: `Running ${(args.description as string)?.slice(0, 25) || "parallel tasks"}` }),
 };
 
 // ============================================================================
@@ -159,6 +194,7 @@ function buildFileTree(paths: string[]): FileNode[] {
 
 export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): CanvasState {
   // ── Redux reads via selectors (Manus: useSelector + selectors) ──
+  // websocket.toolEvents — raw event log (browser, terminal, editor, code, webDevIDE)
   const latestTool = useAppSelector((state) => selectLatestCanvasToolEvent(state, sessionId));
   const totalToolCalls = useAppSelector((state) => selectCanvasToolCount(state, sessionId));
   const allToolCallIds = useAppSelector((state) => selectCanvasToolCallIds(state, sessionId));
@@ -166,15 +202,54 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   const terminalData = useAppSelector((state) => selectTerminalSessions(state, sessionId));
   const browserHistoryFromRedux = useAppSelector((state) => selectBrowserHistory(state, sessionId));
   const availableViewsFromRedux = useAppSelector((state) => selectAvailableViews(state, sessionId));
+  const latestBrowserScreenshot = useAppSelector((state) => selectLatestBrowserScreenshot(state, sessionId));
   const searchResults = useAppSelector((state) => selectLatestSearchResults(state, sessionId));
   const webdevPreviewUrl = useAppSelector((state) => selectWebdevPreviewUrl(state, sessionId));
   const sessionMeta = useAppSelector((state) => selectSessionMetadata(state, sessionId));
+
+  // Domain slice reads — Manus parity: aggregated feature state from dedicated slices
+  // (populated by useSSEToEntities, consumed HERE for rendering)
+  const slideEditorSlides = useAppSelector(selectSlideEditorSlides);
+  const slideEditorCurrentIndex = useAppSelector(selectSlideEditorCurrentIndex);
+  const slideEditorIsPresentationMode = useAppSelector(selectSlideEditorIsPresentationMode);
+  const mapReduceCurrentTask = useAppSelector(selectMapReduceCurrentTask);
+  const mapReduceOverallProgress = useAppSelector(selectMapReduceOverallProgress);
+  const webDevProject = useAppSelector(selectWebDevProject);
+  const aiCanvasGeneratedImage = useAppSelector((state) => selectLatestGeneratedImage(state, sessionId));
+
+  // CodeViewer slice — Manus parity: authoritative file data source (dispatch by useSSEToEntities)
+  const codeViewerFileDataSource = useAppSelector(selectCodeViewerFileDataSource);
+  const codeViewerFileTabs = useAppSelector(selectCodeViewerFileTabs);
+  const codeViewerActiveTabId = useAppSelector(selectCodeViewerActiveTabId);
+  const codeViewerDirectoryList = useAppSelector(selectCodeViewerDirectoryList);
+
+  // AgentWorkspace slice — Manus parity: sidebar type drives canvas view as fallback
+  const agentWorkspaceSidebarType = useAppSelector(selectAgentWorkspaceSidebarType);
+
+  // Timeline slice — Manus parity: event-based scrubber data
+  const timelineEvents = useAppSelector((state) => selectTimelineEvents(state, sessionId));
+
+  // ToolCalls slice — Manus parity: active tool status indicators
+  const activeToolCallIds = useAppSelector(selectActiveToolCallIds);
+  const toolCallStats = useAppSelector(selectToolCallStats);
 
   // ── Local UI state (not server data — user interactions only) ──
   const [viewOverride, setViewOverride] = useState<CanvasViewType | null>(null);
   const [pinnedToolCallId, setPinnedToolCallId] = useState<string | undefined>();
   const [userSelectedPath, setUserSelectedPath] = useState<string | null>(null);
   const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
+  // Terminal session selection override (user-driven)
+  const [activeTerminalSessionOverride, setActiveTerminalSessionOverride] = useState<string | null>(null);
+
+  // Reset terminal override when session changes
+  const prevSessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    if (prevSessionIdRef.current !== sessionId) {
+      setActiveTerminalSessionOverride(null);
+      prevSessionIdRef.current = sessionId;
+    }
+  }, [sessionId]);
+
   // Browser navigation state (user-driven, persists across tool calls)
   const [browserUrlOverride, setBrowserUrlOverride] = useState<string | undefined>();
   const [browserScreenshotOverride, setBrowserScreenshotOverride] = useState<string | undefined>();
@@ -190,9 +265,16 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   // ── Derived values ──
   const latestToolViewType = latestTool ? (TOOL_VIEW_MAP[latestTool.toolName] as CanvasViewType | undefined) : undefined;
   const pinnedViewType = pinnedTool ? (TOOL_VIEW_MAP[pinnedTool.toolName] as CanvasViewType | undefined) : undefined;
-  const effectiveViewType: CanvasViewType = pinnedViewType ?? viewOverride ?? latestToolViewType ?? "empty";
+  // Manus parity: agentWorkspace.sidebarType serves as fallback when no tool has been called
+  const sidebarViewType = agentWorkspaceSidebarType ? (SIDEBAR_TO_VIEW[agentWorkspaceSidebarType] as CanvasViewType | undefined) : undefined;
+  const effectiveViewType: CanvasViewType = pinnedViewType ?? viewOverride ?? latestToolViewType ?? sidebarViewType ?? "empty";
 
   const isActive = isStreaming && latestTool && (latestTool.state === "pending" || latestTool.state === "running");
+  // Browser-specific active state — only true when the latest tool is a BROWSER tool
+  // that's still executing. Prevents browser loading bar when terminal/editor tools run.
+  const isBrowserToolActive = isActive && TOOL_VIEW_MAP[latestTool!.toolName] === "browser";
+  // Check if the latest tool is a search tool that's still running
+  const isSearchRunning = isActive && SEARCH_TOOLS.has(latestTool!.toolName);
   const latestAction = latestTool ? TOOL_ACTION_MAP[latestTool.toolName]?.(latestTool.input) : undefined;
 
   // Merge Redux browser state with local overrides (user navigation > agent state)
@@ -201,14 +283,28 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   const browserTitle = browserTitleOverride ?? latestTool?.title;
   const browserContent = browserContentOverride ?? latestTool?.content;
 
+  // Streaming editor content — progressive file_write/create during input-streaming (entity state "pending")
+  const streamingEditorContent = (() => {
+    if (!latestTool || latestTool.state !== "pending") return null;
+    if (
+      latestTool.toolName !== "file_write" &&
+      latestTool.toolName !== "create_file" &&
+      !(
+        latestTool.toolName === "text_editor" &&
+        (latestTool.input?.command === "create" || latestTool.input?.command === "insert")
+      )
+    )
+      return null;
+    return ((latestTool.input?.content ?? latestTool.input?.file_text) as string) || null;
+  })();
+
   // ── Callbacks ──
   const onSelectView = useCallback((view: CanvasViewType) => setViewOverride(view), []);
   const onPinToolCall = useCallback((id: string) => setPinnedToolCallId(id), []);
   const onUnpin = useCallback(() => setPinnedToolCallId(undefined), []);
 
-  const onSelectTerminalSession = useCallback((_sessionId: string) => {
-    // Terminal session selection is handled by the view component
-    // The selector already provides the active session
+  const onSelectTerminalSession = useCallback((termSessionId: string) => {
+    setActiveTerminalSessionOverride(termSessionId);
   }, []);
 
   const onTimelineChange = useCallback((percentage: number) => {
@@ -356,7 +452,12 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
           return idx >= 0 && allToolCallIds.length > 0 ? Math.round(((idx + 1) / allToolCallIds.length) * 100) : 100;
         })()
       : isActive ? undefined : 100,
+    // Manus parity: timeline event count enriches the scrubber UI
+    timelineEventCount: timelineEvents.length,
     onTimelineChange,
+    // Manus parity: active tool call count for status indicator badges
+    activeToolCallCount: activeToolCallIds.length,
+    toolCallStats,
     sandboxId: sessionMeta.sandboxId,
     nekoUrl: sessionMeta.nekoUrl,
     streamUrl: sessionMeta.streamUrl,
@@ -368,7 +469,7 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   };
 
   // Browser view data
-  if (effectiveViewType === "browser" || availableViewsFromRedux.has("browser")) {
+  if (effectiveViewType === "browser" || availableViewsFromRedux.includes("browser")) {
     if (pinnedTool && TOOL_VIEW_MAP[pinnedTool.toolName] === "browser") {
       state.browserUrl = pinnedTool.url;
       state.browserScreenshot = pinnedTool.screenshot;
@@ -376,12 +477,18 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       state.browserTitle = pinnedTool.title;
       state.browserLoading = false;
     } else {
-      state.browserUrl = browserUrl;
-      state.browserScreenshot = browserScreenshot;
-      state.browserContent = browserContent;
-      state.browserTitle = browserTitle;
-      state.browserLoading = (isActive ?? false) || browserLoading;
-      state.browserSearchResults = searchResults;
+      // Use latest tool's data, falling back to the most recent completed browser
+      // event with a screenshot. This prevents losing screenshots when tools chain
+      // rapidly (e.g., navigate → click → view — click has no screenshot yet).
+      state.browserUrl = browserUrl ?? latestBrowserScreenshot.url;
+      state.browserScreenshot = browserScreenshot ?? latestBrowserScreenshot.screenshot;
+      state.browserContent = browserContent ?? latestBrowserScreenshot.content;
+      state.browserTitle = browserTitle ?? latestBrowserScreenshot.title;
+      // Loading only when a BROWSER tool is active — not terminal/editor tools
+      state.browserLoading = (isBrowserToolActive ?? false) || browserLoading;
+      // When a new search is running, DON'T show stale results from previous search.
+      // Instead show "Searching..." placeholder (loading=true + search:// URL).
+      state.browserSearchResults = isSearchRunning ? undefined : searchResults;
     }
     state.canGoBack = canGoBack;
     state.canGoForward = canGoForward;
@@ -393,7 +500,7 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   }
 
   // Terminal view data
-  if (effectiveViewType === "terminal" || availableViewsFromRedux.has("terminal")) {
+  if (effectiveViewType === "terminal" || availableViewsFromRedux.includes("terminal")) {
     if (pinnedTool && (pinnedTool.toolName.startsWith("shell_") || pinnedTool.toolName === "code_execute") && pinnedTool.output) {
       const cmd = (pinnedTool.input?.command as string) ?? "";
       const rawOut = typeof pinnedTool.output === "string" ? pinnedTool.output : ((pinnedTool.output.stdout ?? JSON.stringify(pinnedTool.output, null, 2)) as string);
@@ -401,8 +508,9 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       state.terminalOutput = cmd ? [`$ ${cmd}`, ...outStr.split("\n")] : outStr.split("\n");
       state.activeTerminalSession = (pinnedTool.input?.id as string) || "default";
     } else {
-      state.terminalOutput = terminalData.sessions[terminalData.activeSession] ?? [];
-      state.activeTerminalSession = terminalData.activeSession;
+      const effectiveActiveSession = activeTerminalSessionOverride ?? terminalData.activeSession;
+      state.terminalOutput = terminalData.sessions[effectiveActiveSession] ?? [];
+      state.activeTerminalSession = effectiveActiveSession;
     }
     state.terminalSessions = terminalData.sessions;
     state.terminalSessionIds = terminalData.sessionOrder;
@@ -410,8 +518,13 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   }
 
   // Editor view data (Manus FileToolView: simple filename header + read-only syntax highlighting)
-  if (effectiveViewType === "editor" || availableViewsFromRedux.has("editor")) {
+  // Manus parity: prefer codeViewer domain slice data when available, fall back to websocket selectors
+  if (effectiveViewType === "editor" || availableViewsFromRedux.includes("editor")) {
     const agentPath = (activeTool?.input?.path ?? activeTool?.input?.file) as string | undefined;
+    // Merge codeViewer slice data with websocket-derived data (codeViewer is authoritative)
+    const mergedFileContents = Object.keys(codeViewerFileDataSource).length > 0
+      ? { ...allFileContents, ...codeViewerFileDataSource }
+      : allFileContents;
 
     if (pinnedTool && TOOL_VIEW_MAP[pinnedTool.toolName] === "editor") {
       const pinnedPath = (pinnedTool.input?.path ?? pinnedTool.input?.file) as string | undefined;
@@ -421,15 +534,24 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
         state.activeFileLanguage = pinnedPath ? getLanguage(pinnedPath) : undefined;
         if (pinnedPath) state.fileTabs = [{ id: "0", name: pinnedPath.split("/").pop() || pinnedPath, path: pinnedPath, isActive: true }];
       }
-    } else if (Object.keys(allFileContents).length > 0) {
-      const allPaths = Object.keys(allFileContents);
-      const activePath = (agentPath && allFileContents[agentPath] ? agentPath : null) ?? allPaths[allPaths.length - 1] ?? null;
+    } else if (Object.keys(mergedFileContents).length > 0) {
+      const allPaths = Object.keys(mergedFileContents);
+      // Prefer codeViewer active tab, then agent path, then latest file
+      const codeViewerActivePath = codeViewerActiveTabId && mergedFileContents[codeViewerActiveTabId] ? codeViewerActiveTabId : null;
+      const activePath = codeViewerActivePath ?? (agentPath && mergedFileContents[agentPath] ? agentPath : null) ?? allPaths[allPaths.length - 1] ?? null;
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        // Use streaming content when the active path matches the streaming tool's target
+        state.activeFileContent = (streamingEditorContent && agentPath === activePath)
+          ? streamingEditorContent : mergedFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
         state.fileTabs = [{ id: "0", name: activePath.split("/").pop() || activePath, path: activePath, isActive: true }];
       }
-      state.allFileContents = allFileContents;
+      state.allFileContents = mergedFileContents;
+    } else if (streamingEditorContent) {
+      // No allFileContents yet but streaming is active — show progressive content
+      state.activeFileContent = streamingEditorContent;
+      state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
+      if (agentPath) state.fileTabs = [{ id: "0", name: agentPath.split("/").pop() || agentPath, path: agentPath, isActive: true }];
     } else if (activeTool?.toolName === "file_write" && activeTool?.input?.content) {
       state.activeFileContent = activeTool.input.content as string;
       state.activeFileLanguage = agentPath ? getLanguage(agentPath) : undefined;
@@ -437,51 +559,107 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
     }
   }
 
-  // Code view data
-  if (effectiveViewType === "code" || availableViewsFromRedux.has("code")) {
+  // Code view data (Manus parity: prefer codeViewer slice for tabs + directory tree)
+  if (effectiveViewType === "code" || availableViewsFromRedux.includes("code")) {
     const agentPath = (activeTool?.input?.path ?? activeTool?.input?.file) as string | undefined;
+    const mergedFileContents = Object.keys(codeViewerFileDataSource).length > 0
+      ? { ...allFileContents, ...codeViewerFileDataSource }
+      : allFileContents;
 
-    if (Object.keys(allFileContents).length > 0) {
-      const allPaths = Object.keys(allFileContents);
+    if (Object.keys(mergedFileContents).length > 0) {
+      const allPaths = Object.keys(mergedFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
+      const codeViewerActivePath = codeViewerActiveTabId && mergedFileContents[codeViewerActiveTabId] ? codeViewerActiveTabId : null;
       const activePath =
-        (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
-        (agentPath && allFileContents[agentPath] ? agentPath : null) ??
+        (userSelectedPath && mergedFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        codeViewerActivePath ??
+        (agentPath && mergedFileContents[agentPath] ? agentPath : null) ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ?? null;
 
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        state.activeFileContent = mergedFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
-      state.fileTree = buildFileTree(allPaths);
-      state.fileTabs = openPaths.map((p, i) => ({ id: String(i), name: p.split("/").pop() || p, path: p, isActive: p === activePath }));
+      // Prefer codeViewer directory tree if populated, else build from file paths
+      state.fileTree = codeViewerDirectoryList.length > 0
+        ? codeViewerDirectoryList.map((d) => ({ name: d.name, path: d.path, type: d.type, children: d.children?.map((c) => ({ name: c.name, path: c.path, type: c.type })) }))
+        : buildFileTree(allPaths);
+      // Prefer codeViewer tabs if populated, else derive from file paths
+      if (codeViewerFileTabs.length > 0) {
+        state.fileTabs = codeViewerFileTabs
+          .filter((t) => !closedTabs.has(t.path))
+          .map((t) => ({ id: t.id, name: t.name, path: t.path, isActive: t.id === codeViewerActiveTabId }));
+      } else {
+        state.fileTabs = openPaths.map((p, i) => ({ id: String(i), name: p.split("/").pop() || p, path: p, isActive: p === activePath }));
+      }
       state.onSelectFile = onSelectFile;
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
-      state.allFileContents = allFileContents;
+      state.allFileContents = mergedFileContents;
     }
   }
 
-  // WebDev IDE view data
-  if (effectiveViewType === "webDevIDE" || availableViewsFromRedux.has("webDevIDE")) {
-    if (Object.keys(allFileContents).length > 0) {
-      const allPaths = Object.keys(allFileContents);
+  // WebDev IDE view data (Manus parity: codeViewer slice for file state)
+  if (effectiveViewType === "webDevIDE" || availableViewsFromRedux.includes("webDevIDE")) {
+    const mergedFileContents = Object.keys(codeViewerFileDataSource).length > 0
+      ? { ...allFileContents, ...codeViewerFileDataSource }
+      : allFileContents;
+
+    if (Object.keys(mergedFileContents).length > 0) {
+      const allPaths = Object.keys(mergedFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
+      const codeViewerActivePath = codeViewerActiveTabId && mergedFileContents[codeViewerActiveTabId] ? codeViewerActiveTabId : null;
       const activePath =
-        (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        (userSelectedPath && mergedFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        codeViewerActivePath ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ?? null;
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        state.activeFileContent = mergedFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
-      state.fileTree = buildFileTree(allPaths);
-      state.fileTabs = openPaths.map((p, i) => ({ id: String(i), name: p.split("/").pop() || p, path: p, isActive: p === activePath }));
+      state.fileTree = codeViewerDirectoryList.length > 0
+        ? codeViewerDirectoryList.map((d) => ({ name: d.name, path: d.path, type: d.type, children: d.children?.map((c) => ({ name: c.name, path: c.path, type: c.type })) }))
+        : buildFileTree(allPaths);
+      if (codeViewerFileTabs.length > 0) {
+        state.fileTabs = codeViewerFileTabs
+          .filter((t) => !closedTabs.has(t.path))
+          .map((t) => ({ id: t.id, name: t.name, path: t.path, isActive: t.id === codeViewerActiveTabId }));
+      } else {
+        state.fileTabs = openPaths.map((p, i) => ({ id: String(i), name: p.split("/").pop() || p, path: p, isActive: p === activePath }));
+      }
       state.onSelectFile = onSelectFile;
       state.onSelectTab = onSelectTab;
       state.onCloseTab = onCloseTab;
     }
-    state.previewUrl = webdevPreviewUrl;
-    state.allFileContents = allFileContents;
+    // Prefer webDev slice project previewUrl over raw tool event extraction
+    state.previewUrl = webDevProject?.previewUrl ?? webdevPreviewUrl;
+    state.allFileContents = Object.keys(codeViewerFileDataSource).length > 0
+      ? { ...allFileContents, ...codeViewerFileDataSource }
+      : allFileContents;
+  }
+
+  // ── Domain slice data (Manus parity: aggregated feature state) ──
+
+  // Slides — from slideEditor slice (populated by useSSEToEntities on slide_present)
+  if (slideEditorSlides.length > 0 || slideEditorIsPresentationMode) {
+    state.slides = slideEditorSlides.map((s) => s.thumbnail ?? "");
+    state.currentSlideIndex = slideEditorCurrentIndex;
+  }
+
+  // MapReduce — from mapReduce slice (populated by useSSEToEntities from message metadata)
+  if (mapReduceCurrentTask) {
+    state.mapReduceTasks = [{
+      id: mapReduceCurrentTask.id,
+      label: mapReduceCurrentTask.name,
+      status: mapReduceCurrentTask.status,
+      progress: mapReduceCurrentTask.progress,
+    }];
+    state.mapReduceOverallProgress = mapReduceOverallProgress;
+  }
+
+  // AI Canvas — generated image from generate_image tool output
+  if (aiCanvasGeneratedImage) {
+    state.aiCanvasContent = aiCanvasGeneratedImage;
   }
 
   return state;

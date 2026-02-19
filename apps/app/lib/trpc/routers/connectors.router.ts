@@ -10,6 +10,7 @@ import {
   desc,
   sql,
   isNull,
+  inArray,
 } from "@repo/database";
 import { createId } from "@paralleldrive/cuid2";
 import { TRPCError } from "@trpc/server";
@@ -1025,6 +1026,74 @@ export const connectorsRouter = createTRPCRouter({
         .limit(1);
 
       return { status: connector?.status ?? "not_found" };
+    }),
+
+  // List connector definitions filtered by categories
+  listByCategory: protectedProcedure
+    .input(
+      z.object({
+        categories: z.array(
+          z.enum(["communication", "storage", "productivity", "development", "crm", "analytics", "other"])
+        ).min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      await ensureDefinitionsSeeded();
+
+      const definitions = await db
+        .select()
+        .from(connectorDefinitions)
+        .where(
+          and(
+            eq(connectorDefinitions.isEnabled, true),
+            inArray(connectorDefinitions.category, input.categories)
+          )
+        )
+        .orderBy(connectorDefinitions.category, connectorDefinitions.name);
+
+      return definitions;
+    }),
+
+  // Execute a tool via connector service (Composio)
+  executeTool: protectedProcedure
+    .input(
+      z.object({
+        toolName: z.string(),
+        arguments: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const connectorServiceUrl = process.env.CONNECTOR_SERVICE_URL || "http://localhost:4009";
+
+      let response: Response;
+      try {
+        response = await fetch(`${connectorServiceUrl}/tools/execute`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": ctx.user.id,
+          },
+          body: JSON.stringify({
+            toolName: input.toolName,
+            arguments: input.arguments ?? {},
+          }),
+        });
+      } catch {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Connector service is not available",
+        });
+      }
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new TRPCError({
+          code: response.status === 404 ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR",
+          message: (error as { error?: string }).error || "Failed to execute tool",
+        });
+      }
+
+      return (await response.json()) as Record<string, unknown>;
     }),
 
   // Get sync history

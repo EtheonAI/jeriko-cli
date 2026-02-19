@@ -1,5 +1,11 @@
 /**
- * Message tools — Communication with the user
+ * Message tools — Communication with the user.
+ *
+ * Manus parity: message_notify_user accepts optional `type` param:
+ *   - info: progress update (default)
+ *   - result: task complete — signals loop termination
+ *
+ * message_ask_user: question that waits for user response.
  */
 
 import { tool } from 'ai';
@@ -9,9 +15,13 @@ import { uploadAttachments } from './executor/sandbox-executor.js';
 
 export function createMessageNotifyUserTool(ctx: ToolContext) {
   return tool({
-    description: `Send a message to user without requiring a response. Use for acknowledging receipt of messages, providing progress updates, reporting task completion, or explaining changes in approach.`,
+    description: `Send a message to user without requiring a response. Use for progress updates (type=info) or signaling task completion with final deliverables (type=result). When type=result, attach all created files.`,
     inputSchema: z.object({
       text: z.string().describe('Message text to display to user'),
+      type: z
+        .enum(['info', 'result'])
+        .default('info')
+        .describe("Message type: info=progress update (default), result=task complete (delivers final output)"),
       attachments: z
         .union([z.string(), z.array(z.string())])
         .optional()
@@ -19,6 +29,7 @@ export function createMessageNotifyUserTool(ctx: ToolContext) {
     }),
     execute: async (params) => {
       const { text } = params;
+      const messageType = params.type || 'info';
       const rawAttachments = params.attachments;
       const attachmentList = rawAttachments
         ? Array.isArray(rawAttachments) ? rawAttachments : [rawAttachments]
@@ -30,15 +41,18 @@ export function createMessageNotifyUserTool(ctx: ToolContext) {
         sessionId: ctx.sessionId,
         role: 'assistant',
         content: text,
-        contentType: 'info',
-        metadata: { attachments: uploadedAttachments },
+        contentType: messageType,
+        metadata: {
+          attachments: uploadedAttachments,
+          ...(messageType === 'result' && { isTaskComplete: true }),
+        },
       });
 
       await ctx.ws.emit(ctx.sessionId, {
         type: 'message',
         role: 'assistant',
         content: text,
-        messageType: 'info',
+        messageType,
         attachments: uploadedAttachments,
         timestamp: Date.now(),
       });
@@ -47,8 +61,11 @@ export function createMessageNotifyUserTool(ctx: ToolContext) {
       // via the SSE stream (tool-output-available event).
       // Manus delivers files via WebSocket; we deliver via tool output.
       return {
-        status: 'sent',
-        message: 'Message delivered to user',
+        status: messageType === 'result' ? 'complete' : 'sent',
+        message: messageType === 'result'
+          ? 'Task complete. Results delivered to user.'
+          : 'Message delivered to user',
+        ...(messageType === 'result' && { isTaskComplete: true }),
         ...(uploadedAttachments.length > 0 && {
           attachments: uploadedAttachments.map((a) => ({
             name: a.name,

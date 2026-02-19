@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Provider, useDispatch, useSelector } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
 import scheduledTasksReducer from "@/lib/store/slices/scheduledTasks.slice";
+import { apiSlice } from "@/lib/store/api/api.slice";
 import { CreateAutomationDialog } from "../create-automation-dialog";
 
 // Mock store hooks to avoid @repo/auth/client import chain
@@ -11,74 +12,86 @@ vi.mock("@/lib/store/hooks", () => ({
   useAppSelector: (selector: any) => useSelector(selector),
 }));
 
-const mockCreate = vi.fn().mockResolvedValue({
-  id: "new-1",
-  userId: "user-1",
-  name: "New Automation",
-  scheduleType: "recurring",
-  taskType: "agent_run",
-  status: "pending",
-  isEnabled: true,
-  runCount: 0,
-  timezone: "UTC",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
+// vi.hoisted runs before vi.mock hoisting — safe to reference in mock factories
+const { mockCreate, mockTrpcFactory } = vi.hoisted(() => {
+  const create = vi.fn().mockResolvedValue({
+    id: "new-1",
+    userId: "user-1",
+    name: "New Automation",
+    scheduleType: "recurring",
+    taskType: "agent_run",
+    status: "pending",
+    isEnabled: true,
+    runCount: 0,
+    timezone: "UTC",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
 
-vi.mock("@/lib/trpc/vanilla", () => ({
-  getTrpcClient: () => ({
+  const factory = () => ({
     scheduledTasks: {
-      create: { mutate: mockCreate },
+      create: { mutate: create },
+      list: { query: () => Promise.resolve([]) },
       listTriggerTypes: {
-        query: vi.fn().mockResolvedValue({
-          triggers: [
-            {
-              slug: "GMAIL_NEW_GMAIL_MESSAGE",
-              appName: "gmail",
-              description: "Triggers when a new email is received",
-            },
-            {
-              slug: "GITHUB_NEW_ISSUE",
-              appName: "github",
-              description: "Triggers when a new issue is created",
-            },
-          ],
-        }),
+        query: () =>
+          Promise.resolve({
+            triggers: [
+              {
+                slug: "GMAIL_NEW_GMAIL_MESSAGE",
+                appName: "gmail",
+                description: "Triggers when a new email is received",
+              },
+              {
+                slug: "GITHUB_NEW_ISSUE",
+                appName: "github",
+                description: "Triggers when a new issue is created",
+              },
+            ],
+          }),
       },
       getTriggerTypeConfig: {
-        query: vi.fn().mockResolvedValue({
-          slug: "GMAIL_NEW_GMAIL_MESSAGE",
-          appName: "gmail",
-          description: "New email trigger",
-          configSchema: {
-            properties: {
-              label: { type: "string", description: "Gmail label to watch" },
+        query: () =>
+          Promise.resolve({
+            slug: "GMAIL_NEW_GMAIL_MESSAGE",
+            appName: "gmail",
+            description: "New email trigger",
+            configSchema: {
+              properties: {
+                label: { type: "string", description: "Gmail label to watch" },
+              },
+              required: ["label"],
             },
-            required: ["label"],
-          },
-          payloadSchema: {},
-        }),
+            payloadSchema: {},
+          }),
       },
     },
     connectors: {
       list: {
-        query: vi.fn().mockResolvedValue([
-          {
-            connector: { id: "uc-1", connectorDefinitionId: "cd-1", status: "connected" },
-            definition: { id: "cd-1", type: "gmail", name: "Gmail", icon: null },
-          },
-          {
-            connector: { id: "uc-2", connectorDefinitionId: "cd-2", status: "connected" },
-            definition: { id: "cd-2", type: "slack", name: "Slack", icon: null },
-          },
-          {
-            connector: { id: "uc-3", connectorDefinitionId: "cd-3", status: "disconnected" },
-            definition: { id: "cd-3", type: "github", name: "GitHub", icon: null },
-          },
-        ]),
+        query: () =>
+          Promise.resolve([
+            {
+              connector: { id: "uc-1", connectorDefinitionId: "cd-1", status: "connected" },
+              definition: { id: "cd-1", type: "gmail", name: "Gmail", icon: null },
+            },
+            {
+              connector: { id: "uc-2", connectorDefinitionId: "cd-2", status: "connected" },
+              definition: { id: "cd-2", type: "slack", name: "Slack", icon: null },
+            },
+            {
+              connector: { id: "uc-3", connectorDefinitionId: "cd-3", status: "disconnected" },
+              definition: { id: "cd-3", type: "github", name: "GitHub", icon: null },
+            },
+          ]),
       },
     },
-  }),
+  });
+
+  return { mockCreate: create, mockTrpcFactory: factory };
+});
+
+vi.mock("@/lib/trpc/vanilla", () => ({
+  getTrpcClient: mockTrpcFactory,
+  getRawTrpcClient: mockTrpcFactory,
 }));
 
 vi.mock("sonner", () => ({
@@ -92,7 +105,11 @@ vi.mock("next/navigation", () => ({
 
 function createStore() {
   return configureStore({
-    reducer: { scheduledTasks: scheduledTasksReducer },
+    reducer: {
+      scheduledTasks: scheduledTasksReducer,
+      [apiSlice.reducerPath]: apiSlice.reducer,
+    },
+    middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
   });
 }
 

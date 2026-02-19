@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { ChevronDownIcon, CheckIcon, PlugIcon, Loader2Icon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useGetInstalledConnectorsQuery } from "@/lib/store/api/api.slice";
 
 interface InstalledConnector {
   connector: { id: string; connectorDefinitionId: string; status: string };
@@ -18,35 +18,19 @@ interface ConnectorPickerProps {
 
 export function ConnectorPicker({ selected, onChange }: ConnectorPickerProps) {
   const [expanded, setExpanded] = useState(false);
-  const [connectors, setConnectors] = useState<InstalledConnector[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    if (!expanded || loaded) return;
-    let cancelled = false;
-    setLoading(true);
-    getTrpcClient()
-      .connectors.list.query()
-      .then((result) => {
-        if (cancelled) return;
-        // Only show connected apps
-        const connected = (result as InstalledConnector[]).filter(
-          (c) => c.connector.status === "connected",
-        );
-        setConnectors(connected);
-        setLoaded(true);
-      })
-      .catch(() => {
-        // Silently fail — user can retry by collapsing/expanding
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [expanded, loaded]);
+  // RTK Query — only fetch when expanded (skip otherwise)
+  const { data: installedData, isLoading: loading } = useGetInstalledConnectorsQuery(undefined, {
+    skip: !expanded,
+  });
+
+  // Only show connected apps
+  const connectors = useMemo(() => {
+    if (!installedData) return [];
+    return (installedData as InstalledConnector[]).filter(
+      (c) => c.connector.status === "connected",
+    );
+  }, [installedData]);
 
   function toggle(type: string) {
     if (selected.includes(type)) {

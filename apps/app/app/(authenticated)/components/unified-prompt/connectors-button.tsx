@@ -3,15 +3,26 @@
 import { Button } from "@repo/design-system/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { PlugIcon, AppWindowIcon, Loader2Icon } from "lucide-react";
-import { useAppSelector } from "@/lib/store/hooks";
+import { useGetInstalledConnectorsQuery } from "@/lib/store/api/api.slice";
 
 interface ConnectorsButtonProps {
   disabled?: boolean;
 }
 
+type InstalledConnector = {
+  connectionId: string;
+  name?: string;
+  uid?: string;
+  isEnabled?: boolean;
+};
+
 export function ConnectorsButton({ disabled }: ConnectorsButtonProps) {
-  const connectors = useAppSelector((state) => state.connectors.installedConnectors);
-  const loadingConnectors = useAppSelector((state) => state.connectors.isLoadingInstalled);
+  const { data: connectors, isLoading: loadingConnectors } = useGetInstalledConnectorsQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({
+      data: data as InstalledConnector[] | undefined,
+      ...rest,
+    }),
+  });
 
   const connectorCount = connectors?.length ?? 0;
 

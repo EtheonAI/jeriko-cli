@@ -51,6 +51,8 @@ export async function executeSandboxTool(
       result = await handleFileFindInContent(baseUrl, params);
     } else if (toolName === "file_find_by_name") {
       result = await handleFileFindByName(baseUrl, params);
+    } else if (toolName === "file_view") {
+      result = await handleFileView(baseUrl, params);
     } else if (toolName === "shell_exec") {
       result = await handleShellExec(baseUrl, params);
     } else if (toolName === "shell_view") {
@@ -271,6 +273,46 @@ async function handleFileFindByName(
     glob,
   });
   return { status: "success", files: result.files ?? result.output ?? "", ...result };
+}
+
+async function handleFileView(
+  baseUrl: string,
+  params: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const file = params.file as string;
+  const sudo = params.sudo as boolean | undefined;
+
+  // Read the file as base64 via /file/read endpoint
+  const body: Record<string, unknown> = { path: file, encoding: "base64" };
+  if (sudo) body.sudo = true;
+
+  try {
+    const result = await postJson(`${baseUrl}/file/read`, body, 30000);
+    const content = result.content as string;
+    if (!content) {
+      return { status: "error", error: "File is empty or could not be read" };
+    }
+
+    // Detect mime type from extension
+    const ext = file.split(".").pop()?.toLowerCase() ?? "";
+    const mimeMap: Record<string, string> = {
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+      webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", ico: "image/x-icon",
+      pdf: "application/pdf", tiff: "image/tiff", tif: "image/tiff",
+    };
+    const mimeType = mimeMap[ext] || "application/octet-stream";
+
+    return {
+      status: "success",
+      file,
+      mimeType,
+      base64: content,
+      sizeBytes: Math.ceil((content.length * 3) / 4),
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { status: "error", error: `Failed to view file: ${msg}` };
+  }
 }
 
 // ── Shell tools (via /terminal/{id}/*) ───────────────────────────────────────
@@ -496,6 +538,15 @@ async function uploadScreenshotToS3(
   return getPresignedUrl(key, 86400, true);
 }
 
+// Actions that return annotated screenshots (bounding boxes drawn by sandbox browser.py).
+// Manus sends CLEAN screenshots to frontend — annotations are text-only (data-manus-id).
+// We take a second clean screenshot after these actions for the frontend.
+const ANNOTATED_SCREENSHOT_ACTIONS = new Set([
+  "view", "navigate", "click", "input", "scroll_up", "scroll_down",
+  "move_mouse", "press_key", "select_option", "restart",
+  "fill_form", "find_keyword", "upload_file",
+]);
+
 async function handleBrowser(
   baseUrl: string,
   toolName: string,
@@ -553,14 +604,48 @@ async function handleBrowser(
     45000
   );
 
-  // Upload screenshot base64 to S3 and replace with presigned URL (Manus parity)
+  // ── Manus parity: send CLEAN screenshot to frontend ──
+  // The sandbox annotates screenshots with numbered bounding boxes (Pillow).
+  // Manus never sends annotated images to users — only adds data-manus-id to DOM.
+  // Primary: use clean_screenshot from sandbox (returned alongside annotated).
+  // Fallback: take a separate clean screenshot via "screenshot" action.
+  if (
+    ANNOTATED_SCREENSHOT_ACTIONS.has(action) &&
+    typeof result.screenshot === "string" &&
+    result.screenshot.length > 200
+  ) {
+    // Primary: sandbox returns clean_screenshot alongside annotated
+    if (typeof result.clean_screenshot === "string" && result.clean_screenshot.length > 200) {
+      result.screenshot = result.clean_screenshot;
+    } else {
+      // Fallback: take a separate clean screenshot
+      try {
+        const cleanResult = await postJson(
+          `${baseUrl}/browser/action`,
+          { action: "screenshot" },
+          15000
+        );
+        if (
+          typeof cleanResult.screenshot === "string" &&
+          cleanResult.screenshot.length > 200
+        ) {
+          result.screenshot = cleanResult.screenshot;
+        }
+      } catch {
+        // Keep annotated as fallback — still usable
+      }
+    }
+  }
+  // Remove clean_screenshot from result — only screenshot goes to frontend
+  delete result.clean_screenshot;
+
+  // Upload screenshot base64 to S3 and replace with presigned URL
   if (typeof result.screenshot === "string" && result.screenshot.length > 200) {
     try {
       const screenshotUrl = await uploadScreenshotToS3(result.screenshot, userId);
       result.screenshot = screenshotUrl;
     } catch (error) {
       console.error("Failed to upload screenshot to S3:", error);
-      // Keep base64 as fallback — frontend normalizeScreenshot() handles it
     }
   }
 

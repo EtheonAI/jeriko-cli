@@ -30,12 +30,14 @@ IMPORTANT:
 - Combine related commands with && to reduce round trips.
 `,
     inputSchema: z.object({
-      id: z.string().describe('Unique identifier of the target shell session (e.g. "default", "terminal_1")'),
+      session: z.string().describe('Unique identifier of the target shell session (e.g. "default", "terminal_1")'),
       exec_dir: z.string().describe('Working directory for command execution (must use absolute path)'),
       command: z.string().describe('Shell command to execute'),
+      timeout: z.number().int().optional().describe('Timeout in seconds for command execution (default: 30)'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_exec', params);
+      // Map session→id for sandbox executor compatibility
+      return executeSandboxTool(ctx, 'shell_exec', { ...params, id: params.session });
     },
   });
 }
@@ -47,10 +49,10 @@ export function createShellViewTool(ctx: ToolContext) {
 Returns the current terminal buffer content including recent command output.
 `,
     inputSchema: z.object({
-      id: z.string().describe('Unique identifier of the target shell session'),
+      session: z.string().describe('Unique identifier of the target shell session'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_view', params);
+      return executeSandboxTool(ctx, 'shell_view', { ...params, id: params.session });
     },
   });
 }
@@ -62,15 +64,16 @@ export function createShellWaitTool(ctx: ToolContext) {
 If the process does not complete within the wait duration, the call returns with whatever output is available so far.
 `,
     inputSchema: z.object({
-      id: z.string().describe('Unique identifier of the target shell session'),
-      seconds: z
+      session: z.string().describe('Unique identifier of the target shell session'),
+      timeout: z
         .number()
         .int()
         .optional()
-        .describe('Wait duration in seconds'),
+        .describe('Wait timeout in seconds'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_wait', params);
+      // Map session→id, timeout→seconds for sandbox executor compatibility
+      return executeSandboxTool(ctx, 'shell_wait', { ...params, id: params.session, seconds: params.timeout });
     },
   });
 }
@@ -80,12 +83,12 @@ export function createShellWriteToProcessTool(ctx: ToolContext) {
     description: `Write input to a running process in a specified shell session. Use for responding to interactive command prompts.
 `,
     inputSchema: z.object({
-      id: z.string().describe('Unique identifier of the target shell session'),
+      session: z.string().describe('Unique identifier of the target shell session'),
       input: z.string().describe('Input content to write to the process'),
       press_enter: z.boolean().describe('Whether to press Enter key after input'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_write_to_process', params);
+      return executeSandboxTool(ctx, 'shell_write_to_process', { ...params, id: params.session });
     },
   });
 }
@@ -95,10 +98,10 @@ export function createShellKillProcessTool(ctx: ToolContext) {
     description: `Terminate a running process in a specified shell session. Use for stopping long-running processes or handling frozen commands.
 `,
     inputSchema: z.object({
-      id: z.string().describe('Unique identifier of the target shell session'),
+      session: z.string().describe('Unique identifier of the target shell session'),
     }),
     execute: async (params) => {
-      return executeSandboxTool(ctx, 'shell_kill_process', params);
+      return executeSandboxTool(ctx, 'shell_kill_process', { ...params, id: params.session });
     },
   });
 }

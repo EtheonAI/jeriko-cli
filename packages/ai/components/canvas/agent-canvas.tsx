@@ -129,6 +129,13 @@ export interface AgentCanvasProps {
   slides?: string[];
   currentSlideIndex?: number;
 
+  // MapReduce view (Manus parity: parallel task tracking)
+  mapReduceTasks?: Array<{ id: string; label: string; status: string; progress?: number }>;
+  mapReduceOverallProgress?: number;
+
+  // AI Canvas view (Manus parity: generated image content)
+  aiCanvasContent?: string;
+
   // Timeline
   timelinePercentage?: number;
   onTimelineChange?: (percentage: number) => void;
@@ -138,7 +145,7 @@ export interface AgentCanvasProps {
   totalSteps?: number;
 
   // View switching
-  availableViews?: Set<CanvasViewType>;
+  availableViews?: CanvasViewType[];
   onSelectView?: (view: CanvasViewType) => void;
 
   // Pinned state — historical tool state recall
@@ -373,6 +380,9 @@ export function AgentCanvas({
   previewFileType,
   slides,
   currentSlideIndex,
+  mapReduceTasks,
+  mapReduceOverallProgress,
+  aiCanvasContent,
   availableViews,
   onSelectView,
   pinnedToolCallId,
@@ -559,7 +569,7 @@ export function AgentCanvas({
             currentIndex={currentSlideIndex}
           />
         )}
-        {viewType === "aiCanvas" && <AICanvasView />}
+        {viewType === "aiCanvas" && <AICanvasView content={aiCanvasContent} />}
         {viewType === "webDevIDE" && (
           <WebDevIDEView
             fileTree={fileTree}
@@ -577,7 +587,7 @@ export function AgentCanvas({
             onClose={onClose}
           />
         )}
-        {viewType === "mapReduce" && <MapReduceView />}
+        {viewType === "mapReduce" && <MapReduceView tasks={mapReduceTasks} overallProgress={mapReduceOverallProgress} />}
         {viewType === "empty" && <EmptyView />}
         </Suspense>
       </div>

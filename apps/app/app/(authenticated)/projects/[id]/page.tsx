@@ -24,10 +24,14 @@ const ProjectPage = async ({ params }: PageProps) => {
   };
 
   // Prefetch project data in parallel
-  await Promise.all([
-    serverTrpc.projects.get.prefetch({ id }),
-    serverTrpc.projects.listSessions.prefetch({ projectId: id }),
-  ]);
+  try {
+    await Promise.all([
+      serverTrpc.projects.get.prefetch({ id }),
+      serverTrpc.projects.listSessions.prefetch({ projectId: id }),
+    ]);
+  } catch {
+    // SSR prefetch failed — client-side RTK Query will retry
+  }
 
   return (
     <HydrateClient>

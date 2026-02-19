@@ -84,6 +84,7 @@ export interface SearchProvider {
 export interface SearchParams {
   query: string;
   dateRange?: 'all' | 'past_hour' | 'past_day' | 'past_week' | 'past_month' | 'past_year';
+  type?: 'info' | 'image' | 'news' | 'api' | 'data' | 'research' | 'tool';
 }
 
 export interface SearchResult {

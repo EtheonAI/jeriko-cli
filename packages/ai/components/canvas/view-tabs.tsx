@@ -53,7 +53,7 @@ const VIEW_ORDER: CanvasViewType[] = [
 // ============================================================================
 
 interface ViewTabsProps {
-  availableViews: Set<CanvasViewType>;
+  availableViews: CanvasViewType[];
   activeView: CanvasViewType;
   onSelectView: (view: CanvasViewType) => void;
 }
@@ -61,7 +61,7 @@ interface ViewTabsProps {
 export function ViewTabs({ availableViews, activeView, onSelectView }: ViewTabsProps) {
   // Only show tabs when there are 2+ views available
   const visibleViews = VIEW_ORDER.filter(
-    (v) => availableViews.has(v) && VIEW_TAB_CONFIG[v] !== null
+    (v) => availableViews.includes(v) && VIEW_TAB_CONFIG[v] !== null
   );
 
   if (visibleViews.length < 2) return null;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { StarIcon, SearchIcon, LayoutGridIcon, ListIcon } from "lucide-react";
 import { cn } from "@repo/design-system/lib/utils";
 import { LibraryView } from "./components/library-view";
+import { ConnectedSources } from "./components/connected-sources";
 import { useAppDispatch, useLibrary } from "@/lib/store/hooks";
 import { setViewType, setIsFavorite } from "@/lib/store/slices/library.slice";
 
@@ -73,6 +74,9 @@ export function FilesPageClient() {
           </button>
         </div>
       </div>
+
+      {/* Connected sources — file/email providers */}
+      <ConnectedSources />
 
       {/* Library content — session-grouped files */}
       <LibraryView

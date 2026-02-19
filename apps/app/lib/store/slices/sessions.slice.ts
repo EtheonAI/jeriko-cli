@@ -153,7 +153,7 @@ const sessionsSlice = createSlice({
         totalCount?: number;
       }>
     ) => {
-      state.sessions = action.payload.sessions;
+      state.sessions = Array.isArray(action.payload.sessions) ? action.payload.sessions : [];
       if (action.payload.hasMore !== undefined) {
         state.hasMore = action.payload.hasMore;
       }
@@ -175,7 +175,9 @@ const sessionsSlice = createSlice({
         cursor: string | null;
       }>
     ) => {
-      state.sessions = [...state.sessions, ...action.payload.sessions];
+      const current = Array.isArray(state.sessions) ? state.sessions : [];
+      const incoming = Array.isArray(action.payload.sessions) ? action.payload.sessions : [];
+      state.sessions = [...current, ...incoming];
       state.hasMore = action.payload.hasMore;
       state.cursor = action.payload.cursor;
     },
@@ -492,8 +494,9 @@ const sessionsSlice = createSlice({
     });
     builder.addCase("sessions/fetchSessionsSuccess", (state, action) => {
       const payload = (action as any).payload ?? {};
-      const sessions = payload.sessions ?? payload ?? [];
-      state.sessions = sessions;
+      // Guard: sessions must always be an array. payload.sessions (wrapped) or payload itself (raw array).
+      const raw = payload.sessions ?? payload;
+      state.sessions = Array.isArray(raw) ? raw : [];
       if (typeof payload.hasMore === "boolean") state.hasMore = payload.hasMore;
       if ("cursor" in payload) state.cursor = payload.cursor ?? null;
       if (typeof payload.totalCount === "number") state.totalCount = payload.totalCount;

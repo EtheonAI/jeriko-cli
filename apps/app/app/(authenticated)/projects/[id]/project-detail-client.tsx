@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FolderIcon,
@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetProjectQuery,
+  useGetProjectSessionsQuery,
+} from "@/lib/store/api/api.slice";
 import {
   type Project,
 } from "@/lib/store/slices/projects.slice";
@@ -23,28 +26,12 @@ type ProjectDetailClientProps = {
 export function ProjectDetailClient({ projectId }: ProjectDetailClientProps) {
   const router = useRouter();
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [project, setProject] = useState<any | null>(null);
-  const [sessions, setSessions] = useState<any[] | null>(null);
-  const [isLoadingProject, setIsLoadingProject] = useState(true);
-  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
 
-  // Fetch project + sessions
-  useEffect(() => {
-    const client = getTrpcClient();
-    setIsLoadingProject(true);
-    client.projects.get
-      .query({ id: projectId })
-      .then((data) => setProject(data))
-      .catch(() => setProject(null))
-      .finally(() => setIsLoadingProject(false));
-
-    setIsLoadingSessions(true);
-    client.projects.listSessions
-      .query({ projectId })
-      .then((data) => setSessions(data as any[]))
-      .catch(() => setSessions(null))
-      .finally(() => setIsLoadingSessions(false));
-  }, [projectId]);
+  // Fetch project + sessions via RTK Query
+  const { data: projectData, isLoading: isLoadingProject } = useGetProjectQuery(projectId);
+  const { data: sessionsData, isLoading: isLoadingSessions } = useGetProjectSessionsQuery({ projectId });
+  const project = (projectData as any) ?? null;
+  const sessions = (sessionsData as any[] | null) ?? null;
 
   // Loading state
   if (isLoadingProject) {

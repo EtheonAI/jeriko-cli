@@ -5,7 +5,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@repo/design-system/components/ui/sidebar";
-import { LibraryBigIcon, ZapIcon } from "lucide-react";
+import { LibraryBigIcon, ZapIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,6 +19,11 @@ const navItems = [
     title: "Automations",
     icon: ZapIcon,
     href: "/actions",
+  },
+  {
+    title: "Community",
+    icon: UsersIcon,
+    href: "/community",
   },
 ];
 

@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { useAppDispatch } from "@/lib/store/hooks";
 import { updateScheduledTask, type ScheduledTask } from "@/lib/store/slices/scheduledTasks.slice";
 import { normalizeScheduledTask } from "@/lib/store/hooks/useScheduledTasksData";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useUpdateScheduledTaskMutation } from "@/lib/store/api/api.slice";
 import { SkillsPicker } from "./skills-picker";
 import { ConnectorPicker } from "./connector-picker";
 
@@ -59,6 +59,7 @@ export function EditAutomationDialog({ task, open, onOpenChange }: EditAutomatio
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
   const dispatch = useAppDispatch();
+  const [updateScheduledTaskMutation] = useUpdateScheduledTaskMutation();
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editFormSchema),
@@ -137,11 +138,11 @@ export function EditAutomationDialog({ task, open, onOpenChange }: EditAutomatio
 
     try {
       setIsSubmitting(true);
-      const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData as any);
+      const updated = await updateScheduledTaskMutation(submitData as any).unwrap();
       if (updated) {
         dispatch(
           updateScheduledTask({
-            id: updated.id,
+            id: (updated as any).id,
             updates: normalizeScheduledTask(updated),
           }),
         );

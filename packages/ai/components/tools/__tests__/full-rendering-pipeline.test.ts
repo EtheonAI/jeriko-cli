@@ -52,6 +52,13 @@ const REGISTERED_TOOLS: Record<string, string> = {
   browser_console_view: "BrowserViewerEnhanced",
   browser_screenshot: "BrowserViewerEnhanced",
   browser_restart: "BrowserViewerEnhanced",
+  browser_save_image: "BrowserViewerEnhanced",
+  browser_upload_file: "BrowserViewerEnhanced",
+  browser_fill_form: "BrowserViewerEnhanced",
+  browser_find_keyword: "BrowserViewerEnhanced",
+  browser_close: "BrowserViewerEnhanced",
+  // File view (binary/multimodal)
+  file_view: "FilePreview",
   // Image
   generate_image: "ImageResult",
   // Deploy
@@ -396,7 +403,7 @@ describe("Full Rendering Pipeline", () => {
         input: { prompt: "A sunset over mountains" },
         result: { url: "https://example.com/image.png", path: "/home/user/image.png" },
         expectedRenderer: "ImageResult",
-        expectedCanvasView: undefined,
+        expectedCanvasView: "aiCanvas",
       },
       // Scheduling
       {
@@ -556,16 +563,17 @@ describe("Full Rendering Pipeline", () => {
       expect(missingRenderers).toEqual([]);
     });
 
-    it("All 41 agent tools have explicit renderers", () => {
+    it("All agent tools have explicit renderers", () => {
       const agentTools = [
         "show_plan", "message_notify_user", "message_ask_user",
-        "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name",
+        "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name", "file_view",
         "shell_exec", "shell_view", "shell_wait", "shell_write_to_process", "shell_kill_process",
         "code_execute", "web_search",
         "browser_view", "browser_navigate", "browser_restart", "browser_click", "browser_input",
         "browser_move_mouse", "browser_press_key", "browser_select_option",
         "browser_scroll_up", "browser_scroll_down",
         "browser_console_exec", "browser_console_view", "browser_screenshot",
+        "browser_save_image", "browser_upload_file", "browser_fill_form", "browser_find_keyword", "browser_close",
         "deploy_expose_port", "deploy_apply_deployment",
         "generate_image", "schedule_recurring_task", "check_outcomes",
         "webdev_init_project", "webdev_save_checkpoint", "webdev_check_status",
@@ -1075,8 +1083,11 @@ describe("Full Rendering Pipeline", () => {
       "browser_move_mouse", "browser_key_press", "browser_press_key",
       "browser_select_option", "browser_console_exec", "browser_console_view",
       "browser_screenshot", "browser_restart",
+      "browser_save_image", "browser_upload_file", "browser_fill_form",
+      "browser_find_keyword", "browser_close",
       "web_search", "search_web", "info_search_web",
       "deploy_expose_port", "deploy_apply_deployment", "make_manus_page",
+      "slide_present", "image_search_upload",
     ];
 
     const terminalTools = [
@@ -1087,13 +1098,13 @@ describe("Full Rendering Pipeline", () => {
     const codeTools = [
       // File tools + text_editor map to code (Manus FileToolView parity)
       "file_read", "file_write", "file_str_replace",
-      "file_find_in_content", "file_find_by_name",
+      "file_find_in_content", "file_find_by_name", "file_view",
       "text_editor",
     ];
 
     const noCanvasTools = [
       "show_plan", "message_notify_user", "message_ask_user",
-      "generate_image", "schedule_recurring_task", "check_outcomes",
+      "schedule_recurring_task", "check_outcomes",
     ];
 
     for (const tool of browserTools) {

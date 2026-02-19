@@ -538,7 +538,8 @@ describe("ChatClient: Body Threading to useChatSession", () => {
   });
 
   it("should build empty body when no skills/connections", () => {
-    const options: { skills?: string[]; connections?: { id: string }[] } | undefined = undefined;
+    // eslint-disable-next-line prefer-const -- intentionally undefined to test guard clauses
+    let options: { skills?: string[]; connections?: { id: string }[] } | undefined;
 
     const body: Record<string, unknown> = {};
     if (options?.skills?.length) body.skills = options.skills;

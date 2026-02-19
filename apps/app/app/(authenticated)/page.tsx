@@ -7,12 +7,17 @@ import { AvatarStack } from "./components/avatar-stack";
 import { Cursors } from "./components/cursors";
 import { Header } from "./components/header/index";
 import { ChatSection } from "./components/chat-section";
+import { ExamplePrompts } from "./components/example-prompts";
 
 const title = "Rubic";
 const description = "AI-powered productivity platform.";
 
 const CollaborationProvider = dynamic(() =>
   import("./components/collaboration-provider").then((mod) => mod.CollaborationProvider)
+);
+
+const OnboardingWizard = dynamic(() =>
+  import("./components/onboarding-wizard").then((mod) => mod.OnboardingWizard)
 );
 
 export const metadata: Metadata = {
@@ -32,12 +37,16 @@ const App = async () => {
   };
 
   // Prefetch data on the server — client components get it instantly via HydrateClient.
-  // MUST await for data to be included in the dehydrated HTML payload.
-  // Promise.all runs them in parallel — no sequential waterfall.
-  await Promise.all([
-    serverTrpc.sessions.list.prefetch(),
-    serverTrpc.billing.getCreditBalance.prefetch(),
-  ]);
+  // Wrapped in try/catch: if DB or auth fails during SSR, the page still renders
+  // and client-side RTK Query hooks will fetch the data instead.
+  try {
+    await Promise.all([
+      serverTrpc.sessions.list.prefetch(),
+      serverTrpc.billing.getCreditBalance.prefetch(),
+    ]);
+  } catch {
+    // SSR prefetch failed — client-side will retry via useGetSessionsQuery()
+  }
 
   return (
     <HydrateClient>
@@ -61,8 +70,14 @@ const App = async () => {
 
           {/* Input */}
           <ChatSection showConfigBar />
+
+          {/* Example prompts — Manus-style quick-start cards */}
+          <ExamplePrompts />
         </div>
       </main>
+
+      {/* Onboarding wizard — shown on first login */}
+      <OnboardingWizard />
     </HydrateClient>
   );
 };

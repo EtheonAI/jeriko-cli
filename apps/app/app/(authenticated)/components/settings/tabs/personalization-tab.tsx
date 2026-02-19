@@ -21,7 +21,11 @@ import {
   SelectValue,
 } from "@repo/design-system/components/ui/select";
 import { Loader2Icon, UserIcon, SparklesIcon, LayoutIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetUserPreferencesQuery,
+  useUpdateProfileMutation,
+  useUpdatePreferencesMutation,
+} from "@/lib/store/api/api.slice";
 import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
 import { updateUser } from "@/lib/store/slices/auth.slice";
 import { toast } from "sonner";
@@ -40,27 +44,15 @@ export function PersonalizationTab() {
   const profile = useAppSelector((state) => state.auth.user);
   const profileLoading = !profile; // Loaded before settings open
   const profileError = false;
-  // Preferences from vanilla tRPC (settings-specific fields like bio, customInstructions)
-  const [preferences, setPreferences] = useState<any>(null);
-  const [prefsLoading, setPrefsLoading] = useState(true);
-  const [prefsError, setPrefsError] = useState(false);
 
-  const fetchPreferences = useCallback(async () => {
-    setPrefsLoading(true);
-    setPrefsError(false);
-    try {
-      const data = await getTrpcClient().user.getPreferences.query();
-      setPreferences(data);
-    } catch {
-      setPrefsError(true);
-    } finally {
-      setPrefsLoading(false);
-    }
-  }, []);
+  // Preferences via RTK Query
+  const { data: preferences, isLoading: prefsLoading, isError: prefsError, refetch: refetchPreferences } = useGetUserPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
 
-  useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
+  // RTK Query mutations
+  const [updateProfileMutation, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
+  const [updatePreferencesMutation, { isLoading: isUpdatingPreferences }] = useUpdatePreferencesMutation();
 
   const [bio, setBio] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
@@ -70,41 +62,30 @@ export function PersonalizationTab() {
     if (preferences?.customInstructions) setCustomInstructions(preferences.customInstructions);
   }, [preferences]);
 
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-
   const handleUpdateProfile = useCallback(
     async (data: { name?: string }) => {
-      setIsUpdatingProfile(true);
       try {
-        const result = await getTrpcClient().user.updateProfile.mutate(data);
+        const result = await updateProfileMutation(data).unwrap();
         toast.success("Profile updated");
         // Update Redux auth slice
         if (result) reduxDispatch(updateUser(result as any));
       } catch (error: any) {
-        toast.error(error.message || "Failed to update profile");
-      } finally {
-        setIsUpdatingProfile(false);
+        toast.error(error?.data || error?.message || "Failed to update profile");
       }
     },
-    [reduxDispatch],
+    [reduxDispatch, updateProfileMutation],
   );
-
-  const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
 
   const handleUpdatePreferences = useCallback(
     async (data: Record<string, any>) => {
-      setIsUpdatingPreferences(true);
       try {
-        await getTrpcClient().user.updatePreferences.mutate(data);
+        await updatePreferencesMutation(data).unwrap();
         toast.success("Preferences saved");
-        fetchPreferences();
       } catch (error: any) {
-        toast.error(error.message || "Failed to save preferences");
-      } finally {
-        setIsUpdatingPreferences(false);
+        toast.error(error?.data || error?.message || "Failed to save preferences");
       }
     },
-    [fetchPreferences],
+    [updatePreferencesMutation],
   );
 
   const isLoading = profileLoading || prefsLoading;
@@ -146,7 +127,7 @@ export function PersonalizationTab() {
           title="Failed to load personalization settings"
           message="Unable to load your personalization preferences. Please try again."
           onRetry={() => {
-            fetchPreferences();
+            refetchPreferences();
           }}
         />
       </div>

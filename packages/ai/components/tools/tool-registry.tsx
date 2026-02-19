@@ -69,6 +69,7 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   file_str_replace: FilePreview as ToolRenderer,
   file_find_in_content: FilePreview as ToolRenderer,
   file_find_by_name: FilePreview as ToolRenderer,
+  file_view: FilePreview as ToolRenderer,
 
   // Browser
   browser_navigate: BrowserViewerEnhanced as ToolRenderer,
@@ -86,6 +87,11 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   browser_console_view: BrowserViewerEnhanced as ToolRenderer,
   browser_screenshot: BrowserViewerEnhanced as ToolRenderer,
   browser_restart: BrowserViewerEnhanced as ToolRenderer,
+  browser_save_image: BrowserViewerEnhanced as ToolRenderer,
+  browser_upload_file: BrowserViewerEnhanced as ToolRenderer,
+  browser_fill_form: BrowserViewerEnhanced as ToolRenderer,
+  browser_find_keyword: BrowserViewerEnhanced as ToolRenderer,
+  browser_close: BrowserViewerEnhanced as ToolRenderer,
 
   // Image generation
   generate_image: ImageResult as ToolRenderer,

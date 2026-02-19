@@ -14,7 +14,7 @@ import { Input } from "@repo/design-system/components/ui/input";
 import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { SearchIcon, CheckIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useGetInstalledConnectorsQuery } from "@/lib/store/api/api.slice";
 
 type ConnectorSelectorDialogProps = {
   open: boolean;
@@ -31,19 +31,12 @@ export function ConnectorSelectorDialog({
 }: ConnectorSelectorDialogProps) {
   const [search, setSearch] = useState("");
   const [localSelected, setLocalSelected] = useState<string[]>(selectedIds);
-  const [connectors, setConnectors] = useState<any[] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch user's installed (connected) connectors when dialog opens
-  useEffect(() => {
-    if (!open) return;
-    setIsLoading(true);
-    getTrpcClient()
-      .connectors.list.query()
-      .then((data) => setConnectors(data as any[]))
-      .catch(() => setConnectors(null))
-      .finally(() => setIsLoading(false));
-  }, [open]);
+  // RTK Query for installed connectors — skip when dialog is closed
+  const { data: connectors = null, isLoading } = useGetInstalledConnectorsQuery(undefined, {
+    skip: !open,
+    selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }),
+  });
 
   // Sync local state with parent when opening
   useEffect(() => {

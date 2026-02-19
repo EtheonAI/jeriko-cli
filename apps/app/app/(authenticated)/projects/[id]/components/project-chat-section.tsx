@@ -4,8 +4,10 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Attachment } from "@repo/ai/lib/types";
 import { ChatPrompt, type SubmitOptions } from "../../../components/unified-prompt";
-import { useSessionsIntegration } from "@/lib/store/hooks";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useCreateSessionMutation,
+  useAddSessionToProjectMutation,
+} from "@/lib/store/api/api.slice";
 
 type ProjectChatSectionProps = {
   projectId: string;
@@ -15,7 +17,8 @@ type ProjectChatSectionProps = {
 export function ProjectChatSection({ projectId, projectName }: ProjectChatSectionProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const { createSession } = useSessionsIntegration();
+  const [createSession] = useCreateSessionMutation();
+  const [addSessionToProject] = useAddSessionToProjectMutation();
 
   const handleSubmit = useCallback(
     async (input: string, attachments: Attachment[], options: SubmitOptions) => {
@@ -24,17 +27,14 @@ export function ProjectChatSection({ projectId, projectName }: ProjectChatSectio
       setIsLoading(true);
 
       try {
-        const result = await createSession(input.slice(0, 100));
-        if (!result.success || !result.session) throw new Error("Failed to create session");
-
-        const session = result.session as Record<string, any>;
+        const session = await createSession({ title: input.slice(0, 100) }).unwrap();
+        if (!session) throw new Error("Failed to create session");
 
         // Link session to project
-        const client = getTrpcClient();
-        await client.projects.addSession.mutate({
+        await addSessionToProject({
           projectId,
           sessionId: session.id,
-        });
+        }).unwrap();
 
         // Store initial message with projectId for the chat page
         sessionStorage.setItem(
@@ -62,7 +62,7 @@ export function ProjectChatSection({ projectId, projectName }: ProjectChatSectio
         setIsLoading(false);
       }
     },
-    [router, createSession, projectId]
+    [router, createSession, addSessionToProject, projectId]
   );
 
   const handleCancel = useCallback(() => {

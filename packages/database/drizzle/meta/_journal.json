@@ -36,6 +36,13 @@
       "when": 1771951200000,
       "tag": "0004_add_messages_session_created_index",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771502964283,
+      "tag": "0005_omniscient_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

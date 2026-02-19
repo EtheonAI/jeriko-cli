@@ -49,7 +49,7 @@ interface DbScheduledTask {
   description: string | null;
   status: "pending" | "running" | "completed" | "failed" | "cancelled" | "paused" | null;
   taskType: "agent_run" | "report" | "sync" | "backup" | "custom";
-  scheduleType: "once" | "recurring" | "cron";
+  scheduleType: "once" | "recurring" | "cron" | "trigger";
   isEnabled: boolean;
   nextRunAt: Date | null;
   createdAt: Date;

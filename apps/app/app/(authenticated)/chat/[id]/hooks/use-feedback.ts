@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetMessageVotesQuery,
+  useVoteMessageMutation,
+  useRemoveMessageVoteMutation,
+} from "@/lib/store/api/api.slice";
 
 /**
  * Persisted 5-star feedback hook.
@@ -13,31 +17,32 @@ export function useFeedback(chatId: string) {
   const [feedback, setFeedback] = useState<Record<string, number>>({});
   // Track which ratings are pending save (optimistic)
   const pendingRef = useRef<Set<string>>(new Set());
+  const [voteMessage] = useVoteMessageMutation();
+  const [removeVote] = useRemoveMessageVoteMutation();
 
-  // Load existing votes from DB
+  // Load existing votes via RTK Query
+  const { data: existingVotes } = useGetMessageVotesQuery(
+    { chatId },
+    { skip: !chatId, selectFromResult: ({ data, ...rest }) => ({ data: data as Array<{ messageId: string; rating: number }> | undefined, ...rest }) }
+  );
+
+  // Sync loaded votes into local state
   useEffect(() => {
-    if (!chatId) return;
-    getTrpcClient()
-      .messages.getVotes.query({ chatId })
-      .then((existingVotes) => {
-        if (existingVotes && existingVotes.length > 0) {
-          const map: Record<string, number> = {};
-          for (const v of existingVotes) {
-            map[v.messageId] = v.rating;
-          }
-          setFeedback((prev) => {
-            const merged = { ...map };
-            for (const msgId of pendingRef.current) {
-              if (prev[msgId] !== undefined) {
-                merged[msgId] = prev[msgId];
-              }
-            }
-            return merged;
-          });
+    if (!existingVotes || existingVotes.length === 0) return;
+    const map: Record<string, number> = {};
+    for (const v of existingVotes) {
+      map[v.messageId] = v.rating;
+    }
+    setFeedback((prev) => {
+      const merged = { ...map };
+      for (const msgId of pendingRef.current) {
+        if (prev[msgId] !== undefined) {
+          merged[msgId] = prev[msgId];
         }
-      })
-      .catch(() => {});
-  }, [chatId]);
+      }
+      return merged;
+    });
+  }, [existingVotes]);
 
   const handleFeedback = useCallback(
     (messageId: string, rating: number) => {
@@ -47,8 +52,8 @@ export function useFeedback(chatId: string) {
           const next = { ...prev };
           delete next[messageId];
           pendingRef.current.add(messageId);
-          getTrpcClient()
-            .messages.removeVote.mutate({ chatId, messageId })
+          removeVote({ chatId, messageId })
+            .unwrap()
             .then(() => pendingRef.current.delete(messageId))
             .catch(() => {
               pendingRef.current.delete(messageId);
@@ -56,12 +61,12 @@ export function useFeedback(chatId: string) {
             });
           return next;
         }
-        // Save to DB — optimistic update
+        // Save to DB — optimistic update via RTK Query
         pendingRef.current.add(messageId);
-        getTrpcClient()
-          .messages.vote.mutate({ chatId, messageId, rating })
+        voteMessage({ chatId, messageId, rating } as any)
+          .unwrap()
           .then(() => pendingRef.current.delete(messageId))
-          .catch((error) => {
+          .catch((error: any) => {
             pendingRef.current.delete(messageId);
             console.error("[useFeedback] Vote save failed:", error);
             toast.error("Failed to save rating");
@@ -69,7 +74,7 @@ export function useFeedback(chatId: string) {
         return { ...prev, [messageId]: rating };
       });
     },
-    [chatId]
+    [chatId, voteMessage, removeVote]
   );
 
   return { feedback, handleFeedback };

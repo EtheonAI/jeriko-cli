@@ -20,7 +20,11 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import { UserAvatar } from "../../shared/user-avatar";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useUpdateProfileMutation,
+  useChangePasswordMutation,
+  useDeleteAccountMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { Loader2Icon } from "lucide-react";
 
@@ -50,10 +54,11 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 
 export function AccountTab({ user }: AccountTabProps) {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation();
+  const [changePassword, { isLoading: isChangingPassword }] = useChangePasswordMutation();
+  const [deleteAccount, { isLoading: isDeleting }] = useDeleteAccountMutation();
 
   // Profile form
   const profileForm = useForm<ProfileFormData>({
@@ -74,32 +79,26 @@ export function AccountTab({ user }: AccountTabProps) {
   });
 
   const onProfileSubmit = useCallback(async (data: ProfileFormData) => {
-    setIsUpdatingProfile(true);
     try {
-      await getTrpcClient().user.updateProfile.mutate({ name: data.name });
+      await updateProfile({ name: data.name }).unwrap();
       toast.success("Profile updated successfully");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update profile");
-    } finally {
-      setIsUpdatingProfile(false);
+      toast.error(error?.data || error?.message || "Failed to update profile");
     }
-  }, []);
+  }, [updateProfile]);
 
   const onPasswordSubmit = useCallback(async (data: PasswordFormData) => {
-    setIsChangingPassword(true);
     try {
-      await getTrpcClient().user.changePassword.mutate({
+      await changePassword({
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
-      });
+      }).unwrap();
       toast.success("Password changed successfully");
       passwordForm.reset();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to change password");
-    } finally {
-      setIsChangingPassword(false);
+      toast.error(error?.data || error?.message || "Failed to change password");
     }
-  }, [passwordForm]);
+  }, [passwordForm, changePassword]);
 
   const handleAvatarChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -118,34 +117,29 @@ export function AccountTab({ user }: AccountTabProps) {
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
-      setIsUpdatingProfile(true);
       try {
-        await getTrpcClient().user.updateProfile.mutate({ image: dataUrl });
+        await updateProfile({ image: dataUrl }).unwrap();
         toast.success("Avatar updated");
       } catch (error: any) {
-        toast.error(error?.message || "Failed to update avatar");
-      } finally {
-        setIsUpdatingProfile(false);
+        toast.error(error?.data || error?.message || "Failed to update avatar");
       }
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [updateProfile]);
 
   const handleDeleteAccount = useCallback(async () => {
     if (deleteConfirmation !== "DELETE") {
       toast.error("Please type DELETE to confirm");
       return;
     }
-    setIsDeleting(true);
     try {
-      await getTrpcClient().user.deleteAccount.mutate({ confirmation: "DELETE" });
+      await deleteAccount({ confirmation: "DELETE" }).unwrap();
       toast.success("Account deleted");
       window.location.href = "/";
     } catch (error: any) {
-      toast.error(error?.message || "Failed to delete account");
-      setIsDeleting(false);
+      toast.error(error?.data || error?.message || "Failed to delete account");
     }
-  }, [deleteConfirmation]);
+  }, [deleteConfirmation, deleteAccount]);
 
   return (
     <div className="space-y-6">

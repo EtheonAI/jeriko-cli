@@ -10,7 +10,7 @@ import {
 import { Button } from "@repo/design-system/components/ui/button";
 import { DownloadIcon } from "lucide-react";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
-import { useLibraryData } from "@/lib/store/hooks";
+import { useGetFileDownloadUrlQuery } from "@/lib/store/api/api.slice";
 import type { FileItem } from "./file-card";
 
 interface FilePreviewModalProps {
@@ -20,23 +20,12 @@ interface FilePreviewModalProps {
 }
 
 export function FilePreviewModal({ file, onClose, onDownload }: FilePreviewModalProps) {
-  const { getDownloadUrl } = useLibraryData({ autoFetch: false });
-  const [downloadData, setDownloadData] = useState<{ url?: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { data: downloadData = null, isLoading } = useGetFileDownloadUrlQuery(
+    file?.id ?? "",
+    { skip: !file?.id || file?.mimeType === "application/folder" }
+  );
 
-  useEffect(() => {
-    if (!file || file.mimeType === "application/folder") {
-      setDownloadData(null);
-      return;
-    }
-    setIsLoading(true);
-    getDownloadUrl(file.id)
-      .then((data) => setDownloadData(data as any))
-      .catch(() => setDownloadData(null))
-      .finally(() => setIsLoading(false));
-  }, [file?.id, file?.mimeType, getDownloadUrl]);
-
-  const url = downloadData?.url;
+  const url = (downloadData as { url?: string } | null)?.url;
 
   function renderPreview() {
     if (!file) return null;

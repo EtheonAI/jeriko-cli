@@ -11,7 +11,13 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetProjectConnectorsQuery,
+  useGetConnectorDefinitionsQuery,
+  useInitializeProjectOAuthMutation,
+  useCheckProjectConnectionMutation,
+  useUninstallConnectorMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 
 type ConnectorDef = {
@@ -40,39 +46,27 @@ type ProjectConnectorsPanelProps = {
 
 export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [connectors, setConnectors] = useState<ProjectConnector[]>([]);
-  const [definitions, setDefinitions] = useState<ConnectorDef[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showCatalog, setShowCatalog] = useState(false);
   const [connectingType, setConnectingType] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const connectingTypeRef = useRef<string | null>(null);
 
-  const fetchConnectors = useCallback(async () => {
-    try {
-      const client = getTrpcClient();
-      const data = await client.connectors.listForProject.query({ projectId });
-      setConnectors(data as ProjectConnector[]);
-    } catch {
-      // Silent — non-critical
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectId]);
+  // RTK Query for project connectors
+  const { data: connectors = [], isLoading, refetch: refetchConnectors } = useGetProjectConnectorsQuery(
+    { projectId },
+    { selectFromResult: ({ data, ...rest }) => ({ data: data as ProjectConnector[] | undefined, ...rest }) }
+  );
 
-  const fetchDefinitions = useCallback(async () => {
-    try {
-      const client = getTrpcClient();
-      const data = await client.connectors.listDefinitions.query();
-      setDefinitions(data as ConnectorDef[]);
-    } catch {
-      // Silent
-    }
-  }, []);
+  // RTK Query for all definitions (lazy — fetched when catalog opens)
+  const { data: definitions = [] } = useGetConnectorDefinitionsQuery(undefined, {
+    skip: !showCatalog,
+    selectFromResult: ({ data, ...rest }) => ({ data: data as ConnectorDef[] | undefined, ...rest }),
+  });
 
-  useEffect(() => {
-    fetchConnectors();
-  }, [fetchConnectors]);
+  // RTK Query mutations
+  const [initProjectOAuth] = useInitializeProjectOAuthMutation();
+  const [checkConnection] = useCheckProjectConnectionMutation();
+  const [uninstallConnector] = useUninstallConnectorMutation();
 
   const connectedTypes = new Set(connectors.map((c) => c.definition.type));
 
@@ -81,11 +75,7 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
       setConnectingType(type);
       connectingTypeRef.current = type;
       try {
-        const client = getTrpcClient();
-        const data = await client.connectors.initializeProjectOAuth.mutate({
-          type,
-          projectId,
-        });
+        const data = await initProjectOAuth({ type, projectId }).unwrap() as any;
 
         const popup = window.open(data.authUrl, "oauth", "width=600,height=700,popup=true");
         if (!popup) {
@@ -99,10 +89,10 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
           if (popup.closed) {
             clearInterval(check);
             try {
-              const status = await client.connectors.checkProjectConnection.mutate({
+              const status = await checkConnection({
                 type: connectingTypeRef.current ?? type,
                 projectId,
-              });
+              }).unwrap() as any;
               if (status.status === "connected") {
                 toast.success(`${type} connected to project`);
               }
@@ -110,7 +100,7 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
               // Silent
             }
             setConnectingType(null);
-            fetchConnectors();
+            refetchConnectors();
           }
         }, 500);
       } catch (error: any) {
@@ -118,24 +108,23 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
         setConnectingType(null);
       }
     },
-    [projectId, fetchConnectors]
+    [projectId, initProjectOAuth, checkConnection, refetchConnectors]
   );
 
   const handleDisconnect = useCallback(
     async (connectorId: string) => {
       setDisconnectingId(connectorId);
       try {
-        const client = getTrpcClient();
-        await client.connectors.uninstall.mutate({ id: connectorId });
+        await uninstallConnector(connectorId).unwrap();
         toast.success("Connector removed from project");
-        fetchConnectors();
+        refetchConnectors();
       } catch (error: any) {
         toast.error(error.message || "Failed to disconnect");
       } finally {
         setDisconnectingId(null);
       }
     },
-    [fetchConnectors]
+    [uninstallConnector, refetchConnectors]
   );
 
   // Listen for postMessage from OAuth callback popup
@@ -147,12 +136,12 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
           toast.error("OAuth authorization was denied or failed.");
           setConnectingType(null);
         }
-        fetchConnectors();
+        refetchConnectors();
       }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [fetchConnectors]);
+  }, [refetchConnectors]);
 
   const connectedCount = connectors.filter(
     (c) => c.connector.status === "connected"
@@ -247,10 +236,7 @@ export function ProjectConnectorsPanel({ projectId }: ProjectConnectorsPanelProp
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() => {
-                if (definitions.length === 0) fetchDefinitions();
-                setShowCatalog(true);
-              }}
+              onClick={() => setShowCatalog(true)}
             >
               <PlusIcon className="size-4 mr-1.5" />
               Add connector

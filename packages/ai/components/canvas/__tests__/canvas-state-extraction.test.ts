@@ -144,7 +144,6 @@ describe("Tool → view type resolution for canvas", () => {
       "show_plan",
       "message_notify_user",
       "message_ask_user",
-      "generate_image",
       "schedule_task",
       "track_analytics",
     ];
@@ -508,7 +507,7 @@ describe("View switching — auto-detect + available views", () => {
 
   it("inline-only tools do not add to available views", () => {
     const available = new Set<CanvasViewType>();
-    const inlineTools = ["show_plan", "message_notify_user", "generate_image"];
+    const inlineTools = ["show_plan", "message_notify_user", "schedule_task"];
 
     for (const toolName of inlineTools) {
       const viewType = TOOL_VIEW_MAP[toolName];

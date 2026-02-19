@@ -13,8 +13,10 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { ScrollArea } from "@repo/design-system/components/ui/scroll-area";
 import { Input } from "@repo/design-system/components/ui/input";
 import { FolderIcon, CheckIcon, SearchIcon, PlusIcon } from "lucide-react";
-import { useAppSelector } from "@/lib/store/hooks";
-import { useProjectsData } from "@/lib/store/hooks";
+import {
+  useGetProjectsQuery,
+  useAddSessionToProjectMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 
 interface MoveToProjectDialogProps {
@@ -36,18 +38,16 @@ export function MoveToProjectDialog({
   const [selectedId, setSelectedId] = useState<string | null>(currentProjectId ?? null);
   const [isPending, setIsPending] = useState(false);
 
-  // Read projects from Redux (hydrated by ReduxDataLoader)
-  const projects = useAppSelector((state) => state.projects.projects);
-  const isLoading = useAppSelector((state) => state.projects.isLoading);
-
-  const { addSessionToProject } = useProjectsData({ autoFetch: false });
+  // Fetch projects via RTK Query
+  const { data: projects, isLoading } = useGetProjectsQuery();
+  const [addSessionToProject] = useAddSessionToProjectMutation();
 
   const handleMove = async () => {
     if (!selectedId) return;
     setIsPending(true);
     try {
-      await addSessionToProject({ projectId: selectedId, sessionId });
-      const project = projects?.find((p: any) => p.id === selectedId);
+      await addSessionToProject({ projectId: selectedId, sessionId }).unwrap();
+      const project = (projects ?? []).find((p: any) => p.id === selectedId);
       toast.success(`Moved to ${project?.name ?? "project"}`);
       onMoved?.(selectedId, project?.name ?? "Project");
       onOpenChange(false);

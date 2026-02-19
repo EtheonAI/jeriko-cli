@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useSearchQuery } from "@/lib/store/api/api.slice";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Card, CardHeader, CardContent } from "@repo/design-system/components/ui/card";
@@ -79,28 +79,18 @@ export function SearchResultsClient({
     }
   }, [debouncedQuery, activeType, router]);
 
-  // Search query via vanilla tRPC
-  const [searchResults, setSearchResults] = useState<any | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (debouncedQuery.length < 2) {
-      setSearchResults(null);
-      return;
-    }
-    setIsLoading(true);
-    getTrpcClient()
-      .search.global.query({ query: debouncedQuery, limit: 50 })
-      .then((data) => setSearchResults(data))
-      .catch(() => setSearchResults(null))
-      .finally(() => setIsLoading(false));
-  }, [debouncedQuery]);
+  // Search query via RTK Query
+  const { data: searchResults = null, isLoading, isFetching } = useSearchQuery(
+    { query: debouncedQuery, limit: 50 },
+    { skip: debouncedQuery.length < 2 }
+  );
 
   // Filter results by type
+  const searchData = searchResults as any;
   const filteredResults =
     activeType === "all"
-      ? searchResults?.results
-      : searchResults?.results.filter((r) => r.type === activeType);
+      ? searchData?.results
+      : searchData?.results?.filter((r: any) => r.type === activeType);
 
   const formatTime = (timestamp: number) => {
     const now = Date.now();
@@ -153,13 +143,13 @@ export function SearchResultsClient({
           )}
         >
           All
-          {searchResults && (
-            <span className="text-xs opacity-70">({searchResults.totalFound})</span>
+          {searchData && (
+            <span className="text-xs opacity-70">({searchData.totalFound})</span>
           )}
         </button>
         {(["file", "session", "task", "project", "action"] as const).map((type) => {
           const Icon = typeIcons[type];
-          const count = searchResults?.facets?.type?.[type] || 0;
+          const count = searchData?.facets?.type?.[type] || 0;
           return (
             <button
               key={type}
@@ -182,7 +172,7 @@ export function SearchResultsClient({
       {/* Results */}
       <div className="space-y-4">
         {/* Loading State */}
-        {isLoading && debouncedQuery.length >= 2 && (
+        {(isLoading || isFetching) && debouncedQuery.length >= 2 && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Card key={i}>
@@ -209,7 +199,7 @@ export function SearchResultsClient({
         )}
 
         {/* No Results */}
-        {!isLoading &&
+        {!isLoading && !isFetching &&
           debouncedQuery.length >= 2 &&
           filteredResults?.length === 0 && (
             <div className="flex flex-col items-center justify-center rounded-xl bg-muted/50 p-12 text-center">
@@ -226,11 +216,11 @@ export function SearchResultsClient({
           <>
             <div className="text-sm text-muted-foreground">
               {filteredResults.length} result{filteredResults.length !== 1 ? "s" : ""}{" "}
-              {searchResults?.processingTimeMs !== undefined &&
-                `in ${searchResults.processingTimeMs}ms`}
+              {searchData?.processingTimeMs !== undefined &&
+                `in ${searchData.processingTimeMs}ms`}
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredResults.map((result) => {
+              {filteredResults.map((result: SearchResultItem) => {
                 const Icon = typeIcons[result.type];
                 return (
                   <Card

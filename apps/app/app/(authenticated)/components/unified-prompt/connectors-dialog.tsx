@@ -13,7 +13,14 @@ import {
   ServerIcon,
   XIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetConnectorDefinitionsQuery,
+  useGetInstalledConnectorsQuery,
+  useInitializeOAuthMutation,
+  useCheckConnectionMutation,
+  useConnectWithApiKeyMutation,
+  useUninstallConnectorMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 
 // ============================================================================
@@ -48,43 +55,29 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
   const [activeTab, setActiveTab] = useState<TabId>("apps");
   const [search, setSearch] = useState("");
 
-  // Local state for data
-  const [definitions, setDefinitions] = useState<any[] | null>(null);
-  const [userConnectors, setUserConnectors] = useState<any[] | null>(null);
-  const [loadingDefs, setLoadingDefs] = useState(true);
-  const [loadingUser, setLoadingUser] = useState(true);
+  // Data fetching via RTK Query
+  const {
+    data: definitionsData,
+    isLoading: loadingDefs,
+    refetch: refetchDefs,
+  } = useGetConnectorDefinitionsQuery();
+  const {
+    data: userConnectorsData,
+    isLoading: loadingUser,
+    refetch: refetchUserConnectors,
+  } = useGetInstalledConnectorsQuery();
+
+  const definitions = (definitionsData as any[] | null) ?? null;
+  const userConnectors = (userConnectorsData as any[] | null) ?? null;
 
   const definitionsRef = useRef(definitions);
   definitionsRef.current = definitions;
   const connectingDefIdRef = useRef<string | null>(null);
 
-  // Fetch definitions on mount
-  useEffect(() => {
-    setLoadingDefs(true);
-    getTrpcClient().connectors.listDefinitions.query()
-      .then((data) => setDefinitions(data as any[]))
-      .catch(() => {})
-      .finally(() => setLoadingDefs(false));
-  }, []);
-
-  // Fetch user connectors when dialog opens
-  useEffect(() => {
-    if (!open) return;
-    setLoadingUser(true);
-    getTrpcClient().connectors.list.query()
-      .then((data) => setUserConnectors(data as any[]))
-      .catch(() => {})
-      .finally(() => setLoadingUser(false));
-  }, [open]);
-
   const refetchAll = useCallback(() => {
-    getTrpcClient().connectors.list.query()
-      .then((data) => setUserConnectors(data as any[]))
-      .catch(() => {});
-    getTrpcClient().connectors.listDefinitions.query()
-      .then((data) => setDefinitions(data as any[]))
-      .catch(() => {});
-  }, []);
+    refetchUserConnectors();
+    refetchDefs();
+  }, [refetchUserConnectors, refetchDefs]);
 
   const [connectingDefId, setConnectingDefId] = useState<string | null>(null);
   const [apiKeyDef, setApiKeyDef] = useState<{ id: string; type: string; name: string } | null>(null);
@@ -92,19 +85,23 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
   const [apiKeyPending, setApiKeyPending] = useState(false);
   const [uninstallPending, setUninstallPending] = useState(false);
 
+  const [initializeOAuth] = useInitializeOAuthMutation();
+  const [checkConnection] = useCheckConnectionMutation();
+  const [connectWithApiKey] = useConnectWithApiKeyMutation();
+  const [uninstallConnector] = useUninstallConnectorMutation();
+
   // Keep ref in sync
   useEffect(() => { connectingDefIdRef.current = connectingDefId; }, [connectingDefId]);
 
   // OAuth flow: check connection status with retries
   const checkConnectionWithRetries = useCallback(async (def: { type: string; name: string }) => {
-    const client = getTrpcClient();
     let connected = false;
     const maxAttempts = 3;
     const delays = [1000, 3000, 5000];
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const result = await client.connectors.checkConnection.mutate({ type: def.type });
+        const result = await checkConnection({ type: def.type }).unwrap();
         if (result.status === "connected") {
           toast.success(`${def.name} connected!`);
           connected = true;
@@ -122,12 +119,12 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
     if (!connected) {
       toast.info("Connection pending. Check Applications page for status.");
     }
-  }, []);
+  }, [checkConnection]);
 
   // OAuth flow: open popup, poll for close
   const startOAuthFlow = useCallback(async (type: string) => {
     try {
-      const data = await getTrpcClient().connectors.initializeOAuth.mutate({ type });
+      const data = await initializeOAuth({ type }).unwrap();
       const popup = window.open(data.authUrl, "oauth", "width=600,height=700,popup=true");
       if (!popup) {
         toast.error("Please allow popups for this site to connect apps.");
@@ -138,7 +135,7 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
       const check = setInterval(async () => {
         if (popup.closed) {
           clearInterval(check);
-          const def = definitionsRef.current?.find((d) => d.id === connectingDefIdRef.current);
+          const def = definitionsRef.current?.find((d: any) => d.id === connectingDefIdRef.current);
           if (def) {
             await checkConnectionWithRetries(def);
           }
@@ -150,7 +147,7 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
       setConnectingDefId(null);
       toast.error(error?.message || "Failed to start connection");
     }
-  }, [checkConnectionWithRetries, refetchAll]);
+  }, [checkConnectionWithRetries, refetchAll, initializeOAuth]);
 
   // Listen for postMessage from OAuth callback popup
   useEffect(() => {
@@ -227,11 +224,11 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
     if (!apiKeyDef || !apiKeyValue.trim() || apiKeyPending) return;
     setApiKeyPending(true);
     try {
-      await getTrpcClient().connectors.connectWithApiKey.mutate({
+      await connectWithApiKey({
         type: apiKeyDef.type,
         apiKey: apiKeyValue.trim(),
-      });
-      const def = definitions?.find((d) => d.type === apiKeyDef.type);
+      }).unwrap();
+      const def = definitions?.find((d: any) => d.type === apiKeyDef.type);
       toast.success(`${def?.name ?? apiKeyDef.type} connected!`);
       setApiKeyDef(null);
       setApiKeyValue("");
@@ -241,24 +238,23 @@ export function ConnectorsDialog({ open, onOpenChange }: ConnectorsDialogProps) 
     } finally {
       setApiKeyPending(false);
     }
-  }, [apiKeyDef, apiKeyValue, apiKeyPending, definitions, refetchAll]);
+  }, [apiKeyDef, apiKeyValue, apiKeyPending, definitions, refetchAll, connectWithApiKey]);
 
   const handleUninstall = useCallback(
     async (connectorId: string) => {
       if (uninstallPending) return;
       setUninstallPending(true);
       try {
-        await getTrpcClient().connectors.uninstall.mutate({ id: connectorId });
+        await uninstallConnector(connectorId).unwrap();
         refetchAll();
       } catch { /* ignore */ }
       finally { setUninstallPending(false); }
     },
-    [uninstallPending, refetchAll]
+    [uninstallPending, refetchAll, uninstallConnector]
   );
 
   // Only show full loading state if we have zero definitions yet
-  // (subsequent opens show stale data while refetching in background)
-  const isLoading = !definitions && (loadingDefs || loadingUser);
+  const isLoading = !definitions && loadingDefs;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

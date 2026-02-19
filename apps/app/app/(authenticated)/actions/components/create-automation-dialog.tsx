@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { useAppDispatch } from "@/lib/store/hooks";
 import { addScheduledTask } from "@/lib/store/slices/scheduledTasks.slice";
 import { normalizeScheduledTask } from "@/lib/store/hooks/useScheduledTasksData";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useCreateScheduledTaskMutation } from "@/lib/store/api/api.slice";
 import { TriggerSelector } from "./trigger-selector";
 import { SkillsPicker } from "./skills-picker";
 import { ConnectorPicker } from "./connector-picker";
@@ -98,6 +98,7 @@ export function CreateAutomationDialog({ open, onOpenChange }: CreateAutomationD
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
   const dispatch = useAppDispatch();
+  const [createScheduledTask] = useCreateScheduledTaskMutation();
 
   const form = useForm<AutomationFormValues>({
     resolver: zodResolver(automationFormSchema),
@@ -177,7 +178,7 @@ export function CreateAutomationDialog({ open, onOpenChange }: CreateAutomationD
 
     try {
       setIsSubmitting(true);
-      const created = await getTrpcClient().scheduledTasks.create.mutate(submitData as any);
+      const created = await createScheduledTask(submitData as any).unwrap();
       dispatch(addScheduledTask(normalizeScheduledTask(created)));
       toast.success("Automation created");
       handleClose();

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Separator } from "@repo/design-system/components/ui/separator";
@@ -41,8 +40,14 @@ import {
   XCircleIcon,
   ClockIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
-import { useConnectorsData } from "@/lib/store/hooks";
+import {
+  useGetConnectorQuery,
+  useGetConnectorSyncHistoryQuery,
+  useSyncConnectorMutation,
+  useDisconnectConnectorMutation,
+  useUninstallConnectorMutation,
+  useUpdateConnectorConfigMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { AppStatusBadge } from "./app-status-badge";
@@ -60,50 +65,36 @@ export function AppConfigPanel({
   onOpenChange,
   onReconnect,
 }: AppConfigPanelProps) {
-  const {
-    sync: syncHook,
-    disconnect: disconnectHook,
-    uninstall: uninstallHook,
-    updateConfig: updateConfigHook,
-    getConnector,
-    getSyncHistory: getSyncHistoryHook,
-  } = useConnectorsData({ autoFetch: false });
-
-  const [data, setData] = useState<any | null>(null);
-  const [syncHistory, setSyncHistory] = useState<any[] | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Fetch connector + sync history when panel opens
-  useEffect(() => {
-    if (!connectorId || !open) {
-      setData(null);
-      setSyncHistory(null);
-      return;
+  // RTK Query hooks for fetching data
+  const { data, isLoading: isLoadingConnector } = useGetConnectorQuery(connectorId!, {
+    skip: !connectorId || !open,
+  });
+  const { data: syncHistory } = useGetConnectorSyncHistoryQuery(
+    { connectorId: connectorId! },
+    {
+      skip: !connectorId || !open,
+      selectFromResult: ({ data, ...rest }) => ({
+        data: data as Array<{ id: string; status: string; startedAt: string; itemsSynced?: number | null }> | undefined,
+        ...rest,
+      }),
     }
-    setIsLoading(true);
-    Promise.all([
-      getConnector(connectorId).catch(() => null),
-      getSyncHistoryHook(connectorId).catch(() => null),
-    ]).then(([connectorData, history]) => {
-      setData(connectorData);
-      setSyncHistory(history as any);
-      setIsLoading(false);
-    });
-  }, [connectorId, open, getConnector, getSyncHistoryHook]);
+  );
 
-  const [syncPending, setSyncPending] = useState(false);
-  const [disconnectPending, setDisconnectPending] = useState(false);
-  const [uninstallPending, setUninstallPending] = useState(false);
+  // RTK Query mutation hooks
+  const [syncConnectorMutation, { isLoading: syncPending }] = useSyncConnectorMutation();
+  const [disconnectConnectorMutation, { isLoading: disconnectPending }] = useDisconnectConnectorMutation();
+  const [uninstallConnectorMutation, { isLoading: uninstallPending }] = useUninstallConnectorMutation();
+
+  // RTK Query mutation for connector config
+  const [updateConnectorConfigMutation] = useUpdateConnectorConfigMutation();
+
+  const isLoading = isLoadingConnector;
 
   const updateConfig = {
     mutate: async (params: { id: string; syncEnabled?: boolean; syncInterval?: number }) => {
       try {
-        await updateConfigHook({ id: params.id, config: params as any });
+        await updateConnectorConfigMutation({ id: params.id, config: params as any }).unwrap();
         toast.success("Settings updated");
-        // Refresh data
-        if (connectorId) {
-          getConnector(connectorId).then(setData).catch(() => {});
-        }
       } catch (err: any) {
         toast.error(err?.message || "Failed to update settings");
       }
@@ -113,17 +104,11 @@ export function AppConfigPanel({
   const syncConnector = {
     isPending: syncPending,
     mutate: async (params: { id: string }) => {
-      setSyncPending(true);
       try {
-        await syncHook(params.id);
+        await syncConnectorMutation(params.id).unwrap();
         toast.success("Sync started");
-        if (connectorId) {
-          getConnector(connectorId).then(setData).catch(() => {});
-        }
       } catch (err: any) {
         toast.error(err?.message || "Failed to start sync");
-      } finally {
-        setSyncPending(false);
       }
     },
   };
@@ -131,15 +116,12 @@ export function AppConfigPanel({
   const disconnectConnector = {
     isPending: disconnectPending,
     mutate: async (params: { id: string }) => {
-      setDisconnectPending(true);
       try {
-        await disconnectHook(params.id);
+        await disconnectConnectorMutation(params.id).unwrap();
         toast.success("Disconnected");
         onOpenChange(false);
       } catch (err: any) {
         toast.error(err?.message || "Failed to disconnect");
-      } finally {
-        setDisconnectPending(false);
       }
     },
   };
@@ -147,21 +129,18 @@ export function AppConfigPanel({
   const uninstallConnector = {
     isPending: uninstallPending,
     mutate: async (params: { id: string }) => {
-      setUninstallPending(true);
       try {
-        await uninstallHook(params.id);
+        await uninstallConnectorMutation(params.id).unwrap();
         toast.success("Removed");
         onOpenChange(false);
       } catch (err: any) {
         toast.error(err?.message || "Failed to remove");
-      } finally {
-        setUninstallPending(false);
       }
     },
   };
 
-  const connector = data?.connector;
-  const definition = data?.definition;
+  const connector = (data as any)?.connector;
+  const definition = (data as any)?.definition;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

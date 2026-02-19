@@ -18,7 +18,10 @@ import {
 } from "@repo/design-system/components/ui/popover";
 import { FolderIcon, Loader2Icon } from "lucide-react";
 import { useAppDispatch } from "@/lib/store/hooks";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useCreateProjectMutation,
+  useUpdateProjectMutation,
+} from "@/lib/store/api/api.slice";
 import {
   addProject,
   updateProject,
@@ -56,6 +59,8 @@ export function CreateProjectDialog({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const dispatch = useAppDispatch();
+  const [createProjectMutation] = useCreateProjectMutation();
+  const [updateProjectMutation] = useUpdateProjectMutation();
   const isEditing = !!editProject;
 
   // Reset form when dialog opens/closes
@@ -88,16 +93,15 @@ export function CreateProjectDialog({
 
     setIsPending(true);
     try {
-      const client = getTrpcClient();
       if (isEditing && editProject) {
-        const project = await client.projects.update.mutate({
+        const project = await updateProjectMutation({
           id: editProject.id,
           name: trimmedName,
           description: instructions.trim() || undefined,
           icon,
           color,
           settings: Object.keys(settings).length > 0 ? settings : undefined,
-        });
+        }).unwrap() as any;
         if (project) {
           dispatch(
             updateProject({
@@ -119,13 +123,13 @@ export function CreateProjectDialog({
           onOpenChange(false);
         }
       } else {
-        const project = await client.projects.create.mutate({
+        const project = await createProjectMutation({
           name: trimmedName,
           description: instructions.trim() || undefined,
           icon,
           color,
           settings: Object.keys(settings).length > 0 ? settings : undefined,
-        });
+        }).unwrap() as any;
         if (project) {
           dispatch(
             addProject({

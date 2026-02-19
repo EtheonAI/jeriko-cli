@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@repo/design-system/lib/utils";
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
   CheckIcon,
   CircleHelpIcon,
 } from "lucide-react";
-import { useLibraryData } from "@/lib/store/hooks";
+import { useGetFileShareQuery, useCreateFileShareMutation } from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import type { LibraryFile } from "./library-file-card";
 
@@ -34,30 +34,20 @@ interface LibraryShareDialogProps {
 export function LibraryShareDialog({ file, open, onClose }: LibraryShareDialogProps) {
   const [accessLevel, setAccessLevel] = useState<"private" | "public">("private");
   const [copied, setCopied] = useState(false);
-  const [isPending, setIsPending] = useState(false);
-  const [existingShare, setExistingShare] = useState<{ shareToken: string } | null>(null);
 
-  const { createShare, getShare } = useLibraryData({ autoFetch: false });
-
-  // Load existing share on open
-  useEffect(() => {
-    if (!open || !file.id) return;
-    getShare(file.id)
-      .then((data) => { if (data) setExistingShare(data as any); })
-      .catch(() => {});
-  }, [open, file.id, getShare]);
+  const { data: existingShare = null } = useGetFileShareQuery(file.id, { skip: !open });
+  const [createShare, { isLoading: isPending }] = useCreateFileShareMutation();
 
   async function handleCopyLink() {
     if (existingShare) {
-      const shareUrl = `${window.location.origin}/share/${existingShare.shareToken}`;
+      const shareUrl = `${window.location.origin}/share/${(existingShare as any).shareToken}`;
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       toast.success("Link copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     } else {
-      setIsPending(true);
       try {
-        const data = await createShare(file.id);
+        const data = await createShare({ fileId: file.id }).unwrap();
         if (data) {
           const shareUrl = `${window.location.origin}/share/${(data as any).shareToken}`;
           await navigator.clipboard.writeText(shareUrl);
@@ -67,15 +57,13 @@ export function LibraryShareDialog({ file, open, onClose }: LibraryShareDialogPr
         }
       } catch {
         toast.error("Failed to create share link");
-      } finally {
-        setIsPending(false);
       }
     }
   }
 
   function handleSocialShare(platform: "twitter" | "linkedin" | "facebook" | "reddit") {
     const shareUrl = existingShare
-      ? `${window.location.origin}/share/${existingShare.shareToken}`
+      ? `${window.location.origin}/share/${(existingShare as any).shareToken}`
       : window.location.href;
     const text = `Check out "${file.name}" on Rubic`;
 

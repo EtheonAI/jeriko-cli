@@ -40,14 +40,25 @@ export function useCanvasPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset baseline on session change only
   }, [sessionId]);
 
-  // Auto-open only when NEW messages arrive during streaming.
-  // `resume: true` briefly sets isStreaming=true but messageCount stays the same,
-  // so the canvas won't open on page refresh for old chats.
+  // Auto-open when:
+  // 1. NEW messages arrive during streaming (messageCount increased = user sent a message)
+  // 2. Page refresh/load detects historical canvas content (Manus parity: always show canvas
+  //    when a session has tool history, even for old chats)
   useEffect(() => {
     if (isStreaming && hasCanvasContent && messageCount > initialCountRef.current) {
       setOpen(true);
     }
   }, [isStreaming, hasCanvasContent, messageCount]);
+
+  // Auto-open on page load when session has historical canvas content.
+  // This fires once after useSSEToEntities populates Redux from DB messages.
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!autoOpenedRef.current && hasCanvasContent && !isStreaming && messageCount > 0) {
+      autoOpenedRef.current = true;
+      setOpen(true);
+    }
+  }, [hasCanvasContent, isStreaming, messageCount]);
 
   const forceOpen = useCallback(() => setOpen(true), []);
 

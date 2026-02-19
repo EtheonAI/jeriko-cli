@@ -2,7 +2,6 @@ import { configureStore } from "@reduxjs/toolkit";
 // Core slices
 import authReducer from "./slices/auth.slice";
 import chatReducer from "./slices/chat.slice";
-import agentsReducer from "./slices/agents.slice";
 import sessionsReducer from "./slices/sessions.slice";
 import websocketReducer from "./slices/websocket.slice";
 import uiReducer from "./slices/ui.slice";
@@ -16,8 +15,8 @@ import experimentReducer from "./slices/experiment.slice";
 import knowledgeReducer from "./slices/knowledge.slice";
 import configsReducer from "./slices/configs.slice";
 // Additional Manus-style slices
-import workspaceReducer from "./slices/workspace.slice";
 import navbarReducer from "./slices/navbar.slice";
+import meetingReducer from "./slices/meeting.slice";
 import webDevReducer from "./slices/webDev.slice";
 import codeViewerReducer from "./slices/codeViewer.slice";
 import filePreviewerReducer from "./slices/filePreviewer.slice";
@@ -51,16 +50,19 @@ import toolCallsReducer from "./slices/toolCalls.slice";
 // Rubic-specific slices
 import skillsReducer from "./slices/skills.slice";
 import enterpriseTeamReducer from "./slices/enterpriseTeam.slice";
+// API slice (RTK Query — Manus architecture: central data hub)
+import { apiSlice } from "./api/api.slice";
 // Middleware
 import { websocketMiddleware } from "./middleware/websocket.middleware";
 
 export const makeStore = () => {
   const store = configureStore({
     reducer: {
+      // RTK Query — central data hub (Manus architecture)
+      [apiSlice.reducerPath]: apiSlice.reducer,
       // Core domain slices
       auth: authReducer,
       chat: chatReducer,
-      agents: agentsReducer,
       sessions: sessionsReducer,
       websocket: websocketReducer,
       ui: uiReducer,
@@ -74,7 +76,7 @@ export const makeStore = () => {
       knowledge: knowledgeReducer,
       configs: configsReducer,
       // Additional feature slices
-      workspace: workspaceReducer,
+      meeting: meetingReducer,
       navbar: navbarReducer,
       webDev: webDevReducer,
       codeViewer: codeViewerReducer,
@@ -121,7 +123,9 @@ export const makeStore = () => {
             "websocket/leaveRoom",
           ],
         },
-      }).concat(websocketMiddleware),
+      })
+        .concat(apiSlice.middleware) // RTK Query middleware — before WS for cache invalidation
+        .concat(websocketMiddleware),
     devTools: process.env.NODE_ENV !== "production",
   });
 
@@ -136,8 +140,8 @@ export type AppDispatch = AppStore["dispatch"];
 
 // ---------------------------------------------------------------------------
 // Re-export types only — NO barrel-exporting slice actions.
-// With 46 slices, 59+ action names collide (setLoading in 9 slices, setError
-// in 13 slices, etc.). Consumers import actions directly from slice files:
+// With 44 slices (43 Manus + apiSlice + toolCalls + search + skills + enterpriseTeam),
+// 59+ action names collide. Consumers import actions directly from slice files:
 //   import { setLoading } from "@/lib/store/slices/auth.slice"
 // ---------------------------------------------------------------------------
 

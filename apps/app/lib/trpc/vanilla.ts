@@ -146,10 +146,20 @@ function getRawClient() {
  * Returns a tRPC client with built-in query caching.
  * - .query() calls are cached for 30s + deduped if in-flight
  * - .mutate() calls pass through and auto-invalidate the router's cache
+ * @deprecated Use RTK Query hooks instead. This is kept for backward compat during migration.
  */
 export function getTrpcClient(): ReturnType<typeof createTRPCProxyClient<AppRouter>> {
   if (!cachedClient) {
     cachedClient = createCachedProxy(getRawClient(), []) as any;
   }
-  return cachedClient;
+  return cachedClient!;
+}
+
+/**
+ * Returns the raw (uncached) tRPC client for RTK Query queryFn calls.
+ * RTK Query handles caching, deduplication, and invalidation — no need for
+ * the Proxy cache layer. This gives full tRPC type safety in queryFn.
+ */
+export function getRawTrpcClient(): ReturnType<typeof createTRPCProxyClient<AppRouter>> {
+  return getRawClient();
 }

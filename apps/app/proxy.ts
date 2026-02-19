@@ -9,6 +9,7 @@ const publicRoutes = [
   "/forgot-password",
   "/reset-password",
   "/register", // Keep for backwards compatibility
+  "/share", // Public session sharing — no auth required
 ];
 
 // Auth-related paths that should redirect authenticated users

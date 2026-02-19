@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Attachment } from "@repo/ai/lib/types";
 import { ChatPrompt, type SubmitOptions } from "./unified-prompt";
-import { useSessionsIntegration } from "@/lib/store/hooks";
+import { useCreateSessionMutation } from "@/lib/store/api/api.slice";
 
 type ChatSectionProps = {
   showConfigBar?: boolean;
@@ -13,7 +13,7 @@ type ChatSectionProps = {
 export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const { createSession } = useSessionsIntegration();
+  const [createSession] = useCreateSessionMutation();
 
   const handleSubmit = useCallback(
     async (input: string, attachments: Attachment[], options: SubmitOptions) => {
@@ -22,10 +22,8 @@ export function ChatSection({ showConfigBar = true }: ChatSectionProps) {
       setIsLoading(true);
 
       try {
-        const result = await createSession(input.slice(0, 100));
-        if (!result.success || !result.session) throw new Error("Failed to create session");
-
-        const session = result.session as Record<string, any>;
+        const session = await createSession({ title: input.slice(0, 100) }).unwrap();
+        if (!session) throw new Error("Failed to create session");
 
         // Store initial message, attachments, and model for the chat page
         sessionStorage.setItem(

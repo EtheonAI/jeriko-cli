@@ -65,11 +65,16 @@ import {
   updateScheduledTask,
   type ScheduledTask,
 } from "@/lib/store/slices/scheduledTasks.slice";
+import { normalizeScheduledTask } from "@/lib/store/hooks/useScheduledTasksData";
 import {
-  normalizeScheduledTask,
-  useScheduledTasksData,
-} from "@/lib/store/hooks/useScheduledTasksData";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+  useGetScheduledTasksQuery,
+  useCreateScheduledTaskMutation,
+  useUpdateScheduledTaskMutation,
+  useRunScheduledTaskNowMutation,
+  usePauseScheduledTaskMutation,
+  useResumeScheduledTaskMutation,
+  useDeleteScheduledTaskMutation,
+} from "@/lib/store/api/api.slice";
 
 // Status badge config
 const statusConfig: Record<
@@ -128,7 +133,18 @@ export function ScheduledTasksTab() {
   const [pendingAction, setPendingAction] = useState<{ type: string; id?: string } | null>(null);
   const dispatch = useAppDispatch();
 
-  const { tasks, isLoading, error, refetch } = useScheduledTasksData();
+  const { data: tasks = [], isLoading, error: queryError, refetch } = useGetScheduledTasksQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as ScheduledTask[] | undefined, ...rest }),
+  });
+  const error = queryError ? String((queryError as any)?.data ?? "Failed to load") : null;
+
+  // RTK Query mutations
+  const [createScheduledTaskMutation] = useCreateScheduledTaskMutation();
+  const [updateScheduledTaskMutation] = useUpdateScheduledTaskMutation();
+  const [runScheduledTaskNowMutation] = useRunScheduledTaskNowMutation();
+  const [pauseScheduledTaskMutation] = usePauseScheduledTaskMutation();
+  const [resumeScheduledTaskMutation] = useResumeScheduledTaskMutation();
+  const [deleteScheduledTaskMutation] = useDeleteScheduledTaskMutation();
 
   // Create form
   const createForm = useForm<TaskFormValues>({
@@ -179,14 +195,14 @@ export function ScheduledTasksTab() {
 
     try {
       setPendingAction({ type: "create" });
-      const created = await getTrpcClient().scheduledTasks.create.mutate(submitData as any);
+      const created = await createScheduledTaskMutation(submitData).unwrap();
       dispatch(addScheduledTask(normalizeScheduledTask(created)));
       toast.success("Task scheduled successfully");
       setIsCreateOpen(false);
       createForm.reset();
     } catch (error: any) {
-      dispatch(setScheduledTasksError(error?.message || "Failed to create task"));
-      toast.error(error?.message || "Failed to create task");
+      dispatch(setScheduledTasksError(error?.data || error?.message || "Failed to create task"));
+      toast.error(error?.data || error?.message || "Failed to create task");
     } finally {
       setPendingAction(null);
     }
@@ -212,13 +228,13 @@ export function ScheduledTasksTab() {
 
     try {
       setPendingAction({ type: "update", id: editingTask.id });
-      const updated = await getTrpcClient().scheduledTasks.update.mutate(submitData as any);
+      const updated = await updateScheduledTaskMutation(submitData as any).unwrap();
       dispatch(updateScheduledTask({ id: updated!.id, updates: normalizeScheduledTask(updated!) }));
       toast.success("Task updated");
       setEditingTask(null);
     } catch (error: any) {
-      dispatch(setScheduledTasksError(error?.message || "Failed to update task"));
-      toast.error(error?.message || "Failed to update task");
+      dispatch(setScheduledTasksError(error?.data || error?.message || "Failed to update task"));
+      toast.error(error?.data || error?.message || "Failed to update task");
     } finally {
       setPendingAction(null);
     }
@@ -518,11 +534,11 @@ export function ScheduledTasksTab() {
                       onClick={async () => {
                         try {
                           setPendingAction({ type: "run", id: task.id });
-                          await getTrpcClient().scheduledTasks.runNow.mutate({ id: task.id });
+                          await runScheduledTaskNowMutation(task.id).unwrap();
                           toast.success("Task triggered — running now");
                           refetch();
                         } catch (error: any) {
-                          toast.error(error?.message || "Failed to run task");
+                          toast.error(error?.data || error?.message || "Failed to run task");
                         } finally {
                           setPendingAction(null);
                         }
@@ -552,9 +568,7 @@ export function ScheduledTasksTab() {
                       onClick={async () => {
                         try {
                           setPendingAction({ type: "pause", id: task.id });
-                          const updated = await getTrpcClient().scheduledTasks.pause.mutate({
-                            id: task.id,
-                          });
+                          const updated = await pauseScheduledTaskMutation(task.id).unwrap();
                           dispatch(
                             updateScheduledTask({
                               id: updated!.id,
@@ -563,7 +577,7 @@ export function ScheduledTasksTab() {
                           );
                           toast.success("Task paused");
                         } catch (error: any) {
-                          toast.error(error?.message || "Failed to pause task");
+                          toast.error(error?.data || error?.message || "Failed to pause task");
                         } finally {
                           setPendingAction(null);
                         }
@@ -582,9 +596,7 @@ export function ScheduledTasksTab() {
                       onClick={async () => {
                         try {
                           setPendingAction({ type: "resume", id: task.id });
-                          const updated = await getTrpcClient().scheduledTasks.resume.mutate({
-                            id: task.id,
-                          });
+                          const updated = await resumeScheduledTaskMutation(task.id).unwrap();
                           dispatch(
                             updateScheduledTask({
                               id: updated!.id,
@@ -593,7 +605,7 @@ export function ScheduledTasksTab() {
                           );
                           toast.success("Task resumed");
                         } catch (error: any) {
-                          toast.error(error?.message || "Failed to resume task");
+                          toast.error(error?.data || error?.message || "Failed to resume task");
                         } finally {
                           setPendingAction(null);
                         }
@@ -629,11 +641,11 @@ export function ScheduledTasksTab() {
                           onClick={async () => {
                             try {
                               setPendingAction({ type: "delete", id: task.id });
-                              await getTrpcClient().scheduledTasks.delete.mutate({ id: task.id });
+                              await deleteScheduledTaskMutation(task.id).unwrap();
                               dispatch(deleteScheduledTask(task.id));
                               toast.success("Task deleted");
                             } catch (error: any) {
-                              toast.error(error?.message || "Failed to delete task");
+                              toast.error(error?.data || error?.message || "Failed to delete task");
                             } finally {
                               setPendingAction(null);
                             }

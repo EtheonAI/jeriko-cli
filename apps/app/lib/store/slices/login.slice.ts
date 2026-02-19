@@ -345,6 +345,14 @@ export const loginSlice = createSlice({
       state.generalError = null;
     },
   },
+  extraReducers: (builder) => {
+    // Auto-reset login state when auth/setUser fires (successful login)
+    builder.addCase("auth/setUser", (state, action) => {
+      if ((action as unknown as { payload: unknown }).payload) {
+        Object.assign(state, initialState);
+      }
+    });
+  },
 });
 
 export const {

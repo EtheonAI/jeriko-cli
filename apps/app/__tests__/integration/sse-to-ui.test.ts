@@ -55,6 +55,11 @@ const REGISTERED_RENDERERS: Record<string, string> = {
   browser_console_view: "BrowserViewerEnhanced",
   browser_screenshot: "BrowserViewerEnhanced",
   browser_restart: "BrowserViewerEnhanced",
+  browser_save_image: "BrowserViewerEnhanced",
+  browser_upload_file: "BrowserViewerEnhanced",
+  browser_fill_form: "BrowserViewerEnhanced",
+  browser_find_keyword: "BrowserViewerEnhanced",
+  browser_close: "BrowserViewerEnhanced",
   generate_image: "ImageResult",
   deploy_expose_port: "DeployResult",
   deploy_apply_deployment: "DeployResult",
@@ -281,12 +286,15 @@ describe("SSE → UI Rendering Pipeline", () => {
     it("should NOT map communication/planning tools to any canvas view", () => {
       const noCanvasTools = [
         "show_plan", "message_notify_user", "message_ask_user",
-        "generate_image",
       ];
 
       for (const tool of noCanvasTools) {
         expect(TOOL_VIEW_MAP[tool]).toBeUndefined();
       }
+    });
+
+    it("should map generate_image to aiCanvas view", () => {
+      expect(TOOL_VIEW_MAP["generate_image"]).toBe("aiCanvas");
     });
 
     it("should detect latest tool view from sequential tool calls", () => {
@@ -607,7 +615,7 @@ describe("SSE → UI Rendering Pipeline", () => {
       expect(failures).toEqual([]);
     });
 
-    it("all 42 agent tools have explicit renderers", () => {
+    it("all 47 agent tools have explicit renderers", () => {
       const agentTools = [
         "show_plan", "message_notify_user", "message_ask_user",
         "file_read", "file_write", "file_str_replace", "file_find_in_content", "file_find_by_name",
@@ -617,6 +625,8 @@ describe("SSE → UI Rendering Pipeline", () => {
         "browser_scroll_up", "browser_scroll_down", "browser_move_mouse",
         "browser_press_key", "browser_select_option",
         "browser_console_exec", "browser_console_view", "browser_screenshot", "browser_restart",
+        "browser_save_image", "browser_upload_file", "browser_fill_form",
+        "browser_find_keyword", "browser_close",
         "deploy_expose_port", "deploy_apply_deployment",
         "generate_image", "schedule_task", "track_analytics",
         "text_editor",

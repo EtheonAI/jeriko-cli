@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Sheet,
   SheetContent,
@@ -18,14 +18,8 @@ import {
   AlertCircleIcon,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
-import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
-import {
-  setTaskExecutions,
-  setLoadingExecutions,
-  type ScheduledTaskExecution,
-} from "@/lib/store/slices/scheduledTasks.slice";
-import { normalizeScheduledTaskExecution } from "@/lib/store/hooks/useScheduledTasksData";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useGetTaskExecutionsQuery } from "@/lib/store/api/api.slice";
+import type { ScheduledTaskExecution } from "@/lib/store/slices/scheduledTasks.slice";
 
 const executionStatusConfig: Record<
   string,
@@ -55,41 +49,17 @@ export function ExecutionHistorySheet({
   open,
   onOpenChange,
 }: ExecutionHistorySheetProps) {
-  const dispatch = useAppDispatch();
-  const executionsMap = useAppSelector((state) => state.scheduledTasks.executions);
-  const executions = useMemo(
-    () => (taskId ? executionsMap[taskId] ?? [] : []),
-    [executionsMap, taskId]
+  const { data: executionsData, isLoading, error: queryError } = useGetTaskExecutionsQuery(
+    { taskId: taskId! },
+    { skip: !taskId || !open }
   );
-  const isLoading = useAppSelector((state) => state.scheduledTasks.isLoadingExecutions);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !taskId) return;
-
-    let cancelled = false;
-    dispatch(setLoadingExecutions(true));
-    setFetchError(null);
-
-    getTrpcClient()
-      .scheduledTasks.getExecutions.query({ taskId })
-      .then((data) => {
-        if (!cancelled) {
-          const normalized = data.map(normalizeScheduledTaskExecution);
-          dispatch(setTaskExecutions({ taskId, executions: normalized }));
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setFetchError(err.message || "Failed to load executions");
-          dispatch(setLoadingExecutions(false));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, taskId, dispatch]);
+  const executions = useMemo(
+    () => (executionsData ?? []) as ScheduledTaskExecution[],
+    [executionsData]
+  );
+  const fetchError = queryError
+    ? (typeof queryError === "object" && "data" in queryError ? String((queryError as any).data) : "Failed to load executions")
+    : null;
 
   function formatDuration(ms: number | null) {
     if (!ms) return "—";

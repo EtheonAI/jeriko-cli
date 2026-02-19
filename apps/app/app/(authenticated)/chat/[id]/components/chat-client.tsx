@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useSocket } from "@/lib/socket/provider";
-import { ToolRegistry, AgentCanvas, useCanvas, usePlannerState, PlannerBar } from "@repo/ai/components";
+import { ToolRegistry, AgentCanvas, usePlannerState, PlannerBar } from "@repo/ai/components";
 import { useE2BStream } from "@repo/ai/hooks/use-e2b-stream";
 import { useE2BTerminal } from "@repo/ai/hooks/use-e2b-terminal";
 import type { UIMessage as RepoUIMessage, SourceUrlUIPart, SourceDocumentUIPart, FileUIPart } from "@repo/ai/lib/types";
@@ -11,12 +11,17 @@ import type { SubmitOptions } from "@/app/(authenticated)/components/unified-pro
 import type { Attachment } from "@repo/ai/lib/types";
 import type { LibraryFile } from "@/app/(authenticated)/files/components/library-file-card";
 import { trpc } from "@/lib/trpc/client";
+import { useAppDispatch } from "@/lib/store/hooks";
+import { toggleSessionSwitch } from "@/lib/store/slices/sessionSwitch.slice";
+import { SessionSwitchDialog } from "@/app/(authenticated)/components/session-switch-dialog";
 
 // Hooks
 import { useChatSession } from "../hooks/use-chat-session";
 import { useCanvasPanel } from "../hooks/use-canvas-panel";
 import { useFeedback } from "../hooks/use-feedback";
 import { useInitialMessage } from "../hooks/use-initial-message";
+import { useSSEToEntities } from "../hooks/use-sse-to-entities";
+import { useCanvasFromEntities } from "../hooks/use-canvas-entities";
 
 // Components
 import { ChatHeader } from "./chat-header";
@@ -51,6 +56,19 @@ export function ChatClient({
   hasMoreMessages = false,
   user,
 }: ChatClientProps) {
+  // Session switcher — Cmd+K global shortcut
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        dispatch(toggleSessionSwitch());
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [dispatch]);
+
   // Core chat hook — useChat is the source of truth
   const {
     messages,
@@ -65,13 +83,16 @@ export function ChatClient({
   // Cast for @repo/ai hooks
   const repoMessages = messages as unknown as RepoUIMessage[];
 
+  // Bridge: normalize SSE tool parts into Redux websocket.toolEvents (dispatch-only, no selectors)
+  useSSEToEntities(messages as unknown as import("ai").UIMessage[], sessionId, isStreaming);
+
   // Planner — derived from show_plan tool calls in messages.
   // Pass isStreaming so in_progress steps auto-complete when stream ends.
   const plannerState = usePlannerState(repoMessages, isStreaming);
   const [plannerExpanded, setPlannerExpanded] = useState(false);
 
-  // Canvas — pass isStreaming so canvas loader stops when stream ends
-  const canvasState = useCanvas(repoMessages, isStreaming);
+  // Canvas — reads from Redux websocket.toolEvents via memoized selectors (Manus parity)
+  const canvasState = useCanvasFromEntities(sessionId, isStreaming);
 
   // Live E2B browser — Neko WebRTC (preferred) or E2B stream or screenshot polling (fallback)
   const e2bBrowser = useE2BStream({
@@ -239,6 +260,7 @@ export function ChatClient({
 
   return (
     <>
+    <SessionSwitchDialog />
     <LibraryPreviewModal
       file={previewFile}
       onClose={() => setPreviewFile(null)}
@@ -304,6 +326,9 @@ export function ChatClient({
               previewFileType={canvasState.previewFileType}
               slides={canvasState.slides}
               currentSlideIndex={canvasState.currentSlideIndex}
+              mapReduceTasks={canvasState.mapReduceTasks}
+              mapReduceOverallProgress={canvasState.mapReduceOverallProgress}
+              aiCanvasContent={canvasState.aiCanvasContent}
               timelinePercentage={canvasState.timelinePercentage}
               onTimelineChange={canvasState.onTimelineChange}
               currentStep={canvasState.currentStep}

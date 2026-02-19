@@ -49,7 +49,7 @@ _playwright_instance = None  # Track for proper cleanup via __aexit__
 COLLECT_ELEMENTS_JS = """
 (args) => {
   const startIndex = args.startIndex || 1;
-  const clickIdAttr = args.clickIdAttr || 'data-rubic_click_id';
+  const clickIdAttr = args.clickIdAttr || 'data-manus-id';
   const elements = [];
   let index = startIndex;
   const interactiveTags = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary', 'option', 'canvas']);
@@ -175,7 +175,7 @@ COLLECT_ELEMENTS_JS = """
 # Adapted from Manus findElementByClickId.js.
 FIND_ELEMENT_BY_INDEX_JS = """
 (index) => {
-  const attr = 'data-rubic_click_id';
+  const attr = 'data-manus-id';
   const target = String(index);
   const visited = new Set();
   const MAX_DEPTH = 10;
@@ -501,7 +501,7 @@ async def _collect_elements() -> dict[str, Any]:
     try:
         result = await _page.evaluate(
             COLLECT_ELEMENTS_JS,
-            {"startIndex": 1, "clickIdAttr": "data-rubic_click_id"},
+            {"startIndex": 1, "clickIdAttr": "data-manus-id"},
         )
         return result
     except Exception as e:
@@ -581,6 +581,9 @@ async def _build_page_snapshot() -> dict[str, Any]:
         "elements": element_descriptions,
         "element_count": len(elements),
         "screenshot": annotated_path or screenshot_path,
+        # Manus parity: return clean screenshot alongside annotated.
+        # Orchestrator sends clean_screenshot to frontend (no bounding boxes).
+        "clean_screenshot": screenshot_path,
         "viewport": viewport,
     }
 
@@ -730,7 +733,7 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
                         safe_value = str(value).replace("'", "\\'").replace('"', '\\"')
                         await page.evaluate(
                             f"""(idx) => {{
-                                const el = document.querySelector('[data-rubic_click_id="' + idx + '"]');
+                                const el = document.querySelector('[data-manus-id="' + idx + '"]');
                                 if (!el || el.tagName.toLowerCase() !== 'select') return;
                                 const val = "{safe_value}";
                                 // Try as numeric index first

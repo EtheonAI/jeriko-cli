@@ -5,7 +5,12 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { SearchIcon, RefreshCwIcon, AppWindowIcon, PlusIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetConnectorDefinitionsQuery,
+  useGetInstalledConnectorsQuery,
+  useInitializeOAuthMutation,
+  useCheckConnectionMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { AppCard } from "./components/app-card";
 import { CategoryFilter, type CategoryValue } from "./components/category-filter";
@@ -21,66 +26,37 @@ export function ApplicationsPageClient() {
   const [configOpen, setConfigOpen] = useState(false);
   const [connectingDefId, setConnectingDefId] = useState<string | null>(null);
 
-  // Data fetching via vanilla tRPC
-  const [definitions, setDefinitions] = useState<any[] | null>(null);
-  const [installedConnectors, setInstalledConnectors] = useState<any[] | null>(null);
-  const [isLoadingDefs, setIsLoadingDefs] = useState(true);
-  const [isLoadingInstalled, setIsLoadingInstalled] = useState(true);
-  const [isDefsError, setIsDefsError] = useState(false);
-  const [isInstalledError, setIsInstalledError] = useState(false);
+  // Data fetching via RTK Query
+  const {
+    data: definitions = null,
+    isLoading: isLoadingDefs,
+    isError: isDefsError,
+    refetch: refetchDefs,
+  } = useGetConnectorDefinitionsQuery();
+  const {
+    data: installedConnectors = null,
+    isLoading: isLoadingInstalled,
+    isError: isInstalledError,
+    refetch: refetchInstalled,
+  } = useGetInstalledConnectorsQuery();
+
   const definitionsRef = useRef(definitions);
   definitionsRef.current = definitions;
   const connectingDefIdRef = useRef(connectingDefId);
   connectingDefIdRef.current = connectingDefId;
 
-  const fetchData = useCallback(() => {
-    const client = getTrpcClient();
-    setIsLoadingDefs(true);
-    setIsLoadingInstalled(true);
-    setIsDefsError(false);
-    setIsInstalledError(false);
-
-    client.connectors.listDefinitions
-      .query()
-      .then((data) => { setDefinitions(data as any[]); setIsDefsError(false); })
-      .catch(() => setIsDefsError(true))
-      .finally(() => setIsLoadingDefs(false));
-
-    client.connectors.list
-      .query()
-      .then((data) => { setInstalledConnectors(data as any[]); setIsInstalledError(false); })
-      .catch(() => setIsInstalledError(true))
-      .finally(() => setIsLoadingInstalled(false));
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const refetchDefs = useCallback(() => {
-    setIsLoadingDefs(true);
-    getTrpcClient().connectors.listDefinitions.query()
-      .then((data) => { setDefinitions(data as any[]); setIsDefsError(false); })
-      .catch(() => setIsDefsError(true))
-      .finally(() => setIsLoadingDefs(false));
-  }, []);
-
-  const refetchInstalled = useCallback(() => {
-    setIsLoadingInstalled(true);
-    getTrpcClient().connectors.list.query()
-      .then((data) => { setInstalledConnectors(data as any[]); setIsInstalledError(false); })
-      .catch(() => setIsInstalledError(true))
-      .finally(() => setIsLoadingInstalled(false));
-  }, []);
+  const [initializeOAuth] = useInitializeOAuthMutation();
+  const [checkConnection] = useCheckConnectionMutation();
 
   // OAuth flow helper: check connection status with retries
   const checkConnectionWithRetries = useCallback(async (def: { type: string; name: string }) => {
-    const client = getTrpcClient();
     let connected = false;
     const maxAttempts = 3;
     const delays = [1000, 3000, 5000];
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const result = await client.connectors.checkConnection.mutate({ type: def.type });
+        const result = await checkConnection({ type: def.type }).unwrap();
         if (result.status === "connected") {
           toast.success(`${def.name} connected successfully!`);
           connected = true;
@@ -101,13 +77,12 @@ export function ApplicationsPageClient() {
     if (!connected) {
       toast.info("Connection pending. Check Applications page for status.");
     }
-  }, []);
+  }, [checkConnection]);
 
   // OAuth flow helper: open popup and poll
   const startOAuthFlow = useCallback(async (type: string) => {
     try {
-      const client = getTrpcClient();
-      const data = await client.connectors.initializeOAuth.mutate({ type });
+      const data = await initializeOAuth({ type }).unwrap();
       const popup = window.open(data.authUrl, "oauth", "width=600,height=700,popup=true");
       if (!popup) {
         toast.error("Please allow popups for this site to connect apps.");
@@ -118,9 +93,9 @@ export function ApplicationsPageClient() {
       const check = setInterval(async () => {
         if (popup.closed) {
           clearInterval(check);
-          const def = definitionsRef.current?.find((d) => d.id === connectingDefIdRef.current);
+          const def = (definitionsRef.current as any[])?.find((d: any) => d.id === connectingDefIdRef.current);
           if (def) {
-            await checkConnectionWithRetries(def);
+            await checkConnectionWithRetries(def as { type: string; name: string });
           }
           setConnectingDefId(null);
           refetchInstalled();
@@ -131,7 +106,7 @@ export function ApplicationsPageClient() {
       setConnectingDefId(null);
       toast.error(error?.message || "Failed to start connection");
     }
-  }, [checkConnectionWithRetries, refetchInstalled, refetchDefs]);
+  }, [checkConnectionWithRetries, refetchInstalled, refetchDefs, initializeOAuth]);
 
   // Listen for postMessage from the OAuth callback popup
   useEffect(() => {
@@ -153,7 +128,7 @@ export function ApplicationsPageClient() {
   const handleConnect = useCallback(
     (definitionId: string, _type: string) => {
       setConnectingDefId(definitionId);
-      const def = definitions?.find((d) => d.id === definitionId);
+      const def = (definitions as any[] | null)?.find((d: any) => d.id === definitionId);
       if (def) {
         startOAuthFlow(def.type);
       }
@@ -176,8 +151,8 @@ export function ApplicationsPageClient() {
 
   // Build connected lookup map (definitionId -> installed connector)
   const installedMap = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof installedConnectors>[number]>();
-    installedConnectors?.forEach((c) => {
+    const map = new Map<string, any>();
+    (installedConnectors as any[] | null)?.forEach((c: any) => {
       map.set(c.definition.id, c);
     });
     return map;
@@ -187,12 +162,12 @@ export function ApplicationsPageClient() {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     if (activeTab === "connected") {
-      installedConnectors?.forEach((c) => {
+      (installedConnectors as any[] | null)?.forEach((c: any) => {
         const cat = c.definition.category || "other";
         counts[cat] = (counts[cat] || 0) + 1;
       });
     } else {
-      definitions?.forEach((d) => {
+      (definitions as any[] | null)?.forEach((d: any) => {
         const cat = d.category || "other";
         counts[cat] = (counts[cat] || 0) + 1;
       });
@@ -204,7 +179,7 @@ export function ApplicationsPageClient() {
   const filteredDefinitions = useMemo(() => {
     if (!definitions) return [];
     const searchLower = search.toLowerCase();
-    return definitions.filter((d) => {
+    return (definitions as any[]).filter((d: any) => {
       if (category !== "all" && d.category !== category) return false;
       if (
         search &&
@@ -220,7 +195,7 @@ export function ApplicationsPageClient() {
   const filteredConnected = useMemo(() => {
     if (!installedConnectors) return [];
     const searchLower = search.toLowerCase();
-    return installedConnectors.filter((c) => {
+    return (installedConnectors as any[]).filter((c: any) => {
       if (category !== "all" && c.definition.category !== category) return false;
       if (
         search &&
@@ -234,8 +209,8 @@ export function ApplicationsPageClient() {
 
   const isLoading = isLoadingDefs || isLoadingInstalled;
   const isError = isDefsError || isInstalledError;
-  const connectedCount = installedConnectors?.length ?? 0;
-  const availableCount = definitions?.length ?? 0;
+  const connectedCount = (installedConnectors as any[] | null)?.length ?? 0;
+  const availableCount = (definitions as any[] | null)?.length ?? 0;
 
   if (isLoading) {
     return (

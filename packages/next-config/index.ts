@@ -122,7 +122,10 @@ export const config: NextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        // Apply security headers to all routes EXCEPT auth API
+        // (Better-Auth sets large Set-Cookie headers that, combined with CSP,
+        // exceed Chrome's response header size limit → ERR_RESPONSE_HEADERS_TOO_BIG)
+        source: "/((?!api/auth).*)",
         headers: securityHeaders,
       },
     ];

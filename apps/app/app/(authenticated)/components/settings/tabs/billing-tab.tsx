@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -18,14 +18,20 @@ import {
   AlertDialogTrigger,
 } from "@repo/design-system/components/ui/alert-dialog";
 import { CheckIcon, CreditCardIcon, CrownIcon, PlusIcon, Loader2Icon, ExternalLinkIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
-import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
 import {
-  setSubscription as setSubscriptionAction,
-  setPaymentMethods as setPaymentMethodsAction,
-  setInvoices as setInvoicesAction,
-  type Subscription,
-} from "@/lib/store/slices/billing.slice";
+  useGetPaymentMethodsQuery,
+  useGetInvoicesQuery,
+  useGetPlansQuery,
+  useGetSubscriptionQuery,
+  useGetCreditPackagesQuery,
+  useCreateSubscriptionCheckoutMutation,
+  useCancelSubscriptionMutation,
+  useReactivateSubscriptionMutation,
+  useSetDefaultPaymentMethodMutation,
+  useDeletePaymentMethodMutation,
+  useGetBillingPortalUrlMutation,
+} from "@/lib/store/api/api.slice";
+import type { MembershipTier, Subscription } from "@/lib/store/slices/billing.slice";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -37,151 +43,105 @@ type BillingTabProps = {
 export function BillingTab({ isPro = false }: BillingTabProps) {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const dispatch = useAppDispatch();
 
-  // Read core billing data from Redux (hydrated by ReduxDataLoader)
-  const plans = useAppSelector((state) => state.billing.personalPlanTiers);
-  const reduxSubscription = useAppSelector((state) => state.billing.subscription);
-  const isLoadingPlans = useAppSelector((state) => state.billing.isSubscriptionLoading);
-  const creditPackages = useAppSelector((state) => state.billing.creditPackages);
+  // RTK Query for all billing data — auto-fetches on mount, cached 5 min
+  const { data: plans, isLoading: isLoadingPlans } = useGetPlansQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as MembershipTier[] | undefined, ...rest }),
+  });
+  const { data: subscriptionData, isLoading: isLoadingSubscription, isError: billingError } = useGetSubscriptionQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({
+      data: data as { subscription: Subscription | null; plan: unknown } | null | undefined,
+      ...rest,
+    }),
+  });
+  const reduxSubscription = (subscriptionData?.subscription ?? null) as Subscription | null;
+  const { data: paymentMethods, isLoading: isLoadingPayments } = useGetPaymentMethodsQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any[] | undefined, ...rest }),
+  });
+  const { data: invoices, isLoading: isLoadingInvoices } = useGetInvoicesQuery({ limit: 5 }, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any[] | undefined, ...rest }),
+  });
 
-  // Lazy-fetch data only needed in this tab (not app-critical)
-  const [paymentMethods, setPaymentMethods] = useState<any[] | null>(null);
-  const [isLoadingPayments, setIsLoadingPayments] = useState(true);
-  const [invoices, setInvoices] = useState<any[] | null>(null);
-  const [isLoadingInvoices, setIsLoadingInvoices] = useState(true);
-
-  // Mutation pending states
-  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
-  const [isCancellingSubscription, setIsCancellingSubscription] = useState(false);
-  const [isReactivating, setIsReactivating] = useState(false);
-  const [isSettingDefault, setIsSettingDefault] = useState(false);
-  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
-  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
-
-  const fetchPaymentMethods = useCallback(async () => {
-    try {
-      const data = await getTrpcClient().billing.listPaymentMethods.query();
-      setPaymentMethods(data);
-    } catch {
-      setPaymentMethods([]);
-    } finally {
-      setIsLoadingPayments(false);
-    }
-  }, []);
-
-  const fetchInvoices = useCallback(async () => {
-    try {
-      const data = await getTrpcClient().billing.listInvoices.query({ limit: 5 });
-      setInvoices(data);
-    } catch {
-      setInvoices([]);
-    } finally {
-      setIsLoadingInvoices(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPaymentMethods();
-    fetchInvoices();
-  }, [fetchPaymentMethods, fetchInvoices]);
-
-  // Mutations as async callbacks
+  // RTK Query mutations
+  const [createSubscriptionCheckout, { isLoading: isCreatingCheckout }] = useCreateSubscriptionCheckoutMutation();
+  const [cancelSubscription, { isLoading: isCancellingSubscription }] = useCancelSubscriptionMutation();
+  const [reactivateSubscription, { isLoading: isReactivating }] = useReactivateSubscriptionMutation();
+  const [setDefaultPaymentMethod, { isLoading: isSettingDefault }] = useSetDefaultPaymentMethodMutation();
+  const [deletePaymentMethod, { isLoading: isDeletingPayment }] = useDeletePaymentMethodMutation();
+  const [getBillingPortalUrl, { isLoading: isOpeningPortal }] = useGetBillingPortalUrlMutation();
 
   const handleCreateCheckout = useCallback(async (planId: string, interval: "monthly" | "yearly") => {
     setSelectedPlan(planId);
-    setIsCreatingCheckout(true);
     try {
-      const data = await getTrpcClient().billing.createSubscriptionCheckout.mutate({
+      const data = await createSubscriptionCheckout({
         planId,
         interval,
         successUrl: `${window.location.origin}/settings?tab=billing&success=true`,
         cancelUrl: `${window.location.origin}/settings?tab=billing`,
-      });
+      }).unwrap();
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       } else {
         toast.info("Stripe checkout not yet configured");
       }
     } catch (error: any) {
-      toast.error(error?.message || "Failed to create checkout");
-    } finally {
-      setIsCreatingCheckout(false);
+      toast.error(error?.data || error?.message || "Failed to create checkout");
     }
-  }, []);
+  }, [createSubscriptionCheckout]);
 
   const handleCancelSubscription = useCallback(async () => {
-    setIsCancellingSubscription(true);
     try {
-      await getTrpcClient().billing.cancelSubscription.mutate({
+      await cancelSubscription({
         cancelAtPeriodEnd: true,
         reason: cancelReason,
-      });
+      }).unwrap();
       toast.success("Subscription cancelled. You'll have access until the end of your billing period.");
-      if (reduxSubscription) dispatch(setSubscriptionAction({ ...reduxSubscription, cancelAtPeriodEnd: true }));
     } catch (error: any) {
-      toast.error(error?.message || "Failed to cancel subscription");
-    } finally {
-      setIsCancellingSubscription(false);
+      toast.error(error?.data || error?.message || "Failed to cancel subscription");
     }
-  }, [cancelReason, reduxSubscription, dispatch]);
+  }, [cancelReason, cancelSubscription]);
 
   const handleReactivateSubscription = useCallback(async () => {
-    setIsReactivating(true);
     try {
-      await getTrpcClient().billing.reactivateSubscription.mutate();
+      await reactivateSubscription().unwrap();
       toast.success("Subscription reactivated");
-      if (reduxSubscription) dispatch(setSubscriptionAction({ ...reduxSubscription, cancelAtPeriodEnd: false }));
     } catch (error: any) {
-      toast.error(error?.message || "Failed to reactivate subscription");
-    } finally {
-      setIsReactivating(false);
+      toast.error(error?.data || error?.message || "Failed to reactivate subscription");
     }
-  }, [reduxSubscription, dispatch]);
+  }, [reactivateSubscription]);
 
   const handleSetDefaultPayment = useCallback(async (id: string) => {
-    setIsSettingDefault(true);
     try {
-      await getTrpcClient().billing.setDefaultPaymentMethod.mutate({ id });
+      await setDefaultPaymentMethod(id).unwrap();
       toast.success("Default payment method updated");
-      await fetchPaymentMethods();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update payment method");
-    } finally {
-      setIsSettingDefault(false);
+      toast.error(error?.data || error?.message || "Failed to update payment method");
     }
-  }, [fetchPaymentMethods]);
+  }, [setDefaultPaymentMethod]);
 
   const handleDeletePayment = useCallback(async (id: string) => {
-    setIsDeletingPayment(true);
     try {
-      await getTrpcClient().billing.deletePaymentMethod.mutate({ id });
+      await deletePaymentMethod(id).unwrap();
       toast.success("Payment method removed");
-      await fetchPaymentMethods();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to remove payment method");
-    } finally {
-      setIsDeletingPayment(false);
+      toast.error(error?.data || error?.message || "Failed to remove payment method");
     }
-  }, [fetchPaymentMethods]);
+  }, [deletePaymentMethod]);
 
   const handleGetBillingPortal = useCallback(async (returnUrl: string) => {
-    setIsOpeningPortal(true);
     try {
-      const data = await getTrpcClient().billing.getBillingPortalUrl.mutate({ returnUrl });
+      const data = await getBillingPortalUrl({ returnUrl }).unwrap();
       if (data.url) {
         window.open(data.url, "_blank");
       } else {
         toast.info("Billing portal not yet configured");
       }
     } catch (error: any) {
-      toast.error(error?.message || "Failed to open billing portal");
-    } finally {
-      setIsOpeningPortal(false);
+      toast.error(error?.data || error?.message || "Failed to open billing portal");
     }
-  }, []);
+  }, [getBillingPortalUrl]);
 
-  const isLoading = isLoadingPlans || isLoadingPayments;
+  const isLoading = isLoadingPlans || isLoadingSubscription || isLoadingPayments;
 
   const isSubscribed = reduxSubscription !== null;
   const isCancelling = reduxSubscription?.cancelAtPeriodEnd;
@@ -215,8 +175,6 @@ export function BillingTab({ isPro = false }: BillingTabProps) {
       </div>
     );
   }
-
-  const billingError = useAppSelector((state) => state.billing.error);
 
   if (billingError) {
     return (

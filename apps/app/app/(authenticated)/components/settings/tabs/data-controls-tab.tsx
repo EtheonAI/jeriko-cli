@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Switch } from "@repo/design-system/components/ui/switch";
 import { Label } from "@repo/design-system/components/ui/label";
@@ -42,54 +42,37 @@ import {
   AlertTriangleIcon,
   FolderIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetUserPreferencesQuery,
+  useUpdatePreferencesMutation,
+  useExportUserDataMutation,
+  useClearChatHistoryMutation,
+  useClearFilesMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { ErrorState } from "./error-state";
 
 export function DataControlsTab() {
-  const [preferences, setPreferences] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["user"]["getPreferences"]["query"]>> | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
+  const { data: preferences, isLoading, isError, refetch: refetchPreferences } = useGetUserPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
+  const [updatePreferencesMutation, { isLoading: isUpdatePending }] = useUpdatePreferencesMutation();
+  const [exportDataMutation, { isLoading: isExportPending }] = useExportUserDataMutation();
+  const [clearChatHistoryMutation, { isLoading: isClearHistoryPending }] = useClearChatHistoryMutation();
+  const [clearFilesMutation, { isLoading: isClearFilesPending }] = useClearFilesMutation();
 
-  const [isUpdatePending, setIsUpdatePending] = useState(false);
-  const [isExportPending, setIsExportPending] = useState(false);
-  const [isClearHistoryPending, setIsClearHistoryPending] = useState(false);
-  const [isClearFilesPending, setIsClearFilesPending] = useState(false);
-
-  const fetchPreferences = useCallback(async () => {
+  const updatePreferences = useCallback(async (input: Record<string, unknown>) => {
     try {
-      setIsLoading(true);
-      setIsError(false);
-      const data = await getTrpcClient().user.getPreferences.query();
-      setPreferences(data);
-    } catch {
-      setIsError(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPreferences();
-  }, [fetchPreferences]);
-
-  const updatePreferences = useCallback(async (input: Parameters<ReturnType<typeof getTrpcClient>["user"]["updatePreferences"]["mutate"]>[0]) => {
-    try {
-      setIsUpdatePending(true);
-      await getTrpcClient().user.updatePreferences.mutate(input);
+      await updatePreferencesMutation(input).unwrap();
       toast.success("Settings updated");
-      fetchPreferences();
     } catch (error: any) {
-      toast.error(error.message || "Failed to update settings");
-    } finally {
-      setIsUpdatePending(false);
+      toast.error(error?.data || error?.message || "Failed to update settings");
     }
-  }, [fetchPreferences]);
+  }, [updatePreferencesMutation]);
 
   const exportData = useCallback(async () => {
     try {
-      setIsExportPending(true);
-      const data = await getTrpcClient().user.exportData.mutate();
+      const data = await exportDataMutation().unwrap();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -101,35 +84,27 @@ export function DataControlsTab() {
       URL.revokeObjectURL(url);
       toast.success("Data exported successfully");
     } catch (error: any) {
-      toast.error(error.message || "Failed to export data");
-    } finally {
-      setIsExportPending(false);
+      toast.error(error?.data || error?.message || "Failed to export data");
     }
-  }, []);
+  }, [exportDataMutation]);
 
   const clearHistory = useCallback(async () => {
     try {
-      setIsClearHistoryPending(true);
-      await getTrpcClient().user.clearChatHistory.mutate();
+      await clearChatHistoryMutation().unwrap();
       toast.success("Conversation history cleared");
     } catch (error: any) {
-      toast.error(error.message || "Failed to clear history");
-    } finally {
-      setIsClearHistoryPending(false);
+      toast.error(error?.data || error?.message || "Failed to clear history");
     }
-  }, []);
+  }, [clearChatHistoryMutation]);
 
   const clearFiles = useCallback(async () => {
     try {
-      setIsClearFilesPending(true);
-      await getTrpcClient().user.clearFiles.mutate();
+      await clearFilesMutation().unwrap();
       toast.success("Files cleared");
     } catch (error: any) {
-      toast.error(error.message || "Failed to clear files");
-    } finally {
-      setIsClearFilesPending(false);
+      toast.error(error?.data || error?.message || "Failed to clear files");
     }
-  }, []);
+  }, [clearFilesMutation]);
 
   const handleToggle = (key: string, value: boolean) => {
     updatePreferences({ [key]: value });
@@ -163,7 +138,7 @@ export function DataControlsTab() {
         <ErrorState
           title="Failed to load data controls"
           message="Unable to load your privacy settings. Please try again."
-          onRetry={() => fetchPreferences()}
+          onRetry={() => refetchPreferences()}
         />
       </div>
     );

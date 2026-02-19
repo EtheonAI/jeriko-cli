@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { cn } from "@repo/design-system/lib/utils";
 import { CableIcon, Loader2Icon, PlusIcon, SettingsIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetInstalledConnectorsQuery,
+  useGetConnectorDefinitionsQuery,
+} from "@/lib/store/api/api.slice";
 
 // ============================================================================
 // Types
@@ -83,24 +86,12 @@ export function ConnectionsModal({
 }: ConnectionsModalProps) {
   const router = useRouter();
 
-  // Local state for connectors data
-  const [connectors, setConnectors] = useState<any[] | null>(null);
-  const [definitions, setDefinitions] = useState<any[] | null>(null);
-  const [loadingConnectors, setLoadingConnectors] = useState(true);
-
-  // Fetch user's installed connectors + definitions on mount
-  useEffect(() => {
-    const client = getTrpcClient();
-    setLoadingConnectors(true);
-    Promise.all([
-      client.connectors.list.query().catch(() => null),
-      client.connectors.listDefinitions.query().catch(() => null),
-    ]).then(([installed, defs]) => {
-      if (installed) setConnectors(installed as any[]);
-      if (defs) setDefinitions(defs as any[]);
-      setLoadingConnectors(false);
-    });
-  }, []);
+  // Data fetching via RTK Query
+  const { data: connectorsData, isLoading: loadingInstalledConnectors } = useGetInstalledConnectorsQuery();
+  const { data: definitionsData, isLoading: loadingDefinitions } = useGetConnectorDefinitionsQuery();
+  const connectors = (connectorsData as any[] | null) ?? null;
+  const definitions = (definitionsData as any[] | null) ?? null;
+  const loadingConnectors = loadingInstalledConnectors || loadingDefinitions;
 
   const isSelected = (id: string) => selectedConnections.some((c) => c.id === id);
   const selectedCount = selectedConnections.length;

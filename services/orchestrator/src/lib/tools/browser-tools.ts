@@ -49,6 +49,18 @@ export function createBrowserTools(ctx: ToolContext) {
       description: `Navigate browser to specified URL. Returns interactive elements with indices, page content as markdown, and an annotated screenshot. Use element indices from this output to interact with the page.`,
       inputSchema: z.object({
         url: z.string().describe("Complete URL to visit. Must include protocol prefix."),
+        intent: z
+          .enum(["informational", "transactional", "research"])
+          .optional()
+          .describe(
+            "Navigation intent: informational=read content (default), transactional=fill forms/click buttons, research=detailed analysis"
+          ),
+        focus: z
+          .string()
+          .optional()
+          .describe(
+            "What to prioritize on the page (e.g., 'search box and filters', 'product details'). Helps narrow element indexing."
+          ),
       }),
       execute: async (params) => {
         return executeSandboxTool(ctx, "browser_navigate", params);
@@ -216,6 +228,72 @@ export function createBrowserTools(ctx: ToolContext) {
         return executeSandboxTool(ctx, "browser_screenshot", {});
       },
       toModelOutput: browserModelOutput,
+    }),
+
+    browser_save_image: tool({
+      description: `Save an image from the current browser page to a file in the sandbox.`,
+      inputSchema: z.object({
+        index: z
+          .number()
+          .int()
+          .describe("Index of the image element to save (from browser_view output)."),
+        path: z.string().describe("Absolute file path to save the image to."),
+      }),
+      execute: async (params) => {
+        return executeSandboxTool(ctx, "browser_save_image", params);
+      },
+    }),
+
+    browser_upload_file: tool({
+      description: `Upload a file to a file input element on the current browser page.`,
+      inputSchema: z.object({
+        index: z
+          .number()
+          .int()
+          .describe("Index of the file input element (from browser_view output)."),
+        file: z.string().describe("Absolute path of the file to upload from the sandbox."),
+      }),
+      execute: async (params) => {
+        return executeSandboxTool(ctx, "browser_upload_file", params);
+      },
+      toModelOutput: browserModelOutput,
+    }),
+
+    browser_fill_form: tool({
+      description: `Fill multiple form fields at once on the current browser page.`,
+      inputSchema: z.object({
+        fields: z
+          .array(
+            z.object({
+              index: z.number().int().describe("Element index from browser_view output."),
+              value: z.string().describe("Value to fill into the field."),
+            })
+          )
+          .describe("Array of field index/value pairs to fill."),
+      }),
+      execute: async (params) => {
+        return executeSandboxTool(ctx, "browser_fill_form", params);
+      },
+      toModelOutput: browserModelOutput,
+    }),
+
+    browser_find_keyword: tool({
+      description: `Search for text on the current browser page and highlight matches.`,
+      inputSchema: z.object({
+        keyword: z.string().describe("Text to search for on the page."),
+      }),
+      execute: async (params) => {
+        return executeSandboxTool(ctx, "browser_find_keyword", params);
+      },
+      toModelOutput: browserModelOutput,
+    }),
+
+    browser_close: tool({
+      description: `Close the current browser window. Use when done with browser interaction.`,
+      inputSchema: z.object({}),
+      execute: async () => {
+        return executeSandboxTool(ctx, "browser_close", {});
+      },
     }),
   };
 }

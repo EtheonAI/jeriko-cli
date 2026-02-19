@@ -425,9 +425,13 @@ export function createParallelTasksTool(ctx: ToolContext) {
   return {
     parallel_tasks: tool({
       description:
-        "Execute multiple independent tasks in parallel using sub-agent LLMs (GPT-4.1-mini). " +
-        "Each task gets its own independent completion. Max 4 concurrent workers per wave. " +
-        "Use this for genuinely parallelizable work like researching multiple topics simultaneously.",
+        "Execute multiple independent tasks in parallel using sub-agent LLMs. " +
+        "Each sub-task gets its own independent LLM completion (GPT-4.1-mini for text/code/research, " +
+        "GPT-4.1-nano for quick tasks, DALL-E 3 for image generation, Gemini 2.5 Flash for image gen, " +
+        "GPT-4o for image analysis). Max 4 concurrent workers per wave. " +
+        "IMPORTANT: Sub-tasks are limited to text generation and cannot use sandbox tools " +
+        "(file_read, shell_exec, browser_navigate, etc.). For tasks that require tool access, " +
+        "execute them sequentially in the main agent loop instead.",
       inputSchema: z.object({
         tasks: z
           .array(

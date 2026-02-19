@@ -20,7 +20,7 @@ function keysForView(view: CanvasViewType): string[] {
 
 describe("TOOL_VIEW_MAP — browser tools", () => {
   const EXPECTED_BROWSER_TOOLS = [
-    // Core browser interactions (15)
+    // Core browser interactions (20)
     "browser_navigate",
     "browser_view",
     "browser_click",
@@ -36,6 +36,11 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
     "browser_console_view",
     "browser_screenshot",
     "browser_restart",
+    "browser_save_image",
+    "browser_upload_file",
+    "browser_fill_form",
+    "browser_find_keyword",
+    "browser_close",
     // Search tools that surface in browser canvas (3)
     "info_search_web",
     "web_search",
@@ -47,11 +52,13 @@ describe("TOOL_VIEW_MAP — browser tools", () => {
     "make_manus_page",
     // Slide present generates viewable URL (1)
     "slide_present",
+    // Image reverse search (1)
+    "image_search_upload",
   ].sort();
 
-  it("should contain exactly 22 browser entries", () => {
+  it("should contain exactly 28 browser entries", () => {
     const browserKeys = keysForView("browser");
-    expect(browserKeys).toHaveLength(22);
+    expect(browserKeys).toHaveLength(28);
   });
 
   it("should map every expected browser tool to 'browser'", () => {
@@ -113,12 +120,13 @@ describe("TOOL_VIEW_MAP — editor tools", () => {
     "file_str_replace",
     "file_find_in_content",
     "file_find_by_name",
+    "file_view",
     "text_editor",
   ].sort();
 
-  it("should contain exactly 6 editor entries", () => {
+  it("should contain exactly 7 editor entries", () => {
     const editorKeys = keysForView("editor");
-    expect(editorKeys).toHaveLength(6);
+    expect(editorKeys).toHaveLength(7);
   });
 
   it("should map every expected editor tool to 'editor'", () => {
@@ -180,7 +188,6 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
     "show_plan",
     "message_notify_user",
     "message_ask_user",
-    "generate_image",
     "schedule_task",
     "track_analytics",
   ];
@@ -198,19 +205,22 @@ describe("TOOL_VIEW_MAP — inline-only tools are absent", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — total count", () => {
-  it("should have exactly 43 entries (22 browser + 6 terminal + 6 editor + 9 webDevIDE)", () => {
+  it("should have exactly 56 entries (28 browser + 6 terminal + 7 editor + 9 webDevIDE + 2 aiCanvas + 3 slides + 1 mapReduce)", () => {
     const totalKeys = Object.keys(TOOL_VIEW_MAP);
-    expect(totalKeys).toHaveLength(43);
+    expect(totalKeys).toHaveLength(56);
   });
 
-  it("should have counts that add up: browser + terminal + editor + webDevIDE = total", () => {
+  it("should have counts that add up: all view types = total", () => {
     const browserCount = keysForView("browser").length;
     const terminalCount = keysForView("terminal").length;
     const editorCount = keysForView("editor").length;
     const webdevCount = keysForView("webDevIDE").length;
+    const aiCanvasCount = keysForView("aiCanvas").length;
+    const slidesCount = keysForView("slides").length;
+    const mapReduceCount = keysForView("mapReduce").length;
     const total = Object.keys(TOOL_VIEW_MAP).length;
 
-    expect(browserCount + terminalCount + editorCount + webdevCount).toBe(total);
+    expect(browserCount + terminalCount + editorCount + webdevCount + aiCanvasCount + slidesCount + mapReduceCount).toBe(total);
   });
 });
 
@@ -219,9 +229,9 @@ describe("TOOL_VIEW_MAP — total count", () => {
 // ---------------------------------------------------------------------------
 
 describe("TOOL_VIEW_MAP — no unexpected view types", () => {
-  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "editor", "webDevIDE"];
+  const ALLOWED_VIEW_TYPES: CanvasViewType[] = ["browser", "terminal", "editor", "webDevIDE", "aiCanvas", "slides", "mapReduce"];
 
-  it("every value should be one of: browser, terminal, editor, webDevIDE", () => {
+  it("every value should be one of the allowed view types", () => {
     const viewTypes = new Set(Object.values(TOOL_VIEW_MAP));
 
     for (const vt of viewTypes) {
@@ -232,8 +242,8 @@ describe("TOOL_VIEW_MAP — no unexpected view types", () => {
     }
   });
 
-  it("should use exactly the four expected view types", () => {
+  it("should use exactly the seven expected view types", () => {
     const viewTypes = [...new Set(Object.values(TOOL_VIEW_MAP))].sort();
-    expect(viewTypes).toEqual(["browser", "editor", "terminal", "webDevIDE"]);
+    expect(viewTypes).toEqual(["aiCanvas", "browser", "editor", "mapReduce", "slides", "terminal", "webDevIDE"]);
   });
 });

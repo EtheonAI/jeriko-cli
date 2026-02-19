@@ -54,13 +54,39 @@ interface BrowserOutput {
   url?: string;
   title?: string;
   content?: string;
-  screenshot?: string; // base64
+  screenshot?: string; // base64 or S3 presigned URL
   error?: string;
   console_output?: string[];
   network_requests?: number;
   page_loaded?: boolean;
   action_result?: string;
   elements_found?: number;
+}
+
+/** Known base64 magic prefixes for common image formats */
+const BASE64_IMAGE_PREFIXES = ["iVBOR", "/9j/", "R0lGO", "UklGR"];
+
+/** Normalize screenshot value: detect URL vs base64 and return a valid src */
+function normalizeScreenshotSrc(raw: string): string {
+  if (raw.startsWith("data:")) return raw;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  for (const prefix of BASE64_IMAGE_PREFIXES) {
+    if (raw.startsWith(prefix)) {
+      const mime = raw.startsWith("/9j/")
+        ? "image/jpeg"
+        : raw.startsWith("UklGR")
+          ? "image/webp"
+          : raw.startsWith("R0lGO")
+            ? "image/gif"
+            : "image/png";
+      return `data:${mime};base64,${raw}`;
+    }
+  }
+  // Fallback: if it looks like base64, treat as PNG
+  if (raw.length > 100 && /^[A-Za-z0-9+/=]+$/.test(raw.slice(0, 100))) {
+    return `data:image/png;base64,${raw}`;
+  }
+  return raw;
 }
 
 // ============================================================================
@@ -233,7 +259,7 @@ function FullscreenModal({
         onWheel={handleWheel}
       >
         <img
-          src={`data:image/png;base64,${screenshot}`}
+          src={normalizeScreenshotSrc(screenshot)}
           alt="Browser screenshot fullscreen"
           className="max-w-none select-none"
           style={{
@@ -388,7 +414,7 @@ export function BrowserViewerEnhanced({
       {screenshot && !isLoading && (
         <div className="relative">
           <img
-            src={`data:image/png;base64,${screenshot}`}
+            src={normalizeScreenshotSrc(screenshot)}
             alt="Browser screenshot"
             className="w-full cursor-pointer"
             onClick={() => setIsFullscreen(true)}

@@ -9,7 +9,6 @@ import {
   setTaskFinished,
   setContextLengthStatus,
 } from "../slices/websocket.slice";
-import { addAgent, addTask, updateAgent, updateTask } from "../slices/agents.slice";
 import {
   addExecution,
   addScheduledTask,
@@ -49,8 +48,21 @@ import {
   addResult as addMapResult,
   completeTask as completeMapTask,
 } from "../slices/mapReduce.slice";
-import type { Agent, AgentTask } from "../slices/agents.slice";
 import type { ScheduledTask, ScheduledTaskExecution } from "../slices/scheduledTasks.slice";
+import { setShouldShowMeetingIntro } from "../slices/meeting.slice";
+import {
+  appendDataSource as appendCommunityItem,
+  toggleLike as toggleCommunityLike,
+  type CommunityItem,
+} from "../slices/community.slice";
+import {
+  updateFileConnectorStatus,
+  type FileConnectorAppType,
+} from "../slices/fileConnector.slice";
+import { setShareInfo, type ShareInfo } from "../slices/fileShare.slice";
+import { addUserSkill, removeUserSkill, type Skill } from "../slices/skills.slice";
+import { addMember, removeMember, type TeamMember } from "../slices/team.slice";
+import { apiSlice } from "../api/api.slice";
 
 // ==================================================================
 // Event types — single source of truth for all WS events
@@ -62,31 +74,6 @@ export type WebSocketEvent =
   | { type: "server:shutdown"; data?: { reason?: string } }
   | { type: "subscribed"; data?: { channel?: string } }
   | { type: "unsubscribed"; data?: { channel?: string } }
-  | { type: "task:created"; data?: { task?: AgentTask } }
-  | {
-      type: "task:updated";
-      data?: {
-        agentId?: string;
-        taskId?: string;
-        updates?: Partial<AgentTask>;
-        task?: Partial<AgentTask>;
-      };
-    }
-  | {
-      type: "task:completed";
-      data?: {
-        agentId?: string;
-        taskId?: string;
-        updates?: Partial<AgentTask>;
-        task?: Partial<AgentTask>;
-      };
-    }
-  | { type: "task:cancelled"; data?: { agentId?: string; taskId?: string } }
-  | { type: "agent:new"; data?: { agent?: Agent } }
-  | {
-      type: "agent:update";
-      data?: { agentId?: string; sessionId?: string; updates?: Partial<Agent> };
-    }
   | { type: "session:update"; data?: { sessionId?: string; updates?: Partial<AgentSession> } }
   | { type: "session:new"; data?: { session?: AgentSession } }
   | { type: "session:deleted"; data?: { sessionId?: string } }
@@ -146,6 +133,26 @@ export type WebSocketEvent =
   | { type: "webdev_project_created"; data?: { project?: WebDevProject } }
   // Context length warning
   | { type: "context_length.warning"; data?: { status?: "normal" | "warning" | "critical" | "exceeded" } }
+  // Meeting events
+  | { type: "meeting:intro:show"; data?: Record<string, unknown> }
+  | { type: "meeting:intro:dismiss"; data?: Record<string, unknown> }
+  // Knowledge events
+  | { type: "knowledge:updated"; data?: { id?: string; updates?: Record<string, unknown> } }
+  // Experiment events
+  | { type: "experiment:variant:update"; data?: { key?: string; value?: unknown } }
+  // Community events
+  | { type: "community:item:new"; data?: CommunityItem }
+  | { type: "community:item:like"; data?: { itemId?: string } }
+  // File connector events
+  | { type: "fileConnector:status"; data?: { appType?: FileConnectorAppType; connected?: boolean; accountEmail?: string } }
+  // File share events
+  | { type: "file.shared"; data?: ShareInfo }
+  // Skill events
+  | { type: "skill:installed"; data?: Skill }
+  | { type: "skill:removed"; data?: { skillId?: string } }
+  // Team events
+  | { type: "team:member:added"; data?: TeamMember }
+  | { type: "team:member:removed"; data?: { memberId?: string } }
   | { type: "pong"; data?: { ts?: number } };
 
 // WebSocket middleware actions
@@ -515,57 +522,6 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
       // Acknowledgment from server — no action needed
       break;
 
-    // Task events
-    case "task:created":
-      if (event.data?.task?.id && event.data.task.agentId) {
-        dispatch(addTask(event.data.task));
-      }
-      break;
-
-    case "task:updated":
-    case "task:completed":
-      if (event.data?.agentId && event.data?.taskId) {
-        dispatch(
-          updateTask({
-            id: event.data.taskId,
-            agentId: event.data.agentId,
-            updates: event.data.updates ?? event.data.task ?? {},
-          })
-        );
-      }
-      break;
-
-    case "task:cancelled":
-      if (event.data?.agentId && event.data?.taskId) {
-        dispatch(
-          updateTask({
-            id: event.data.taskId,
-            agentId: event.data.agentId,
-            updates: { status: "cancelled" },
-          })
-        );
-      }
-      break;
-
-    // Agent events
-    case "agent:new":
-      if (event.data?.agent?.id && event.data.agent.sessionId) {
-        dispatch(addAgent(event.data.agent));
-      }
-      break;
-
-    case "agent:update":
-      if (event.data?.agentId && event.data?.sessionId) {
-        dispatch(
-          updateAgent({
-            id: event.data.agentId,
-            sessionId: event.data.sessionId,
-            updates: event.data.updates ?? {},
-          })
-        );
-      }
-      break;
-
     // Session events
     case "session.created":
       if (event.data?.sessionId) {
@@ -582,6 +538,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             updatedAt: now,
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["Session"]));
       }
       break;
 
@@ -593,18 +550,21 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             updates: event.data.updates,
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["Session"]));
       }
       break;
 
     case "session:new":
       if (event.data?.session?.id) {
         dispatch(addSession(event.data.session));
+        dispatch(apiSlice.util.invalidateTags(["Session"]));
       }
       break;
 
     case "session:deleted":
       if (event.data?.sessionId) {
         dispatch(removeSession(event.data.sessionId));
+        dispatch(apiSlice.util.invalidateTags(["Session"]));
       }
       break;
 
@@ -612,12 +572,14 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
     case "notification:new":
       if (event.data?.id && event.data?.type && event.data?.title) {
         dispatch(addNotification(event.data as Notification));
+        dispatch(apiSlice.util.invalidateTags(["Notification"]));
       }
       break;
 
     case "notification:read":
       if (event.data?.notificationId || event.data?.id) {
         dispatch(markNotificationAsRead(event.data.notificationId ?? event.data.id!));
+        dispatch(apiSlice.util.invalidateTags(["Notification"]));
       }
       break;
 
@@ -845,6 +807,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
     case "file.uploaded":
       if (event.data?.file?.id) {
         dispatch(addFile(event.data.file));
+        dispatch(apiSlice.util.invalidateTags(["File"]));
       }
       break;
 
@@ -856,6 +819,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             updates: { ...event.data.updates, storageKey: event.data.url ?? undefined } as Partial<FileItem>,
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["File"]));
       }
       break;
 
@@ -869,6 +833,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             errorMessage: event.data.errorMessage,
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["Connector"]));
       }
       break;
 
@@ -893,6 +858,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             },
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["Session"]));
       }
       break;
 
@@ -1008,6 +974,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             description: "Agent execution usage",
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["Billing"]));
       }
       break;
 
@@ -1019,6 +986,7 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
     case "scheduledTask:new":
       if (event.data?.task?.id) {
         dispatch(addScheduledTask(event.data.task));
+        dispatch(apiSlice.util.invalidateTags(["ScheduledTask"]));
       }
       break;
 
@@ -1030,18 +998,21 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             updates: event.data.updates ?? event.data.task ?? {},
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["ScheduledTask"]));
       }
       break;
 
     case "scheduledTask:deleted":
       if (event.data?.taskId) {
         dispatch(deleteScheduledTask(event.data.taskId));
+        dispatch(apiSlice.util.invalidateTags(["ScheduledTask"]));
       }
       break;
 
     case "scheduledTask:execution:new":
       if (event.data?.execution?.id) {
         dispatch(addExecution(event.data.execution));
+        dispatch(apiSlice.util.invalidateTags(["ScheduledTask"]));
       }
       break;
 
@@ -1054,6 +1025,85 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
             updates: event.data.updates ?? {},
           })
         );
+        dispatch(apiSlice.util.invalidateTags(["ScheduledTask"]));
+      }
+      break;
+
+    // Meeting events
+    case "meeting:intro:show":
+      dispatch(setShouldShowMeetingIntro(true));
+      break;
+
+    case "meeting:intro:dismiss":
+      dispatch(setShouldShowMeetingIntro(false));
+      break;
+
+    // Knowledge events — invalidate RTK Query cache
+    case "knowledge:updated":
+      dispatch(apiSlice.util.invalidateTags(["Knowledge"]));
+      break;
+
+    // Experiment events — invalidate RTK Query cache
+    case "experiment:variant:update":
+      dispatch(apiSlice.util.invalidateTags(["Experiment"]));
+      break;
+
+    // Community events
+    case "community:item:new":
+      if (event.data?.id) {
+        dispatch(appendCommunityItem([event.data]));
+      }
+      break;
+
+    case "community:item:like":
+      if (event.data?.itemId) {
+        dispatch(toggleCommunityLike(event.data.itemId));
+      }
+      break;
+
+    // File connector status
+    case "fileConnector:status":
+      if (event.data?.appType) {
+        dispatch(
+          updateFileConnectorStatus({
+            appType: event.data.appType,
+            connected: event.data.connected ?? false,
+            accountEmail: event.data.accountEmail,
+          })
+        );
+      }
+      break;
+
+    // File shared
+    case "file.shared":
+      if (event.data?.id) {
+        dispatch(setShareInfo(event.data));
+      }
+      break;
+
+    // Skill events
+    case "skill:installed":
+      if (event.data?.id) {
+        dispatch(addUserSkill(event.data));
+      }
+      break;
+
+    case "skill:removed":
+      if (event.data?.skillId) {
+        dispatch(removeUserSkill(event.data.skillId));
+      }
+      break;
+
+    // Team events
+    case "team:member:added":
+      if (event.data?.id) {
+        dispatch(addMember(event.data));
+      }
+      break;
+
+    case "team:member:removed":
+      if (event.data?.memberId) {
+        dispatch(removeMember(event.data.memberId));
       }
       break;
 

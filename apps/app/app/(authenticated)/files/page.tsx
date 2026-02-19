@@ -12,9 +12,15 @@ export const metadata: Metadata = {
 export default async function FilesPage() {
   const session = await getSession();
 
-  // Prefetch files data on server — client picks it up instantly.
-  // MUST await for data to be included in the dehydrated HTML payload.
-  await serverTrpc.files.listBySession.prefetch();
+  // Prefetch files + connector definitions on server — client picks them up instantly.
+  try {
+    await Promise.all([
+      serverTrpc.files.listBySession.prefetch(),
+      serverTrpc.connectors.listByCategory.prefetch({ categories: ["storage", "communication"] }),
+    ]);
+  } catch {
+    // SSR prefetch failed — client-side RTK Query will retry
+  }
 
   return (
     <HydrateClient>

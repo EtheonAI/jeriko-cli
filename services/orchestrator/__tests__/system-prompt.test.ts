@@ -264,7 +264,7 @@ describe("buildManusSystemPrompt", () => {
         selectedConnections: undefined,
       }));
 
-      expect(prompt).toContain("No third-party integrations are currently connected");
+      expect(prompt).toContain("No third-party integrations were detected from the connector service");
     });
 
     it("should prefer selectedConnections over connectedApps", () => {

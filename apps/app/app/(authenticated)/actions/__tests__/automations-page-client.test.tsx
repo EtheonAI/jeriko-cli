@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { Provider } from "react-redux";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { Provider, useDispatch, useSelector } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
-import { useDispatch, useSelector } from "react-redux";
 import scheduledTasksReducer from "@/lib/store/slices/scheduledTasks.slice";
 import type { ScheduledTask } from "@/lib/store/slices/scheduledTasks.slice";
+import { apiSlice } from "@/lib/store/api/api.slice";
 
 // Mock store hooks to avoid @repo/auth/client import chain
 // Must return stable hook references — re-export the real hooks
@@ -25,22 +25,29 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-// Mock tRPC client — resolves synchronously to avoid async state updates
-vi.mock("@/lib/trpc/vanilla", () => ({
-  getTrpcClient: () => ({
+// vi.hoisted runs before vi.mock hoisting — safe to reference in mock factories
+const { mockTasksResponseRef, mockTrpc } = vi.hoisted(() => {
+  const ref = { current: [] as ScheduledTask[] };
+  const factory = () => ({
     scheduledTasks: {
-      list: { query: vi.fn().mockResolvedValue([]) },
-      create: { mutate: vi.fn() },
-      update: { mutate: vi.fn() },
-      delete: { mutate: vi.fn() },
-      pause: { mutate: vi.fn() },
-      resume: { mutate: vi.fn() },
-      runNow: { mutate: vi.fn() },
-      getExecutions: { query: vi.fn().mockResolvedValue([]) },
-      listTriggerTypes: { query: vi.fn().mockResolvedValue({ triggers: [] }) },
-      getTriggerTypeConfig: { query: vi.fn().mockResolvedValue({}) },
+      list: { query: () => Promise.resolve(ref.current) },
+      create: { mutate: () => Promise.resolve({}) },
+      update: { mutate: () => Promise.resolve({}) },
+      delete: { mutate: () => Promise.resolve({}) },
+      pause: { mutate: () => Promise.resolve({}) },
+      resume: { mutate: () => Promise.resolve({}) },
+      runNow: { mutate: () => Promise.resolve({}) },
+      getExecutions: { query: () => Promise.resolve([]) },
+      listTriggerTypes: { query: () => Promise.resolve({ triggers: [] }) },
+      getTriggerTypeConfig: { query: () => Promise.resolve({}) },
     },
-  }),
+  });
+  return { mockTasksResponseRef: ref, mockTrpc: factory };
+});
+
+vi.mock("@/lib/trpc/vanilla", () => ({
+  getTrpcClient: mockTrpc,
+  getRawTrpcClient: mockTrpc,
 }));
 
 vi.mock("sonner", () => ({
@@ -64,22 +71,13 @@ function makeTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   };
 }
 
-function createStore(tasks: ScheduledTask[] = []) {
+function createStore() {
   return configureStore({
-    reducer: { scheduledTasks: scheduledTasksReducer },
-    preloadedState: {
-      scheduledTasks: {
-        tasks,
-        executions: {},
-        chatScheduledTaskIds: [],
-        selectedTaskId: null,
-        editingTask: null,
-        isCreating: false,
-        isLoading: false,
-        isLoadingExecutions: false,
-        error: null,
-      },
+    reducer: {
+      scheduledTasks: scheduledTasksReducer,
+      [apiSlice.reducerPath]: apiSlice.reducer,
     },
+    middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
   });
 }
 
@@ -89,10 +87,12 @@ const { AutomationsPageClient } = await import("../automations-page-client");
 describe("AutomationsPageClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTasksResponseRef.current = [];
   });
 
-  it("should render the page title and create button", () => {
-    const store = createStore([makeTask()]);
+  it("should render the page title and create button", async () => {
+    mockTasksResponseRef.current = [makeTask()];
+    const store = createStore();
 
     render(
       <Provider store={store}>
@@ -101,11 +101,14 @@ describe("AutomationsPageClient", () => {
     );
 
     expect(screen.getByText("Automations")).toBeDefined();
-    expect(screen.getAllByText("Create Automation").length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Automation").length).toBeGreaterThanOrEqual(1);
+    });
   });
 
-  it("should render tab buttons", () => {
-    const store = createStore([makeTask()]);
+  it("should render tab buttons", async () => {
+    mockTasksResponseRef.current = [makeTask()];
+    const store = createStore();
 
     render(
       <Provider store={store}>
@@ -113,13 +116,16 @@ describe("AutomationsPageClient", () => {
       </Provider>
     );
 
-    expect(screen.getByText("All")).toBeDefined();
-    expect(screen.getByText("Triggers")).toBeDefined();
-    expect(screen.getByText("Schedules")).toBeDefined();
-    expect(screen.getByText("One-time")).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText("All")).toBeDefined();
+      expect(screen.getByText("Triggers")).toBeDefined();
+      expect(screen.getByText("Schedules")).toBeDefined();
+      expect(screen.getByText("One-time")).toBeDefined();
+    });
   });
 
   it("should show empty state when no tasks", async () => {
+    mockTasksResponseRef.current = [];
     const store = createStore();
 
     render(
@@ -133,8 +139,8 @@ describe("AutomationsPageClient", () => {
     });
   });
 
-  it("should render task cards when tasks exist", () => {
-    const store = createStore([
+  it("should render task cards when tasks exist", async () => {
+    mockTasksResponseRef.current = [
       makeTask({ id: "t1", name: "Daily Report" }),
       makeTask({
         id: "t2",
@@ -143,7 +149,8 @@ describe("AutomationsPageClient", () => {
         triggerAppName: "gmail",
         triggerEventSlug: "GMAIL_NEW_MESSAGE",
       }),
-    ]);
+    ];
+    const store = createStore();
 
     render(
       <Provider store={store}>
@@ -151,21 +158,29 @@ describe("AutomationsPageClient", () => {
       </Provider>
     );
 
-    expect(screen.getByText("Daily Report")).toBeDefined();
-    expect(screen.getByText("Gmail Trigger")).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText("Daily Report")).toBeDefined();
+      expect(screen.getByText("Gmail Trigger")).toBeDefined();
+    });
   });
 
-  it("should filter tasks by search query", () => {
-    const store = createStore([
+  it("should filter tasks by search query", async () => {
+    mockTasksResponseRef.current = [
       makeTask({ id: "t1", name: "Daily Report" }),
       makeTask({ id: "t2", name: "Gmail Notification" }),
-    ]);
+    ];
+    const store = createStore();
 
     render(
       <Provider store={store}>
         <AutomationsPageClient />
       </Provider>
     );
+
+    // Wait for RTK-Query to resolve and tasks to render
+    await waitFor(() => {
+      expect(screen.getByText("Daily Report")).toBeDefined();
+    });
 
     const searchInput = screen.getByPlaceholderText("Search automations...");
     fireEvent.change(searchInput, { target: { value: "Gmail" } });
@@ -175,13 +190,18 @@ describe("AutomationsPageClient", () => {
   });
 
   it("should open create dialog on button click", async () => {
-    const store = createStore([makeTask()]);
+    mockTasksResponseRef.current = [makeTask()];
+    const store = createStore();
 
     render(
       <Provider store={store}>
         <AutomationsPageClient />
       </Provider>
     );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Create Automation").length).toBeGreaterThanOrEqual(1);
+    });
 
     const createButtons = screen.getAllByText("Create Automation");
     fireEvent.click(createButtons[0]!);

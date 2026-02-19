@@ -234,7 +234,16 @@ describe("Resumable Streams — Decoupled Agent Execution", () => {
     });
 
     it("swallows resumeStream errors", () => {
-      expect(hookCode).toContain("resumeStream().catch(");
+      expect(hookCode).toContain("resumeStream()");
+      expect(hookCode).toContain(".catch(() => {");
+    });
+
+    it("awaits resumePromiseRef in sendMessage to prevent concurrent makeRequest", () => {
+      // sendMessage must await the resume promise before calling sdkSendMessage,
+      // preventing concurrent makeRequest calls that cause the
+      // "Cannot read properties of undefined (reading 'state')" crash (chat.ts:711)
+      expect(hookCode).toContain("resumePromiseRef");
+      expect(hookCode).toContain("await resumePromiseRef.current");
     });
 
     it("has customStop that calls both local stop() and server stop endpoint", () => {

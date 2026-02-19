@@ -326,6 +326,13 @@ export {
   type NewAgentMailbox,
 } from "./agentMailboxes";
 
+// Skill schemas
+export {
+  skillDefinitions,
+  type SkillDefinition,
+  type NewSkillDefinition,
+} from "./skills";
+
 // Website Builder schemas
 export {
   websiteProjects,

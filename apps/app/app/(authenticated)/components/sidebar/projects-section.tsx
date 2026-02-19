@@ -46,7 +46,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
 import { deleteProject, updateProject } from "@/lib/store/slices/projects.slice";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useUpdateProjectMutation, useDeleteProjectMutation } from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { CreateProjectDialog } from "../projects/create-project-dialog";
 import type { Project } from "@/lib/store/slices/projects.slice";
@@ -64,6 +64,8 @@ const ProjectItem = memo(function ProjectItem({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const dispatch = useAppDispatch();
   const router = useRouter();
+  const [updateProjectMutation] = useUpdateProjectMutation();
+  const [deleteProjectMutation] = useDeleteProjectMutation();
 
   const handlePin = useCallback(() => {
     const currentlyPinned = (project as any).isPinned ?? false;
@@ -74,8 +76,8 @@ const ProjectItem = memo(function ProjectItem({
       })
     );
     toast.success(currentlyPinned ? "Unpinned" : "Pinned");
-    getTrpcClient()
-      .projects.update.mutate({ id: project.id, isPinned: !currentlyPinned } as any)
+    updateProjectMutation({ id: project.id, isPinned: !currentlyPinned } as any)
+      .unwrap()
       .catch(() => {
         dispatch(
           updateProject({
@@ -85,7 +87,7 @@ const ProjectItem = memo(function ProjectItem({
         );
         toast.error("Failed to update pin");
       });
-  }, [project, dispatch]);
+  }, [project, dispatch, updateProjectMutation]);
 
   const handleDelete = useCallback(() => {
     dispatch(deleteProject(project.id));
@@ -94,12 +96,12 @@ const ProjectItem = memo(function ProjectItem({
     if (isActive) {
       router.push("/");
     }
-    getTrpcClient()
-      .projects.delete.mutate({ id: project.id })
+    deleteProjectMutation(project.id)
+      .unwrap()
       .catch(() => {
         toast.error("Failed to delete project");
       });
-  }, [project.id, dispatch, isActive, router]);
+  }, [project.id, dispatch, isActive, router, deleteProjectMutation]);
 
   return (
     <>

@@ -28,7 +28,8 @@ import type { LibraryFile } from "./library-file-card";
 import { DownloadFormatPicker } from "./download-format-picker";
 import { LibraryShareDialog } from "./library-share-dialog";
 import { formatDistanceToNow, format } from "date-fns";
-import { useAppDispatch, useFilePreviewer, useLibraryData } from "@/lib/store/hooks";
+import { useAppDispatch, useFilePreviewer } from "@/lib/store/hooks";
+import { useGetFileContentQuery } from "@/lib/store/api/api.slice";
 import {
   setPreviewData,
   setFullscreen as setReduxFullscreen,
@@ -60,8 +61,6 @@ export function LibraryPreviewModal({ file, onClose, onLocateInTask, onFavorite,
     dispatch(setReduxFullscreen(val));
   }, [dispatch]);
 
-  const { getContent } = useLibraryData({ autoFetch: false });
-
   // Only fetch full text content for text files (modal needs full content, not just 3KB preview)
   const isTextFile =
     file?.mimeType?.startsWith("text/") ||
@@ -73,20 +72,11 @@ export function LibraryPreviewModal({ file, onClose, onLocateInTask, onFavorite,
   // Skip DB fetch if inline content is provided (from chat tool parts)
   const hasInlineContent = !!inlineContent;
 
-  const [contentData, setContentData] = useState<{ content?: string; url?: string } | null>(null);
-  const [isResolvingContent, setIsResolvingContent] = useState(false);
-
-  useEffect(() => {
-    if (!file?.id || !isTextFile || hasInlineContent) {
-      setContentData(null);
-      return;
-    }
-    setIsResolvingContent(true);
-    getContent(file.id)
-      .then((data) => setContentData(data as any))
-      .catch(() => setContentData(null))
-      .finally(() => setIsResolvingContent(false));
-  }, [file?.id, isTextFile, hasInlineContent, getContent]);
+  const shouldFetchContent = !!file?.id && isTextFile && !hasInlineContent;
+  const { data: contentData = null, isLoading: isResolvingContent } = useGetFileContentQuery(
+    file?.id ?? "",
+    { skip: !shouldFetchContent }
+  );
 
   // For text files, use getContent response. For others, use enriched resolvedUrl from listBySession.
   const resolvedUrl = contentData?.url ?? file?.resolvedUrl ?? null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -32,7 +32,14 @@ import {
   FileTextIcon,
   CalendarIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetConnectorDefinitionsQuery,
+  useGetInstalledConnectorsQuery,
+  useInstallConnectorMutation,
+  useDisconnectConnectorMutation,
+  useUninstallConnectorMutation,
+  useSyncConnectorMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -60,108 +67,56 @@ const statusVariants: Record<string, { variant: "default" | "secondary" | "destr
 export function ConnectorsTab() {
   const [selectedConnector, setSelectedConnector] = useState<string | null>(null);
 
-  // Query state
-  const [definitions, setDefinitions] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["connectors"]["listDefinitions"]["query"]>> | undefined>(undefined);
-  const [installedConnectors, setInstalledConnectors] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["connectors"]["list"]["query"]>> | undefined>(undefined);
-  const [isLoadingDefinitions, setIsLoadingDefinitions] = useState(true);
-  const [isLoadingInstalled, setIsLoadingInstalled] = useState(true);
-  const [isDefinitionsError, setIsDefinitionsError] = useState(false);
-  const [isInstalledError, setIsInstalledError] = useState(false);
+  // RTK Query for definitions and installed connectors
+  const { data: definitions, isLoading: isLoadingDefinitions, isError: isDefinitionsError, refetch: refetchDefinitions } = useGetConnectorDefinitionsQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any[] | undefined, ...rest }),
+  });
+  const { data: installedConnectors, isLoading: isLoadingInstalled, isError: isInstalledError, refetch: refetchInstalled } = useGetInstalledConnectorsQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any[] | undefined, ...rest }),
+  });
 
-  // Mutation pending states
-  const [isInstallPending, setIsInstallPending] = useState(false);
-  const [isDisconnectPending, setIsDisconnectPending] = useState(false);
-  const [isUninstallPending, setIsUninstallPending] = useState(false);
-  const [isSyncPending, setIsSyncPending] = useState(false);
-
-  // Fetch definitions
-  const fetchDefinitions = useCallback(async () => {
-    setIsLoadingDefinitions(true);
-    setIsDefinitionsError(false);
-    try {
-      const data = await getTrpcClient().connectors.listDefinitions.query();
-      setDefinitions(data);
-    } catch {
-      setIsDefinitionsError(true);
-    } finally {
-      setIsLoadingDefinitions(false);
-    }
-  }, []);
-
-  // Fetch installed connectors
-  const fetchInstalled = useCallback(async () => {
-    setIsLoadingInstalled(true);
-    setIsInstalledError(false);
-    try {
-      const data = await getTrpcClient().connectors.list.query();
-      setInstalledConnectors(data);
-    } catch {
-      setIsInstalledError(true);
-    } finally {
-      setIsLoadingInstalled(false);
-    }
-  }, []);
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchDefinitions();
-    fetchInstalled();
-  }, [fetchDefinitions, fetchInstalled]);
+  // RTK Query mutations
+  const [installConnectorMutation, { isLoading: isInstallPending }] = useInstallConnectorMutation();
+  const [disconnectConnectorMutation, { isLoading: isDisconnectPending }] = useDisconnectConnectorMutation();
+  const [uninstallConnectorMutation, { isLoading: isUninstallPending }] = useUninstallConnectorMutation();
+  const [syncConnectorMutation, { isLoading: isSyncPending }] = useSyncConnectorMutation();
 
   // Mutation callbacks
   const installConnector = useCallback(async (input: { connectorDefinitionId: string }) => {
-    setIsInstallPending(true);
     try {
-      const data = await getTrpcClient().connectors.install.mutate(input);
+      await installConnectorMutation(input).unwrap();
       toast.success("Connector added. Click Connect to authorize.");
-      await fetchInstalled();
-      // Redirect to OAuth flow
-      // window.location.href = `/api/connectors/${data.id}/oauth/start`;
     } catch (error: any) {
-      toast.error(error.message || "Failed to install connector");
-    } finally {
-      setIsInstallPending(false);
+      toast.error(error?.data || error?.message || "Failed to install connector");
     }
-  }, [fetchInstalled]);
+  }, [installConnectorMutation]);
 
   const disconnectConnector = useCallback(async (input: { id: string }) => {
-    setIsDisconnectPending(true);
     try {
-      await getTrpcClient().connectors.disconnect.mutate(input);
+      await disconnectConnectorMutation(input.id).unwrap();
       toast.success("Connector disconnected");
-      await fetchInstalled();
     } catch (error: any) {
-      toast.error(error.message || "Failed to disconnect connector");
-    } finally {
-      setIsDisconnectPending(false);
+      toast.error(error?.data || error?.message || "Failed to disconnect connector");
     }
-  }, [fetchInstalled]);
+  }, [disconnectConnectorMutation]);
 
   const uninstallConnector = useCallback(async (input: { id: string }) => {
-    setIsUninstallPending(true);
     try {
-      await getTrpcClient().connectors.uninstall.mutate(input);
+      await uninstallConnectorMutation(input.id).unwrap();
       toast.success("Connector removed");
-      await fetchInstalled();
     } catch (error: any) {
-      toast.error(error.message || "Failed to remove connector");
-    } finally {
-      setIsUninstallPending(false);
+      toast.error(error?.data || error?.message || "Failed to remove connector");
     }
-  }, [fetchInstalled]);
+  }, [uninstallConnectorMutation]);
 
   const syncConnector = useCallback(async (input: { id: string }) => {
-    setIsSyncPending(true);
     try {
-      await getTrpcClient().connectors.sync.mutate(input);
+      await syncConnectorMutation(input.id).unwrap();
       toast.success("Sync started");
-      await fetchInstalled();
     } catch (error: any) {
-      toast.error(error.message || "Failed to start sync");
-    } finally {
-      setIsSyncPending(false);
+      toast.error(error?.data || error?.message || "Failed to start sync");
     }
-  }, [fetchInstalled]);
+  }, [syncConnectorMutation]);
 
   const isLoading = isLoadingDefinitions || isLoadingInstalled;
   const isError = isDefinitionsError || isInstalledError;
@@ -172,14 +127,14 @@ export function ConnectorsTab() {
   );
 
   // Group definitions by category
-  const groupedDefinitions = definitions?.reduce((acc, def) => {
+  const groupedDefinitions = (definitions ?? []).reduce<Record<string, any[]>>((acc, def) => {
     const category = def.category || "other";
     if (!acc[category]) {
       acc[category] = [];
     }
     acc[category].push(def);
     return acc;
-  }, {} as Record<string, typeof definitions>) || {};
+  }, {});
 
   const categoryLabels: Record<string, string> = {
     communication: "Communication",
@@ -232,8 +187,8 @@ export function ConnectorsTab() {
           title="Failed to load connectors"
           message="Unable to load your connectors. Please try again."
           onRetry={() => {
-            fetchDefinitions();
-            fetchInstalled();
+            refetchDefinitions();
+            refetchInstalled();
           }}
         />
       </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { getTrpcClient } from "../trpc/vanilla";
+import { useQuickSearchQuery } from "../store/api/api.slice";
 import {
   openSearch,
   closeSearch,
@@ -44,6 +44,7 @@ const MIN_QUERY_LENGTH = 2;
 export function useSearch() {
   const dispatch = useAppDispatch();
   const router = useRouter();
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Selectors
@@ -57,6 +58,48 @@ export function useSearch() {
   const activeFilter = useAppSelector(selectActiveFilter);
   const selectedIndex = useAppSelector(selectSelectedIndex);
   const selectedResult = useAppSelector(selectSelectedResult);
+
+  // RTK Query — auto-fetches when debouncedQuery changes
+  const { data: quickResults, error: searchError, isFetching } = useQuickSearchQuery(
+    { query: debouncedQuery, limit: 20 },
+    { skip: !debouncedQuery || debouncedQuery.length < MIN_QUERY_LENGTH }
+  );
+
+  // Sync RTK Query loading state to Redux
+  const prevFetchingRef = useRef(isFetching);
+  useEffect(() => {
+    if (isFetching !== prevFetchingRef.current) {
+      prevFetchingRef.current = isFetching;
+      dispatch(setLoading(isFetching));
+    }
+  }, [isFetching, dispatch]);
+
+  // Sync RTK Query results to Redux
+  const prevResultsRef = useRef(quickResults);
+  useEffect(() => {
+    if (quickResults && quickResults !== prevResultsRef.current) {
+      prevResultsRef.current = quickResults;
+      // Transform quick search results to the format Redux expects
+      const resultsArray = quickResults as any[];
+      const totalFound = resultsArray?.length ?? 0;
+      dispatch(setResults({
+        query: debouncedQuery,
+        results: resultsArray,
+        totalFound,
+        processingTimeMs: 0,
+      }));
+      if (debouncedQuery.trim().length >= MIN_QUERY_LENGTH) {
+        dispatch(addRecentSearch({ query: debouncedQuery.trim(), resultCount: totalFound }));
+      }
+    }
+  }, [quickResults, debouncedQuery, dispatch]);
+
+  // Sync RTK Query errors to Redux
+  useEffect(() => {
+    if (searchError) {
+      dispatch(setError("Search failed"));
+    }
+  }, [searchError, dispatch]);
 
   // Load recent searches from localStorage on mount
   useEffect(() => {
@@ -80,58 +123,29 @@ export function useSearch() {
     }
   }, []);
 
-  // Search via vanilla tRPC client (imperative query call)
-  const performSearchQuery = useCallback(
-    async (searchQuery: string) => {
-      try {
-        const data = await getTrpcClient().search.global.query({
-          query: searchQuery,
-          limit: 20,
-        });
-        dispatch(setResults(data));
-        if (searchQuery.trim().length >= MIN_QUERY_LENGTH) {
-          dispatch(addRecentSearch({ query: searchQuery.trim(), resultCount: data.totalFound }));
-          saveRecentSearches([
-            { query: searchQuery.trim(), timestamp: Date.now(), resultCount: data.totalFound },
-            ...recentSearches.filter((s) => s.query.toLowerCase() !== searchQuery.toLowerCase()),
-          ]);
-        }
-      } catch (err: any) {
-        dispatch(setError(err.message ?? "Search failed"));
-      }
-    },
-    [dispatch, recentSearches, saveRecentSearches]
-  );
+  // Handle query change — debounce before updating the RTK Query parameter
+  const handleQueryChange = useCallback(
+    (newQuery: string) => {
+      dispatch(setQuery(newQuery));
 
-  // Debounced search
-  const performSearch = useCallback(
-    (searchQuery: string) => {
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
 
-      if (searchQuery.length < MIN_QUERY_LENGTH) {
+      if (newQuery.length < MIN_QUERY_LENGTH) {
         dispatch(clearResults());
         dispatch(setLoading(false));
+        setDebouncedQuery("");
         return;
       }
 
       dispatch(setLoading(true));
 
       debounceRef.current = setTimeout(() => {
-        performSearchQuery(searchQuery);
+        setDebouncedQuery(newQuery);
       }, DEBOUNCE_MS);
     },
-    [dispatch, performSearchQuery]
-  );
-
-  // Handle query change
-  const handleQueryChange = useCallback(
-    (newQuery: string) => {
-      dispatch(setQuery(newQuery));
-      performSearch(newQuery);
-    },
-    [dispatch, performSearch]
+    [dispatch]
   );
 
   // Handle filter change
@@ -204,9 +218,11 @@ export function useSearch() {
   const handleRecentSearchSelect = useCallback(
     (recentQuery: string) => {
       dispatch(setQuery(recentQuery));
-      performSearch(recentQuery);
+      // Immediately update debounced query (no debounce for recent search selection)
+      setDebouncedQuery(recentQuery);
+      dispatch(setLoading(true));
     },
-    [dispatch, performSearch]
+    [dispatch]
   );
 
   // Handle recent search removal

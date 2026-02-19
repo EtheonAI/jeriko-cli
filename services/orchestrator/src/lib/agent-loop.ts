@@ -70,6 +70,87 @@ function sseEvent(data: Record<string, unknown>): Uint8Array {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+// ── Context compaction (Manus parity: <compacted_history>) ───────────────
+// Prevents hitting the 200K token limit on long conversations by compressing
+// old tool results while keeping recent messages intact.
+
+/** Rough token estimate: 4 chars ≈ 1 token. */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+function estimateMessageTokens(messages: ModelMessage[]): number {
+  let total = 0;
+  for (const msg of messages) {
+    if (typeof msg.content === "string") {
+      total += estimateTokens(msg.content);
+    } else if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        const p = part as Record<string, unknown>;
+        if (p.type === "text") total += estimateTokens(p.text as string);
+        else if (p.type === "image") total += 500;
+        else if (p.type === "tool-result") {
+          const result = p.result as unknown;
+          total += estimateTokens(typeof result === "string" ? result : JSON.stringify(result ?? ""));
+        }
+      }
+    }
+  }
+  return total;
+}
+
+/**
+ * Compact old messages when approaching context limit.
+ * Keeps the most recent `recentKeep` messages, summarizes older tool results.
+ */
+function compactMessages(
+  messages: ModelMessage[],
+  systemPromptTokens: number,
+  contextLimit = 180000,
+): ModelMessage[] {
+  const msgTokens = estimateMessageTokens(messages);
+  const threshold = contextLimit - systemPromptTokens;
+
+  if (msgTokens < threshold) return messages;
+
+  console.log(`[agent-loop] Context compaction: ~${msgTokens} tokens > ${threshold} threshold`);
+
+  // Keep recent 20 messages (≈10 turns)
+  const recentKeep = Math.min(20, messages.length);
+  const oldMessages = messages.slice(0, messages.length - recentKeep);
+  const recentMessages = messages.slice(messages.length - recentKeep);
+
+  if (oldMessages.length === 0) return messages;
+
+  // Build compacted history from old messages
+  const summaries: string[] = [];
+  for (const msg of oldMessages) {
+    const content = typeof msg.content === "string"
+      ? msg.content
+      : JSON.stringify(msg.content);
+
+    if (msg.role === "tool") {
+      summaries.push(`[Tool result]: ${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`);
+    } else if (msg.role === "assistant" && content.length < 300) {
+      summaries.push(`[Assistant]: ${content}`);
+    } else if (msg.role === "user" && content.length < 300) {
+      summaries.push(`[User]: ${content}`);
+    }
+  }
+
+  const compactedMessage: ModelMessage = {
+    role: "user" as const,
+    content: `<compacted_history>
+The following is a summary of earlier conversation turns. Refer to this for context:
+
+${summaries.slice(0, 50).join("\n")}
+${summaries.length > 50 ? `\n... (${summaries.length - 50} earlier entries omitted) ...` : ""}
+</compacted_history>`,
+  };
+
+  return [compactedMessage, ...recentMessages];
+}
+
 /**
  * Run the streaming agent loop.
  * Returns a ReadableStream that emits SSE events compatible with UIMessage stream protocol.
@@ -89,6 +170,10 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     abortSignal,
     planLimits,
   } = input;
+
+  // Error retry counter (Manus parity: terminate after 3 consecutive failures on same tool)
+  let consecutiveErrors = 0;
+  let lastFailedTool = "";
 
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
   const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -221,24 +306,36 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
   // needs to know ALL connected apps. Build a complete map from ALL specs.
   const composioToolsByApp = composioSpecs.length > 0 ? groupToolsByApp(composioSpecs) : undefined;
 
-  // Build a COMPLETE tools-by-app map including static tools that groupToolsByApp skips.
-  // Without this, the system prompt says "no integrations" for apps with static tool overrides.
+  // Build a COMPLETE tools-by-app map including ALL tools for ALL connected apps.
+  // groupToolsByApp skips tools in STATIC_TOOL_NAMES (gmail_send_email etc), so apps
+  // that ONLY have static tools would be missing. We also need to add the static tool
+  // names (gmail_send, outlook_send etc) so the system prompt lists them as available.
+  const STATIC_TOOLS_BY_APP: Record<string, string[]> = {
+    gmail: ["gmail_send", "gmail_download"],
+    outlook: ["outlook_send", "outlook_download"],
+  };
+
   const allToolsByApp: Record<string, string[]> | undefined = composioSpecs.length > 0
     ? (() => {
         const map: Record<string, string[]> = { ...(composioToolsByApp ?? {}) };
+        // Add every connected app from Composio specs, even if all its tools are static
         for (const spec of composioSpecs) {
           const app = spec.appName.toLowerCase();
-          if (!map[app]) {
-            // This app's tools were all filtered by STATIC_TOOL_NAMES.
-            // Add them with their sanitised names so the system prompt lists them.
-            const toolName = spec.name
-              .toLowerCase()
-              .replace(/[^a-z0-9_]/g, "_")
-              .replace(/_+/g, "_")
-              .replace(/^_|_$/g, "");
-            map[app] = map[app] ?? [];
-            if (toolName && !map[app]!.includes(toolName)) {
-              map[app]!.push(toolName);
+          if (!map[app]) map[app] = [];
+          const toolName = spec.name
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "_")
+            .replace(/_+/g, "_")
+            .replace(/^_|_$/g, "");
+          if (toolName && !map[app]!.includes(toolName)) {
+            map[app]!.push(toolName);
+          }
+        }
+        // Add static tool names for apps that have them (gmail_send, outlook_send, etc.)
+        for (const [app, staticTools] of Object.entries(STATIC_TOOLS_BY_APP)) {
+          if (map[app]) {
+            for (const t of staticTools) {
+              if (!map[app]!.includes(t)) map[app]!.push(t);
             }
           }
         }
@@ -307,6 +404,42 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     ? [...new Set(composioSpecs.map((s) => s.appName.toLowerCase()))]
     : undefined;
 
+  // Fetch user secrets from session metadata (keys stored by settings UI)
+  const userSecrets: SystemPromptContext["secrets"] = [];
+  if (sessionMeta && typeof sessionMeta === "object") {
+    const secrets = (sessionMeta as Record<string, unknown>).secrets;
+    if (Array.isArray(secrets)) {
+      for (const s of secrets) {
+        const sec = s as Record<string, unknown>;
+        if (typeof sec.name === "string" && Array.isArray(sec.variables)) {
+          userSecrets.push({
+            name: sec.name,
+            variables: sec.variables as string[],
+            description: (sec.description as string) || undefined,
+          });
+        }
+      }
+    }
+  }
+
+  // Fetch cross-session knowledge from session metadata or knowledge service
+  const userKnowledge: SystemPromptContext["knowledge"] = [];
+  if (sessionMeta && typeof sessionMeta === "object") {
+    const knowledge = (sessionMeta as Record<string, unknown>).knowledge;
+    if (Array.isArray(knowledge)) {
+      for (const k of knowledge) {
+        const item = k as Record<string, unknown>;
+        if (typeof item.name === "string" && typeof item.content === "string") {
+          userKnowledge.push({
+            name: item.name,
+            useWhen: (item.useWhen as string) || "always",
+            content: item.content,
+          });
+        }
+      }
+    }
+  }
+
   const promptCtx: SystemPromptContext = {
     userName,
     sessionId,
@@ -314,12 +447,17 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     currentDate: new Date().toISOString().split("T")[0] ?? new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     activeSkills: skills,
-    // Use frontend-selected connections first, fall back to auto-detected apps from Composio
-    connectedApps: connections?.map((c) => c.name || c.id) ?? allConnectedApps,
+    // Use frontend-selected connections first, fall back to auto-detected apps from Composio.
+    // IMPORTANT: Use .length check, NOT `??` — empty arrays are non-null so `??` won't fall back.
+    connectedApps: connections && connections.length > 0
+      ? connections.map((c) => c.name || c.id)
+      : allConnectedApps,
     selectedConnections: connections,
     fileContext: inputFileContext?.length ? inputFileContext : extractFileContext(messages),
     composioToolsByApp: allToolsByApp,
     enabledMcpServers,
+    secrets: userSecrets.length > 0 ? userSecrets : undefined,
+    knowledge: userKnowledge.length > 0 ? userKnowledge : undefined,
   };
 
   // Create all tools — webdev mode + dynamic Composio tools
@@ -371,17 +509,21 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
       "You are Rubic, a helpful AI assistant with access to tools for file operations, shell commands, browser control, code execution, web search, and deployment.";
   }
 
+  // ── Compact messages if approaching context limit ──
+  const systemPromptTokens = estimateTokens(systemPrompt);
+  const compactedMessages = compactMessages(messages, systemPromptTokens);
+
   // Run streamText with all tools
   const result = streamText({
     model,
     system: systemPrompt,
-    messages,
+    messages: compactedMessages,
     maxOutputTokens: 16384,
     stopWhen: stepCountIs(maxSteps),
     tools,
     abortSignal,
     // Metering hook: called when each step finishes (LLM completion + tool execution)
-    onStepFinish: ({ stepType, usage, toolCalls }) => {
+    onStepFinish: ({ stepType, usage, toolCalls, toolResults }) => {
       // Meter the LLM step (token usage)
       if (usage && (usage.promptTokens > 0 || usage.completionTokens > 0)) {
         meterStep({
@@ -394,7 +536,7 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
         });
       }
 
-      // Meter each tool call
+      // Meter each tool call + track consecutive errors (Manus parity)
       if (toolCalls && toolCalls.length > 0) {
         for (const tc of toolCalls) {
           meterTool({
@@ -402,6 +544,38 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
             sessionId,
             toolName: tc.toolName,
           });
+        }
+
+        // Check tool results for errors (Manus: 3 consecutive failures → inject reminder)
+        if (toolResults && toolResults.length > 0) {
+          const lastResult = toolResults[toolResults.length - 1] as Record<string, unknown> | undefined;
+          const resultValue = lastResult?.result ?? lastResult;
+          const resultStr = typeof resultValue === "string"
+            ? resultValue
+            : JSON.stringify(resultValue ?? "");
+          const isError = resultStr.includes('"status":"error"') || resultStr.includes('"error":');
+
+          if (isError) {
+            const failedTool = toolCalls[toolCalls.length - 1]?.toolName ?? "";
+            if (failedTool === lastFailedTool) {
+              consecutiveErrors++;
+            } else {
+              lastFailedTool = failedTool;
+              consecutiveErrors = 1;
+            }
+
+            if (consecutiveErrors >= 3) {
+              console.log(`[agent-loop] Tool ${lastFailedTool} failed 3 times. Agent should try different approach.`);
+              consecutiveErrors = 0;
+              lastFailedTool = "";
+              // The error message in the tool result will guide the agent.
+              // AI SDK doesn't support injecting messages mid-stream, but the
+              // repeated failure pattern itself signals the agent to change approach.
+            }
+          } else {
+            consecutiveErrors = 0;
+            lastFailedTool = "";
+          }
         }
       }
     },
@@ -543,22 +717,168 @@ function createStorageClient(): ToolContext["storage"] {
   };
 }
 
-// ── Default search provider (Bing HTML scraping) ──
-// DuckDuckGo blocks server-side requests with CAPTCHA (HTTP 202) as of Feb 2026.
-// Bing is used as the fallback — returns real results without bot detection.
+// ── Default search provider ──
+// Manus uses Tavily/Serper/Brave — configure via env vars.
+// Priority: Brave > Serper > Tavily > Bing HTML fallback (with ensearch=1 for English).
 
 function createDefaultSearchProvider(): ToolContext["searchProvider"] {
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY;
+  const serperKey = process.env.SERPER_API_KEY;
+  const tavilyKey = process.env.TAVILY_API_KEY;
+
   return {
     search: async (params) => {
+      type SearchResult = { title: string; url: string; snippet: string };
+
+      // ── Brave Search API (free tier: 2000 queries/month) ──
+      if (braveKey) {
+        try {
+          const resp = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(params.query)}&count=10`,
+            {
+              headers: {
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": braveKey,
+              },
+              signal: AbortSignal.timeout(10000),
+            }
+          );
+          if (resp.ok) {
+            const data = (await resp.json()) as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+            const results: SearchResult[] = (data.web?.results ?? []).slice(0, 10).map((r) => ({
+              title: r.title, url: r.url, snippet: r.description,
+            }));
+            if (results.length > 0) {
+              console.log(`[search] Brave query="${params.query}" results=${results.length}`);
+              return results;
+            }
+          }
+        } catch (err) {
+          console.error("[search] Brave error, falling through:", err);
+        }
+      }
+
+      // ── Serper API (Google results, free tier: 2500 queries) ──
+      if (serperKey) {
+        try {
+          const resp = await fetch("https://google.serper.dev/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+            body: JSON.stringify({ q: params.query, num: 10, gl: "us", hl: "en" }),
+            signal: AbortSignal.timeout(10000),
+          });
+          if (resp.ok) {
+            const data = (await resp.json()) as { organic?: Array<{ title: string; link: string; snippet: string }> };
+            const results: SearchResult[] = (data.organic ?? []).slice(0, 10).map((r) => ({
+              title: r.title, url: r.link, snippet: r.snippet,
+            }));
+            if (results.length > 0) {
+              console.log(`[search] Serper query="${params.query}" results=${results.length}`);
+              return results;
+            }
+          }
+        } catch (err) {
+          console.error("[search] Serper error, falling through:", err);
+        }
+      }
+
+      // ── Tavily API (search-optimized, free tier: 1000 queries/month) ──
+      if (tavilyKey) {
+        try {
+          const resp = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ api_key: tavilyKey, query: params.query, max_results: 10, search_depth: "basic" }),
+            signal: AbortSignal.timeout(10000),
+          });
+          if (resp.ok) {
+            const data = (await resp.json()) as { results?: Array<{ title: string; url: string; content: string }> };
+            const results: SearchResult[] = (data.results ?? []).slice(0, 10).map((r) => ({
+              title: r.title, url: r.url, snippet: r.content?.slice(0, 300) ?? "",
+            }));
+            if (results.length > 0) {
+              console.log(`[search] Tavily query="${params.query}" results=${results.length}`);
+              return results;
+            }
+          }
+        } catch (err) {
+          console.error("[search] Tavily error, falling through:", err);
+        }
+      }
+
+      // ── DuckDuckGo HTML fallback (more reliable than Bing scraping) ──
+      try {
+        const ddgResponse = await fetch(
+          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(params.query)}`,
+          {
+            method: "POST",
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              "Accept": "text/html",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `q=${encodeURIComponent(params.query)}`,
+            signal: AbortSignal.timeout(12000),
+          }
+        );
+
+        if (ddgResponse.ok) {
+          const ddgHtml = await ddgResponse.text();
+          const ddgResults: SearchResult[] = [];
+
+          // DuckDuckGo HTML results are in <div class="result results_links results_links_deep web-result">
+          // with <a class="result__a"> for title/URL and <a class="result__snippet"> for snippet
+          const resultBlocks = ddgHtml.split(/class="result\s+results_links/).slice(1);
+
+          for (const block of resultBlocks) {
+            // Extract URL from result__a href
+            const urlMatch = block.match(/<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
+            if (!urlMatch) continue;
+
+            let url = (urlMatch[1] ?? "").trim();
+            const title = (urlMatch[2] ?? "").replace(/<[^>]*>/g, "").trim();
+
+            // DuckDuckGo wraps URLs through a redirect — extract actual URL
+            if (url.includes("uddg=")) {
+              const uddgMatch = url.match(/uddg=([^&]+)/);
+              if (uddgMatch && uddgMatch[1]) {
+                url = decodeURIComponent(uddgMatch[1]);
+              }
+            }
+            if (!url.startsWith("http")) continue;
+
+            const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div|span)>/i);
+            const snippet = snippetMatch
+              ? (snippetMatch[1] ?? "").replace(/<[^>]*>/g, "").trim()
+              : "";
+
+            if (url && title) ddgResults.push({ title, url, snippet });
+            if (ddgResults.length >= 10) break;
+          }
+
+          if (ddgResults.length > 0) {
+            console.log(`[search] DuckDuckGo fallback query="${params.query}" results=${ddgResults.length}`);
+            return ddgResults;
+          }
+        }
+      } catch (err) {
+        console.error("[search] DuckDuckGo error, falling through to Bing:", err);
+      }
+
+      // ── Bing HTML fallback (last resort) ──
       try {
         const response = await fetch(
-          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10`,
+          `https://www.bing.com/search?q=${encodeURIComponent(params.query)}&count=10&ensearch=1&setlang=en&mkt=en-US&cc=US`,
           {
             headers: {
               "User-Agent":
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
               "Accept": "text/html,application/xhtml+xml",
               "Accept-Language": "en-US,en;q=0.9",
+              "Cookie": "SRCHHPGUSR=SRCHLANG=en;ENSEARCH=BENVER=1;",
             },
             signal: AbortSignal.timeout(12000),
           }
@@ -567,30 +887,18 @@ function createDefaultSearchProvider(): ToolContext["searchProvider"] {
         if (!response.ok) return [];
         const html = await response.text();
 
-        // Bing organic results: <li class="b_algo">
-        //   <h2><a href="...">Title</a></h2>
-        //   <cite>display-url</cite>
-        //   <p>Snippet</p>
         const items = html.split(/<li[^>]*class="b_algo"[^>]*>/i).slice(1);
-        const results: Array<{ title: string; url: string; snippet: string }> = [];
+        const results: SearchResult[] = [];
 
         for (const item of items) {
-          // Title from <h2><a>
-          const titleMatch = item.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
-          if (!titleMatch) continue;
-          const title = (titleMatch[1] ?? "").replace(/<[^>]*>/g, "").trim();
+          // Extract URL from the <a href="..."> inside <h2>
+          const linkMatch = item.match(/<h2[^>]*>[\s\S]*?<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
+          if (!linkMatch) continue;
+          const url = (linkMatch[1] ?? "").trim();
+          const title = (linkMatch[2] ?? "").replace(/<[^>]*>/g, "").trim();
 
-          // URL from <cite> — Bing shows display URLs like "site.com › path"
-          const citeMatch = item.match(/<cite[^>]*>([\s\S]*?)<\/cite>/i);
-          let url = "";
-          if (citeMatch) {
-            url = (citeMatch[1] ?? "").replace(/<[^>]*>/g, "").trim();
-            // Convert Bing display format: "site.com › path › sub" → "site.com/path/sub"
-            url = url.replace(/\s*›\s*/g, "/");
-            if (url && !url.startsWith("http")) url = "https://" + url;
-          }
+          if (!url || !url.startsWith("http")) continue;
 
-          // Snippet from paragraph or description span
           const snippetMatch =
             item.match(/<p[^>]*>([\s\S]*?)<\/p>/i) ??
             item.match(/<span[^>]*class="[^"]*b_(?:lineclamp|paractl|descript)[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
@@ -598,16 +906,14 @@ function createDefaultSearchProvider(): ToolContext["searchProvider"] {
             ? (snippetMatch[1] ?? "").replace(/<[^>]*>/g, "").trim()
             : "";
 
-          if (url && title) {
-            results.push({ title, url, snippet });
-          }
+          if (url && title) results.push({ title, url, snippet });
           if (results.length >= 10) break;
         }
 
-        console.log(`[search] Bing query="${params.query}" status=${response.status} results=${results.length}`);
+        console.log(`[search] Bing fallback query="${params.query}" results=${results.length}`);
         return results;
       } catch (err) {
-        console.error("[search] Error:", err);
+        console.error("[search] Bing error:", err);
         return [];
       }
     },

@@ -59,7 +59,7 @@ export function createAllTools(
     message_notify_user: createMessageNotifyUserTool(ctx),
     message_ask_user: createMessageAskUserTool(ctx),
 
-    // File operations (5)
+    // File operations (6)
     ...createFileTools(ctx),
 
     // Shell operations (5)
@@ -124,6 +124,7 @@ export function getAllToolNames(): string[] {
     "file_str_replace",
     "file_find_in_content",
     "file_find_by_name",
+    "file_view",
     // Shell
     "shell_exec",
     "shell_view",
@@ -144,6 +145,11 @@ export function getAllToolNames(): string[] {
     "browser_console_view",
     "browser_screenshot",
     "browser_restart",
+    "browser_save_image",
+    "browser_upload_file",
+    "browser_fill_form",
+    "browser_find_keyword",
+    "browser_close",
     // Code
     "code_execute",
     // Search
@@ -185,5 +191,6 @@ export function getAllToolNames(): string[] {
     "webdev_execute_sql",
     "webdev_push_schema",
     "webdev_list_versions",
+    "webdev_add_feature",
   ];
 }

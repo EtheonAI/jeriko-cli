@@ -17,6 +17,9 @@ import { devicesRouter } from "./devices.router";
 import { smartHomeRouter } from "./smartHome.router";
 import { webhooksRouter } from "./webhooks.router";
 import { websiteBuilderRouter } from "./websiteBuilder.router";
+import { skillsRouter } from "./skills.router";
+import { communityRouter } from "./community.router";
+import { knowledgeRouter } from "./knowledge.router";
 
 /**
  * This is the primary router for your server.
@@ -35,6 +38,7 @@ export const appRouter = createTRPCRouter({
   notifications: notificationsRouter,
   scheduledTasks: scheduledTasksRouter,
   projects: projectsRouter,
+  skills: skillsRouter,
 
   // API Keys (Rubic AI)
   apiKeys: apiKeysRouter,
@@ -50,6 +54,10 @@ export const appRouter = createTRPCRouter({
   webhooks: webhooksRouter,
   // Website Builder
   websiteBuilder: websiteBuilderRouter,
+  // Community (shared sessions)
+  community: communityRouter,
+  // Knowledge base
+  knowledge: knowledgeRouter,
 });
 
 // Export type definition of API

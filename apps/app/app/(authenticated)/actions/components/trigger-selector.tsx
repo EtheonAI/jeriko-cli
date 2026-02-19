@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Label } from "@repo/design-system/components/ui/label";
 import { Input } from "@repo/design-system/components/ui/input";
 import {
@@ -12,7 +11,10 @@ import {
 } from "@repo/design-system/components/ui/select";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { AlertCircleIcon, ExternalLinkIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetScheduledTaskTriggerTypesQuery,
+  useGetScheduledTaskTriggerConfigQuery,
+} from "@/lib/store/api/api.slice";
 import Link from "next/link";
 
 interface TriggerType {
@@ -48,67 +50,23 @@ export function TriggerSelector({
   onEventChange,
   onConfigChange,
 }: TriggerSelectorProps) {
-  const [triggerTypes, setTriggerTypes] = useState<TriggerType[]>([]);
-  const [eventConfig, setEventConfig] = useState<TriggerConfig | null>(null);
-  const [isLoadingTypes, setIsLoadingTypes] = useState(true);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Fetch available trigger types via RTK Query
+  const {
+    data: triggerTypesData,
+    isLoading: isLoadingTypes,
+    error: triggerTypesError,
+  } = useGetScheduledTaskTriggerTypesQuery();
+  const triggerTypes = ((triggerTypesData as any)?.triggers ?? []) as TriggerType[];
+  const error = triggerTypesError
+    ? (typeof triggerTypesError === "object" && "data" in triggerTypesError ? String((triggerTypesError as any).data) : "Failed to load trigger types")
+    : null;
 
-  // Fetch available trigger types
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoadingTypes(true);
-    setError(null);
-
-    getTrpcClient()
-      .scheduledTasks.listTriggerTypes.query()
-      .then((data) => {
-        if (!cancelled) {
-          setTriggerTypes(data.triggers ?? []);
-          setIsLoadingTypes(false);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message || "Failed to load trigger types");
-          setIsLoadingTypes(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Fetch config schema when event is selected
-  useEffect(() => {
-    if (!selectedEvent) {
-      setEventConfig(null);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingConfig(true);
-
-    getTrpcClient()
-      .scheduledTasks.getTriggerTypeConfig.query({ slug: selectedEvent })
-      .then((data) => {
-        if (!cancelled) {
-          setEventConfig(data);
-          setIsLoadingConfig(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEventConfig(null);
-          setIsLoadingConfig(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedEvent]);
+  // Fetch config schema when event is selected via RTK Query
+  const {
+    data: eventConfigData,
+    isLoading: isLoadingConfig,
+  } = useGetScheduledTaskTriggerConfigQuery(selectedEvent, { skip: !selectedEvent });
+  const eventConfig = (selectedEvent ? eventConfigData : null) as TriggerConfig | null;
 
   // Group triggers by app name
   const appNames = [...new Set(triggerTypes.map((t) => t.appName))].sort();

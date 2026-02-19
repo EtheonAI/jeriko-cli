@@ -293,15 +293,25 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
   // Track whether the user actually sent a new message (vs stream resume)
   const userSentMessageRef = useRef(false);
 
-  // Wrap sendMessage to always include chatId in body
+  // Wrap sendMessage to always include chatId in body.
+  // CRITICAL: Await resumePromiseRef before calling sdkSendMessage.
+  // The SDK's Chat class has a single this.activeResponse — if two
+  // makeRequest calls run concurrently (resume + send), the first
+  // call's finally block sets this.activeResponse = undefined before
+  // the second's finally can read it → crash at chat.ts:711.
   const sendMessage = useCallback(
-    (
+    async (
       text: string,
       options?: {
         body?: Record<string, unknown>;
         attachments?: Attachment[];
       },
     ) => {
+      // Wait for any in-flight resume to complete before sending,
+      // preventing concurrent makeRequest calls on the same Chat instance.
+      if (resumePromiseRef.current) {
+        await resumePromiseRef.current;
+      }
       userSentMessageRef.current = true;
       const body = { chatId: sessionId, ...(options?.body ?? {}) };
       const files = mapAttachmentsToFiles(options?.attachments);
@@ -333,18 +343,26 @@ export function useChatSession({ sessionId, initialMessages }: UseChatSessionOpt
   // fires synchronously when resumeStream() is called. Without this,
   // historical chats flash a thinking indicator + sidebar spinner because
   // "submitted" → isStreaming=true before the resume GET returns 404.
+  //
+  // resumePromiseRef stores the resume promise so sendMessage can await it.
+  // Two concurrent makeRequest calls on the same Chat instance race on
+  // this.activeResponse — the first call's finally block clears it before
+  // the second's finally can read it, causing the "Cannot read properties
+  // of undefined (reading 'state')" crash at chat.ts:711.
   const resumeCalledRef = useRef(false);
   const isResumingRef = useRef(true);
+  const resumePromiseRef = useRef<Promise<void> | undefined>(undefined);
   useEffect(() => {
     if (resumeCalledRef.current) return;
     resumeCalledRef.current = true;
-    resumeStream()
+    resumePromiseRef.current = resumeStream({})
       .catch(() => {
         // Swallow resume errors — most common case is "no active stream"
         // which is expected for historical chats.
       })
       .finally(() => {
         isResumingRef.current = false;
+        resumePromiseRef.current = undefined;
       });
   }, [resumeStream]);
 

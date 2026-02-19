@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLibraryData } from "@/lib/store/hooks";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import { useMemo, useState } from "react";
+import { useGetFilesBySessionQuery, useToggleFavoriteMutation } from "@/lib/store/api/api.slice";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { FolderOpenIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
@@ -25,36 +24,17 @@ interface LibraryViewProps {
 export function LibraryView({ viewType = "grid", favoritesOnly = false, searchQuery = "" }: LibraryViewProps) {
   const [previewFile, setPreviewFile] = useState<LibraryFile | null>(null);
   const [shareFile, setShareFile] = useState<LibraryFile | null>(null);
-  const [groups, setGroups] = useState<any[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const hasFetchedRef = useRef(false);
 
-  const { toggleFavorite } = useLibraryData({ autoFetch: false });
-
-  // Fetch session-grouped files
-  useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-    setIsLoading(true);
-    getTrpcClient()
-      .files.listBySession.query({ favoritesOnly: favoritesOnly || undefined })
-      .then((data) => setGroups(data as any[]))
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
-  }, [favoritesOnly]);
-
-  const refetchGroups = useCallback(() => {
-    getTrpcClient()
-      .files.listBySession.query({ favoritesOnly: favoritesOnly || undefined })
-      .then((data) => setGroups(data as any[]))
-      .catch(() => {});
-  }, [favoritesOnly]);
+  const { data: groups = null, isLoading } = useGetFilesBySessionQuery(
+    { favoritesOnly: favoritesOnly || undefined }
+  );
+  const [toggleFavorite] = useToggleFavoriteMutation();
 
   const filteredGroups = useMemo(() => {
     if (!groups) return [];
-    if (!searchQuery.trim()) return groups;
+    if (!searchQuery.trim()) return groups as any[];
     const q = searchQuery.toLowerCase();
-    return groups
+    return (groups as any[])
       .map((g) => ({
         ...g,
         files: g.files.filter((f: { name: string }) => f.name.toLowerCase().includes(q)),
@@ -92,8 +72,7 @@ export function LibraryView({ viewType = "grid", favoritesOnly = false, searchQu
 
   async function handleFavorite(file: LibraryFile) {
     try {
-      await toggleFavorite(file.id);
-      refetchGroups();
+      await toggleFavorite(file.id).unwrap();
       toast.success("Favorite updated");
     } catch {
       toast.error("Failed to update favorite");

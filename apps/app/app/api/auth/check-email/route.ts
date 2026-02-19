@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db, users, eq } from "@repo/database";
+import { db, users, accounts, eq, and } from "@repo/database";
 
 // Simple in-memory rate limiter (per IP, 5 requests per 60 seconds)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -62,15 +62,33 @@ export async function POST(request: Request) {
       // Normalize email to lowercase
       const normalizedEmail = email.toLowerCase().trim();
 
-      // Check if user exists
+      // Check if user exists, has a credential account, and email verification status
       const existingUser = await db
-        .select({ id: users.id })
+        .select({ id: users.id, emailVerified: users.emailVerified })
         .from(users)
         .where(eq(users.email, normalizedEmail))
         .limit(1);
 
+      let hasCredential = false;
+      if (existingUser[0]) {
+        const credentialAccount = await db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, existingUser[0].id),
+              eq(accounts.providerId, "credential")
+            )
+          )
+          .limit(1);
+        hasCredential = credentialAccount.length > 0;
+      }
+
       return NextResponse.json({
-        exists: existingUser.length > 0,
+        // Only treat as "existing" if they have a credential account to sign in with.
+        // Users without credentials (orphaned records) should go through sign-up.
+        exists: existingUser.length > 0 && hasCredential,
+        emailVerified: existingUser[0]?.emailVerified ?? false,
       });
     } catch (error) {
       console.error("Check email error:", error);

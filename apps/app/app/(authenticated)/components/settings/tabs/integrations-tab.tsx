@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -57,7 +57,22 @@ import {
   ClockIcon,
   RotateCcwIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetWebhooksQuery,
+  useGetWebhookEventTypesQuery,
+  useGetWebhookDeliveriesQuery,
+  useCreateWebhookMutation,
+  useDeleteWebhookMutation,
+  useTestWebhookMutation,
+  useRegenerateWebhookSecretMutation,
+  useGetWebhookDeliveryDetailsQuery,
+  useRetryWebhookDeliveryMutation,
+  useGetApiKeysQuery,
+  useCreateApiKeyMutation,
+  useRevokeApiKeyMutation,
+  useDeleteApiKeyMutation,
+  useRenameApiKeyMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { ErrorState } from "./error-state";
@@ -90,67 +105,36 @@ function DeliveryStatusBadge({ status }: { status: string }) {
 
 function DeliveryLogSection({ webhookId }: { webhookId: string }) {
   const [detailDeliveryId, setDetailDeliveryId] = useState<string | null>(null);
-  const [deliveries, setDeliveries] = useState<any[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [deliveryDetail, setDeliveryDetail] = useState<any | null>(null);
-  const [isRetryPending, setIsRetryPending] = useState(false);
 
-  const fetchDeliveries = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await getTrpcClient().webhooks.getDeliveries.query({
-        webhookId,
-        limit: 20,
-        offset: 0,
-      });
-      setDeliveries(data);
-    } catch {
-      setDeliveries(null);
-    } finally {
-      setIsLoading(false);
+  // RTK Query for deliveries
+  const { data: deliveries, isLoading, refetch: refetchDeliveries } = useGetWebhookDeliveriesQuery(
+    { webhookId, limit: 20, offset: 0 },
+    { selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }) }
+  );
+
+  // RTK Query for delivery details — auto-fetches when deliveryId changes
+  const { data: deliveryDetail } = useGetWebhookDeliveryDetailsQuery(
+    { deliveryId: detailDeliveryId!, webhookId },
+    {
+      skip: !detailDeliveryId,
+      selectFromResult: ({ data, ...rest }) => ({ data: (data ?? null) as any, ...rest }),
     }
-  }, [webhookId]);
+  );
 
-  useEffect(() => {
-    fetchDeliveries();
-  }, [fetchDeliveries]);
-
-  useEffect(() => {
-    if (!detailDeliveryId) {
-      setDeliveryDetail(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await getTrpcClient().webhooks.getDeliveryDetails.query({
-          deliveryId: detailDeliveryId,
-          webhookId,
-        });
-        if (!cancelled) setDeliveryDetail(data);
-      } catch {
-        if (!cancelled) setDeliveryDetail(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [detailDeliveryId, webhookId]);
+  // RTK Query mutation for retry
+  const [retryDeliveryMutation, { isLoading: isRetryPending }] = useRetryWebhookDeliveryMutation();
 
   const retryDelivery = useCallback(
     async (deliveryId: string) => {
       try {
-        setIsRetryPending(true);
-        await getTrpcClient().webhooks.retryDelivery.mutate({ deliveryId, webhookId });
+        await retryDeliveryMutation({ deliveryId, webhookId }).unwrap();
         toast.success("Delivery queued for retry");
-        fetchDeliveries();
+        refetchDeliveries();
       } catch (error: any) {
         toast.error(error.message || "Failed to retry delivery");
-      } finally {
-        setIsRetryPending(false);
       }
     },
-    [webhookId, fetchDeliveries]
+    [webhookId, retryDeliveryMutation, refetchDeliveries]
   );
 
   if (isLoading) {
@@ -279,46 +263,19 @@ export function IntegrationsTab() {
   const [copied, setCopied] = useState<string | null>(null);
   const [expandedWebhook, setExpandedWebhook] = useState<string | null>(null);
 
-  // Webhooks state
-  const [webhooks, setWebhooks] = useState<any[] | null>(null);
-  const [isLoadingWebhooks, setIsLoadingWebhooks] = useState(true);
-  const [isWebhooksError, setIsWebhooksError] = useState(false);
-  const [eventTypes, setEventTypes] = useState<any[] | null>(null);
+  // RTK Query for webhooks and event types
+  const { data: webhooks, isLoading: isLoadingWebhooks, isError: isWebhooksError, refetch: refetchWebhooks } = useGetWebhooksQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }),
+  });
+  const { data: eventTypes } = useGetWebhookEventTypesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }),
+  });
 
-  // Mutation pending states
-  const [isCreatePending, setIsCreatePending] = useState(false);
-  const [isDeletePending, setIsDeletePending] = useState(false);
-  const [isTestPending, setIsTestPending] = useState(false);
-  const [isRegeneratePending, setIsRegeneratePending] = useState(false);
-
-  // Fetch webhooks
-  const fetchWebhooks = useCallback(async () => {
-    try {
-      setIsLoadingWebhooks(true);
-      setIsWebhooksError(false);
-      const data = await getTrpcClient().webhooks.list.query();
-      setWebhooks(data);
-    } catch {
-      setIsWebhooksError(true);
-      setWebhooks(null);
-    } finally {
-      setIsLoadingWebhooks(false);
-    }
-  }, []);
-
-  const fetchEventTypes = useCallback(async () => {
-    try {
-      const data = await getTrpcClient().webhooks.getEventTypes.query();
-      setEventTypes(data);
-    } catch {
-      setEventTypes(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchWebhooks();
-    fetchEventTypes();
-  }, [fetchWebhooks, fetchEventTypes]);
+  // RTK Query mutations
+  const [createWebhookMutation, { isLoading: isCreatePending }] = useCreateWebhookMutation();
+  const [deleteWebhookMutation, { isLoading: isDeletePending }] = useDeleteWebhookMutation();
+  const [testWebhookMutation, { isLoading: isTestPending }] = useTestWebhookMutation();
+  const [regenerateSecretMutation, { isLoading: isRegeneratePending }] = useRegenerateWebhookSecretMutation();
 
   // Form
   const form = useForm<CreateWebhookForm>({
@@ -336,67 +293,52 @@ export function IntegrationsTab() {
   const createWebhook = useCallback(
     async (data: { name: string; url: string; events: any[] }) => {
       try {
-        setIsCreatePending(true);
-        await getTrpcClient().webhooks.create.mutate(data);
+        await createWebhookMutation(data as any).unwrap();
         toast.success("Webhook created");
-        fetchWebhooks();
         setIsCreateOpen(false);
         form.reset();
       } catch (error: any) {
-        toast.error(error.message || "Failed to create webhook");
-      } finally {
-        setIsCreatePending(false);
+        toast.error(error?.data || error?.message || "Failed to create webhook");
       }
     },
-    [fetchWebhooks, form]
+    [createWebhookMutation, form]
   );
 
   const deleteWebhook = useCallback(
     async (id: string) => {
       try {
-        setIsDeletePending(true);
-        await getTrpcClient().webhooks.delete.mutate({ id });
+        await deleteWebhookMutation(id).unwrap();
         toast.success("Webhook deleted");
-        fetchWebhooks();
       } catch (error: any) {
-        toast.error(error.message || "Failed to delete webhook");
-      } finally {
-        setIsDeletePending(false);
+        toast.error(error?.data || error?.message || "Failed to delete webhook");
       }
     },
-    [fetchWebhooks]
+    [deleteWebhookMutation]
   );
 
   const testWebhook = useCallback(async (id: string) => {
     try {
-      setIsTestPending(true);
-      const result = await getTrpcClient().webhooks.test.mutate({ id });
+      const result = await testWebhookMutation(id).unwrap();
       if (result.success) {
         toast.success(`Test successful (${result.status})`);
       } else {
         toast.error(`Test failed: ${result.error || result.statusText}`);
       }
     } catch (error: any) {
-      toast.error(error.message || "Failed to test webhook");
-    } finally {
-      setIsTestPending(false);
+      toast.error(error?.data || error?.message || "Failed to test webhook");
     }
-  }, []);
+  }, [testWebhookMutation]);
 
   const regenerateSecret = useCallback(
     async (id: string) => {
       try {
-        setIsRegeneratePending(true);
-        await getTrpcClient().webhooks.regenerateSecret.mutate({ id });
+        await regenerateSecretMutation(id).unwrap();
         toast.success("Secret regenerated");
-        fetchWebhooks();
       } catch (error: any) {
-        toast.error(error.message || "Failed to regenerate secret");
-      } finally {
-        setIsRegeneratePending(false);
+        toast.error(error?.data || error?.message || "Failed to regenerate secret");
       }
     },
-    [fetchWebhooks]
+    [regenerateSecretMutation]
   );
 
   const copyToClipboard = async (text: string, id: string) => {
@@ -416,17 +358,17 @@ export function IntegrationsTab() {
 
   // Group event types by category
   const groupedEvents =
-    eventTypes?.reduce(
+    (eventTypes ?? []).reduce<Record<string, any[]>>(
       (acc, event) => {
         const cat = event.category ?? "other";
         if (!acc[cat]) {
           acc[cat] = [];
         }
-        acc[cat]!.push(event);
+        acc[cat].push(event);
         return acc;
       },
-      {} as Record<string, typeof eventTypes>
-    ) || {};
+      {}
+    );
 
   if (isLoadingWebhooks) {
     return (
@@ -457,7 +399,7 @@ export function IntegrationsTab() {
         <ErrorState
           title="Failed to load integrations"
           message="Unable to load your webhooks. Please try again."
-          onRetry={() => fetchWebhooks()}
+          onRetry={() => refetchWebhooks()}
         />
       </div>
     );
@@ -778,101 +720,73 @@ function ApiKeysSection() {
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  // Data state
-  const [apiKeysList, setApiKeysList] = useState<any[] | null>(null);
-  const [isLoadingKeys, setIsLoadingKeys] = useState(true);
-  const [isKeysError, setIsKeysError] = useState(false);
+  // RTK Query for API keys
+  const { data: apiKeysList, isLoading: isLoadingKeys, isError: isKeysError, refetch: refetchKeys } = useGetApiKeysQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: (data as any[] | undefined) ?? null, ...rest }),
+  });
 
-  // Mutation pending states
-  const [isCreateKeyPending, setIsCreateKeyPending] = useState(false);
-  const [isRevokePending, setIsRevokePending] = useState(false);
-  const [isDeleteKeyPending, setIsDeleteKeyPending] = useState(false);
-  const [isRenamePending, setIsRenamePending] = useState(false);
+  // RTK Query mutations
+  const [createApiKeyMutation, { isLoading: isCreateKeyPending }] = useCreateApiKeyMutation();
+  const [revokeApiKeyMutation, { isLoading: isRevokePending }] = useRevokeApiKeyMutation();
 
-  const fetchKeys = useCallback(async () => {
-    try {
-      setIsLoadingKeys(true);
-      setIsKeysError(false);
-      const data = await getTrpcClient().apiKeys.list.query();
-      setApiKeysList(data);
-    } catch {
-      setIsKeysError(true);
-      setApiKeysList(null);
-    } finally {
-      setIsLoadingKeys(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchKeys();
-  }, [fetchKeys]);
+  // Rename and delete are not in RTK Query — use vanilla tRPC
+  // isDeleteKeyPending and isRenamePendingRtk are provided by RTK Query mutations below
 
   const createKey = useCallback(
     async (name: string) => {
       try {
-        setIsCreateKeyPending(true);
-        const data = await getTrpcClient().apiKeys.create.mutate({ name });
-        setRevealedKey(data.key);
-        fetchKeys();
+        const data = await createApiKeyMutation({ name }).unwrap();
+        setRevealedKey((data as any).key);
         setIsCreateOpen(false);
         setNewKeyName("Default");
         toast.success("API key created. Copy it now — it won't be shown again.");
       } catch (error: any) {
-        toast.error(error.message || "Failed to create API key");
-      } finally {
-        setIsCreateKeyPending(false);
+        toast.error(error?.data || error?.message || "Failed to create API key");
       }
     },
-    [fetchKeys]
+    [createApiKeyMutation]
   );
 
   const revokeKey = useCallback(
     async (id: string) => {
       try {
-        setIsRevokePending(true);
-        await getTrpcClient().apiKeys.revoke.mutate({ id });
+        await revokeApiKeyMutation(id).unwrap();
         toast.success("API key revoked");
-        fetchKeys();
       } catch (error: any) {
-        toast.error(error.message || "Failed to revoke API key");
-      } finally {
-        setIsRevokePending(false);
+        toast.error(error?.data || error?.message || "Failed to revoke API key");
       }
     },
-    [fetchKeys]
+    [revokeApiKeyMutation]
   );
+
+  const [deleteApiKeyMutation, { isLoading: isDeleteKeyPendingRtk }] = useDeleteApiKeyMutation();
+  const [renameApiKeyMutation, { isLoading: isRenamePendingRtk }] = useRenameApiKeyMutation();
 
   const deleteKey = useCallback(
     async (id: string) => {
       try {
-        setIsDeleteKeyPending(true);
-        await getTrpcClient().apiKeys.delete.mutate({ id });
+        await deleteApiKeyMutation({ id }).unwrap();
         toast.success("API key deleted");
-        fetchKeys();
+        refetchKeys();
       } catch (error: any) {
-        toast.error(error.message || "Failed to delete API key");
-      } finally {
-        setIsDeleteKeyPending(false);
+        toast.error(error?.message || "Failed to delete API key");
       }
     },
-    [fetchKeys]
+    [deleteApiKeyMutation, refetchKeys]
   );
 
   const renameKey = useCallback(
     async (id: string, name: string) => {
       try {
-        setIsRenamePending(true);
-        await getTrpcClient().apiKeys.rename.mutate({ id, name });
+        await renameApiKeyMutation({ id, name }).unwrap();
         toast.success("API key renamed");
-        fetchKeys();
+        refetchKeys();
         setEditingKeyId(null);
       } catch (error: any) {
-        toast.error(error.message || "Failed to rename API key");
-      } finally {
-        setIsRenamePending(false);
+        toast.error(error?.message || "Failed to rename API key");
       }
     },
-    [fetchKeys]
+    [renameApiKeyMutation, refetchKeys]
   );
 
   const copyApiKey = async (text: string, id: string) => {
@@ -904,7 +818,7 @@ function ApiKeysSection() {
         <ErrorState
           title="Failed to load API keys"
           message="Unable to load your API keys. Please try again."
-          onRetry={() => fetchKeys()}
+          onRetry={() => refetchKeys()}
         />
       </div>
     );
@@ -1025,7 +939,7 @@ function ApiKeysSection() {
                               renameKey(apiKey.id, editName);
                             }
                           }}
-                          disabled={isRenamePending}
+                          disabled={isRenamePendingRtk}
                         >
                           <CheckIcon className="h-3 w-3" />
                         </Button>

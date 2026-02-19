@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Button } from "@repo/design-system/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@repo/design-system/components/ui/card";
@@ -8,7 +7,10 @@ import { Progress } from "@repo/design-system/components/ui/progress";
 import { Separator } from "@repo/design-system/components/ui/separator";
 import { Skeleton } from "@repo/design-system/components/ui/skeleton";
 import { CrownIcon, SparklesIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetUsageSummaryQuery,
+  useGetUsageRecordsQuery,
+} from "@/lib/store/api/api.slice";
 import { useAppSelector } from "@/lib/store/hooks";
 import { useSettings } from "../settings-context";
 import { format } from "date-fns";
@@ -26,43 +28,13 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
   const reduxSubscription = useAppSelector((state) => state.billing.subscription);
   const isLoadingBilling = useAppSelector((state) => state.billing.isSubscriptionLoading);
 
-  // Lazy-fetch usage data (settings-only, not app-critical)
-  const [usageSummary, setUsageSummary] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["billing"]["getUsageSummary"]["query"]>> | undefined>(undefined);
-  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
-  const [isSummaryError, setIsSummaryError] = useState(false);
-
-  const [usageRecords, setUsageRecords] = useState<Awaited<ReturnType<ReturnType<typeof getTrpcClient>["billing"]["getUsageRecords"]["query"]>> | undefined>(undefined);
-  const [isLoadingRecords, setIsLoadingRecords] = useState(true);
-
-  const fetchUsageSummary = useCallback(async () => {
-    try {
-      setIsLoadingSummary(true);
-      setIsSummaryError(false);
-      const data = await getTrpcClient().billing.getUsageSummary.query();
-      setUsageSummary(data);
-    } catch {
-      setIsSummaryError(true);
-    } finally {
-      setIsLoadingSummary(false);
-    }
-  }, []);
-
-  const fetchUsageRecords = useCallback(async () => {
-    try {
-      setIsLoadingRecords(true);
-      const data = await getTrpcClient().billing.getUsageRecords.query({ limit: 10 });
-      setUsageRecords(data);
-    } catch {
-      // silently fail for records — summary error is the primary indicator
-    } finally {
-      setIsLoadingRecords(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUsageSummary();
-    fetchUsageRecords();
-  }, [fetchUsageSummary, fetchUsageRecords]);
+  // RTK Query for usage data
+  const { data: usageSummary, isLoading: isLoadingSummary, isError: isSummaryError, refetch: refetchUsageSummary } = useGetUsageSummaryQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
+  const { data: usageRecords, isLoading: isLoadingRecords } = useGetUsageRecordsQuery({ limit: 10 }, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any[] | undefined, ...rest }),
+  });
 
   const isLoading = isLoadingBilling || isLoadingSummary || isLoadingRecords;
   const isError = isSummaryError;
@@ -78,7 +50,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
   const planName = reduxSubscription ? reduxSubscription.plan.charAt(0).toUpperCase() + reduxSubscription.plan.slice(1) : "Free";
 
   // Group usage by date for display
-  const groupedUsage = usageRecords?.reduce((acc, record) => {
+  const groupedUsage = (usageRecords ?? []).reduce<Record<string, { tasks: number; credits: number }>>((acc, record) => {
     const date = format(new Date(record.createdAt), "MMM d");
     if (!acc[date]) {
       acc[date] = { tasks: 0, credits: 0 };
@@ -86,7 +58,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
     acc[date].tasks += 1;
     acc[date].credits += record.credits;
     return acc;
-  }, {} as Record<string, { tasks: number; credits: number }>) || {};
+  }, {});
 
   const usageHistory = Object.entries(groupedUsage)
     .slice(0, 5)
@@ -126,7 +98,7 @@ export function UsageTab({ isPro = false }: UsageTabProps) {
           title="Failed to load usage data"
           message="Unable to load your usage information. Please try again."
           onRetry={() => {
-            fetchUsageSummary();
+            refetchUsageSummary();
           }}
         />
       </div>

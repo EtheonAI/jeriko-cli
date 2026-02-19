@@ -1,5 +1,5 @@
 (index) => {
-  const attr = 'data-rubic_click_id';
+  const attr = 'data-manus-id';
   const target = String(index);
   const visited = new Set();
   const MAX_DEPTH = 10;

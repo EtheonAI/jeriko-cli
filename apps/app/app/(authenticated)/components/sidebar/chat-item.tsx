@@ -56,13 +56,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
 import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
 import {
   removeSession,
   updateSession as updateSessionAction,
   toggleSessionFavorite,
 } from "@/lib/store/slices/sessions.slice";
+import {
+  useUpdateSessionMutation,
+  useAddSessionToProjectMutation,
+  useDeleteSessionMutation,
+} from "@/lib/store/api/api.slice";
 import { toast } from "sonner";
 
 const chatIconMap: Record<string, LucideIcon> = {
@@ -125,9 +129,12 @@ export const ChatItem = memo(function ChatItem({ chat }: ChatItemProps) {
     (state) => state.chat.isStreaming && state.chat.currentStreamingSessionId === chat.id
   );
   const isFavoriteFromRedux = useAppSelector(
-    (state) => state.sessions.sessions.find((s: { id: string }) => s.id === chat.id)?.isFavorite ?? false
+    (state) => state.sessions.sessions?.find((s: { id: string }) => s.id === chat.id)?.isFavorite ?? false
   );
   const dispatch = useAppDispatch();
+  const [updateSession] = useUpdateSessionMutation();
+  const [addSessionToProject] = useAddSessionToProjectMutation();
+  const [deleteSession] = useDeleteSessionMutation();
   const [isMoving, setIsMoving] = useState(false);
 
   const Icon = getIconForChat(chat.title);
@@ -162,10 +169,10 @@ export const ChatItem = memo(function ChatItem({ chat }: ChatItemProps) {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== chat.title) {
       dispatch(updateSessionAction({ id: chat.id, updates: { title: trimmed } }));
-      getTrpcClient().sessions.update.mutate({ id: chat.id, title: trimmed }).catch(() => {});
+      updateSession({ id: chat.id, title: trimmed }).catch(() => {});
     }
     setIsRenaming(false);
-  }, [renameValue, chat.title, chat.id, dispatch]);
+  }, [renameValue, chat.title, chat.id, dispatch, updateSession]);
 
   const handleRenameKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -181,20 +188,18 @@ export const ChatItem = memo(function ChatItem({ chat }: ChatItemProps) {
   const handleToggleFavorite = useCallback(() => {
     dispatch(toggleSessionFavorite(chat.id));
     const isFav = !(isFavoriteFromRedux ?? chat.isFavorite ?? false);
-    getTrpcClient()
-      .sessions.update.mutate({ id: chat.id, metadata: { isFavorite: isFav } })
-      .catch(() => {});
+    updateSession({ id: chat.id, metadata: { isFavorite: isFav } }).catch(() => {});
     toast.success(isFav ? "Added to favorites" : "Removed from favorites");
-  }, [chat.id, chat.isFavorite, isFavoriteFromRedux, dispatch]);
+  }, [chat.id, chat.isFavorite, isFavoriteFromRedux, dispatch, updateSession]);
 
   const handleMoveToProject = useCallback(async () => {
     if (!selectedProjectId) return;
     setIsMoving(true);
     try {
-      await getTrpcClient().projects.addSession.mutate({
+      await addSessionToProject({
         projectId: selectedProjectId,
         sessionId: chat.id,
-      });
+      }).unwrap();
       const project = projects?.find((p: any) => p.id === selectedProjectId);
       toast.success(`Moved to ${project?.name ?? "project"}`);
       dispatch(updateSessionAction({ id: chat.id, updates: { projectId: selectedProjectId } }));
@@ -204,16 +209,16 @@ export const ChatItem = memo(function ChatItem({ chat }: ChatItemProps) {
     } finally {
       setIsMoving(false);
     }
-  }, [selectedProjectId, chat.id, projects, dispatch]);
+  }, [selectedProjectId, chat.id, projects, dispatch, addSessionToProject]);
 
   const handleDelete = useCallback(() => {
     dispatch(removeSession(chat.id));
-    getTrpcClient().sessions.delete.mutate({ id: chat.id }).catch(() => {});
+    deleteSession(chat.id).catch(() => {});
     setShowDeleteDialog(false);
     if (isActive) {
       router.push("/");
     }
-  }, [chat.id, dispatch, isActive, router]);
+  }, [chat.id, dispatch, isActive, router, deleteSession]);
 
   const isFavorite = isFavoriteFromRedux ?? chat.isFavorite ?? false;
   const filteredProjects = useMemo(() => {

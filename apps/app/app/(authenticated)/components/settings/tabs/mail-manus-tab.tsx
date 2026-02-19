@@ -38,7 +38,13 @@ import {
   SparklesIcon,
   RefreshCwIcon,
 } from "lucide-react";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useGetUserPreferencesQuery,
+  useUpdatePreferencesMutation,
+  useGetNotificationPreferencesQuery,
+  useUpdateNotificationPreferencesMutation,
+  useGetOrCreateMailboxQuery,
+} from "@/lib/store/api/api.slice";
 import { useAppSelector, useAppDispatch } from "@/lib/store/hooks";
 import {
   setAgentEmailInfo as setMailAgentEmailInfo,
@@ -60,66 +66,27 @@ export function MailManusTab() {
   const [copied, setCopied] = useState(false);
   const dispatch = useAppDispatch();
 
-  // --- Vanilla tRPC state ---
-  const [mailbox, setMailbox] = useState<any>(null);
-  const [mailboxLoading, setMailboxLoading] = useState(true);
-  const [mailboxError, setMailboxError] = useState(false);
+  // Mailbox via RTK Query — auto-fetches on mount
+  const {
+    data: mailbox,
+    isLoading: mailboxLoading,
+    isError: mailboxError,
+    refetch: fetchMailbox,
+  } = useGetOrCreateMailboxQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as any, ...rest }),
+  });
 
-  const [preferences, setPreferences] = useState<any>(null);
-  const [prefsLoading, setPrefsLoading] = useState(true);
+  // RTK Query for user preferences and notification preferences
+  const { data: preferences, isLoading: prefsLoading } = useGetUserPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
+  const { data: notifPrefs, isLoading: notifLoading, isError: notifError, refetch: refetchNotifPrefs } = useGetNotificationPreferencesQuery(undefined, {
+    selectFromResult: ({ data, ...rest }) => ({ data: data as Record<string, any> | undefined, ...rest }),
+  });
 
-  const [notifPrefs, setNotifPrefs] = useState<any>(null);
-  const [notifLoading, setNotifLoading] = useState(true);
-  const [notifError, setNotifError] = useState(false);
-
-  const [isUpdatingNotifPrefs, setIsUpdatingNotifPrefs] = useState(false);
-  const [isUpdatingUserPrefs, setIsUpdatingUserPrefs] = useState(false);
-
-  // --- Fetch functions ---
-  const fetchMailbox = useCallback(async () => {
-    setMailboxLoading(true);
-    setMailboxError(false);
-    try {
-      const data = await getTrpcClient().mail.getOrCreateMailbox.query();
-      setMailbox(data);
-    } catch {
-      setMailboxError(true);
-    } finally {
-      setMailboxLoading(false);
-    }
-  }, []);
-
-  const fetchPreferences = useCallback(async () => {
-    setPrefsLoading(true);
-    try {
-      const data = await getTrpcClient().user.getPreferences.query();
-      setPreferences(data);
-    } catch {
-      // silently fail — preferences are optional display
-    } finally {
-      setPrefsLoading(false);
-    }
-  }, []);
-
-  const fetchNotifPrefs = useCallback(async () => {
-    setNotifLoading(true);
-    setNotifError(false);
-    try {
-      const data = await getTrpcClient().notifications.getPreferences.query();
-      setNotifPrefs(data);
-    } catch {
-      setNotifError(true);
-    } finally {
-      setNotifLoading(false);
-    }
-  }, []);
-
-  // --- Fetch on mount ---
-  useEffect(() => {
-    fetchMailbox();
-    fetchPreferences();
-    fetchNotifPrefs();
-  }, [fetchMailbox, fetchPreferences, fetchNotifPrefs]);
+  // RTK Query mutations
+  const [updateNotificationPreferencesMutation, { isLoading: isUpdatingNotifPrefs }] = useUpdateNotificationPreferencesMutation();
+  const [updateUserPreferencesMutation, { isLoading: isUpdatingUserPrefs }] = useUpdatePreferencesMutation();
 
   // Sync mailbox to Redux mailAgent slice when loaded
   useEffect(() => {
@@ -148,30 +115,22 @@ export function MailManusTab() {
     quietHoursStart?: string;
     quietHoursEnd?: string;
   }) => {
-    setIsUpdatingNotifPrefs(true);
     try {
-      await getTrpcClient().notifications.updatePreferences.mutate(input);
+      await updateNotificationPreferencesMutation(input as any).unwrap();
       toast.success("Email settings updated");
-      fetchNotifPrefs();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to update settings");
-    } finally {
-      setIsUpdatingNotifPrefs(false);
+      toast.error(error?.data || error?.message || "Failed to update settings");
     }
-  }, [fetchNotifPrefs]);
+  }, [updateNotificationPreferencesMutation]);
 
   const updateUserPreferences = useCallback(async (input: Record<string, unknown>) => {
-    setIsUpdatingUserPrefs(true);
     try {
-      await getTrpcClient().user.updatePreferences.mutate(input);
+      await updateUserPreferencesMutation(input).unwrap();
       toast.success("Email processing preferences saved");
-      fetchPreferences();
     } catch (error: any) {
-      toast.error(error?.message || "Failed to save preferences");
-    } finally {
-      setIsUpdatingUserPrefs(false);
+      toast.error(error?.data || error?.message || "Failed to save preferences");
     }
-  }, [fetchPreferences]);
+  }, [updateUserPreferencesMutation]);
 
   // Form
   const form = useForm<EmailSettingsForm>({
@@ -240,7 +199,7 @@ export function MailManusTab() {
         <ErrorState
           title="Failed to load email settings"
           message="Unable to load your email preferences. Please try again."
-          onRetry={() => fetchNotifPrefs()}
+          onRetry={() => refetchNotifPrefs()}
         />
       </div>
     );

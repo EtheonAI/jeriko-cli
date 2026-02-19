@@ -41,12 +41,17 @@ import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
 import { useAppDispatch } from "@/lib/store/hooks";
 import {
-  deleteScheduledTask,
+  deleteScheduledTask as deleteScheduledTaskAction,
   updateScheduledTask,
   type ScheduledTask,
 } from "@/lib/store/slices/scheduledTasks.slice";
 import { normalizeScheduledTask } from "@/lib/store/hooks/useScheduledTasksData";
-import { getTrpcClient } from "@/lib/trpc/vanilla";
+import {
+  useRunScheduledTaskNowMutation,
+  usePauseScheduledTaskMutation,
+  useResumeScheduledTaskMutation,
+  useDeleteScheduledTaskMutation,
+} from "@/lib/store/api/api.slice";
 
 const scheduleTypeConfig: Record<
   string,
@@ -88,6 +93,10 @@ interface AutomationCardProps {
 export function AutomationCard({ task, onEdit, onViewHistory, onRefetch }: AutomationCardProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const dispatch = useAppDispatch();
+  const [runTaskNow] = useRunScheduledTaskNowMutation();
+  const [pauseTask] = usePauseScheduledTaskMutation();
+  const [resumeTask] = useResumeScheduledTaskMutation();
+  const [deleteTask] = useDeleteScheduledTaskMutation();
 
   const skillIds = Array.isArray((task.payload as Record<string, unknown> | null)?.skillIds)
     ? ((task.payload as Record<string, unknown>).skillIds as string[])
@@ -103,7 +112,7 @@ export function AutomationCard({ task, onEdit, onViewHistory, onRefetch }: Autom
   const handleRunNow = async () => {
     try {
       setPendingAction("run");
-      await getTrpcClient().scheduledTasks.runNow.mutate({ id: task.id });
+      await runTaskNow(task.id).unwrap();
       toast.success("Automation triggered");
       onRefetch();
     } catch (err: any) {
@@ -118,9 +127,9 @@ export function AutomationCard({ task, onEdit, onViewHistory, onRefetch }: Autom
       const action = task.isEnabled ? "pause" : "resume";
       setPendingAction(action);
       const updated = task.isEnabled
-        ? await getTrpcClient().scheduledTasks.pause.mutate({ id: task.id })
-        : await getTrpcClient().scheduledTasks.resume.mutate({ id: task.id });
-      dispatch(updateScheduledTask({ id: updated!.id, updates: normalizeScheduledTask(updated!) }));
+        ? await pauseTask(task.id).unwrap()
+        : await resumeTask(task.id).unwrap();
+      dispatch(updateScheduledTask({ id: (updated as any)!.id, updates: normalizeScheduledTask(updated!) }));
       toast.success(task.isEnabled ? "Automation paused" : "Automation resumed");
     } catch (err: any) {
       toast.error(err?.message || "Failed to update automation");
@@ -132,8 +141,8 @@ export function AutomationCard({ task, onEdit, onViewHistory, onRefetch }: Autom
   const handleDelete = async () => {
     try {
       setPendingAction("delete");
-      await getTrpcClient().scheduledTasks.delete.mutate({ id: task.id });
-      dispatch(deleteScheduledTask(task.id));
+      await deleteTask(task.id).unwrap();
+      dispatch(deleteScheduledTaskAction(task.id));
       toast.success("Automation deleted");
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete automation");

@@ -708,8 +708,8 @@ describe("User Flow: Image Generation", () => {
     const output = imgPart.output as Record<string, unknown>;
     expect(output.url).toContain("cdn.rubic.dev");
 
-    // No canvas view for image generation
-    expect(TOOL_VIEW_MAP["generate_image"]).toBeUndefined();
+    // Image generation opens AI Canvas view (Manus parity)
+    expect(TOOL_VIEW_MAP["generate_image"]).toBe("aiCanvas");
   });
 
   it("should process image background removal", () => {

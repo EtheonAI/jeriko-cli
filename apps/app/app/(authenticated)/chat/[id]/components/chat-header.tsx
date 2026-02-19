@@ -31,7 +31,11 @@ import {
   Trash2Icon,
   InfoIcon,
 } from "lucide-react";
-import { useAppDispatch, useAppSelector, useSessionsIntegration } from "@/lib/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/lib/store/hooks";
+import {
+  useUpdateSessionMutation,
+  useDeleteSessionMutation,
+} from "@/lib/store/api/api.slice";
 import {
   updateSession as updateSessionInStore,
   removeSession,
@@ -67,7 +71,7 @@ export function ChatHeader({
   const router = useRouter();
   const dispatch = useAppDispatch();
   const session = useAppSelector((state) =>
-    state.sessions.sessions.find((s: AgentSession) => s.id === sessionId)
+    state.sessions.sessions?.find((s: AgentSession) => s.id === sessionId)
   );
 
   // Local state
@@ -78,10 +82,8 @@ export function ChatHeader({
   const [showTaskDetails, setShowTaskDetails] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const {
-    updateSession: updateSessionApi,
-    deleteSession: deleteSessionApi,
-  } = useSessionsIntegration();
+  const [updateSessionApi] = useUpdateSessionMutation();
+  const [deleteSessionApi] = useDeleteSessionMutation();
 
   // Auto-focus rename input
   useEffect(() => {
@@ -100,7 +102,7 @@ export function ChatHeader({
   const handleRenameSubmit = useCallback(() => {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== session?.title) {
-      updateSessionApi(sessionId, { title: trimmed } as any);
+      updateSessionApi({ id: sessionId, title: trimmed });
     }
     setIsRenaming(false);
   }, [renameValue, session?.title, sessionId, updateSessionApi]);
@@ -116,12 +118,12 @@ export function ChatHeader({
   const handleToggleFavorite = useCallback(() => {
     dispatch(toggleSessionFavorite(sessionId));
     const isFav = !session?.isFavorite;
-    updateSessionApi(sessionId, { metadata: { isFavorite: isFav } } as any);
+    updateSessionApi({ id: sessionId, metadata: { isFavorite: isFav } });
     toast.success(isFav ? "Added to favorites" : "Removed from favorites");
   }, [sessionId, session?.isFavorite, dispatch, updateSessionApi]);
 
   const handleDelete = useCallback(async () => {
-    await deleteSessionApi(sessionId);
+    await deleteSessionApi(sessionId).unwrap();
     setShowDeleteDialog(false);
     router.push("/");
   }, [sessionId, deleteSessionApi, router]);
@@ -129,14 +131,14 @@ export function ChatHeader({
   const handleShareChange = useCallback(
     (isPublic: boolean) => {
       const shareId = isPublic ? sessionId : null;
-      updateSessionApi(sessionId, { isShared: isPublic, shareId } as any);
+      updateSessionApi({ id: sessionId, metadata: { isShared: isPublic, shareId } });
     },
     [sessionId, updateSessionApi]
   );
 
   const handleMoved = useCallback(
     (projectId: string, _projectName: string) => {
-      updateSessionApi(sessionId, { projectId } as any);
+      updateSessionApi({ id: sessionId, metadata: { projectId } });
     },
     [sessionId, updateSessionApi]
   );
@@ -193,7 +195,7 @@ export function ChatHeader({
                 return;
               }
               const updated = [...current, email];
-              updateSessionApi(sessionId, { sharedWith: updated } as any);
+              updateSessionApi({ id: sessionId, metadata: { sharedWith: updated } });
             }}
           />
 
