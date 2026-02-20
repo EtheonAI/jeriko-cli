@@ -50,4 +50,10 @@ export const mediaRoutes: FastifyPluginAsync = async (fastify) => {
     if (!result.ok) return reply.status(result.status).send(result.body);
     return result.body;
   });
+
+  // Proxy ICE servers from webrtc-media service
+  fastify.get("/v1/sessions/:id/media/ice-servers", async (_request, reply) => {
+    const result = await proxyJson(`${mediaServiceUrl}/v1/media/ice-servers`);
+    return reply.status(result.ok ? 200 : result.status).send(result.body);
+  });
 };

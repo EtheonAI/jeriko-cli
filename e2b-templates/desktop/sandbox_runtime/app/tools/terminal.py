@@ -54,6 +54,9 @@ class Terminal:
         self.master_fd: int | None = None
         self.pid: int | None = None
         self.alive = False
+        # WebSocket subscriber queues — push-based PTY output
+        self._subscribers: set[asyncio.Queue] = set()
+        self._reader_task: asyncio.Task | None = None
         self._start(shell, cols, rows)
 
     def _start(self, shell: str, cols: int, rows: int) -> None:
@@ -94,8 +97,90 @@ class Terminal:
             # Ensure output dir exists
             os.makedirs(os.path.dirname(self.full_output_path), exist_ok=True)
 
+    def subscribe(self) -> asyncio.Queue:
+        """Subscribe to push-based PTY output. Returns a Queue that receives text chunks."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=256)
+        self._subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue) -> None:
+        """Remove a subscriber queue."""
+        self._subscribers.discard(q)
+
+    def start_reader(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Launch the async read loop that pushes PTY output to subscribers."""
+        if self._reader_task is not None:
+            return
+        self._reader_task = loop.create_task(self._read_loop())
+
+    async def _read_loop(self) -> None:
+        """Async task: detect PTY output via add_reader, push to all subscriber queues."""
+        loop = asyncio.get_event_loop()
+        while self.alive and self.master_fd is not None:
+            readable = asyncio.Event()
+            try:
+                loop.add_reader(self.master_fd, readable.set)
+            except (OSError, ValueError):
+                break
+            try:
+                await asyncio.wait_for(readable.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                break
+            finally:
+                try:
+                    loop.remove_reader(self.master_fd)
+                except (OSError, ValueError):
+                    pass
+
+            # Read all available data
+            chunks: list[bytes] = []
+            while True:
+                try:
+                    r, _, _ = select.select([self.master_fd], [], [], 0)
+                except (OSError, ValueError):
+                    break
+                if not r:
+                    break
+                try:
+                    data = os.read(self.master_fd, 65536)
+                except (OSError, IOError):
+                    break
+                if not data:
+                    break
+                chunks.append(data)
+
+            if chunks:
+                text = b"".join(chunks).decode("utf-8", errors="replace")
+                self.output += text
+                # Append to full output log
+                try:
+                    with open(self.full_output_path, "a") as f:
+                        f.write(text)
+                except OSError:
+                    pass
+                # Push to all subscribers
+                for q in list(self._subscribers):
+                    try:
+                        q.put_nowait(text)
+                    except asyncio.QueueFull:
+                        pass
+
     def read_output(self) -> str:
-        """Read available output from the PTY."""
+        """Read available output from the PTY.
+
+        When _read_loop is active (WebSocket push mode), the reader task owns
+        the file descriptor exclusively. This method just returns the accumulated
+        buffer that _read_loop keeps updated. No fd race.
+
+        When _read_loop is NOT active (pure HTTP mode), this method reads from
+        the fd directly (original behavior).
+        """
+        if self._reader_task is not None:
+            # Reader loop owns the fd — return accumulated buffer
+            return self.output
+
         if self.master_fd is None:
             return ""
         chunks: list[bytes] = []
@@ -142,7 +227,11 @@ class Terminal:
                 pass
 
     def kill(self) -> None:
-        """Kill the terminal process."""
+        """Kill the terminal process and stop the reader task."""
+        self.alive = False
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+            self._reader_task = None
         if self.pid:
             try:
                 os.kill(self.pid, signal.SIGKILL)
@@ -153,8 +242,8 @@ class Terminal:
                 os.close(self.master_fd)
             except OSError:
                 pass
-        self.alive = False
         self.master_fd = None
+        self._subscribers.clear()
 
     def is_alive(self) -> bool:
         """Check if the child process is still running."""
@@ -192,6 +281,8 @@ async def create_terminal(req: TerminalCreateRequest) -> dict[str, Any]:
         return {"id": tid, "pid": terminals[tid].pid, "output": "", "exists": True}
     t = Terminal(tid, cols=req.cols, rows=req.rows, shell=req.shell)
     terminals[tid] = t
+    # Start push-based reader for WebSocket subscribers
+    t.start_reader(asyncio.get_event_loop())
     # Wait briefly for shell prompt
     await asyncio.sleep(0.3)
     output = t.read_output()

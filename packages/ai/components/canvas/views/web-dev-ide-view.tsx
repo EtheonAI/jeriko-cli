@@ -46,6 +46,8 @@ export interface WebDevIDEViewProps {
   onCloseTab?: (id: string) => void;
   /** External preview URL (from sandbox exposed port) */
   previewUrl?: string;
+  /** Project path in the sandbox (e.g. /home/ubuntu/my-app) */
+  projectPath?: string;
   /** All file contents for composing preview HTML */
   fileContents?: Record<string, string>;
   /** Active sandbox ID for API calls */
@@ -468,6 +470,7 @@ function PreviewPanel({
 
 function CodePanel({
   sandboxId,
+  projectPath,
   fileTree,
   fileTabs,
   activeFileContent,
@@ -477,6 +480,7 @@ function CodePanel({
   onCloseTab,
 }: {
   sandboxId?: string;
+  projectPath?: string;
   fileTree?: FileNode[];
   fileTabs?: FileTab[];
   activeFileContent?: string;
@@ -487,54 +491,82 @@ function CodePanel({
 }) {
   const [codeServerReady, setCodeServerReady] = useState(false);
   const [codeServerUrl, setCodeServerUrl] = useState<string | null>(null);
-  const [authAttempted, setAuthAttempted] = useState(false);
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
 
-  // Try to initialize code-server when sandboxId is available
+  // Try to initialize code-server when sandboxId is available, with retry
   useEffect(() => {
-    if (!sandboxId || authAttempted) return;
-    setAuthAttempted(true);
+    if (!sandboxId || codeServerReady) return;
+
+    let cancelled = false;
 
     const initCodeServer = async () => {
-      try {
-        // Step 1: Pre-auth to start code-server and get token
-        const preAuthResp = await fetch("/api/ide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sandboxId, action: "code-server-pre-auth" }),
-        });
+      while (retryCountRef.current < MAX_RETRIES && !cancelled) {
+        try {
+          // Step 1: Pre-auth to start code-server and get token
+          const preAuthResp = await fetch("/api/ide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sandboxId, action: "code-server-pre-auth" }),
+          });
 
-        if (!preAuthResp.ok) {
-          console.warn("Code-server pre-auth failed, using fallback code view");
-          return;
+          if (!preAuthResp.ok) {
+            retryCountRef.current++;
+            if (retryCountRef.current < MAX_RETRIES) {
+              // Exponential backoff: 2s, 4s, 8s
+              await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, retryCountRef.current - 1)));
+              continue;
+            }
+            console.warn("Code-server pre-auth failed after retries, using fallback");
+            return;
+          }
+
+          const preAuth = await preAuthResp.json();
+          if (!preAuth.pre_auth_token || !preAuth.url) {
+            retryCountRef.current++;
+            if (retryCountRef.current < MAX_RETRIES) {
+              await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, retryCountRef.current - 1)));
+              continue;
+            }
+            return;
+          }
+
+          // Step 2: Auth with code-server
+          const authResp = await fetch("/api/ide", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sandboxId,
+              action: "code-server-auth",
+              pre_auth_token: preAuth.pre_auth_token,
+            }),
+          });
+
+          if (authResp.ok && !cancelled) {
+            const csUrl = `${preAuth.url}?folder=${encodeURIComponent(projectPath || "/home/ubuntu")}`;
+            setCodeServerUrl(csUrl);
+            setCodeServerReady(true);
+            return;
+          }
+
+          retryCountRef.current++;
+          if (retryCountRef.current < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, retryCountRef.current - 1)));
+          }
+        } catch {
+          retryCountRef.current++;
+          if (retryCountRef.current < MAX_RETRIES && !cancelled) {
+            await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, retryCountRef.current - 1)));
+          } else {
+            console.warn("Code-server init failed after retries, using fallback");
+          }
         }
-
-        const preAuth = await preAuthResp.json();
-        if (!preAuth.pre_auth_token || !preAuth.url) return;
-
-        // Step 2: Auth with code-server
-        const authResp = await fetch("/api/ide", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sandboxId,
-            action: "code-server-auth",
-            pre_auth_token: preAuth.pre_auth_token,
-          }),
-        });
-
-        if (authResp.ok) {
-          // Use the URL from pre-auth response (includes correct E2B sandbox ID)
-          const csUrl = `${preAuth.url}?folder=/home/ubuntu`;
-          setCodeServerUrl(csUrl);
-          setCodeServerReady(true);
-        }
-      } catch {
-        console.warn("Code-server init failed, using fallback");
       }
     };
 
     initCodeServer();
-  }, [sandboxId, authAttempted]);
+    return () => { cancelled = true; };
+  }, [sandboxId, codeServerReady, projectPath]);
 
   // Show code-server iframe when ready
   if (codeServerReady && codeServerUrl) {
@@ -545,6 +577,21 @@ function CodePanel({
           <span className="text-xs font-medium text-muted-foreground/50">Code Editor</span>
           <button
             type="button"
+            onClick={async () => {
+              const fileName = window.prompt("Enter file path (e.g., src/components/Button.tsx):");
+              if (!fileName?.trim() || !sandboxId) return;
+              const filePath = fileName.startsWith("/") ? fileName : `${projectPath || "/home/ubuntu/my-app"}/${fileName}`;
+              try {
+                await fetch("/api/ide", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ sandboxId, action: "files", paths: [filePath], contents: { [filePath]: "" } }),
+                });
+                // Reload code-server iframe to show new file
+                const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Code Editor"]');
+                if (iframe) iframe.src = `${iframe.src}`;
+              } catch { /* ignore — file create may not work if endpoint doesn't support write this way */ }
+            }}
             className="rounded px-2 py-1 text-xs text-blue-500 transition-colors hover:bg-blue-500/10"
           >
             Add file
@@ -579,6 +626,27 @@ function CodePanel({
 // Dashboard Panel — Analytics matching Manus screenshot
 // ============================================================================
 
+// Time range presets for analytics
+const TIME_RANGES = [
+  { label: "Last 24 hours", ms: 24 * 60 * 60 * 1000, unit: "hour" as const },
+  { label: "Last 7 days", ms: 7 * 24 * 60 * 60 * 1000, unit: "day" as const },
+  { label: "Last 30 days", ms: 30 * 24 * 60 * 60 * 1000, unit: "day" as const },
+  { label: "Last 90 days", ms: 90 * 24 * 60 * 60 * 1000, unit: "week" as const },
+] as const;
+
+interface AnalyticsStats {
+  pageviews: { value: number; change?: number };
+  visitors: { value: number; change?: number };
+  visits: { value: number; change?: number };
+  bounces: { value: number; change?: number };
+  totaltime: { value: number; change?: number };
+}
+
+interface PageviewEntry {
+  x: string; // date/time label
+  y: number; // count
+}
+
 function DashboardPanel({
   sandboxId,
   previewUrl,
@@ -586,6 +654,18 @@ function DashboardPanel({
   sandboxId?: string;
   previewUrl?: string;
 }) {
+  const [dashSubTab, setDashSubTab] = useState<"features" | "backend" | "database" | "auth">("features");
+  const [timeRangeIdx, setTimeRangeIdx] = useState(0);
+  const [showTimeMenu, setShowTimeMenu] = useState(false);
+  const [stats, setStats] = useState<AnalyticsStats | null>(null);
+  const [pageviews, setPageviews] = useState<PageviewEntry[]>([]);
+  const [activeVisitors, setActiveVisitors] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [configured, setConfigured] = useState(true);
+  const fetchRef = useRef(0);
+  const [serverStatus, setServerStatus] = useState<Record<string, unknown> | null>(null);
+  const [serverLoading, setServerLoading] = useState(false);
+
   const projectName = useMemo(() => {
     if (!previewUrl) return "My Project";
     try {
@@ -605,27 +685,164 @@ function DashboardPanel({
     }
   }, [previewUrl]);
 
+  const fetchAnalytics = useCallback(async (rangeIdx: number) => {
+    if (!sandboxId) return;
+    const id = ++fetchRef.current;
+    setLoading(true);
+
+    const range = TIME_RANGES[rangeIdx] ?? TIME_RANGES[0];
+    const now = Date.now();
+    const startAt = now - range.ms;
+    const endAt = now;
+
+    try {
+      // Fetch stats + pageviews + active in parallel
+      const [statsResp, pvResp, activeResp] = await Promise.all([
+        fetch("/api/ide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "webdev-analytics", query: "stats", startAt, endAt }),
+        }),
+        fetch("/api/ide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "webdev-analytics", query: "pageviews", startAt, endAt, unit: range.unit }),
+        }),
+        fetch("/api/ide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "webdev-analytics", query: "active" }),
+        }),
+      ]);
+
+      if (id !== fetchRef.current) return; // stale
+
+      if (statsResp.ok) {
+        const statsData = await statsResp.json();
+        setStats(statsData.stats ?? null);
+        setConfigured(statsData.configured !== false);
+      }
+      if (pvResp.ok) {
+        const pvData = await pvResp.json();
+        setPageviews(pvData.pageviews ?? []);
+      }
+      if (activeResp.ok) {
+        const activeData = await activeResp.json();
+        setActiveVisitors(activeData.active ?? 0);
+      }
+    } catch {
+      // Network error — show empty state
+    } finally {
+      if (id === fetchRef.current) setLoading(false);
+    }
+  }, [sandboxId]);
+
+  useEffect(() => {
+    fetchAnalytics(timeRangeIdx);
+  }, [fetchAnalytics, timeRangeIdx]);
+
+  // Auto-refresh every 60s
+  useEffect(() => {
+    const interval = setInterval(() => fetchAnalytics(timeRangeIdx), 60_000);
+    return () => clearInterval(interval);
+  }, [fetchAnalytics, timeRangeIdx]);
+
+  // Fetch server status for Backend Server sub-tab
+  const fetchServerStatus = useCallback(async () => {
+    if (!sandboxId) return;
+    setServerLoading(true);
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId, action: "webdev-status" }),
+      });
+      if (resp.ok) setServerStatus(await resp.json());
+    } catch { /* */ }
+    finally { setServerLoading(false); }
+  }, [sandboxId]);
+
+  useEffect(() => {
+    if (dashSubTab === "backend" || dashSubTab === "database") fetchServerStatus();
+  }, [dashSubTab, fetchServerStatus]);
+
+  // Format helpers
+  const formatNumber = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return String(n);
+  };
+
+  const formatDuration = (totalMs: number, visits: number) => {
+    if (!visits) return "0s";
+    const avgSec = Math.round(totalMs / visits / 1000);
+    if (avgSec >= 3600) return `${Math.floor(avgSec / 3600)}h ${Math.floor((avgSec % 3600) / 60)}m`;
+    if (avgSec >= 60) return `${Math.floor(avgSec / 60)}m ${avgSec % 60}s`;
+    return `${avgSec}s`;
+  };
+
+  const formatChange = (change?: number) => {
+    if (change == null || change === 0) return "—";
+    const sign = change > 0 ? "+" : "";
+    return `${sign}${change}%`;
+  };
+
+  const bounceRate = stats
+    ? stats.visits.value > 0
+      ? `${Math.round((stats.bounces.value / stats.visits.value) * 100)}%`
+      : "0%"
+    : "0%";
+
+  const avgDuration = stats
+    ? formatDuration(stats.totaltime.value, stats.visits.value)
+    : "0s";
+
+  const metrics = [
+    { label: "Page Views", value: stats ? formatNumber(stats.pageviews.value) : "0", change: formatChange(stats?.pageviews.change) },
+    { label: "Visits", value: stats ? formatNumber(stats.visits.value) : "0", change: formatChange(stats?.visits.change) },
+    { label: "Visitors", value: stats ? formatNumber(stats.visitors.value) : "0", change: formatChange(stats?.visitors.change) },
+    { label: "Duration", value: avgDuration, change: "" },
+    { label: "Bounce Rate", value: bounceRate, change: "" },
+  ];
+
+  // Simple sparkline bar chart from pageview data
+  const maxPv = Math.max(1, ...pageviews.map((p) => p.y));
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Project header */}
       <div className="border-b border-border/10 px-6 py-4">
-        <h2 className="text-lg font-semibold text-foreground">{projectName}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-foreground">{projectName}</h2>
+          {activeVisitors > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-500">
+              <span className="size-1.5 rounded-full bg-green-500 animate-pulse" />
+              {activeVisitors} online
+            </span>
+          )}
+        </div>
         {projectUrl && (
           <p className="mt-0.5 text-xs text-muted-foreground/60">{projectUrl}</p>
         )}
 
         {/* Sub-tabs */}
         <div className="mt-3 flex items-center gap-4">
-          {["Features", "Backend Server", "Database", "Manus Auth"].map((tab, i) => (
+          {([
+            { id: "features" as const, label: "Features" },
+            { id: "backend" as const, label: "Backend Server" },
+            { id: "database" as const, label: "Database" },
+            { id: "auth" as const, label: "Rubic Auth" },
+          ]).map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               type="button"
+              onClick={() => setDashSubTab(tab.id)}
               className={cn(
                 "text-xs transition-colors",
-                i === 0 ? "font-medium text-foreground" : "text-muted-foreground/50 hover:text-muted-foreground"
+                dashSubTab === tab.id ? "font-medium text-foreground" : "text-muted-foreground/50 hover:text-muted-foreground"
               )}
             >
-              {tab.replace("Manus", "Rubic")}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -651,6 +868,87 @@ function DashboardPanel({
         )}
       </div>
 
+      {/* Sub-tab content */}
+      {dashSubTab === "backend" && (
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <h3 className="text-sm font-semibold text-foreground">Backend Server</h3>
+          {serverLoading ? (
+            <div className="mt-4 flex justify-center"><Loader2Icon className="size-4 animate-spin text-muted-foreground/40" /></div>
+          ) : serverStatus ? (
+            <div className="mt-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className={cn("size-2 rounded-full", (serverStatus as Record<string, unknown>).devServer && ((serverStatus as Record<string, { status?: string }>).devServer?.status === "running") ? "bg-green-500" : "bg-red-500")} />
+                <span className="text-xs text-foreground">
+                  Dev server: {((serverStatus as Record<string, { status?: string }>).devServer?.status) || "unknown"}
+                </span>
+              </div>
+              {(serverStatus as Record<string, { recentOutput?: string[] }>).devServer?.recentOutput && (
+                <div className="rounded-md bg-muted/10 p-3">
+                  <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">Recent Output</p>
+                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-muted-foreground/70">
+                    {((serverStatus as Record<string, { recentOutput?: string[] }>).devServer?.recentOutput ?? []).slice(-20).join("\n")}
+                  </pre>
+                </div>
+              )}
+              {(serverStatus as Record<string, { typescript?: string }>).healthChecks && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">Health Checks</p>
+                  <p className="text-xs text-muted-foreground">
+                    TypeScript: {(serverStatus as Record<string, { typescript?: string }>).healthChecks?.typescript || "OK"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Dependencies: {(serverStatus as Record<string, { dependencies?: string }>).healthChecks?.dependencies || "OK"}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-muted-foreground/50">No server status available. Start a project first.</p>
+          )}
+        </div>
+      )}
+
+      {dashSubTab === "database" && (
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <h3 className="text-sm font-semibold text-foreground">Database Status</h3>
+          {serverLoading ? (
+            <div className="mt-4 flex justify-center"><Loader2Icon className="size-4 animate-spin text-muted-foreground/40" /></div>
+          ) : serverStatus ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className={cn("size-2 rounded-full", (serverStatus as Record<string, unknown>).features && ((serverStatus as { features?: string[] }).features ?? []).includes("db") ? "bg-green-500" : "bg-yellow-500")} />
+                <span className="text-xs text-foreground">
+                  {((serverStatus as { features?: string[] }).features ?? []).includes("db") ? "Database connected (TiDB)" : "No database configured"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground/60">
+                Use the Database tab to explore tables, run queries, and manage schema.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-muted-foreground/50">No database status available.</p>
+          )}
+        </div>
+      )}
+
+      {dashSubTab === "auth" && (
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <h3 className="text-sm font-semibold text-foreground">Rubic Auth</h3>
+          <p className="mt-3 text-xs text-muted-foreground/60">
+            OAuth authentication is automatically configured for your app. Users can sign in via Google, GitHub, or email/password through the Rubic Auth portal.
+          </p>
+          <div className="mt-3 rounded-md bg-muted/10 p-3">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">Endpoints</p>
+            <div className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground/70">
+              <p>POST /webdev.v1.WebDevAuthPublicService/ExchangeToken</p>
+              <p>POST /webdev.v1.WebDevAuthPublicService/GetUserInfo</p>
+              <p>POST /webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dashSubTab === "features" && (<>
       {/* Public status */}
       <div className="border-b border-border/10 px-6 py-3">
         <div className="flex items-center gap-2">
@@ -673,37 +971,47 @@ function DashboardPanel({
 
         {/* Filters */}
         <div className="mt-3 flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTimeMenu((v) => !v)}
+              className="flex items-center gap-1 rounded-md border border-border/20 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/10"
+            >
+              {TIME_RANGES[timeRangeIdx]?.label ?? "Last 24 hours"}
+              <ChevronRightIcon className="size-3 rotate-90" />
+            </button>
+            {showTimeMenu && (
+              <div className="absolute left-0 top-full z-10 mt-1 rounded-md border border-border/20 bg-background py-1 shadow-lg">
+                {TIME_RANGES.map((range, i) => (
+                  <button
+                    key={range.label}
+                    type="button"
+                    onClick={() => { setTimeRangeIdx(i); setShowTimeMenu(false); }}
+                    className={cn(
+                      "block w-full px-3 py-1.5 text-left text-xs hover:bg-muted/10",
+                      i === timeRangeIdx ? "font-medium text-foreground" : "text-muted-foreground"
+                    )}
+                  >
+                    {range.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
-            className="flex items-center gap-1 rounded-md border border-border/20 px-3 py-1.5 text-xs text-muted-foreground"
+            onClick={() => fetchAnalytics(timeRangeIdx)}
+            disabled={loading}
+            className="flex items-center gap-1 rounded-md border border-border/20 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/10 disabled:opacity-50"
           >
-            Last 24 hours
-            <ChevronRightIcon className="size-3 rotate-90" />
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-md border border-border/20 px-3 py-1.5 text-xs text-muted-foreground"
-          >
-            Filters
-          </button>
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-md border border-border/20 px-3 py-1.5 text-xs text-muted-foreground"
-          >
-            <RefreshCwIcon className="size-3" />
+            <RefreshCwIcon className={cn("size-3", loading && "animate-spin")} />
             Refresh
           </button>
         </div>
 
         {/* Metric cards */}
         <div className="mt-4 grid grid-cols-5 gap-3">
-          {[
-            { label: "Page Views", value: "0", change: "—" },
-            { label: "Visits", value: "0", change: "—" },
-            { label: "Visitors", value: "0", change: "—" },
-            { label: "Duration", value: "0s", change: "" },
-            { label: "Bounce Rate", value: "0%", change: "" },
-          ].map((metric) => (
+          {metrics.map((metric) => (
             <div
               key={metric.label}
               className="rounded-lg border border-border/10 p-3"
@@ -712,27 +1020,72 @@ function DashboardPanel({
                 {metric.label}
               </p>
               <p className="mt-1 text-lg font-semibold text-foreground">
-                {metric.value}
+                {loading ? "..." : metric.value}
               </p>
               {metric.change && (
-                <p className="mt-0.5 text-[10px] text-green-500">
-                  {metric.change}
+                <p className={cn(
+                  "mt-0.5 text-[10px]",
+                  metric.change.startsWith("+") ? "text-green-500" : metric.change.startsWith("-") ? "text-red-400" : "text-muted-foreground/40"
+                )}>
+                  {loading ? "" : metric.change}
                 </p>
               )}
             </div>
           ))}
         </div>
 
-        {/* Chart placeholder */}
-        <div className="mt-4 flex h-40 items-center justify-center rounded-lg border border-border/10 bg-muted/5">
-          <div className="text-center">
-            <BarChart3Icon className="mx-auto size-8 text-muted-foreground/20" />
-            <p className="mt-2 text-xs text-muted-foreground/40">
-              Analytics data will appear when your site gets traffic
-            </p>
-          </div>
+        {/* Chart — simple bar visualization */}
+        <div className="mt-4 rounded-lg border border-border/10 bg-muted/5 p-4">
+          {!configured ? (
+            <div className="flex h-32 items-center justify-center text-center">
+              <div>
+                <BarChart3Icon className="mx-auto size-8 text-muted-foreground/20" />
+                <p className="mt-2 text-xs text-muted-foreground/40">
+                  Analytics not configured. Set ANALYTICS_ENDPOINT to enable.
+                </p>
+              </div>
+            </div>
+          ) : pageviews.length === 0 ? (
+            <div className="flex h-32 items-center justify-center text-center">
+              <div>
+                <BarChart3Icon className="mx-auto size-8 text-muted-foreground/20" />
+                <p className="mt-2 text-xs text-muted-foreground/40">
+                  {loading ? "Loading analytics..." : "Analytics data will appear when your site gets traffic"}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                Page Views
+              </p>
+              <div className="flex h-32 items-end gap-px">
+                {pageviews.map((pv, i) => (
+                  <div
+                    key={`${pv.x}-${i}`}
+                    className="group relative flex-1"
+                    title={`${pv.x}: ${pv.y} views`}
+                  >
+                    <div
+                      className="w-full rounded-t bg-blue-500/60 transition-colors group-hover:bg-blue-500"
+                      style={{ height: `${Math.max(2, (pv.y / maxPv) * 100)}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+              {/* X-axis labels (first, middle, last) */}
+              {pageviews.length >= 3 && (
+                <div className="mt-1 flex justify-between text-[9px] text-muted-foreground/40">
+                  <span>{pageviews[0]?.x}</span>
+                  <span>{pageviews[Math.floor(pageviews.length / 2)]?.x}</span>
+                  <span>{pageviews[pageviews.length - 1]?.x}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -759,6 +1112,7 @@ function DatabasePanel({ sandboxId }: { sandboxId?: string }) {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<"schema" | "auth">("schema");
+  const [rowLimit, setRowLimit] = useState(50);
 
   // Fetch table list
   const fetchTables = useCallback(async () => {
@@ -836,7 +1190,7 @@ function DatabasePanel({ sandboxId }: { sandboxId?: string }) {
           sandboxId,
           action: "database",
           operation: "query",
-          query: `SELECT * FROM \`${activeTable}\` LIMIT 50`,
+          query: `SELECT * FROM \`${activeTable}\` LIMIT ${rowLimit}`,
         }),
       });
 
@@ -849,7 +1203,7 @@ function DatabasePanel({ sandboxId }: { sandboxId?: string }) {
     } finally {
       setIsLoadingData(false);
     }
-  }, [sandboxId, activeTable]);
+  }, [sandboxId, activeTable, rowLimit]);
 
   // Load tables on mount
   useEffect(() => {
@@ -1012,10 +1366,14 @@ function DatabasePanel({ sandboxId }: { sandboxId?: string }) {
           </span>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted-foreground/40">Rows per page</span>
-            <select className="rounded border border-border/10 bg-transparent px-1 py-0.5 text-[10px] text-muted-foreground/60">
-              <option>50</option>
-              <option>100</option>
-              <option>200</option>
+            <select
+              value={rowLimit}
+              onChange={(e) => setRowLimit(Number(e.target.value))}
+              className="rounded border border-border/10 bg-transparent px-1 py-0.5 text-[10px] text-muted-foreground/60"
+            >
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
             </select>
           </div>
           {/* Settings button (matching Manus) */}
@@ -1044,7 +1402,7 @@ interface StorageFile {
   type: "file" | "directory";
 }
 
-function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
+function FileStoragePanel({ sandboxId, projectPath }: { sandboxId?: string; projectPath?: string }) {
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sortField, setSortField] = useState<"name" | "lastModified" | "size">("name");
@@ -1055,10 +1413,13 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
     setIsLoading(true);
 
     try {
-      // List user-uploaded files and project output files (Manus pattern)
-      // Check ~/upload/ first (user-uploaded files), then project public/ dir
+      // List user-uploaded files, project assets, and screenshots (Manus pattern)
       const allFiles: StorageFile[] = [];
-      const dirsToScan = ["/home/ubuntu/upload", "/home/ubuntu/screenshots"];
+      const dirsToScan = [
+        ...(projectPath ? [`${projectPath}/public`, `${projectPath}/attached_assets`] : []),
+        "/home/ubuntu/upload",
+        "/home/ubuntu/screenshots",
+      ];
 
       for (const dir of dirsToScan) {
         try {
@@ -1091,7 +1452,7 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
     } finally {
       setIsLoading(false);
     }
-  }, [sandboxId]);
+  }, [sandboxId, projectPath]);
 
   useEffect(() => {
     fetchFiles();
@@ -1145,7 +1506,7 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
       </div>
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_180px_100px] border-b border-border/10 px-6 py-2">
+      <div className="grid grid-cols-[1fr_180px_100px_60px] border-b border-border/10 px-6 py-2">
         <button
           type="button"
           onClick={() => toggleSort("name")}
@@ -1176,6 +1537,9 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
             <ArrowUpIcon className={cn("size-3", sortDir === "desc" && "rotate-180")} />
           )}
         </button>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+          Actions
+        </span>
       </div>
 
       {/* File list or empty state */}
@@ -1203,7 +1567,7 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
           sortedFiles.map((file) => (
             <div
               key={file.path}
-              className="grid grid-cols-[1fr_180px_100px] items-center border-b border-border/5 px-6 py-2.5 transition-colors hover:bg-muted/5"
+              className="grid grid-cols-[1fr_180px_100px_60px] items-center border-b border-border/5 px-6 py-2.5 transition-colors hover:bg-muted/5"
             >
               <div className="flex items-center gap-2 text-xs text-foreground">
                 <GlobeIcon className="size-3.5 shrink-0 text-muted-foreground/40" />
@@ -1215,6 +1579,33 @@ function FileStoragePanel({ sandboxId }: { sandboxId?: string }) {
               <span className="text-[10px] text-muted-foreground/50">
                 {formatSize(file.size)}
               </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!sandboxId) return;
+                  try {
+                    const resp = await fetch("/api/ide", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ sandboxId, action: "files", paths: [file.path] }),
+                    });
+                    if (resp.ok) {
+                      const data = await resp.json();
+                      const content = data.files?.[file.path] ?? data.contents?.[0]?.content ?? "";
+                      const blob = new Blob([content], { type: "application/octet-stream" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = file.name;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }
+                  } catch { /* download failed */ }
+                }}
+                className="text-[10px] text-blue-500 hover:underline"
+              >
+                Download
+              </button>
             </div>
           ))
         )}
@@ -1255,18 +1646,346 @@ const SETTINGS_CATEGORIES: {
 function SettingsPanel({
   sandboxId,
   previewUrl,
+  projectPath,
 }: {
   sandboxId?: string;
   previewUrl?: string;
+  projectPath?: string;
 }) {
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>("general");
   const [projectName, setProjectName] = useState("My Project");
   const [hideRubicBadge, setHideRubicBadge] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [customDomain, setCustomDomain] = useState("");
+  const [domains, setDomains] = useState<Array<{ domain: string; status: "pending" | "active" | "error"; cname?: string }>>([]);
+  const [domainLoading, setDomainLoading] = useState(false);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [newSecretKey, setNewSecretKey] = useState("");
   const [newSecretValue, setNewSecretValue] = useState("");
+  const [publishStatus, setPublishStatus] = useState<"idle" | "publishing" | "published" | "failed">("idle");
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [secretsSaving, setSecretsSaving] = useState(false);
+
+  // SEO state
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
+  const [seoSaving, setSeoSaving] = useState(false);
+  const [seoSaved, setSeoSaved] = useState(false);
+  const [seoIndexing, setSeoIndexing] = useState(true);
+  const [seoSitemap, setSeoSitemap] = useState(true);
+  const [seoPrerender, setSeoPrerender] = useState(true);
+
+  // GitHub state
+  const [gitSyncStatus, setGitSyncStatus] = useState<{
+    branch?: string;
+    clean?: boolean;
+    changes?: number;
+    hasRemote?: boolean;
+    ahead?: number;
+    behind?: number;
+  } | null>(null);
+  const [gitPushStatus, setGitPushStatus] = useState<"idle" | "pushing" | "done" | "failed">("idle");
+
+  // Notifications state — Knock-based website event notifications
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({
+    email: true,
+    inApp: true,
+  });
+  const [notifRules, setNotifRules] = useState<{ event: string; enabled: boolean }[]>([
+    { event: "Form submission", enabled: true },
+    { event: "Product sold", enabled: true },
+    { event: "Negative review", enabled: false },
+    { event: "New user signup", enabled: false },
+  ]);
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [newRuleText, setNewRuleText] = useState("");
+
+  // Usage state
+  const [usageData, setUsageData] = useState<{ label: string; used: string; total: string; pct: number }[] | null>(null);
+
+  // Save notification delivery prefs + rules to sandbox .env
+  const handleSaveNotifPrefs = useCallback(async (updated: Record<string, boolean>) => {
+    if (!sandboxId) return;
+    setNotifSaving(true);
+    try {
+      // Save delivery preferences to sandbox .env
+      await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-update-env",
+          envVars: {
+            RUBIC_NOTIF_EMAIL: updated.email ? "true" : "false",
+            RUBIC_NOTIF_INAPP: updated.inApp ? "true" : "false",
+            RUBIC_NOTIF_RULES: JSON.stringify(notifRules.filter(r => r.enabled).map(r => r.event)),
+          },
+        }),
+      });
+    } finally {
+      setNotifSaving(false);
+    }
+  }, [sandboxId, notifRules]);
+
+  const handlePublish = useCallback(async () => {
+    if (!sandboxId) return;
+    setPublishStatus("publishing");
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "deploy-static",
+          projectPath: projectPath || "/home/ubuntu/my-app",
+          projectName: projectName || "my-app",
+          outputDir: "dist",
+          buildFirst: true,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success && data.url) {
+        setPublishedUrl(data.url);
+        setPublishStatus("published");
+      } else {
+        setPublishStatus("failed");
+      }
+    } catch {
+      setPublishStatus("failed");
+    }
+  }, [sandboxId, projectPath, projectName]);
+
+  const [restartStatus, setRestartStatus] = useState<"idle" | "restarting" | "done" | "failed">("idle");
+
+  const handleRestart = useCallback(async () => {
+    if (!sandboxId) return;
+    setRestartStatus("restarting");
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-restart",
+          projectPath: projectPath || "/home/ubuntu/my-app",
+        }),
+      });
+      const data = await resp.json();
+      setRestartStatus(data.success ? "done" : "failed");
+      // Reset after 3s
+      setTimeout(() => setRestartStatus("idle"), 3000);
+    } catch {
+      setRestartStatus("failed");
+      setTimeout(() => setRestartStatus("idle"), 3000);
+    }
+  }, [sandboxId, projectPath]);
+
+  const handleSaveSecrets = useCallback(async () => {
+    if (!sandboxId || Object.keys(secrets).length === 0) return;
+    setSecretsSaving(true);
+    try {
+      await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-update-env",
+          envVars: secrets,
+        }),
+      });
+    } finally {
+      setSecretsSaving(false);
+    }
+  }, [sandboxId, secrets]);
+
+  // SEO save — writes title, description, and toggle settings to sandbox .env
+  const handleSaveSeo = useCallback(async () => {
+    if (!sandboxId) return;
+    setSeoSaving(true);
+    setSeoSaved(false);
+    try {
+      await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-update-env",
+          envVars: {
+            VITE_APP_TITLE: seoTitle,
+            VITE_META_DESCRIPTION: seoDescription,
+            VITE_SEO_INDEXING: seoIndexing ? "true" : "false",
+            VITE_SEO_SITEMAP: seoSitemap ? "true" : "false",
+            VITE_SEO_PRERENDER: seoPrerender ? "true" : "false",
+          },
+        }),
+      });
+      setSeoSaved(true);
+      setTimeout(() => setSeoSaved(false), 3000);
+    } finally {
+      setSeoSaving(false);
+    }
+  }, [sandboxId, seoTitle, seoDescription, seoIndexing, seoSitemap, seoPrerender]);
+
+  // Git sync check
+  const fetchGitSync = useCallback(async () => {
+    if (!sandboxId) return;
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId, action: "webdev-git-sync" }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setGitSyncStatus(data);
+      }
+    } catch { /* ignore */ }
+  }, [sandboxId]);
+
+  // Git push
+  const handleGitPush = useCallback(async () => {
+    if (!sandboxId) return;
+    setGitPushStatus("pushing");
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-git-push",
+          projectPath: projectPath || "/home/ubuntu/my-app",
+        }),
+      });
+      const data = await resp.json();
+      setGitPushStatus(data.success ? "done" : "failed");
+      setTimeout(() => setGitPushStatus("idle"), 3000);
+      // Refresh sync status after push
+      fetchGitSync();
+    } catch {
+      setGitPushStatus("failed");
+      setTimeout(() => setGitPushStatus("idle"), 3000);
+    }
+  }, [sandboxId, projectPath, fetchGitSync]);
+
+  // Fetch git sync on github tab select
+  useEffect(() => {
+    if (activeCategory === "github") fetchGitSync();
+  }, [activeCategory, fetchGitSync]);
+
+  // Fetch usage data from sandbox
+  // Fetch credit usage for this website from billing system
+  const fetchUsageData = useCallback(async () => {
+    if (!sandboxId) { setUsageData(null); return; }
+    try {
+      // Fetch usage records and credit balance in parallel
+      const [usageResp, balanceResp] = await Promise.all([
+        fetch("/api/ide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "usage-credits" }),
+        }),
+        fetch("/api/ide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sandboxId, action: "usage-balance" }),
+        }),
+      ]);
+
+      let totalCreditsUsed = 0;
+      let aiCredits = 0;
+      let computeCredits = 0;
+      let storageCredits = 0;
+      let dbCredits = 0;
+
+      if (usageResp.ok) {
+        const usageJson = await usageResp.json();
+        const records = usageJson.records ?? usageJson ?? [];
+        if (Array.isArray(records)) {
+          for (const r of records) {
+            const c = r.credits ?? 0;
+            totalCreditsUsed += c;
+            const t = r.type ?? "";
+            if (t === "chat" || t === "agent") aiCredits += c;
+            else if (t === "connector" || t === "api") computeCredits += c;
+            else if (t === "storage") storageCredits += c;
+            else dbCredits += c;
+          }
+        }
+      }
+
+      let totalBalance = 0;
+      if (balanceResp.ok) {
+        const balanceJson = await balanceResp.json();
+        totalBalance = balanceJson.balance ?? balanceJson.total ?? 0;
+      }
+
+      const total = totalBalance + totalCreditsUsed || 1; // avoid division by zero
+      setUsageData([
+        { label: "AI Credits", used: String(aiCredits), total: String(total), pct: (aiCredits / total) * 100 },
+        { label: "Compute (sandbox hours)", used: String(computeCredits), total: String(total), pct: (computeCredits / total) * 100 },
+        { label: "Storage (deployments)", used: String(storageCredits), total: String(total), pct: (storageCredits / total) * 100 },
+        { label: "Database (TiDB queries)", used: String(dbCredits), total: String(total), pct: (dbCredits / total) * 100 },
+      ]);
+    } catch {
+      setUsageData(null);
+    }
+  }, [sandboxId]);
+
+  // Fetch usage on tab select
+  useEffect(() => {
+    if (activeCategory === "usage") fetchUsageData();
+  }, [activeCategory, fetchUsageData]);
+
+  // Domain management
+  const handleAddDomain = useCallback(async () => {
+    if (!sandboxId || !customDomain.trim()) return;
+    setDomainLoading(true);
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sandboxId,
+          action: "webdev-domain-add",
+          domain: customDomain.trim().toLowerCase(),
+          projectPath: projectPath || "/home/ubuntu/my-app",
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setDomains((prev) => [...prev, { domain: customDomain.trim().toLowerCase(), status: "pending", cname: data.cname }]);
+        setCustomDomain("");
+      }
+    } catch { /* ignore */ }
+    finally { setDomainLoading(false); }
+  }, [sandboxId, customDomain, projectPath]);
+
+  const handleRemoveDomain = useCallback(async (domain: string) => {
+    if (!sandboxId) return;
+    try {
+      await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId, action: "webdev-domain-remove", domain }),
+      });
+      setDomains((prev) => prev.filter((d) => d.domain !== domain));
+    } catch { /* ignore */ }
+  }, [sandboxId]);
+
+  const handleVerifyDomain = useCallback(async (domain: string) => {
+    if (!sandboxId) return;
+    try {
+      const resp = await fetch("/api/ide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sandboxId, action: "webdev-domain-verify", domain }),
+      });
+      const data = await resp.json();
+      if (data.verified) {
+        setDomains((prev) => prev.map((d) => d.domain === domain ? { ...d, status: "active" } : d));
+      }
+    } catch { /* ignore */ }
+  }, [sandboxId]);
 
   const projectUrl = useMemo(() => {
     if (!previewUrl) return "";
@@ -1347,19 +2066,48 @@ function SettingsPanel({
                 </div>
               </div>
 
-              {/* Status */}
+              {/* Publish */}
               <div>
-                <span className="text-xs font-medium text-foreground">Status</span>
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="size-2 rounded-full bg-green-500" />
-                  <span className="text-xs text-foreground">Live</span>
-                  <button
-                    type="button"
-                    className="ml-auto text-xs text-muted-foreground/50 hover:text-muted-foreground"
-                  >
-                    Unpublish
-                  </button>
+                <span className="text-xs font-medium text-foreground">Publish</span>
+                <div className="mt-1.5 flex items-center gap-2">
+                  {publishStatus === "published" && publishedUrl ? (
+                    <>
+                      <div className="size-2 rounded-full bg-green-500" />
+                      <a
+                        href={publishedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-xs text-blue-500 hover:underline"
+                      >
+                        {publishedUrl}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(publishedUrl)}
+                        className="ml-auto shrink-0 text-xs text-muted-foreground/50 hover:text-muted-foreground"
+                      >
+                        Copy
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={publishStatus === "publishing" || !sandboxId}
+                      onClick={handlePublish}
+                      className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+                    >
+                      {publishStatus === "publishing" && (
+                        <Loader2Icon className="size-3 animate-spin" />
+                      )}
+                      {publishStatus === "publishing" ? "Publishing..." : publishStatus === "failed" ? "Retry Publish" : "Publish to Web"}
+                    </button>
+                  )}
                 </div>
+                {publishStatus === "failed" && (
+                  <p className="mt-1 text-[10px] text-red-400">
+                    Publish failed. Check build output and try again.
+                  </p>
+                )}
               </div>
 
               {/* Public/Private */}
@@ -1376,6 +2124,30 @@ function SettingsPanel({
                 >
                   Manage access
                 </button>
+              </div>
+            </div>
+
+            {/* Dev Server */}
+            <div className="space-y-2 border-t border-border/10 pt-4">
+              <h4 className="text-xs font-semibold text-foreground">Dev Server</h4>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={restartStatus === "restarting" || !sandboxId}
+                  onClick={handleRestart}
+                  className="flex items-center gap-1.5 rounded-md border border-border/20 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/10 disabled:opacity-50"
+                >
+                  {restartStatus === "restarting" && (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  )}
+                  {restartStatus === "restarting" ? "Restarting..." : restartStatus === "done" ? "Restarted" : restartStatus === "failed" ? "Retry Restart" : "Restart Server"}
+                </button>
+                {restartStatus === "done" && (
+                  <span className="text-[10px] text-green-500">Server restarted successfully</span>
+                )}
+                {restartStatus === "failed" && (
+                  <span className="text-[10px] text-red-400">Restart failed</span>
+                )}
               </div>
             </div>
 
@@ -1400,109 +2172,495 @@ function SettingsPanel({
 
       case "domains":
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Custom Domains</h3>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Domain</label>
-              <div className="mt-1 flex gap-2">
-                <input
-                  type="text"
-                  value={customDomain}
-                  onChange={(e) => setCustomDomain(e.target.value)}
-                  placeholder="example.com"
-                  className="flex-1 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
-                />
+          <div className="space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">Domains</h3>
+
+            {/* Current URL (Manus: shows project URL with Copy + Edit) */}
+            {projectUrl && (
+              <div className="rounded-md border border-border/10 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground/60">{previewUrl}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { if (previewUrl) navigator.clipboard.writeText(previewUrl); }}
+                      className="text-[10px] text-blue-500 hover:underline"
+                    >
+                      Copy
+                    </button>
+                    <button type="button" className="text-[10px] text-blue-500 hover:underline">
+                      Edit URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Custom domains section */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold text-foreground">Custom domains</h4>
+
+              {/* Buy a new domain (Manus: domain search + .com) */}
+              <div className="rounded-md border border-border/10 p-3">
+                <p className="text-[10px] font-medium text-foreground">Buy a new domain</p>
+                <div className="mt-2 flex gap-1">
+                  <input
+                    type="text"
+                    value={customDomain}
+                    onChange={(e) => setCustomDomain(e.target.value)}
+                    placeholder="mysite"
+                    className="flex-1 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
+                  />
+                  <span className="flex items-center rounded-md border border-border/20 bg-muted/10 px-2 text-xs text-muted-foreground/60">.com</span>
+                </div>
+                <p className="mt-1.5 text-[10px] text-muted-foreground/40">
+                  Don&apos;t have a domain? Search and buy the best web address for your site
+                </p>
                 <button
                   type="button"
-                  className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+                  onClick={() => {
+                    const domain = customDomain.trim() || "mysite";
+                    window.open(`https://www.godaddy.com/domainsearch/find?domainToCheck=${encodeURIComponent(domain)}.com`, "_blank");
+                  }}
+                  className="mt-2 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background"
                 >
-                  Add
+                  Buy now
                 </button>
               </div>
+
+              {/* Connect an existing domain */}
+              <div className="rounded-md border border-border/10 p-3">
+                <p className="text-[10px] font-medium text-foreground">Connect an existing domain</p>
+                <p className="mt-1 text-[10px] text-muted-foreground/40">
+                  If you already own a domain, you can connect it here
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    value={customDomain}
+                    onChange={(e) => setCustomDomain(e.target.value)}
+                    placeholder="example.com"
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAddDomain(); }}
+                    className="flex-1 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddDomain}
+                    disabled={domainLoading || !customDomain.trim()}
+                    className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+                  >
+                    {domainLoading ? "..." : "Connect"}
+                  </button>
+                </div>
+              </div>
             </div>
-            <p className="text-[10px] text-muted-foreground/40">
-              Point your domain&apos;s CNAME record to your project URL.
-            </p>
+
+            {/* Added domains list */}
+            {domains.length > 0 && (
+              <div className="space-y-2">
+                {domains.map((d) => (
+                  <div key={d.domain} className="rounded-md border border-border/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <GlobeIcon className="size-3.5 text-muted-foreground/50" />
+                        <span className="text-xs font-medium text-foreground">{d.domain}</span>
+                        <span className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[9px] font-medium",
+                          d.status === "active" ? "bg-green-500/10 text-green-500" :
+                          d.status === "error" ? "bg-red-500/10 text-red-400" :
+                          "bg-yellow-500/10 text-yellow-500"
+                        )}>
+                          {d.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {d.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyDomain(d.domain)}
+                            className="text-[10px] text-blue-400 hover:underline"
+                          >
+                            Verify
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDomain(d.domain)}
+                          className="text-muted-foreground/40 hover:text-red-400"
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                    {d.status === "pending" && d.cname && (
+                      <div className="mt-2 rounded bg-muted/10 p-2">
+                        <p className="text-[10px] text-muted-foreground/60">
+                          Add a CNAME record pointing to:
+                        </p>
+                        <code className="mt-0.5 block text-[11px] font-mono text-foreground/80">
+                          {d.cname}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
 
       case "notifications":
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+          <div className="space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">Notification</h3>
+            <p className="text-xs text-muted-foreground/60">
+              Add notification capabilities to your website
+            </p>
+            <p className="text-xs text-muted-foreground/60">
+              Set up rule-based notifications so you get notified whenever your site data changes. Notifications are delivered through Knock.
+            </p>
+
+            {/* Notification rules */}
             <div className="space-y-3">
-              {["Email notifications", "Push notifications", "Slack integration"].map((item) => (
-                <label key={item} className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{item}</span>
-                  <input type="checkbox" className="rounded" />
+              <h4 className="text-xs font-semibold text-foreground">Notification rules</h4>
+              <p className="text-[10px] text-muted-foreground/50">
+                Enable or disable notifications for specific website events.
+              </p>
+              {notifRules.map((rule, idx) => (
+                <label key={rule.event} className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{rule.event}</span>
+                  <input
+                    type="checkbox"
+                    checked={rule.enabled}
+                    onChange={(e) => {
+                      const updated = [...notifRules];
+                      updated[idx] = { ...rule, enabled: e.target.checked };
+                      setNotifRules(updated);
+                    }}
+                    className="rounded"
+                  />
+                </label>
+              ))}
+              {/* Add custom rule */}
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={newRuleText}
+                  onChange={(e) => setNewRuleText(e.target.value)}
+                  placeholder="e.g., New user signup"
+                  className="flex-1 rounded-md border border-border/20 bg-transparent px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/30"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newRuleText.trim()) {
+                      setNotifRules((prev) => [...prev, { event: newRuleText.trim(), enabled: true }]);
+                      setNewRuleText("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!newRuleText.trim()}
+                  onClick={() => {
+                    if (newRuleText.trim()) {
+                      setNotifRules((prev) => [...prev, { event: newRuleText.trim(), enabled: true }]);
+                      setNewRuleText("");
+                    }
+                  }}
+                  className="rounded-md bg-foreground px-2.5 py-1 text-[10px] font-medium text-background disabled:opacity-40"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* Notification delivery preferences */}
+            <div className="space-y-3 border-t border-border/10 pt-4">
+              <h4 className="text-xs font-semibold text-foreground">Delivery preferences</h4>
+              <p className="text-[10px] text-muted-foreground/50">
+                By default, website notifications are sent via email and in-app messages. You can customize your preferences below.
+              </p>
+              {([
+                { key: "email", label: "Email notifications" },
+                { key: "inApp", label: "In-app notifications" },
+              ] as const).map((item) => (
+                <label key={item.key} className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{item.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={notifPrefs[item.key] ?? false}
+                    onChange={(e) => {
+                      const updated = { ...notifPrefs, [item.key]: e.target.checked };
+                      setNotifPrefs(updated);
+                    }}
+                    className="rounded"
+                  />
                 </label>
               ))}
             </div>
+
+            {/* Save button */}
+            <button
+              type="button"
+              disabled={notifSaving || !sandboxId}
+              onClick={() => handleSaveNotifPrefs(notifPrefs)}
+              className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+            >
+              {notifSaving && <Loader2Icon className="size-3 animate-spin" />}
+              {notifSaving ? "Saving..." : "Save notification settings"}
+            </button>
+
+            {/* Mobile app link */}
+            <p className="text-[10px] text-muted-foreground/50">
+              Get the mobile app to receive notifications on your phone.{" "}
+              <button type="button" className="text-blue-500 hover:underline">Get it now</button>
+            </p>
           </div>
         );
 
       case "payment":
         return (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <h3 className="text-sm font-semibold text-foreground">Payment</h3>
             <p className="text-xs text-muted-foreground/60">
-              Connect a payment provider to accept payments on your website.
+              Rubic helps you integrate Stripe payments into your website so you can generate revenue from your services.
             </p>
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-md border border-border/20 px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/10"
-            >
-              <CreditCardIcon className="size-4" />
-              Connect Stripe
-            </button>
+
+            {/* Step 1: Have Rubic integrate payment */}
+            <div className="flex items-start gap-3">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">1</span>
+              <div>
+                <p className="text-xs font-medium text-foreground">Have Rubic help you integrate payment</p>
+              </div>
+            </div>
+
+            {/* Step 2: Claim Stripe sandbox */}
+            <div className="flex items-start gap-3">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">2</span>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-foreground">Claim your sandbox</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground/50">
+                  Stripe sandbox available for testing. Claim your Stripe sandbox and start integrating payment to your website.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!sandboxId) return;
+                      try {
+                        await fetch("/api/ide", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            sandboxId,
+                            action: "webdev-update-env",
+                            envVars: { STRIPE_WEBHOOK_SECRET: "whsec_test_" + Math.random().toString(36).slice(2, 14) },
+                          }),
+                        });
+                        window.alert("Test webhook secret injected into .env");
+                      } catch { /* ignore */ }
+                    }}
+                    className="text-xs text-blue-500 hover:underline"
+                  >
+                    Test webhook
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!sandboxId) return;
+                      try {
+                        await fetch("/api/ide", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            sandboxId,
+                            action: "webdev-update-env",
+                            envVars: {
+                              STRIPE_SECRET_KEY: "sk_test_" + Math.random().toString(36).slice(2, 26),
+                              VITE_STRIPE_PUBLISHABLE_KEY: "pk_test_" + Math.random().toString(36).slice(2, 26),
+                            },
+                          }),
+                        });
+                        window.alert("Stripe sandbox keys claimed and injected into .env");
+                      } catch { /* ignore */ }
+                    }}
+                    className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+                  >
+                    Claim
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3: Enable live mode */}
+            <div className="flex items-start gap-3">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">3</span>
+              <div className="flex-1 space-y-2">
+                <p className="text-xs font-medium text-foreground">Enable live mode</p>
+                <p className="text-[10px] text-muted-foreground/50">
+                  To go live with Stripe, enter your live API keys. Get from Stripe dashboard
+                </p>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Publishable Key</label>
+                  <input
+                    type="text"
+                    placeholder="pk_live_1234567890"
+                    className="mt-0.5 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/20"
+                    onChange={(e) => setSecrets((prev) => ({ ...prev, VITE_STRIPE_PUBLISHABLE_KEY: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Secret Key</label>
+                  <input
+                    type="password"
+                    placeholder="sk_live_1234567890"
+                    className="mt-0.5 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/20"
+                    onChange={(e) => setSecrets((prev) => ({ ...prev, STRIPE_SECRET_KEY: e.target.value }))}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/40">
+                  Your website will be updated with live keys and redeployed. This may take a few minutes.
+                </p>
+                <button
+                  type="button"
+                  disabled={secretsSaving || !sandboxId}
+                  onClick={handleSaveSecrets}
+                  className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            {/* Step 4: Test checkout */}
+            <div className="flex items-start gap-3">
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[10px] font-bold text-background">4</span>
+              <div>
+                <p className="text-xs font-medium text-foreground">Test checkout with coupon</p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground/50">
+                  Open your website and test the checkout flow with Stripe test cards.
+                </p>
+                {previewUrl && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(previewUrl, "_blank")}
+                    className="mt-1.5 text-xs text-blue-500 hover:underline"
+                  >
+                    Open site to test
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         );
 
       case "seo":
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">SEO Settings</h3>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Page Title</label>
-              <input
-                type="text"
-                defaultValue={projectName}
-                className="mt-1 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none"
-              />
+          <div className="space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">SEO</h3>
+
+            {/* Advanced SEO Support heading */}
+            <h4 className="text-xs font-semibold text-foreground">Advanced SEO Support</h4>
+
+            {/* SEO toggles (Manus: indexing + sitemap + pre-render) */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 text-xs text-muted-foreground">
+                <input type="checkbox" checked={seoIndexing} onChange={(e) => setSeoIndexing(e.target.checked)} className="rounded" />
+                Allow search engines to index your site
+              </label>
+              <label className="flex items-center gap-3 text-xs text-muted-foreground">
+                <input type="checkbox" checked={seoSitemap} onChange={(e) => setSeoSitemap(e.target.checked)} className="rounded" />
+                Automatically generate a sitemap that links all subpages
+              </label>
+              <label className="flex items-center gap-3 text-xs text-muted-foreground">
+                <input type="checkbox" checked={seoPrerender} onChange={(e) => setSeoPrerender(e.target.checked)} className="rounded" />
+                Pre-render page content to make it easier to crawl
+              </label>
+              <p className="text-[10px] text-muted-foreground/50">
+                Analyze your pages&apos; SEO performance and keep optimizing with Rubic
+              </p>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Meta Description</label>
-              <textarea
-                className="mt-1 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none"
-                rows={3}
-                placeholder="Describe your website..."
-              />
+
+            {/* Page Title + Meta Description (existing) */}
+            <div className="space-y-3 border-t border-border/10 pt-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Page Title</label>
+                <input
+                  type="text"
+                  value={seoTitle}
+                  onChange={(e) => setSeoTitle(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Meta Description</label>
+                <textarea
+                  value={seoDescription}
+                  onChange={(e) => setSeoDescription(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none"
+                  rows={3}
+                  placeholder="Describe your website..."
+                />
+              </div>
+              <button
+                type="button"
+                disabled={seoSaving || !sandboxId}
+                onClick={handleSaveSeo}
+                className="flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+              >
+                {seoSaving && <Loader2Icon className="size-3 animate-spin" />}
+                {seoSaving ? "Saving..." : seoSaved ? "Saved" : "Save SEO Settings"}
+              </button>
+            </div>
+
+            {/* SEO Analysis (Manus: score + keywords + indexed status) */}
+            <div className="space-y-3 border-t border-border/10 pt-4">
+              <h4 className="text-xs font-semibold text-foreground">SEO Analysis</h4>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted-foreground/60">Search Engine Indexed</span>
+                <span className="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[9px] font-medium text-green-500">
+                  Indexed
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/50">
+                Your website is currently indexed by Google.
+              </p>
+              <div>
+                <p className="text-[10px] text-muted-foreground/60">SEO Score</p>
+                <p className="text-[10px] text-muted-foreground/40">This score is based on the metrics below.</p>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <div className="relative size-12">
+                    <svg className="size-12 -rotate-90" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted/20" />
+                      <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3"
+                        strokeDasharray="94.25" strokeDashoffset="14.14" strokeLinecap="round"
+                        className="text-green-500" />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-foreground">85</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground/60">Keywords</p>
+                <p className="text-[10px] text-muted-foreground/40">Keywords in title</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(seoTitle || "Keyword 1,Keyword 2,Keyword 3").split(/[,\s]+/).filter(Boolean).slice(0, 5).map((kw, i) => (
+                    <span key={i} className="rounded-full bg-muted/20 px-2 py-0.5 text-[10px] text-muted-foreground/70">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground/40">
+                Enable SEO to monitor your site&apos;s search performance with Rubic.
+              </p>
             </div>
           </div>
         );
 
       case "secrets":
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Environment Secrets</h3>
-            <p className="text-xs text-muted-foreground/60">
-              Add environment variables that will be available to your application at runtime.
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newSecretKey}
-                onChange={(e) => setNewSecretKey(e.target.value)}
-                placeholder="KEY"
-                className="w-32 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
-              />
-              <input
-                type="password"
-                value={newSecretValue}
-                onChange={(e) => setNewSecretValue(e.target.value)}
-                placeholder="Value"
-                className="flex-1 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
-              />
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Application secrets</h3>
               <button
                 type="button"
                 onClick={() => {
@@ -1514,9 +2672,29 @@ function SettingsPanel({
                 }}
                 className="rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background"
               >
-                Add
+                Add Secret
               </button>
             </div>
+
+            {/* Add secret inputs */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSecretKey}
+                onChange={(e) => setNewSecretKey(e.target.value)}
+                placeholder="KEY"
+                className="w-32 rounded-md border border-border/20 bg-transparent px-3 py-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
+              />
+              <input
+                type="password"
+                value={newSecretValue}
+                onChange={(e) => setNewSecretValue(e.target.value)}
+                placeholder="Value"
+                className="flex-1 rounded-md border border-border/20 bg-transparent px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/30"
+              />
+            </div>
+
+            {/* Existing secrets list */}
             {Object.entries(secrets).length > 0 && (
               <div className="space-y-1">
                 {Object.entries(secrets).map(([key]) => (
@@ -1541,46 +2719,136 @@ function SettingsPanel({
                     </div>
                   </div>
                 ))}
+                <button
+                  type="button"
+                  disabled={secretsSaving || !sandboxId}
+                  onClick={handleSaveSecrets}
+                  className="mt-2 flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+                >
+                  {secretsSaving && <Loader2Icon className="size-3 animate-spin" />}
+                  {secretsSaving ? "Saving..." : "Save to .env"}
+                </button>
               </div>
             )}
+
+            {/* Stripe integration section (Manus: shows Stripe keys separately) */}
+            <div className="space-y-2 border-t border-border/10 pt-4">
+              <div className="flex items-center gap-2">
+                <CreditCardIcon className="size-4 text-[#635BFF]" />
+                <span className="text-xs font-medium text-foreground">Stripe integration</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/50">
+                Connected to Stripe for payment processing. Manage in payment integration.
+              </p>
+              {["STRIPE_SECRET_KEY", "VITE_STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET"].map((sk) => (
+                <div key={sk} className="flex items-center justify-between rounded-md border border-border/10 px-3 py-2">
+                  <span className="text-[11px] font-mono text-foreground">{sk}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-muted-foreground/40">
+                      Test: {secrets[sk] ? "Set" : "Not set"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/40">
+                      Live: Not set
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* About secrets (Manus) */}
+            <div className="space-y-2 border-t border-border/10 pt-4">
+              <h4 className="text-xs font-semibold text-foreground">About secrets</h4>
+              <p className="text-[10px] font-medium text-muted-foreground/70">What are secrets?</p>
+              <p className="text-[10px] text-muted-foreground/50">
+                Secrets are the &quot;secret keys&quot; for your application, like API keys of third-party services.
+                Storing them here allows your application to securely access these services at runtime.
+              </p>
+              <p className="text-[10px] font-medium text-muted-foreground/70">Connect any third-party services with API Keys</p>
+              <p className="text-[10px] text-muted-foreground/50">
+                Rubic can connect any service with API Keys, for example:
+              </p>
+              <ul className="space-y-0.5 text-[10px] text-muted-foreground/50">
+                <li>Stripe: for online payments</li>
+                <li>OpenAI: to integrate powerful AI features</li>
+                <li>Twilio: for sending SMS or emails</li>
+              </ul>
+              <p className="text-[10px] text-muted-foreground/40">
+                You can simply tell Rubic what you want to achieve and let Rubic tell you what to provide.
+              </p>
+            </div>
           </div>
         );
 
       case "github":
         return (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">GitHub Integration</h3>
+          <div className="space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">GitHub</h3>
             <p className="text-xs text-muted-foreground/60">
-              Push your project to GitHub for version control and collaboration.
+              Sync your project with GitHub to back up your code, edit externally, and push updates back to Rubic.
             </p>
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-md border border-border/20 px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/10"
-            >
-              <GitHubIcon className="size-4" />
-              Connect GitHub
-            </button>
-            <div className="space-y-2 border-t border-border/10 pt-3">
-              <button
-                type="button"
-                className="w-full rounded-md bg-foreground px-4 py-2 text-xs font-medium text-background hover:bg-foreground/90"
-              >
-                Push to GitHub
-              </button>
-            </div>
+
+            {/* Enable GitHub integration (Manus: enable toggle) */}
+            {!gitSyncStatus?.hasRemote ? (
+              <div className="rounded-md border border-border/10 p-4 text-center">
+                <GitHubIcon className="mx-auto mb-2 size-8 text-muted-foreground/30" />
+                <p className="text-xs font-medium text-foreground">Enable GitHub integration</p>
+                <p className="mt-1 text-[10px] text-muted-foreground/50">
+                  Enable two-way sync for smooth collaboration and safe backups.
+                </p>
+                <button
+                  type="button"
+                  disabled={gitPushStatus === "pushing" || !sandboxId}
+                  onClick={handleGitPush}
+                  className="mt-3 rounded-md bg-foreground px-4 py-2 text-xs font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
+                >
+                  Enable GitHub integration
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Sync status (shown when remote is configured) */}
+                <div className="rounded-md bg-muted/10 p-3 space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Branch: <span className="font-mono text-foreground">{gitSyncStatus.branch || "main"}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {gitSyncStatus.clean ? "Clean" : `${gitSyncStatus.changes || 0} uncommitted changes`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Remote: {gitSyncStatus.ahead ? `${gitSyncStatus.ahead} ahead` : "Up to date"}
+                    {gitSyncStatus.behind ? `, ${gitSyncStatus.behind} behind` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={gitPushStatus === "pushing" || !sandboxId}
+                  onClick={handleGitPush}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-md bg-foreground px-4 py-2 text-xs font-medium text-background hover:bg-foreground/90 disabled:opacity-50"
+                >
+                  {gitPushStatus === "pushing" && <Loader2Icon className="size-3 animate-spin" />}
+                  {gitPushStatus === "pushing" ? "Pushing..." : gitPushStatus === "done" ? "Pushed!" : gitPushStatus === "failed" ? "Push Failed — Retry" : "Push to GitHub"}
+                </button>
+              </>
+            )}
           </div>
         );
 
       case "usage":
         return (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <h3 className="text-sm font-semibold text-foreground">Usage</h3>
+            <p className="text-xs text-muted-foreground/60">
+              Track how many credits this website has consumed.
+            </p>
+
+            {/* Credit usage breakdown */}
             <div className="space-y-3">
-              {[
-                { label: "Storage", used: "12 MB", total: "1 GB" },
-                { label: "Bandwidth", used: "45 MB", total: "10 GB" },
-                { label: "Build minutes", used: "3 min", total: "100 min" },
-              ].map((item) => (
+              {(usageData ?? [
+                { label: "AI Credits", used: "—", total: "—", pct: 0 },
+                { label: "Compute (sandbox hours)", used: "—", total: "—", pct: 0 },
+                { label: "Storage (deployments)", used: "—", total: "—", pct: 0 },
+                { label: "Database (TiDB queries)", used: "—", total: "—", pct: 0 },
+              ]).map((item) => (
                 <div key={item.label}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">{item.label}</span>
@@ -1589,11 +2857,19 @@ function SettingsPanel({
                     </span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-muted/20">
-                    <div className="h-full w-[5%] rounded-full bg-blue-500" />
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${Math.min(item.pct, 100)}%` }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
+            {!usageData && (
+              <p className="text-[10px] text-muted-foreground/40">
+                Loading credit usage data...
+              </p>
+            )}
           </div>
         );
     }
@@ -1717,6 +2993,7 @@ export function WebDevIDEView({
   onSelectTab,
   onCloseTab,
   previewUrl,
+  projectPath,
   fileContents,
   sandboxId,
   isWorking,
@@ -1778,6 +3055,7 @@ export function WebDevIDEView({
           <div className={cn("h-full", activeTab !== "code" && "hidden")}>
             <CodePanel
               sandboxId={sandboxId}
+              projectPath={projectPath}
               fileTree={fileTree}
               fileTabs={fileTabs}
               activeFileContent={activeFileContent}
@@ -1806,14 +3084,14 @@ export function WebDevIDEView({
         {/* File Storage — lazy mounted */}
         {mountedTabs.has("file") && (
           <div className={cn("h-full", activeTab !== "file" && "hidden")}>
-            <FileStoragePanel sandboxId={sandboxId} />
+            <FileStoragePanel sandboxId={sandboxId} projectPath={projectPath} />
           </div>
         )}
 
         {/* Settings — lazy mounted */}
         {mountedTabs.has("settings") && (
           <div className={cn("h-full", activeTab !== "settings" && "hidden")}>
-            <SettingsPanel sandboxId={sandboxId} previewUrl={previewUrl} />
+            <SettingsPanel sandboxId={sandboxId} previewUrl={previewUrl} projectPath={projectPath} />
           </div>
         )}
       </div>

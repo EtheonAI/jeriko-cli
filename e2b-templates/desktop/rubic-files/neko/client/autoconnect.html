@@ -28,14 +28,20 @@
   <script>
     (function() {
       var params = new URLSearchParams(window.location.search);
-      // If server param is set, we're loaded from external CDN — API calls go to that server.
-      // Otherwise, API calls go to the same origin (sandbox Neko on port 8333).
+      // server param = direct E2B sandbox Neko URL (e.g. https://8333-{id}.e2b.dev)
+      // session param = Rubic session ID (enables proxy auth + TURN via webrtc-media service)
       var serverOrigin = params.get('server') || '';
+      var sessionId = params.get('session') || '';
       var nekoOrigin = serverOrigin || window.location.origin;
 
       // Derive sandbox runtime origin (port 8330) from Neko origin (port 8333).
-      // E2B proxy format: https://8333-{sandboxId}.e2b.dev → https://8330-{sandboxId}.e2b.dev
+      // E2B proxy format: https://8333-{sandboxId}.e2b.dev -> https://8330-{sandboxId}.e2b.dev
       var runtimeOrigin = nekoOrigin.replace('8333-', '8330-');
+
+      // When loaded from webrtc-media service, use same origin for proxy endpoints
+      var proxyOrigin = (serverOrigin && window.location.origin !== serverOrigin)
+        ? window.location.origin
+        : null;
 
       var maxRetries = 20;
       var attempt = 0;
@@ -47,7 +53,7 @@
       }
 
       function loginWithToken(token) {
-        // Use "admin" as username — Neko uses password to determine admin vs user access
+        // Use "admin" as username -- Neko uses password to determine admin vs user access
         fetch(nekoOrigin + '/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -56,7 +62,7 @@
         })
         .then(function(resp) {
           if (resp.ok) {
-            // Login successful — session cookie is set.
+            // Login successful -- session cookie is set.
             // Load the Neko Vue client which will auto-connect.
             document.getElementById('status').style.display = 'none';
             var iframe = document.createElement('iframe');
@@ -65,17 +71,17 @@
             iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads';
             document.body.appendChild(iframe);
           } else if (resp.status === 401 || resp.status === 403) {
-            setStatus('Authentication failed — token may have expired. Retrying...', false);
-            // Token might be stale (cached in sandbox runtime) — retry pre-auth
+            setStatus('Authentication failed -- token may have expired. Retrying...', false);
+            // Token might be stale (cached in sandbox runtime) -- retry pre-auth
             setTimeout(fetchPreAuth, 2000);
           } else {
-            // Neko server might not be ready yet — retry
+            // Neko server might not be ready yet -- retry
             setStatus('Connecting to virtual computer (attempt ' + attempt + ')...', false);
             setTimeout(fetchPreAuth, 2000);
           }
         })
         .catch(function() {
-          // Network error — Neko server not ready yet, retry
+          // Network error -- Neko server not ready yet, retry
           setStatus('Connecting to virtual computer (attempt ' + attempt + ')...', false);
           setTimeout(fetchPreAuth, 2000);
         });
@@ -90,6 +96,32 @@
 
         setStatus('Connecting to virtual computer' + (attempt > 1 ? ' (attempt ' + attempt + ')...' : '...'), false);
 
+        // Try proxy auth first (if loaded from webrtc-media service with session param)
+        if (proxyOrigin && sessionId && attempt <= 3) {
+          fetch(proxyOrigin + '/v1/media/sessions/' + encodeURIComponent(sessionId) + '/auth')
+          .then(function(resp) {
+            if (resp.ok) return resp.json();
+            throw new Error('Proxy auth returned ' + resp.status);
+          })
+          .then(function(data) {
+            if (data && data.token) {
+              loginWithToken(data.token);
+            } else {
+              // Fall through to direct pre-auth
+              fetchDirectPreAuth();
+            }
+          })
+          .catch(function() {
+            // Proxy not available, fall through to direct
+            fetchDirectPreAuth();
+          });
+          return;
+        }
+
+        fetchDirectPreAuth();
+      }
+
+      function fetchDirectPreAuth() {
         // Call sandbox runtime pre-auth endpoint to get actual Neko admin password.
         // Port 8330 = sandbox runtime (RSA auth skipped for /neko/pre-auth).
         // CORS is enabled on sandbox runtime (allow_origins=["*"]).
@@ -99,7 +131,7 @@
         })
         .then(function(resp) {
           if (!resp.ok) {
-            // Runtime not ready yet — retry
+            // Runtime not ready yet -- retry
             setTimeout(fetchPreAuth, 2000);
             return;
           }
@@ -110,12 +142,12 @@
           if (data.ok && data.token) {
             loginWithToken(data.token);
           } else {
-            // Pre-auth returned but no token — Neko might not have started yet
+            // Pre-auth returned but no token -- Neko might not have started yet
             setTimeout(fetchPreAuth, 2000);
           }
         })
         .catch(function() {
-          // Network error — sandbox runtime not ready yet, retry
+          // Network error -- sandbox runtime not ready yet, retry
           setTimeout(fetchPreAuth, 2000);
         });
       }

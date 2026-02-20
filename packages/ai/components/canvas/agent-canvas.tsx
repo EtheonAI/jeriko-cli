@@ -113,6 +113,9 @@ export interface AgentCanvasProps {
   // Preview URL (deployed sandbox app)
   previewUrl?: string;
 
+  // Project path (webdev project directory in sandbox)
+  projectPath?: string;
+
   // All file contents (for preview rendering)
   fileContents?: Record<string, string>;
 
@@ -404,6 +407,7 @@ export function AgentCanvas({
   onSelectTab,
   onCloseTab,
   previewUrl,
+  projectPath,
   fileContents,
   terminalOutput,
   liveTerminalOutput,
@@ -584,6 +588,10 @@ export function AgentCanvas({
             filePath={fileTabs?.find((t) => t.isActive)?.path}
             content={activeFileContent}
             language={activeFileLanguage}
+            fileTabs={fileTabs}
+            allFileContents={fileContents}
+            onSelectTab={onSelectTab}
+            onCloseTab={onCloseTab}
           />
         )}
         {viewType === "code" && (
@@ -642,6 +650,7 @@ export function AgentCanvas({
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
             previewUrl={previewUrl}
+            projectPath={projectPath}
             fileContents={fileContents}
             sandboxId={sandboxId}
             isWorking={isWorking}

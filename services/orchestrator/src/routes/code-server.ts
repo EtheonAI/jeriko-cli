@@ -21,13 +21,12 @@
 
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
-import { getSandboxInfo, getE2bSandboxIdBySandboxId } from "../lib/e2b-manager.js";
+import { getSandboxInfo, getE2bSandboxIdBySandboxId, buildSandboxPortUrl } from "../lib/e2b-manager.js";
 import { getRsaHeaders } from "../lib/rsa-auth.js";
 
 const logger = createLogger({ service: "code-server" });
 
 const SANDBOX_SERVICE_URL = process.env.SANDBOX_SERVICE_URL || "http://localhost:4012";
-const CODE_SERVER_DOMAIN = process.env.CODE_SERVER_DOMAIN || "";
 
 /**
  * Get the E2B port proxy URL for a sandbox.
@@ -38,12 +37,10 @@ async function getPortProxyUrl(
   userId: string,
   port: number
 ): Promise<string | null> {
-  const domain = CODE_SERVER_DOMAIN || (process.env.SANDBOX_DOMAIN || "e2b.dev");
-
   // Try cache first (avoids sandbox service roundtrip)
   const cachedE2bId = getE2bSandboxIdBySandboxId(sandboxId);
   if (cachedE2bId) {
-    return `https://${port}-${cachedE2bId}.${domain}`;
+    return buildSandboxPortUrl(cachedE2bId, port);
   }
 
   // Fall back to sandbox service
@@ -56,7 +53,7 @@ async function getPortProxyUrl(
     const sbxData = (await resp.json()) as { data?: { e2bSandboxId?: string } };
     const e2bId = sbxData.data?.e2bSandboxId;
     if (!e2bId) return null;
-    return `https://${port}-${e2bId}.${domain}`;
+    return buildSandboxPortUrl(e2bId, port);
   } catch {
     return null;
   }

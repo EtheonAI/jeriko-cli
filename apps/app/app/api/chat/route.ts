@@ -618,6 +618,32 @@ export const POST = async (req: Request) => {
       }
     }
 
+    // Pre-warm sandbox in parallel (Manus parity: VNC always available).
+    // getOrCreateSandbox in e2b-manager.ts is idempotent — won't duplicate.
+    if (sessionId && !sessionMeta.sandboxId) {
+      fetch(`${ORCHESTRATOR_SERVICE_URL}/api/sandbox/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": userId },
+        body: JSON.stringify({ sessionId, userId }),
+        signal: AbortSignal.timeout(25000),
+      })
+        .then(async (resp) => {
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.sandboxId || data.nekoUrl) {
+              await db
+                .update(agentSessions)
+                .set({
+                  metadata: { ...sessionMeta, ...data },
+                  updatedAt: new Date(),
+                })
+                .where(eq(agentSessions.id, sessionId));
+            }
+          }
+        })
+        .catch(() => {}); // Non-blocking — orchestrator will also create sandbox
+    }
+
     // Convert UIMessages to CoreMessages for the orchestrator.
     // Include text content from parts. For user messages, also include file
     // references so the LLM knows about attached files.

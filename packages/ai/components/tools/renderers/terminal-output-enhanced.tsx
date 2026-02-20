@@ -40,8 +40,10 @@ interface TerminalInput {
 
 interface TerminalOutput {
   stdout?: string;
+  output?: string;       // Our executor format
   stderr?: string;
   exit_code?: number;
+  status?: string;       // "completed" | "running" | "error"
   error?: string;
   duration_ms?: number;
   signal?: string;
@@ -105,9 +107,11 @@ export function TerminalOutputEnhanced({
   const command = typedInput?.command ?? "";
   const execDir = typedInput?.exec_dir ?? "~";
 
-  const stdout = typedOutput?.stdout ?? "";
+  const stdout = typedOutput?.output ?? typedOutput?.stdout ?? "";
   const stderr = typedOutput?.stderr ?? "";
-  const exitCode = typedOutput?.exit_code;
+  const exitCode = typedOutput?.exit_code ??
+    (typedOutput?.status === "completed" ? 0 :
+     typedOutput?.status === "error" ? 1 : undefined);
   const duration = typedOutput?.duration_ms;
   const signal = typedOutput?.signal;
   const error = typedOutput?.error ?? errorText;

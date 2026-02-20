@@ -246,13 +246,16 @@ export function BrowserView({
 
   // Live stream URL — Neko WebRTC (primary) or E2B noVNC stream (fallback)
   const liveStreamUrl = nekoUrl || streamUrl || null;
-  // Show Neko live stream in TWO cases:
+  // Manus pattern: Neko iframe is always rendered as a BACKGROUND layer when available.
+  // Screenshots overlay on top during agent browsing. Live stream shows through when
+  // no screenshot is available or user clicks "Take Control".
+  const hasLiveStream = !!liveStreamUrl;
+  // Show ONLY the live stream (no screenshot overlay) in two cases:
   // 1. User explicitly clicked "Take Control" (interactive mode)
-  // 2. Agent is actively browsing AND Neko URL is available (read-only live view)
-  // This matches Manus: live desktop stream during agent work, screenshots for history.
-  const isLiveStreamMode = (userControlActive || !!isAgentBrowsing) && !!liveStreamUrl;
+  // 2. Agent is actively browsing AND no screenshot available yet
+  const isLiveStreamMode = (userControlActive || (!!isAgentBrowsing && !screenshot)) && hasLiveStream;
   // User has interactive control (can click/type in browser) — only via Take Control button
-  const isInteractiveMode = userControlActive && !!liveStreamUrl;
+  const isInteractiveMode = userControlActive && hasLiveStream;
 
   const toggleUserControl = useCallback(() => {
     setUserControlActive((prev) => {
@@ -397,25 +400,29 @@ export function BrowserView({
         tabIndex={isInteractiveMode && !isLiveStreamMode ? 0 : undefined}
         onKeyDown={isInteractiveMode && !isLiveStreamMode ? handleKeyDown : undefined}
       >
-        {/* Priority 1: Live desktop stream — Neko WebRTC (primary) or E2B noVNC (fallback)
-            Shown in two modes:
-            - Agent browsing: read-only view (pointer-events-none on iframe, agent drives)
-            - Take Control: interactive mode (user can click/type via Neko WebRTC) */}
-        {isLiveStreamMode ? (
+        {/* Layer 1 (background): Neko live desktop stream — always rendered when URL available.
+            Manus pattern: live stream persists behind screenshots so transitions are seamless.
+            When agent is browsing, user sees live desktop. Screenshots overlay on top. */}
+        {hasLiveStream && (
           <iframe
-            src={liveStreamUrl}
+            key="neko-live-stream"
+            src={liveStreamUrl!}
             title="Rubic Virtual Computer — Live Desktop"
             className={cn(
-              "size-full border-0",
+              "absolute inset-0 size-full border-0",
+              // Hide behind screenshot/search overlay unless in live stream mode
+              !isLiveStreamMode && "z-0",
+              isLiveStreamMode && "z-10",
               // Read-only during agent browsing — block mouse/keyboard to iframe
-              // Interactive when user explicitly clicks "Take Control"
               !isInteractiveMode && "pointer-events-none"
             )}
             allow="clipboard-read; clipboard-write; autoplay; microphone; camera; display-capture"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
             referrerPolicy="no-referrer"
           />
-        ) : searchResults ? (
+        )}
+        {/* Layer 2: Content overlays (search results, screenshots, empty state) */}
+        {isLiveStreamMode ? null : searchResults ? (
           /* Priority 2: Search results — always shown above screenshot so E2B polling
              doesn't hide search results with stale screenshots */
           <div className="h-full overflow-y-auto p-4">
@@ -506,15 +513,29 @@ export function BrowserView({
                   <GlobeIcon className="mx-auto mb-3 size-12 animate-pulse opacity-50" />
                   <p className="text-sm">Navigating...</p>
                 </>
+              ) : sandboxId ? (
+                <>
+                  <MonitorIcon className="mx-auto mb-3 size-12 animate-pulse opacity-50" />
+                  <p className="text-sm">Preparing desktop stream...</p>
+                  <p className="mt-1 text-xs text-muted-foreground/30">
+                    Connecting to virtual computer
+                  </p>
+                </>
               ) : (
                 <>
                   <MonitorIcon className="mx-auto mb-3 size-12 opacity-30" />
-                  <p className="text-sm">Waiting for virtual computer...</p>
-                  <p className="mt-1 text-xs text-muted-foreground/30">
-                    The desktop will appear when the agent starts browsing
-                  </p>
+                  <p className="text-sm">Desktop will appear when the agent starts browsing</p>
                 </>
               )}
+            </div>
+          </div>
+        )}
+        {/* Activity overlay on screenshot when browser tool is executing without Neko */}
+        {loading && !isLiveStreamMode && screenshot && !searchResults && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+            <div className="rounded-full bg-black/40 px-3 py-1.5 text-xs text-white backdrop-blur-sm">
+              <LoaderIcon className="mr-1.5 inline size-3 animate-spin" />
+              Working...
             </div>
           </div>
         )}

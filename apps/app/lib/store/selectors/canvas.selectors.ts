@@ -199,10 +199,13 @@ export const selectLatestBrowserScreenshot = createSelector(
   }
 );
 
+/** Live terminal chunks from WebSocket — used for real-time output during execution */
+const selectLiveTerminalChunks = (state: RootState) => state.websocket.liveTerminalChunks;
+
 /** All terminal events for a session, grouped by shell session ID (Manus PTY parity) */
 export const selectTerminalSessions = createSelector(
-  [selectToolEvents, selectToolEventsBySession, (_: RootState, sessionId: string) => sessionId],
-  (events, bySession, sessionId): {
+  [selectToolEvents, selectToolEventsBySession, selectLiveTerminalChunks, (_: RootState, sessionId: string) => sessionId],
+  (events, bySession, liveChunks, sessionId): {
     sessions: Record<string, string[]>;
     sessionOrder: string[];
     activeSession: string;
@@ -211,11 +214,12 @@ export const selectTerminalSessions = createSelector(
     const sessions: Record<string, string[]> = {};
     const sessionOrder: string[] = [];
     let activeSession = "default";
+    // Track in-progress shell sessions to merge live chunks
+    const inProgressShellSessions = new Set<string>();
 
     for (const id of sessionIds) {
       const event = events[id];
       if (!event || !SHELL_TOOLS.has(event.toolName)) continue;
-      if (event.state !== "complete" || !event.output) continue;
 
       const shellSessionId = (event.input?.id as string) || (event.input?.session as string) || "default";
 
@@ -224,11 +228,27 @@ export const selectTerminalSessions = createSelector(
         sessionOrder.push(shellSessionId);
       }
 
+      // Process in-progress shell_exec — show command immediately with live chunks
+      if (event.toolName === "shell_exec" && (event.state === "running" || event.state === "pending")) {
+        const cmd = (event.input?.command as string) ?? "";
+        const lines = sessions[shellSessionId]!;
+        const lastCmd = lines.findLast((l) => l.startsWith("$"));
+        if (lastCmd !== `$ ${cmd}` && cmd) {
+          lines.push(`$ ${cmd}`);
+          inProgressShellSessions.add(shellSessionId);
+        }
+        activeSession = shellSessionId;
+        continue;
+      }
+
+      // Skip non-complete events without output (except handled above)
+      if (event.state !== "complete" || !event.output) continue;
+
       const output = event.output;
       const rawOutput =
         typeof output === "string"
           ? output
-          : ((output.stdout ?? output.output ?? JSON.stringify(output, null, 2)) as string);
+          : ((output.output ?? output.stdout ?? JSON.stringify(output, null, 2)) as string);
       const outputStr = typeof rawOutput === "string" ? rawOutput : String(rawOutput);
 
       if (event.toolName === "shell_exec") {
@@ -246,6 +266,12 @@ export const selectTerminalSessions = createSelector(
             lines.push("  \u23F3 Running...");
           } else {
             lines.push(`$ ${cmd}`, ...outputStr.split("\n"));
+          }
+        } else if (lastCmd === `$ ${cmd}`) {
+          // Command already shown from input-available — replace running indicator with output
+          const lastCmdIndex = lines.findLastIndex((l) => l.startsWith("$"));
+          if (lastCmdIndex >= 0) {
+            sessions[shellSessionId] = [...lines.slice(0, lastCmdIndex + 1), ...outputStr.split("\n")];
           }
         }
       } else if (event.toolName === "shell_view" || event.toolName === "shell_wait") {
@@ -269,7 +295,23 @@ export const selectTerminalSessions = createSelector(
         lines.push(...outputStr.split("\n"));
       }
 
+      // Remove from in-progress when output arrives
+      inProgressShellSessions.delete(shellSessionId);
       activeSession = shellSessionId;
+    }
+
+    // Merge live terminal chunks for in-progress sessions
+    for (const shellSessionId of inProgressShellSessions) {
+      const chunkKey = `${sessionId}:${shellSessionId}`;
+      const liveOutput = liveChunks[chunkKey];
+      const lines = sessions[shellSessionId];
+      if (liveOutput && lines) {
+        // Replace "Running..." placeholder with live output
+        lines.push(...liveOutput.split("\n"));
+      } else if (lines) {
+        // No live output yet — show running indicator
+        lines.push("  \u23F3 Running...");
+      }
     }
 
     return { sessions, sessionOrder, activeSession };

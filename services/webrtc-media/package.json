@@ -14,13 +14,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/websocket": "^11.0.2",
+    "@repo/database": "workspace:*",
     "@repo/service-utils": "workspace:*",
+    "@repo/storage": "workspace:*",
+    "drizzle-orm": "^0.44.2",
     "fastify": "^5.2.2",
+    "ws": "^8.18.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.13.4",
+    "@types/ws": "^8.18.1",
     "tsup": "^8.5.0",
     "tsx": "^4.19.3",
     "typescript": "^5.9.3",

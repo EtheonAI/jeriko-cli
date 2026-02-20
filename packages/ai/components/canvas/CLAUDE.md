@@ -7,9 +7,37 @@ Reactive canvas system: browser, editor, code, and terminal views. Driven by too
 - `use-canvas.ts`: Scans messages backwards → `TOOL_VIEW_MAP` → determines active view
 - `agent-canvas.tsx`: Renders active view, manages tabs
 - `views/browser-view.tsx`: Screenshots, search results, URL bar, Take Control
-- `views/editor-view.tsx`: Manus FileToolView parity — simple filename header + read-only syntax highlighting
+- `views/editor-view.tsx`: Monaco editor (lazy-loaded), Manus FileToolView parity — filename header + read-only syntax highlighting
+- `views/monaco-wrapper.tsx`: Lazy-loaded Monaco component (`React.lazy`), `rubic-dark` theme, 30+ language mappings
 - `views/code-view.tsx`: Full IDE — file tree, tabs, ShikiCodeBlock (for webDevIDE)
-- `views/terminal-view.tsx`: Shell output accumulation, per-session PTY
+- `views/terminal-view.tsx`: Shell output accumulation, per-session PTY, rAF scroll debounce, live WS + static fallback
+
+## View Switching Priority (Manus Parity — VERIFIED Feb 2026)
+1. **Pinned tool** — User scrubbed timeline to historical tool
+2. **View override** — User manually switched tabs (local state)
+3. **Latest tool** — Currently executing or most recent (via TOOL_VIEW_MAP)
+4. **Sidebar type** — `agentWorkspace.sidebarType` fallback (no tools called yet)
+5. **Empty** — No tools or canvas
+
+Two implementations: standalone (`use-canvas.ts`, messages-driven) + Redux-based (`use-canvas-entities.ts`, selectors-driven).
+
+## Terminal Pipeline — Dual Path Architecture (Feb 2026)
+- **HTTP (Manus pattern)**: REST polling ~300-600ms. This IS what Manus does (TCP on port 8330).
+- **WebSocket push (enhancement)**: Push ~50-100ms via sandbox `/ws` endpoint. Our improvement over Manus.
+- `sandbox-executor.ts` tries WS first, falls back to HTTP silently.
+- **Lazy WS connection**: `ensureSandboxWs()` on first shell tool call, NOT at sandbox init.
+- **PTY fd ownership**: When `_reader_task` active in sandbox, ONLY `_read_loop` reads from fd.
+
+## Editor Pipeline — Monaco (Feb 2026)
+- **Confirmed**: Manus uses Monaco for WebDev IDE code tab (Part 4, line 541-542)
+- `monaco-wrapper.tsx`: `React.lazy(() => import("@monaco-editor/react"))` — ~2MB lazy-loaded
+- Custom `rubic-dark` theme: `#19191a` bg, `#dadada` fg, `#858481` line numbers
+- Options: no minimap, fontSize 13, readOnly, automaticLayout
+- **MUST use React.lazy()** — direct import adds ~2MB to initial bundle
+
+## File Pipeline (REST only — matches Manus)
+- file_read/write/str_replace → POST /text_editor → synchronous response
+- Results flow: SSE → use-sse-to-entities → codeViewer.slice → canvas.selectors → EditorView → Monaco
 
 ## TOOL_VIEW_MAP (43 total entries)
 

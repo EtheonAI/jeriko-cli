@@ -121,6 +121,9 @@ export interface CanvasState {
   // Preview (deployed app iframe)
   previewUrl?: string;
 
+  // Project path (webdev project directory in sandbox)
+  projectPath?: string;
+
   // All file contents map (for preview rendering)
   allFileContents?: Record<string, string>;
 
@@ -212,6 +215,7 @@ export const TOOL_VIEW_MAP: Record<string, CanvasViewType> = {
   webdev_push_schema: "webDevIDE",
   webdev_list_versions: "webDevIDE",
   webdev_add_feature: "webDevIDE",
+  webdev_read_debug_logs: "webDevIDE",
 
   // Image generation / processing -> AI Canvas
   generate_image: "aiCanvas",
@@ -841,42 +845,133 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     [allToolCallIds]
   );
 
-  // Accumulate terminal output from shell_exec — per-session (Manus parity)
+  // Show command immediately when shell_exec starts (input-available/input-streaming)
+  // This eliminates the blank terminal canvas during the 5+ second execution delay.
+  useEffect(() => {
+    if (!latestTool) return;
+    if (latestTool.viewType !== "terminal") return;
+    if (latestTool.toolName !== "shell_exec") return;
+    if (latestTool.state !== "input-available" && latestTool.state !== "input-streaming") return;
+
+    const sessionId = (latestTool.args?.id as string) || "default";
+    const cmd = (latestTool.args?.command as string) ?? "";
+    if (!cmd) return;
+
+    setTerminalSessions((prev) => {
+      const sessionLines = prev[sessionId] ?? [];
+      const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
+      if (lastCmd === `$ ${cmd}`) return prev;
+      return {
+        ...prev,
+        [sessionId]: [...sessionLines, `$ ${cmd}`, "\u23F3 Running..."],
+      };
+    });
+    setTerminalSessionOrder((prev) => prev.includes(sessionId) ? prev : [...prev, sessionId]);
+    setActiveTerminalSession(sessionId);
+  }, [latestTool?.toolCallId, latestTool?.state, latestTool?.viewType]);
+
+  // Accumulate terminal output from all shell tools — per-session (Manus parity)
   // Shell tools use the `id` param for session tracking.
+  // Our executor format: { status, output } — always prefer `output` field first.
   // Deps: toolCallId + state (primitives) — avoids infinite loop from object ref
   useEffect(() => {
     if (!latestTool) return;
     if (latestTool.state !== "output-available" || !latestTool.output) return;
+    if (latestTool.viewType !== "terminal") return;
 
     const output = latestTool.output as Record<string, unknown>;
+    const sessionId = (latestTool.args?.id as string) || "default";
+
+    // Helper: extract terminal text from output (consistent across all shell tools)
+    const extractOutput = (): string => {
+      if (typeof latestTool.output === "string") return latestTool.output;
+      const raw = (output.output ?? output.stdout ?? JSON.stringify(latestTool.output, null, 2)) as string;
+      return typeof raw === "string" ? raw : String(raw);
+    };
 
     if (latestTool.toolName === "shell_exec") {
-      const sessionId = (latestTool.args?.id as string) || "default";
       const cmd = (latestTool.args?.command as string) ?? "";
-      const rawOutput =
-        typeof latestTool.output === "string"
-          ? latestTool.output
-          : ((output.stdout ?? output.output ?? JSON.stringify(latestTool.output, null, 2)) as string);
-      const outputStr = typeof rawOutput === "string" ? rawOutput : String(rawOutput);
+      const outputStr = extractOutput();
 
       setTerminalSessions((prev) => {
         const sessionLines = prev[sessionId] ?? [];
-        const lastCmd = sessionLines.findLast((l) => l.startsWith("$"));
-        if (lastCmd === `$ ${cmd}`) return prev;
+        // Replace "Running..." placeholder with real output if present
+        const filtered = sessionLines.filter((l) => l !== "\u23F3 Running...");
+        const lastCmd = filtered.findLast((l) => l.startsWith("$"));
+        if (lastCmd === `$ ${cmd}`) {
+          // Command already in buffer (from input-available effect) — append output only
+          return {
+            ...prev,
+            [sessionId]: [...filtered, ...outputStr.split("\n")],
+          };
+        }
         return {
           ...prev,
-          [sessionId]: [...sessionLines, `$ ${cmd}`, ...outputStr.split("\n")],
+          [sessionId]: [...filtered, `$ ${cmd}`, ...outputStr.split("\n")],
         };
       });
-
-      setTerminalSessionOrder((prev) => {
-        if (prev.includes(sessionId)) return prev;
-        return [...prev, sessionId];
-      });
-
-      setActiveTerminalSession(sessionId);
+    } else if (latestTool.toolName === "shell_view") {
+      // shell_view: replace session output with the full PTY buffer
+      const outputStr = extractOutput();
+      setTerminalSessions((prev) => ({
+        ...prev,
+        [sessionId]: outputStr.split("\n"),
+      }));
+    } else if (latestTool.toolName === "shell_wait") {
+      // shell_wait: append latest buffer (agent waited for process completion)
+      const outputStr = extractOutput();
+      const completed = (output.completed as boolean) ?? false;
+      setTerminalSessions((prev) => ({
+        ...prev,
+        [sessionId]: [
+          ...(prev[sessionId] ?? []).filter((l) => l !== "\u23F3 Running..."),
+          ...outputStr.split("\n"),
+          completed ? "" : "\u23F3 Still running...",
+        ].filter(Boolean),
+      }));
+    } else if (latestTool.toolName === "shell_write_to_process") {
+      // shell_write_to_process: show input sent + latest buffer
+      const input = (latestTool.args?.input as string) ?? "";
+      const outputStr = extractOutput();
+      setTerminalSessions((prev) => ({
+        ...prev,
+        [sessionId]: [
+          ...(prev[sessionId] ?? []).filter((l) => l !== "\u23F3 Running..."),
+          ...(input ? [`> ${input}`] : []),
+          ...outputStr.split("\n"),
+        ],
+      }));
+    } else if (latestTool.toolName === "shell_kill_process") {
+      // shell_kill_process: append kill notice
+      setTerminalSessions((prev) => ({
+        ...prev,
+        [sessionId]: [
+          ...(prev[sessionId] ?? []).filter((l) => l !== "\u23F3 Running..."),
+          "Process terminated.",
+        ],
+      }));
     }
+
+    // Ensure session is tracked and active
+    setTerminalSessionOrder((prev) => prev.includes(sessionId) ? prev : [...prev, sessionId]);
+    setActiveTerminalSession(sessionId);
   }, [latestTool?.toolCallId, latestTool?.state]);
+
+  // Clear stale "Running..." placeholders when streaming ends
+  // If agent moved on without returning output, remove the placeholder.
+  useEffect(() => {
+    if (isStreaming) return; // Only clean up when stream ends
+    setTerminalSessions((prev) => {
+      let changed = false;
+      const next: Record<string, string[]> = {};
+      for (const [sid, lines] of Object.entries(prev)) {
+        const filtered = lines.filter((l) => l !== "\u23F3 Running...");
+        if (filtered.length !== lines.length) changed = true;
+        next[sid] = filtered;
+      }
+      return changed ? next : prev;
+    });
+  }, [isStreaming]);
 
   // Extract webdev preview URL from webdev tool results and deploy_expose_port
   useEffect(() => {
@@ -1209,8 +1304,15 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // Resolve effective view: user override takes priority over auto-detected
   // When pinned, use the pinned tool's view type
+  // Manus parity: WebDev IDE session lock — during an active webdev session, file and terminal
+  // operations should NOT switch away from the IDE view. Manus keeps the IDE throughout;
+  // file operations show in the Code tab, terminal runs in the IDE's terminal panel.
+  const isWebDevSession = availableViews.includes("webDevIDE");
+  const isFileOrTerminalDuringWebdev = isWebDevSession && !pinnedTool &&
+    (latestTool?.viewType === "editor" || latestTool?.viewType === "terminal");
   const effectiveViewType: CanvasViewType =
-    pinnedTool?.viewType ?? viewOverride ?? latestTool?.viewType ?? "empty";
+    pinnedTool?.viewType ?? viewOverride ??
+    (isFileOrTerminalDuringWebdev ? "webDevIDE" : latestTool?.viewType) ?? "empty";
 
   // Build canvas state
   if (!latestTool && !pinnedTool) {
@@ -1273,11 +1375,12 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
   // Browser view data — use persistent state (populate when browser view available, not just active)
   // When pinned to a browser tool, extract data from the pinned tool directly
   if (effectiveViewType === "browser" || availableViews.includes("browser")) {
-    // Detect if agent is actively executing a browser tool right now.
-    // When true AND nekoUrl is available, BrowserView auto-shows the Neko live stream.
+    // Manus parity: `live` ref in ToolPanel persists until explicitly changed.
+    // Show Neko live stream as long as latest tool is browser — no isStreaming check.
+    // Goes false only when: non-browser tool starts or user pins a historical tool.
+    // BrowserView guards on nekoUrl existence, so this is safe even after sandbox dies.
     const isBrowserToolActive =
       !pinnedTool &&
-      latestTool?.isWorking === true &&
       latestTool?.viewType === "browser";
     state.isAgentBrowsing = isBrowserToolActive;
 
@@ -1296,6 +1399,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       // Only show loading bar during actual page loads (navigate, restart, search),
       // NOT during interaction tools (click, scroll, view, type, etc.).
       // Real browsers don't show a loading bar when clicking a button.
+      // Manus has NO browser loading bar at all — they rely on VNC for live feedback.
       const isNavigationTool =
         latestTool?.toolName === "browser_navigate" ||
         latestTool?.toolName === "browser_restart" ||
@@ -1332,7 +1436,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       const rawOut =
         typeof pinnedTool.output === "string"
           ? pinnedTool.output
-          : (pinOutput.stdout ?? JSON.stringify(pinnedTool.output, null, 2));
+          : (pinOutput.output ?? pinOutput.stdout ?? JSON.stringify(pinnedTool.output, null, 2));
       const outStr = typeof rawOut === "string" ? rawOut : String(rawOut);
       state.terminalOutput = cmd ? [`$ ${cmd}`, ...outStr.split("\n")] : outStr.split("\n");
       state.activeTerminalSession = pinSessionId;
@@ -1346,7 +1450,7 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
     state.onSelectTerminalSession = onSelectTerminalSession;
   }
 
-  // Editor view data — simple Manus-style: one file at a time, no tree/tabs
+  // Editor view data — multi-file tabs (Manus FileToolView parity)
   if (effectiveViewType === "editor" || availableViews.includes("editor")) {
     const agentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
 
@@ -1366,9 +1470,11 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
       }
     } else if (Object.keys(allFileContents).length > 0) {
       const allPaths = Object.keys(allFileContents);
+      const openPaths = allPaths.filter((p) => !closedTabs.has(p));
       const activePath =
+        (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
         (agentPath && allFileContents[agentPath] ? agentPath : null) ??
-        allPaths[allPaths.length - 1] ??
+        (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
         null;
       if (activePath) {
         // FIX 2.3: When agent is streaming a file write, show progressive content
@@ -1378,9 +1484,17 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
             ? streamingEditorContent
             : allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
-        state.fileTabs = [{ id: "0", name: activePath.split("/").pop() || activePath, path: activePath, isActive: true }];
       }
+      // Build multi-file tabs from all open files (same pattern as code view)
+      state.fileTabs = openPaths.map((p, i) => ({
+        id: String(i),
+        name: p.split("/").pop() || p,
+        path: p,
+        isActive: p === activePath,
+      }));
       state.allFileContents = allFileContents;
+      state.onSelectTab = onSelectTab;
+      state.onCloseTab = onCloseTab;
     } else if (streamingEditorContent) {
       // FIX 2.3: Show streaming content even before allFileContents is populated
       state.activeFileContent = streamingEditorContent;
@@ -1484,15 +1598,20 @@ export function useCanvas(messages: UIMessage[], isStreaming = false): CanvasSta
 
   // WebDev IDE view data — reuse file tree + add preview URL
   if (effectiveViewType === "webDevIDE" || availableViews.includes("webDevIDE")) {
+    // When a file tool runs during webdev session (view locked), follow the agent's active file
+    const webdevAgentPath = (activeTool?.args?.path ?? activeTool?.args?.file) as string | undefined;
     if (Object.keys(allFileContents).length > 0) {
       const allPaths = Object.keys(allFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
       const activePath =
         (userSelectedPath && allFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        (webdevAgentPath && allFileContents[webdevAgentPath] ? webdevAgentPath : null) ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
         null;
       if (activePath) {
-        state.activeFileContent = allFileContents[activePath];
+        // Use streaming content when agent is actively writing a file
+        state.activeFileContent = (streamingEditorContent && webdevAgentPath === activePath)
+          ? streamingEditorContent : allFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
       state.fileTree = buildFileTree(allPaths);

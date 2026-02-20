@@ -211,6 +211,7 @@ const TOOL_CATEGORY: Record<string, ToolCategoryEntry> = {
     getLabel: () => "Adding feature",
     getArg: (input) => (input?.feature as string) || undefined,
   },
+  webdev_read_debug_logs: { icon: CodeIcon, getLabel: () => "Reading browser debug logs" },
 };
 
 // ============================================================================

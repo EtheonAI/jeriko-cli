@@ -1,23 +1,31 @@
-import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import * as schema from "./schema";
 
-// Auto-load DATABASE_URL from package .env if not in environment
+// Auto-load DATABASE_URL from package .env if not in environment.
+// Searches known monorepo paths — no import.meta.url needed (CJS/ESM compatible).
 if (!process.env.DATABASE_URL) {
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const envContent = readFileSync(resolve(__dirname, "../.env"), "utf-8");
-    for (const line of envContent.split("\n")) {
-      const match = line.match(/^DATABASE_URL\s*=\s*(.+)/);
-      if (match) {
-        process.env.DATABASE_URL = match[1]!.trim();
-        break;
+  const candidates = [
+    resolve(process.cwd(), "packages/database/.env"),      // from monorepo root
+    resolve(process.cwd(), ".env"),                         // from packages/database itself
+    resolve(process.cwd(), "../../packages/database/.env"), // from services/* or apps/*
+  ];
+  for (const envPath of candidates) {
+    try {
+      if (!existsSync(envPath)) continue;
+      const envContent = readFileSync(envPath, "utf-8");
+      for (const line of envContent.split("\n")) {
+        const match = line.match(/^DATABASE_URL\s*=\s*(.+)/);
+        if (match?.[1]) {
+          process.env.DATABASE_URL = match[1].trim();
+          break;
+        }
       }
-    }
-  } catch { /* .env not found — rely on environment */ }
+      if (process.env.DATABASE_URL) break;
+    } catch { /* .env not found — rely on environment */ }
+  }
 }
 
 // Service-safe database client (no server-only import)

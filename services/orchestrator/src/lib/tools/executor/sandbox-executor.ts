@@ -9,11 +9,46 @@
  *   - File I/O:               /file/{command}
  */
 
-import type { ToolContext } from "../types.js";
+import type { ToolContext, SandboxWsClient } from "../types.js";
 import { getRsaHeaders } from "../../rsa-auth.js";
+import { getOrCreateWsClient, getWsClient } from "../../sandbox-ws-client.js";
+import { buildSandboxPortUrl } from "../../e2b-manager.js";
 
 // Track which terminal IDs have been created this session
 const createdTerminals = new Set<string>();
+
+/**
+ * Lazily get or create the sandbox WebSocket client.
+ * Called on the first shell tool call — by this point the sandbox runtime
+ * is already initialized (initializeSandbox has had time to complete).
+ * Returns undefined if connection fails (falls back to HTTP).
+ */
+async function ensureSandboxWs(ctx: ToolContext): Promise<SandboxWsClient | undefined> {
+  // Already connected?
+  if (ctx.sandboxWs?.connected) return ctx.sandboxWs;
+
+  // Try cached client
+  const cached = getWsClient(ctx.sandboxId);
+  if (cached?.connected) {
+    ctx.sandboxWs = cached;
+    return cached;
+  }
+
+  // Lazy connect
+  const baseUrl = ctx.terminalServerUrl;
+  if (!baseUrl || baseUrl === "no-sandbox") return undefined;
+
+  try {
+    const ws = await getOrCreateWsClient(baseUrl, ctx.sandboxId);
+    if (ws.connected) {
+      ctx.sandboxWs = ws;
+      return ws;
+    }
+  } catch {
+    // WS unavailable — HTTP fallback
+  }
+  return undefined;
+}
 
 /**
  * Execute a tool by routing to the correct sandbox runtime endpoint.
@@ -54,11 +89,11 @@ export async function executeSandboxTool(
     } else if (toolName === "file_view") {
       result = await handleFileView(baseUrl, params);
     } else if (toolName === "shell_exec") {
-      result = await handleShellExec(baseUrl, params);
+      result = await handleShellExec(baseUrl, params, ctx);
     } else if (toolName === "shell_view") {
       result = await handleShellView(baseUrl, params);
     } else if (toolName === "shell_wait") {
-      result = await handleShellWait(baseUrl, params);
+      result = await handleShellWait(baseUrl, params, ctx);
     } else if (toolName === "shell_write_to_process") {
       result = await handleShellWriteToProcess(baseUrl, params);
     } else if (toolName === "shell_kill_process") {
@@ -319,17 +354,125 @@ async function handleFileView(
 
 async function handleShellExec(
   baseUrl: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  ctx: ToolContext
 ): Promise<Record<string, unknown>> {
   const id = (params.id as string) || "default";
-  const execDir = params.exec_dir as string;
   const command = params.command as string;
+  const execDir = params.exec_dir as string;
 
+  // Lazily connect WS on first shell call, then use push path if connected
+  const ws = await ensureSandboxWs(ctx);
+  if (ws?.connected) {
+    return handleShellExecViaWs(ctx, id, command, execDir);
+  }
+  return handleShellExecViaHttp(baseUrl, id, command, execDir, ctx);
+}
+
+/**
+ * WebSocket-based shell exec — push-based terminal output.
+ * Creates terminal + writes command via WS, receives output via subscriber push.
+ * Latency: ~50-100ms (vs 300-600ms with HTTP polling).
+ */
+async function handleShellExecViaWs(
+  ctx: ToolContext,
+  id: string,
+  command: string,
+  execDir?: string
+): Promise<Record<string, unknown>> {
+  const ws = ctx.sandboxWs!;
+  const fullCommand = execDir ? `cd ${JSON.stringify(execDir)} && ${command}` : command;
+
+  // Ensure terminal exists via WS
+  ws.send({ type: "terminal.create", id });
+  // Brief wait for terminal creation acknowledgment
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  // Accumulate output via push handler
+  let accumulated = "";
+  let lastChunkTime = Date.now();
+
+  const outputHandler = (terminalId: string, data: string) => {
+    if (terminalId === id) {
+      accumulated += data;
+      lastChunkTime = Date.now();
+      // Emit to frontend in real-time (Manus: sandbox.terminal.chunk)
+      ctx.ws.emit(ctx.sessionId, {
+        type: "sandbox.terminal.chunk",
+        data: {
+          sessionId: ctx.sessionId,
+          terminalId: id,
+          output: data,
+        },
+      }).catch(() => {}); // Fire-and-forget
+    }
+  };
+
+  ws.onTerminalOutput(outputHandler);
+
+  try {
+    // Write command
+    ws.send({ type: "terminal.write", id, text: fullCommand, enter: true });
+
+    // Wait for output stabilization (1.5s no new data) or 5s timeout
+    const startTime = Date.now();
+    let stableCount = 0;
+    let prevLen = 0;
+
+    // Initial wait for first output
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    while (Date.now() - startTime < 5000) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const timeSinceLastChunk = Date.now() - lastChunkTime;
+
+      if (accumulated.length === prevLen) {
+        stableCount++;
+        if (stableCount >= 3 || timeSinceLastChunk > 1500) break;
+      } else {
+        stableCount = 0;
+        prevLen = accumulated.length;
+      }
+    }
+
+    const outputLines = accumulated.split("\n");
+    const completed = stableCount >= 3 || (Date.now() - lastChunkTime > 1500 && accumulated.length > 0);
+
+    if (completed) {
+      const trimmedOutput = outputLines.length > 100
+        ? outputLines.slice(-100).join("\n")
+        : accumulated;
+      return { status: "completed", output: trimmedOutput };
+    }
+
+    const trimmedPartial = outputLines.length > 50
+      ? outputLines.slice(-50).join("\n")
+      : accumulated;
+    return {
+      status: "running",
+      output: trimmedPartial || "(command still running — use shell_view to check output)",
+      session_id: id,
+    };
+  } finally {
+    ws.offTerminalOutput(outputHandler);
+  }
+}
+
+/**
+ * HTTP polling-based shell exec — fallback when WebSocket is unavailable.
+ * Original implementation: polls /terminal/{id}/view every 300ms.
+ */
+async function handleShellExecViaHttp(
+  baseUrl: string,
+  id: string,
+  command: string,
+  execDir: string | undefined,
+  ctx: ToolContext
+): Promise<Record<string, unknown>> {
   // Ensure terminal exists
   await ensureTerminal(baseUrl, id);
 
   // Snapshot current output length BEFORE writing the command
-  // so we can return only the new output (delta)
   const preView = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
   const preOutput = ((preView.output ?? preView.content ?? "") as string);
   const preLen = preOutput.length;
@@ -345,11 +488,8 @@ async function handleShellExec(
   );
 
   // Manus parity: exec_command() waits max 5 seconds for completion.
-  // If done → returns status="completed" with output.
-  // If still running → returns status="running" with partial output.
-  // Agent then calls shell_view() to poll — each poll = new tool event = frontend update.
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  let lastOutput = "";
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  let lastOutput = preOutput;
   let stableCount = 0;
   const pollStart = Date.now();
   while (Date.now() - pollStart < 5000) {
@@ -357,21 +497,33 @@ async function handleShellExec(
     const currentOutput = (result.output ?? result.content ?? "") as string;
     if (currentOutput === lastOutput) {
       stableCount++;
-      if (stableCount >= 2) break; // Output stabilized = command done
+      if (stableCount >= 2) break;
     } else {
+      const delta = currentOutput.length > lastOutput.length
+        ? currentOutput.slice(lastOutput.length)
+        : currentOutput.slice(-500);
+      if (delta) {
+        ctx.ws.emit(ctx.sessionId, {
+          type: "sandbox.terminal.chunk",
+          data: {
+            sessionId: ctx.sessionId,
+            terminalId: id,
+            output: delta,
+          },
+        }).catch(() => {});
+      }
       stableCount = 0;
       lastOutput = currentOutput;
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
-  // Read final output and return only the NEW portion (after the pre-snapshot)
+  // Read final output
   const viewResult = await getJson(`${baseUrl}/terminal/${encodeURIComponent(id)}/view`);
   const fullOutput = (viewResult.output ?? viewResult.content ?? "") as string;
   const newOutput = fullOutput.length > preLen ? fullOutput.slice(preLen) : fullOutput.slice(-2000);
 
   if (stableCount >= 2) {
-    // Command completed within 5s — return full output (Manus: status="completed")
     const outputLines = newOutput.split("\n");
     const trimmedOutput = outputLines.length > 100
       ? outputLines.slice(-100).join("\n")
@@ -379,8 +531,6 @@ async function handleShellExec(
     return { status: "completed", output: trimmedOutput };
   }
 
-  // Command still running — return immediately with partial output (Manus parity)
-  // Agent will call shell_view() to poll → each poll is a new tool event → progressive terminal updates
   const partialLines = newOutput.split("\n");
   const trimmedPartial = partialLines.length > 50
     ? partialLines.slice(-50).join("\n")
@@ -414,12 +564,85 @@ async function handleShellView(
 
 async function handleShellWait(
   baseUrl: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  ctx: ToolContext
 ): Promise<Record<string, unknown>> {
   const id = (params.id as string) || "default";
   const seconds = (params.seconds as number) ?? 30;
 
-  // Poll terminal view until output stabilizes or timeout
+  // Use WebSocket push path if connected (faster, lower latency)
+  const ws = await ensureSandboxWs(ctx);
+  if (ws?.connected) {
+    return handleShellWaitViaWs(ctx, id, seconds);
+  }
+  return handleShellWaitViaHttp(baseUrl, id, seconds, ctx);
+}
+
+/**
+ * WebSocket-based shell_wait — listens for push output until stabilization.
+ */
+async function handleShellWaitViaWs(
+  ctx: ToolContext,
+  id: string,
+  seconds: number,
+): Promise<Record<string, unknown>> {
+  const ws = ctx.sandboxWs!;
+  let accumulated = "";
+  let lastChunkTime = Date.now();
+
+  const outputHandler = (terminalId: string, data: string) => {
+    if (terminalId === id) {
+      accumulated += data;
+      lastChunkTime = Date.now();
+      ctx.ws.emit(ctx.sessionId, {
+        type: "sandbox.terminal.chunk",
+        data: { sessionId: ctx.sessionId, terminalId: id, output: data },
+      }).catch(() => {});
+    }
+  };
+
+  ws.onTerminalOutput(outputHandler);
+
+  try {
+    const startTime = Date.now();
+    const timeoutMs = seconds * 1000;
+    let stableCount = 0;
+    let prevLen = 0;
+
+    while (Date.now() - startTime < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const timeSinceLastChunk = Date.now() - lastChunkTime;
+
+      if (accumulated.length === prevLen) {
+        stableCount++;
+        if (stableCount >= 3 || timeSinceLastChunk > 2000) {
+          const lines = accumulated.split("\n");
+          const trimmed = lines.length > 100 ? lines.slice(-100).join("\n") : accumulated;
+          return { status: "success", completed: true, output: trimmed, output_truncated: lines.length > 100 };
+        }
+      } else {
+        stableCount = 0;
+        prevLen = accumulated.length;
+      }
+    }
+
+    const lines = accumulated.split("\n");
+    const trimmed = lines.length > 100 ? lines.slice(-100).join("\n") : accumulated;
+    return { status: "success", completed: false, output: trimmed, output_truncated: lines.length > 100 };
+  } finally {
+    ws.offTerminalOutput(outputHandler);
+  }
+}
+
+/**
+ * HTTP polling-based shell_wait — fallback when WebSocket is unavailable.
+ */
+async function handleShellWaitViaHttp(
+  baseUrl: string,
+  id: string,
+  seconds: number,
+  ctx: ToolContext
+): Promise<Record<string, unknown>> {
   const startTime = Date.now();
   const timeoutMs = seconds * 1000;
   let lastOutput = "";
@@ -437,6 +660,15 @@ async function handleShellWait(
         return { status: "success", completed: true, output: trimmed, output_truncated: lines.length > 100 };
       }
     } else {
+      const delta = currentOutput.length > lastOutput.length
+        ? currentOutput.slice(lastOutput.length)
+        : currentOutput.slice(-500);
+      if (delta) {
+        ctx.ws.emit(ctx.sessionId, {
+          type: "sandbox.terminal.chunk",
+          data: { sessionId: ctx.sessionId, terminalId: id, output: delta },
+        }).catch(() => {});
+      }
       stableCount = 0;
       lastOutput = currentOutput;
     }
@@ -446,12 +678,7 @@ async function handleShellWait(
 
   const lines = lastOutput.split("\n");
   const trimmed = lines.length > 100 ? lines.slice(-100).join("\n") : lastOutput;
-  return {
-    status: "success",
-    completed: false,
-    output: trimmed,
-    output_truncated: lines.length > 100,
-  };
+  return { status: "success", completed: false, output: trimmed, output_truncated: lines.length > 100 };
 }
 
 async function handleShellWriteToProcess(
@@ -678,32 +905,50 @@ async function handleDeployExposePort(
     return { status: "error", error: "No E2B sandbox ID available" };
   }
 
-  const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-  const publicUrl = `https://${port}-${e2bId}.${domain}`;
+  const publicUrl = buildSandboxPortUrl(e2bId, port);
 
   return { status: "success", url: publicUrl, port };
 }
 
 async function handleDeployApplyDeployment(
-  baseUrl: string,
+  _baseUrl: string,
   ctx: ToolContext,
   params: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const type = params.type as string;
   const localDir = params.local_dir as string;
 
-  const result = await postJson(
-    `${baseUrl}/deploy/zip-and-upload`,
-    {
-      type,
-      local_dir: localDir,
-      user_id: ctx.userId,
-      session_id: ctx.sessionId,
-    },
-    120000
-  );
+  // Use orchestrator's static deploy endpoint for permanent S3 hosting
+  // instead of sandbox's zip-and-upload (which produces presigned URLs that expire)
+  const ORCHESTRATOR_URL = `http://localhost:${process.env.PORT || 4014}`;
+  const resp = await fetch(`${ORCHESTRATOR_URL}/api/deploy/static`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sandboxId: ctx.sandboxId,
+      userId: ctx.userId,
+      sessionId: ctx.sessionId,
+      projectPath: localDir.includes("/") ? localDir.replace(/\/[^/]+$/, "") : `/home/ubuntu/${localDir}`,
+      outputDir: localDir.includes("/") ? localDir.split("/").pop() : localDir,
+      buildFirst: false, // Agent already built before calling deploy
+    }),
+    signal: AbortSignal.timeout(180000),
+  });
 
-  return { status: "success", type, local_dir: localDir, ...result };
+  const result = (await resp.json()) as Record<string, unknown>;
+  if (!resp.ok) {
+    return { status: "error", error: result.error || "Deploy failed", type, local_dir: localDir };
+  }
+
+  return {
+    status: "success",
+    type,
+    local_dir: localDir,
+    url: result.url,
+    friendlyUrl: result.friendlyUrl,
+    filesUploaded: result.filesUploaded,
+    deploymentId: result.deploymentId,
+  };
 }
 
 // ── Upload attachments ───────────────────────────────────────────────────────

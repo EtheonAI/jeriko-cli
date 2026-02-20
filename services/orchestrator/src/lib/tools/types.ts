@@ -17,8 +17,11 @@ export interface ToolContext {
   terminalServerUrl: string;
   e2bSandboxId: string;
 
-  // WebSocket
+  // WebSocket (Redis pub/sub to frontend)
   ws: WebSocketClient;
+
+  // WebSocket (direct to sandbox runtime — push-based terminal output)
+  sandboxWs?: SandboxWsClient;
 
   // External Services
   searchProvider?: SearchProvider;
@@ -30,6 +33,14 @@ export interface ToolContext {
     maxParallelSubtasks: number;
     planType: string;
   };
+}
+
+export interface SandboxWsClient {
+  readonly connected: boolean;
+  send(msg: Record<string, unknown>): void;
+  onTerminalOutput(handler: (terminalId: string, data: string) => void): void;
+  offTerminalOutput(handler: (terminalId: string, data: string) => void): void;
+  close(): void;
 }
 
 export interface DatabaseClient {

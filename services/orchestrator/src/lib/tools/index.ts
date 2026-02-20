@@ -192,5 +192,6 @@ export function getAllToolNames(): string[] {
     "webdev_push_schema",
     "webdev_list_versions",
     "webdev_add_feature",
+    "webdev_read_debug_logs",
   ];
 }

@@ -79,6 +79,11 @@ export interface WebSocketState {
   lastConnectedAt: string | null;
   lastPongTime: number | null;
 
+  // Live terminal chunks from WebSocket sandbox.terminal.chunk events.
+  // Key: "sessionId:terminalId", Value: accumulated output text.
+  // Canvas view reads this for real-time terminal output during tool execution.
+  liveTerminalChunks: Record<string, string>;
+
   // P6.5: Reconnect policy
   reconnectConfig: ReconnectConfig;
   nextReconnectDelay: number | null; // milliseconds
@@ -102,6 +107,7 @@ const initialState: WebSocketState = {
   reconnectAttempts: 0,
   lastConnectedAt: null,
   lastPongTime: null,
+  liveTerminalChunks: {},
   // P6.5: Default reconnect policy
   reconnectConfig: {
     policy: "exponential",
@@ -233,6 +239,33 @@ const websocketSlice = createSlice({
       state.disableTimelineAutoUpdate = action.payload;
     },
 
+    // Live terminal chunks from sandbox.terminal.chunk WebSocket events
+    appendLiveTerminalChunk: (
+      state,
+      action: PayloadAction<{ sessionId: string; terminalId: string; output: string }>
+    ) => {
+      const key = `${action.payload.sessionId}:${action.payload.terminalId}`;
+      state.liveTerminalChunks[key] =
+        (state.liveTerminalChunks[key] ?? "") + action.payload.output;
+    },
+
+    clearLiveTerminalChunks: (
+      state,
+      action: PayloadAction<{ sessionId: string; terminalId?: string }>
+    ) => {
+      if (action.payload.terminalId) {
+        const key = `${action.payload.sessionId}:${action.payload.terminalId}`;
+        delete state.liveTerminalChunks[key];
+      } else {
+        // Clear all chunks for this session
+        for (const key of Object.keys(state.liveTerminalChunks)) {
+          if (key.startsWith(`${action.payload.sessionId}:`)) {
+            delete state.liveTerminalChunks[key];
+          }
+        }
+      }
+    },
+
     // P6.5: Reconnect policy management
     setReconnectConfig: (state, action: PayloadAction<Partial<ReconnectConfig>>) => {
       state.reconnectConfig = { ...state.reconnectConfig, ...action.payload };
@@ -324,6 +357,9 @@ export const {
   setTaskFinished,
   setIsVNCConnected,
   setDisableTimelineAutoUpdate,
+  // Live terminal chunks
+  appendLiveTerminalChunk,
+  clearLiveTerminalChunks,
   // P6.5: Reconnect policy actions
   setReconnectConfig,
   startReconnecting,

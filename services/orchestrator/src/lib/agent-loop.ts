@@ -15,7 +15,7 @@ import {
   type ComposioToolSpec,
 } from "./tools/index.js";
 import { buildManusSystemPrompt, type SystemPromptContext } from "./system-prompt.js";
-import { getOrCreateSandbox } from "./e2b-manager.js";
+import { getOrCreateSandbox, buildTerminalServerUrl } from "./e2b-manager.js";
 import { getRsaHeaders } from "./rsa-auth.js";
 import { meterStep, meterTool } from "./billing-client.js";
 
@@ -198,14 +198,14 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
 
   // Build tool context
   // terminalServerUrl uses the e2b sandbox ID for E2B port proxying
-  // Format: https://{port}-{e2b_sandbox_id}.e2b.dev
+  // Format: https://{port}-{e2b_sandbox_id}.{SANDBOX_DOMAIN}
   // LOCAL_SANDBOX_URL override: use local Docker container for testing
   const localSandboxUrl = process.env.LOCAL_SANDBOX_URL || "";
   const sandboxIdForUrl = e2bSandboxId || sandboxId;
   const terminalServerUrl = localSandboxUrl
     ? localSandboxUrl
     : sandboxIdForUrl
-      ? `https://8330-${sandboxIdForUrl}.${process.env.SANDBOX_DOMAIN || "e2b.dev"}`
+      ? buildTerminalServerUrl(sandboxIdForUrl)
       : "";
 
   const toolCtx: ToolContext = {
@@ -217,7 +217,8 @@ export async function runStreamingAgentLoop(input: AgentLoopInput): Promise<Agen
     sandboxId: sandboxId || "no-sandbox",
     terminalServerUrl: terminalServerUrl || "no-sandbox",
     e2bSandboxId: e2bSandboxId || sandboxId || "",
-    ws: createNoopWs(),
+    ws: createRedisWs(userId),
+    // sandboxWs is lazily connected on first shell tool call (see sandbox-executor.ts)
     storage: createStorageClient(),
     searchProvider: createDefaultSearchProvider(),
     imageProvider: createDefaultImageProvider(),
@@ -637,9 +638,17 @@ function createNoopDb(): ToolContext["db"] {
   };
 }
 
-function createNoopWs(): ToolContext["ws"] {
+function createRedisWs(userId: string): ToolContext["ws"] {
   return {
-    emit: async () => {},
+    emit: async (_sessionId: string, event: unknown) => {
+      try {
+        const { publish } = await import("@repo/service-utils");
+        await publish(`user:${userId}`, event);
+      } catch (err) {
+        // Redis unavailable — non-critical, tool execution still works
+        console.error("[ws] Failed to publish event:", err);
+      }
+    },
   };
 }
 
@@ -671,8 +680,7 @@ function createStorageClient(): ToolContext["storage"] {
       if (!hasS3) return path;
       try {
         // Download file from sandbox, upload to S3
-        const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-        const fileUrl = `https://8330-${sandboxId}.${domain}/file/read`;
+        const fileUrl = `${buildTerminalServerUrl(sandboxId)}/file/read`;
         const body = JSON.stringify({ path });
         const rsaHeaders = getRsaHeaders(body);
         const response = await fetch(fileUrl, {

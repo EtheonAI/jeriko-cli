@@ -10,6 +10,7 @@ const publicRoutes = [
   "/reset-password",
   "/register", // Keep for backwards compatibility
   "/share", // Public session sharing — no auth required
+  "/app-auth", // OAuth portal for webdev project users
 ];
 
 // Auth-related paths that should redirect authenticated users
@@ -30,6 +31,11 @@ export async function proxy(request: NextRequest) {
 
   // Allow OAuth callback route (Composio redirects here after OAuth popup completes)
   if (pathname.startsWith("/api/connectors/callback")) {
+    return NextResponse.next();
+  }
+
+  // Allow OAuth proxy route (webdev apps call this for token exchange)
+  if (pathname.startsWith("/api/oauth-proxy")) {
     return NextResponse.next();
   }
 

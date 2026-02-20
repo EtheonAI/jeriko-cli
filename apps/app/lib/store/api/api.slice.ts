@@ -77,6 +77,7 @@ export const apiSlice = createApi({
     "Mail",
     "Knowledge",
     "Experiment",
+    "Secret",
   ],
   endpoints: (builder) => ({
     // ================== SESSIONS ==================
@@ -655,6 +656,26 @@ export const apiSlice = createApi({
       queryFn: (args) =>
         trpcQuery(() => getRawTrpcClient().connectors.executeTool.mutate(args)),
     }),
+
+    // ================== SECRETS ==================
+    getSecrets: builder.query<
+      Array<{ id: string; key: string; maskedValue: string; description: string | null; createdAt: string; updatedAt: string }>,
+      void
+    >({
+      queryFn: () => trpcQuery(() => getRawTrpcClient().secrets.list.query()),
+      providesTags: ["Secret"],
+    }),
+    upsertSecret: builder.mutation<
+      { id: string; key: string; updated: boolean },
+      { key: string; value: string; description?: string }
+    >({
+      queryFn: (args) => trpcQuery(() => getRawTrpcClient().secrets.upsert.mutate(args)),
+      invalidatesTags: ["Secret"],
+    }),
+    deleteSecret: builder.mutation<{ success: boolean }, { id: string }>({
+      queryFn: (args) => trpcQuery(() => getRawTrpcClient().secrets.delete.mutate(args)),
+      invalidatesTags: ["Secret"],
+    }),
   }),
 });
 
@@ -807,4 +828,8 @@ export const {
   // Connectors (file sources)
   useGetConnectorsByCategoryQuery,
   useExecuteConnectorToolMutation,
+  // Secrets
+  useGetSecretsQuery,
+  useUpsertSecretMutation,
+  useDeleteSecretMutation,
 } = apiSlice;

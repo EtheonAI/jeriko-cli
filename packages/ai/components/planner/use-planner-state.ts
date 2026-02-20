@@ -168,18 +168,11 @@ export function usePlannerState(messages: UIMessage[], isStreaming = false): Pla
       status: mapStatus(todo.status),
     }));
 
-    // When the agent is done streaming, auto-complete steps.
-    // The agent sometimes forgets to send a final show_plan update, leaving
-    // the planner stuck on steps the agent was working on or hadn't started yet.
-    // For finished chats (not streaming), mark all non-error steps as completed
-    // since the agent finished its entire response.
-    if (!isStreaming) {
-      for (const step of steps) {
-        if (step.status === "in_progress" || step.status === "pending") {
-          step.status = "completed";
-        }
-      }
-    }
+    // Manus parity: NO auto-completion. Steps stay in whatever status the
+    // server last sent. The agent must explicitly call show_plan with updated
+    // statuses to advance the planner. If the agent stops mid-way, the planner
+    // stays on the last reported state — this matches Manus's PlanPanel.vue
+    // which purely renders server-sent step statuses with zero client mutation.
 
     const completedSteps = steps.filter((s) => s.status === "completed").length;
     const inProgressIndex = steps.findIndex((s) => s.status === "in_progress");

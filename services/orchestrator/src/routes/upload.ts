@@ -72,12 +72,22 @@ function extractBearerToken(authHeader: string | undefined): string | null {
   return parts[1] || null;
 }
 
+/** Extract token from either Authorization header or x-sandbox-token fallback */
+function extractToken(request: { headers: Record<string, string | string[] | undefined> }): string | null {
+  const bearer = extractBearerToken(request.headers.authorization as string | undefined);
+  if (bearer) return bearer;
+  // Fallback: x-sandbox-token header (backward compat with older rubic-upload-file)
+  const sandboxToken = request.headers["x-sandbox-token"];
+  if (typeof sandboxToken === "string" && sandboxToken) return sandboxToken;
+  return null;
+}
+
 export async function uploadRoutes(app: FastifyInstance) {
   // ─── POST /api/upload/presign ──────────────────────────────────────────
   // Returns a presigned PUT URL for direct S3 upload + the final CDN/access URL.
   app.post("/api/upload/presign", async (request, reply) => {
-    // Validate auth
-    const token = extractBearerToken(request.headers.authorization);
+    // Validate auth — supports Authorization: Bearer <token> and x-sandbox-token fallback
+    const token = extractToken(request);
     if (!token) {
       return reply.status(401).send({
         error: {

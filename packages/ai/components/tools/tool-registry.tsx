@@ -153,6 +153,7 @@ const defaultRenderers: Record<string, ToolRenderer> = {
   webdev_push_schema: ProgressTool as ToolRenderer,
   webdev_list_versions: ProgressTool as ToolRenderer,
   webdev_add_feature: ProgressTool as ToolRenderer,
+  webdev_read_debug_logs: ProgressTool as ToolRenderer,
 
   // Fallback for any unknown tool
   "*": GenericTool,

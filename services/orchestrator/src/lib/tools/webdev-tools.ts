@@ -13,6 +13,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { ToolContext } from "./types.js";
+import { buildPreviewUrl } from "../e2b-manager.js";
 
 const ORCHESTRATOR_URL = `http://localhost:${process.env.PORT || 4014}`;
 
@@ -53,18 +54,25 @@ function createWebdevInitProjectTool(ctx: ToolContext) {
         .describe("Name of the application (used as directory name)."),
     }),
     execute: async (params) => {
+      const directory = `/home/ubuntu/${params.app_name}`;
       const result = await callWebdevRoute("/api/webdev/init", {
         sandboxId: ctx.sandboxId,
         userId: ctx.userId,
         template_id: params.template_id,
         app_name: params.app_name,
-        directory: `/home/ubuntu/${params.app_name}`,
+        directory,
       });
-      // Use devServerPort from init response (set in vite.config.ts), fallback to 3000
+      // Use centralized URL builder (respects PROXY_DOMAIN, SANDBOX_PROXY_URL)
       const port = (result.devServerPort as number) || 3000;
-      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-      const previewUrl = `https://${port}-${ctx.e2bSandboxId}.${domain}`;
-      return { ...result, previewUrl };
+      const previewUrl = buildPreviewUrl(ctx.e2bSandboxId, port) || (result.previewUrl as string);
+      return {
+        ...result,
+        previewUrl,
+        // Ensure name + directory are always in output for frontend SSE handler
+        name: params.app_name,
+        directory,
+        projectPath: directory,
+      };
     },
   });
 }
@@ -258,6 +266,29 @@ function createWebdevAddFeatureTool(ctx: ToolContext) {
   });
 }
 
+function createWebdevReadDebugLogsTool(ctx: ToolContext) {
+  return tool({
+    description:
+      "Read browser debug logs collected from the running webdev app. " +
+      "Returns console output (errors, warnings, logs), failed network requests, " +
+      "UI events, and uncaught exceptions. Use to diagnose client-side bugs, " +
+      "broken API calls, or rendering errors. Call with clear=true to clear logs after reading.",
+    inputSchema: z.object({
+      clear: z
+        .boolean()
+        .optional()
+        .describe("If true, clear the debug logs after reading. Default: false."),
+    }),
+    execute: async (params) => {
+      return callWebdevRoute("/api/webdev/debug-logs", {
+        sandboxId: ctx.sandboxId,
+        userId: ctx.userId,
+        clear: params.clear,
+      });
+    },
+  });
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 export function createWebdevTools(ctx: ToolContext) {
@@ -271,5 +302,6 @@ export function createWebdevTools(ctx: ToolContext) {
     webdev_push_schema: createWebdevPushSchemaTool(ctx),
     webdev_list_versions: createWebdevListVersionsTool(ctx),
     webdev_add_feature: createWebdevAddFeatureTool(ctx),
+    webdev_read_debug_logs: createWebdevReadDebugLogsTool(ctx),
   } as const;
 }

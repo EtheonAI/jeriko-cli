@@ -26,7 +26,9 @@ interface FileReadInput {
 
 interface FileReadOutput {
   content: string;
-  path: string;
+  path?: string;
+  file?: string;          // Our executor format
+  status?: string;        // Our executor format: "success"
   size?: number;
   encoding?: string;
   lines?: number;
@@ -40,9 +42,12 @@ interface FileWriteInput {
 }
 
 interface FileWriteOutput {
-  success: boolean;
-  path: string;
+  success?: boolean;
+  status?: string;         // Our executor format: "success"
+  path?: string;
+  file?: string;           // Our executor format
   bytes_written?: number;
+  bytesWritten?: number;   // Our executor format: camelCase
   created?: boolean;
 }
 
@@ -79,11 +84,12 @@ export function FilePreview({
     );
   }
 
-  // Read operation output
-  if (!isWriteOperation && output && "content" in output) {
+  // Read operation output — handle both {content} and {status, content} formats
+  if (!isWriteOperation && output && ("content" in output)) {
     const readOutput = output as FileReadOutput;
     const language = getLanguageFromExtension(extension);
     const lines = readOutput.content.split("\n");
+    const displayPath = readOutput.path ?? readOutput.file ?? filePath;
 
     return (
       <div className="space-y-2">
@@ -123,19 +129,21 @@ export function FilePreview({
     );
   }
 
-  // Write operation output
-  if (isWriteOperation && output && "success" in output) {
+  // Write operation output — handle both {success: true} and {status: "success"} formats
+  if (isWriteOperation && output && ("success" in output || output.status === "success")) {
     const writeOutput = output as FileWriteOutput;
+    const isSuccess = writeOutput.success ?? writeOutput.status === "success";
+    const bytesWritten = writeOutput.bytes_written ?? writeOutput.bytesWritten;
 
     return (
       <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
         <div
           className={cn(
             "flex size-10 items-center justify-center rounded-lg",
-            writeOutput.success ? "bg-green-500/10" : "bg-red-500/10"
+            isSuccess ? "bg-green-500/10" : "bg-red-500/10"
           )}
         >
-          {writeOutput.success ? (
+          {isSuccess ? (
             writeOutput.created ? (
               <PlusIcon className="size-5 text-green-500" />
             ) : (
@@ -150,12 +158,12 @@ export function FilePreview({
             {writeOutput.created ? "File created" : "File updated"}
           </span>
           <span className="block truncate font-mono text-xs text-muted-foreground">
-            {filePath}
+            {writeOutput.path ?? writeOutput.file ?? filePath}
           </span>
         </div>
-        {writeOutput.bytes_written !== undefined && (
+        {bytesWritten !== undefined && (
           <span className="text-xs text-muted-foreground">
-            {formatBytes(writeOutput.bytes_written)}
+            {formatBytes(bytesWritten)}
           </span>
         )}
       </div>

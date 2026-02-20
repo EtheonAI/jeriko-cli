@@ -1,109 +1,111 @@
+/**
+ * WebRTC Media / Neko Proxy Service — port 4016.
+ *
+ * Responsibilities:
+ * - DB-backed media session CRUD (Neko streaming sessions)
+ * - Cloudflare TURN credential cache + rotation
+ * - Neko client static files served from S3
+ * - WebSocket signaling proxy (frontend → sandbox Neko)
+ * - Neko pre-auth proxy (password fetch + cache)
+ */
+
 import Fastify from "fastify";
-import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import websocket from "@fastify/websocket";
+import { createLogger } from "@repo/service-utils";
+import { initDb } from "./lib/db.js";
+import { healthRoutes } from "./routes/health.js";
+import { sessionRoutes } from "./routes/sessions.js";
+import { iceServerRoutes } from "./routes/ice-servers.js";
+import { nekoClientRoutes } from "./routes/neko-client.js";
+import { wsProxyRoutes } from "./routes/ws-proxy.js";
+import { authRoutes } from "./routes/auth.js";
+
+const logger = createLogger({ service: "webrtc-media" });
 
 const PORT = Number(process.env.PORT ?? 4016);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
-const createBodySchema = z.object({
-  sessionId: z.string().min(1),
-  sandboxId: z.string().optional(),
-  userId: z.string().optional(),
-  provider: z.enum(["neko", "novnc"]).optional().default("neko"),
-});
+export async function buildApp() {
+  const app = Fastify({
+    logger: false,
+    requestIdHeader: "x-request-id",
+    genReqId: () => crypto.randomUUID(),
+    bodyLimit: 1 * 1024 * 1024, // 1MB
+    trustProxy: true,
+  });
 
-const sessionMap = new Map<string, {
-  mediaSessionId: string;
-  sessionId: string;
-  sandboxId: string | null;
-  userId: string | null;
-  provider: "neko" | "novnc";
-  streamUrl: string;
-  controlUrl: string;
-  createdAt: string;
-  updatedAt: string;
-}>();
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",")
+    .map((o: string) => o.trim())
+    .filter(Boolean);
 
-function streamUrlFor(provider: "neko" | "novnc", sandboxId: string | null): string {
-  const host = process.env.NEKO_PUBLIC_HOST ?? "localhost";
-  const scheme = process.env.NEKO_PUBLIC_SCHEME ?? "https";
-  const port = Number(process.env.NEKO_PUBLIC_PORT ?? 8080);
+  await app.register(cors, {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-user-id", "x-session-id"],
+  });
 
-  if (provider === "neko") {
-    const sid = sandboxId ?? "unknown";
-    return `${scheme}://${host}:${port}/?session=${encodeURIComponent(sid)}`;
-  }
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  });
 
-  // Fallback noVNC stream pattern
-  const novncHost = process.env.NOVNC_PUBLIC_HOST ?? host;
-  const novncPort = Number(process.env.NOVNC_PUBLIC_PORT ?? 6080);
-  return `${scheme}://${novncHost}:${novncPort}/vnc.html`;
-}
+  await app.register(websocket);
 
-function buildApp() {
-  const app = Fastify({ logger: true });
+  // Register routes
+  await app.register(healthRoutes);
+  await app.register(sessionRoutes);
+  await app.register(iceServerRoutes);
+  await app.register(nekoClientRoutes);
+  await app.register(wsProxyRoutes);
+  await app.register(authRoutes);
 
-  app.get("/health", async () => ({ status: "ok", service: "webrtc-media" }));
-
-  app.post("/v1/media/sessions", async (request, reply) => {
-    const parsed = createBodySchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ error: parsed.error.flatten() });
+  // Remove X-Frame-Options for neko-client routes — must be embeddable in iframes
+  app.addHook("onSend", async (request, reply) => {
+    if (request.url.startsWith("/neko-client/")) {
+      reply.raw.removeHeader("X-Frame-Options");
+      reply.raw.removeHeader("Cross-Origin-Opener-Policy");
     }
-
-    const data = parsed.data;
-    const now = new Date().toISOString();
-    const mediaSessionId = `med_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
-    const streamUrl = streamUrlFor(data.provider, data.sandboxId ?? null);
-    const controlUrl = `${streamUrl}&control=1`;
-
-    const record = {
-      mediaSessionId,
-      sessionId: data.sessionId,
-      sandboxId: data.sandboxId ?? null,
-      userId: data.userId ?? null,
-      provider: data.provider,
-      streamUrl,
-      controlUrl,
-      createdAt: now,
-      updatedAt: now,
-    } as const;
-
-    sessionMap.set(data.sessionId, { ...record });
-
-    return reply.status(201).send({
-      mediaSessionId,
-      sessionId: data.sessionId,
-      provider: data.provider,
-      streamUrl,
-      controlUrl,
-      createdAt: now,
-    });
-  });
-
-  app.get("/v1/media/sessions/by-session/:sessionId", async (request, reply) => {
-    const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(request.params);
-    const record = sessionMap.get(sessionId);
-    if (!record) return reply.status(404).send({ error: "Media session not found" });
-    return record;
-  });
-
-  app.delete("/v1/media/sessions/by-session/:sessionId", async (request, reply) => {
-    const { sessionId } = z.object({ sessionId: z.string().min(1) }).parse(request.params);
-    const deleted = sessionMap.delete(sessionId);
-    if (!deleted) return reply.status(404).send({ success: false, error: "Media session not found" });
-    return { success: true };
   });
 
   return app;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const app = buildApp();
-  app.listen({ port: PORT, host: HOST }).catch((err) => {
-    app.log.error(err);
-    process.exit(1);
+async function main() {
+  // Initialize database connection
+  await initDb();
+
+  const app = await buildApp();
+
+  app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {
+    logger.error({ err: error }, "Request error");
+    const statusCode = error.statusCode || 500;
+    reply.status(statusCode).send({
+      error: statusCode === 500 ? "Internal server error" : error.message,
+    });
   });
+
+  try {
+    await app.listen({ port: PORT, host: HOST });
+    logger.info({ port: PORT, host: HOST }, "WebRTC media service started");
+  } catch (err) {
+    logger.error(err, "Failed to start server");
+    process.exit(1);
+  }
+
+  const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+  for (const signal of signals) {
+    process.on(signal, async () => {
+      logger.info({ signal }, "Received shutdown signal");
+      await app.close();
+      process.exit(0);
+    });
+  }
 }
 
-export { buildApp };
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void main();
+}

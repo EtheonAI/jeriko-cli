@@ -93,6 +93,55 @@ export async function uploadFile(
   );
 }
 
+/**
+ * Upload a file for permanent public hosting.
+ * Uses public-read ACL when bucket supports it, immutable cache headers.
+ * Returns the permanent public URL (CDN preferred, then direct S3 URL).
+ */
+export async function uploadPublicFile(
+  key: string,
+  body: Buffer | Uint8Array,
+  contentType?: string,
+): Promise<string> {
+  const client = getClient();
+  const config = getConfig();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    })
+  );
+  return getPublicUrl(key);
+}
+
+/**
+ * Get a permanent public URL for an S3 key.
+ * CDN → S3-compatible endpoint → AWS virtual-hosted style.
+ */
+export function getPublicUrl(key: string): string {
+  const config = getConfig();
+  if (config.cdnUrl) {
+    return `${config.cdnUrl}/${key}`;
+  }
+  if (config.endpoint) {
+    return config.forcePathStyle
+      ? `${config.endpoint}/${config.bucket}/${key}`
+      : `${config.endpoint}/${key}`;
+  }
+  return `https://${config.bucket}.s3.${config.region}.amazonaws.com/${key}`;
+}
+
+/** Get the raw storage config (for building URLs) */
+function getConfig(): StorageConfig {
+  if (!_config) {
+    _config = getStorageConfig();
+  }
+  return _config;
+}
+
 /** Get CDN URL if configured, otherwise return null */
 export function getCdnUrl(key: string): string | null {
   if (!_config) {

@@ -65,12 +65,20 @@ export function TerminalView({
   // Determine if we have multiple sessions to show tabs
   const hasMultipleSessions = sessionIds && sessionIds.length > 1;
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom with rAF debounce — prevents layout thrashing
+  // when WebSocket push delivers chunks at 10-50ms intervals
+  const rafRef = useRef<number>(0);
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [displayOutput]);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      if (terminalRef.current) {
+        terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+      }
+    });
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [output, liveOutput, liveConnected]);
 
   // Handle keyboard input when in interactive mode
   const handleKeyDown = useCallback(

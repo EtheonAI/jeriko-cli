@@ -40,6 +40,30 @@ const FORGE_FRONTEND_API_KEY = process.env.FORGE_FRONTEND_API_KEY || "";
 const FORGE_LLM_PROVIDER_URL = process.env.FORGE_LLM_PROVIDER_URL || "https://api.openai.com/v1";
 const FORGE_LLM_PROVIDER_KEY = process.env.FORGE_LLM_PROVIDER_KEY || process.env.OPENAI_API_KEY || "";
 
+// Image generation provider (DALL-E via OpenAI API)
+const FORGE_IMAGE_PROVIDER_URL = process.env.FORGE_IMAGE_PROVIDER_URL || "https://api.openai.com/v1";
+const FORGE_IMAGE_PROVIDER_KEY = process.env.FORGE_IMAGE_PROVIDER_KEY || FORGE_LLM_PROVIDER_KEY;
+
+// Voice transcription provider (Whisper via OpenAI API)
+const FORGE_VOICE_PROVIDER_URL = process.env.FORGE_VOICE_PROVIDER_URL || "https://api.openai.com/v1";
+const FORGE_VOICE_PROVIDER_KEY = process.env.FORGE_VOICE_PROVIDER_KEY || FORGE_LLM_PROVIDER_KEY;
+
+// Data API — registered external API providers
+// Map of provider name → { baseUrl, apiKey, allowedPaths }
+const DATA_API_PROVIDERS: Record<string, { baseUrl: string; apiKey: string; allowedPaths?: string[] }> = {};
+
+// Load data API providers from env (format: DATA_API_PROVIDER_<NAME>_URL, DATA_API_PROVIDER_<NAME>_KEY)
+for (const [key, value] of Object.entries(process.env)) {
+  const urlMatch = key.match(/^DATA_API_PROVIDER_(\w+)_URL$/);
+  if (urlMatch && value) {
+    const name = urlMatch[1]!.toLowerCase();
+    DATA_API_PROVIDERS[name] = {
+      baseUrl: value,
+      apiKey: process.env[`DATA_API_PROVIDER_${urlMatch[1]}_KEY`] || "",
+    };
+  }
+}
+
 // Allowed models for Forge API (webdev projects get access to more models than sandbox)
 const ALLOWED_FORGE_MODELS = new Set([
   "gpt-4.1-mini",
@@ -76,10 +100,12 @@ export async function forgeRoutes(app: FastifyInstance) {
       status: "ok",
       services: {
         llm: !!FORGE_LLM_PROVIDER_KEY,
-        images: false, // Not yet implemented
-        voice: false, // Not yet implemented
+        images: !!FORGE_IMAGE_PROVIDER_KEY,
+        voice: !!FORGE_VOICE_PROVIDER_KEY,
         notifications: true,
+        dataApi: Object.keys(DATA_API_PROVIDERS).length > 0,
       },
+      dataApiProviders: Object.keys(DATA_API_PROVIDERS),
     });
   });
 
@@ -205,8 +231,16 @@ export async function forgeRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: "Invalid or missing server-side Forge API key" });
     }
 
+    if (!FORGE_IMAGE_PROVIDER_KEY) {
+      return reply.status(503).send({ error: "Image generation provider not configured" });
+    }
+
     const body = request.body as {
       prompt?: string;
+      model?: string;
+      size?: string;
+      quality?: string;
+      n?: number;
       originalImages?: Array<{ url: string; mimeType: string }>;
     };
 
@@ -214,13 +248,46 @@ export async function forgeRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "prompt required" });
     }
 
-    // TODO: Integrate image generation provider
-    logger.info({ prompt: body.prompt?.slice(0, 100) }, "Image generation requested (stub)");
+    const model = body.model || "dall-e-3";
+    const allowedModels = new Set(["dall-e-2", "dall-e-3", "gpt-image-1"]);
+    if (!allowedModels.has(model)) {
+      return reply.status(400).send({
+        error: `Unsupported image model. Allowed: ${Array.from(allowedModels).join(", ")}`,
+      });
+    }
 
-    return reply.status(501).send({
-      error: "Image generation not yet implemented",
-      hint: "Will be available when DALL-E/Stable Diffusion provider is configured",
-    });
+    try {
+      const upstreamResp = await fetch(`${FORGE_IMAGE_PROVIDER_URL}/images/generations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${FORGE_IMAGE_PROVIDER_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          prompt: body.prompt,
+          n: Math.min(body.n || 1, 4),
+          size: body.size || "1024x1024",
+          quality: body.quality || "standard",
+          response_format: "url",
+        }),
+        signal: AbortSignal.timeout(120000),
+      });
+
+      if (!upstreamResp.ok) {
+        const errText = await upstreamResp.text();
+        logger.error({ status: upstreamResp.status, error: errText }, "Forge image upstream error");
+        return reply.status(upstreamResp.status).send({ error: errText });
+      }
+
+      const data = await upstreamResp.json();
+      logger.info({ model, prompt: body.prompt.slice(0, 80) }, "Forge image generated");
+      return reply.send(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ error: msg }, "Forge image generation failed");
+      return reply.status(502).send({ error: msg });
+    }
   });
 
   /**
@@ -236,13 +303,46 @@ export async function forgeRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: "Invalid or missing server-side Forge API key" });
     }
 
-    // TODO: Implement Whisper proxy
-    logger.info("Voice transcription requested (stub)");
+    if (!FORGE_VOICE_PROVIDER_KEY) {
+      return reply.status(503).send({ error: "Voice transcription provider not configured" });
+    }
 
-    return reply.status(501).send({
-      error: "Voice transcription not yet implemented",
-      hint: "Will proxy to OpenAI Whisper API when configured",
-    });
+    try {
+      // Forward the multipart form data to OpenAI Whisper API
+      // The request body is multipart/form-data with a file field
+      const contentType = request.headers["content-type"] || "";
+
+      if (!contentType.includes("multipart/form-data")) {
+        return reply.status(400).send({ error: "Expected multipart/form-data with audio file" });
+      }
+
+      // Get raw body and forward as-is to upstream
+      const rawBody = request.body as Buffer;
+
+      const upstreamResp = await fetch(`${FORGE_VOICE_PROVIDER_URL}/audio/transcriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": contentType,
+          Authorization: `Bearer ${FORGE_VOICE_PROVIDER_KEY}`,
+        },
+        body: rawBody,
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (!upstreamResp.ok) {
+        const errText = await upstreamResp.text();
+        logger.error({ status: upstreamResp.status, error: errText }, "Forge voice upstream error");
+        return reply.status(upstreamResp.status).send({ error: errText });
+      }
+
+      const data = await upstreamResp.json();
+      logger.info("Forge voice transcription completed");
+      return reply.send(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ error: msg }, "Forge voice transcription failed");
+      return reply.status(502).send({ error: msg });
+    }
   });
 
   /**
@@ -308,12 +408,77 @@ export async function forgeRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: "Invalid or missing Forge API key" });
     }
 
-    // TODO: Implement external API proxy with registered data providers
-    logger.info("Data API proxy requested (stub)");
+    const body = request.body as {
+      provider: string;   // e.g. "youtube", "twitter", "maps"
+      path: string;       // API path (appended to provider's baseUrl)
+      method?: string;    // HTTP method (default: GET)
+      params?: Record<string, string>; // Query params
+      data?: unknown;     // Request body (for POST/PUT)
+    };
 
-    return reply.status(501).send({
-      error: "Data API proxy not yet implemented",
-      hint: "Will be available when data providers are registered",
-    });
+    if (!body.provider || !body.path) {
+      return reply.status(400).send({ error: "provider and path required" });
+    }
+
+    const provider = DATA_API_PROVIDERS[body.provider.toLowerCase()];
+    if (!provider) {
+      const available = Object.keys(DATA_API_PROVIDERS);
+      return reply.status(400).send({
+        error: `Unknown data API provider: ${body.provider}`,
+        available: available.length > 0 ? available : "No providers configured. Set DATA_API_PROVIDER_<NAME>_URL env vars.",
+      });
+    }
+
+    // Build upstream URL
+    const url = new URL(body.path, provider.baseUrl);
+    if (body.params) {
+      for (const [k, v] of Object.entries(body.params)) {
+        url.searchParams.set(k, v);
+      }
+    }
+
+    // Security: block localhost and private IPs
+    const hostname = url.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("10.") || hostname.startsWith("192.168.")) {
+      return reply.status(403).send({ error: "Private/local URLs not allowed" });
+    }
+
+    const method = (body.method || "GET").toUpperCase();
+
+    try {
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+
+      if (provider.apiKey) {
+        headers.Authorization = `Bearer ${provider.apiKey}`;
+      }
+
+      if (body.data && (method === "POST" || method === "PUT" || method === "PATCH")) {
+        headers["Content-Type"] = "application/json";
+      }
+
+      const upstreamResp = await fetch(url.toString(), {
+        method,
+        headers,
+        body: body.data && method !== "GET" ? JSON.stringify(body.data) : undefined,
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const responseData = await upstreamResp.text();
+      logger.info({ provider: body.provider, path: body.path, status: upstreamResp.status }, "Forge data API proxy");
+
+      // Try to parse as JSON, otherwise return as text
+      try {
+        const json = JSON.parse(responseData);
+        return reply.status(upstreamResp.status).send(json);
+      } catch {
+        return reply.status(upstreamResp.status).send({ data: responseData });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ error: msg, provider: body.provider }, "Forge data API proxy failed");
+      return reply.status(502).send({ error: msg });
+    }
   });
 }

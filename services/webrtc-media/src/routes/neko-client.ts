@@ -1,13 +1,9 @@
 /**
  * Neko Client — serves the Neko web client from S3 (Manus CDN pattern).
  *
- * Manus hosts their Neko client at files.manuscdn.com/neko-client/.
- * We serve ours from S3 through this proxy route, which:
- * - Keeps files on our domain (no public S3 bucket needed)
- * - Adds proper CORS + security headers
- * - Allows iframe embedding from our app
- *
- * Files are uploaded to S3 via: npx tsx src/scripts/upload-neko-client.ts
+ * Moved from orchestrator. Serves static files from S3 neko-client/ prefix
+ * with in-memory caching, ETag support, and iframe-friendly headers.
+ * Falls back to local neko-client/ directory in development.
  *
  * Routes:
  *   GET /neko-client/*  — serves static files from S3 neko-client/ prefix
@@ -15,8 +11,14 @@
 
 import type { FastifyInstance } from "fastify";
 import { createLogger } from "@repo/service-utils";
+import { readFile } from "node:fs/promises";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const logger = createLogger({ service: "neko-client" });
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const LOCAL_NEKO_DIR = resolve(__dirname, "../../neko-client");
 
 const S3_PREFIX = "neko-client";
 
@@ -30,7 +32,7 @@ let _storage: typeof import("@repo/storage") | null = null;
 async function getStorage(): Promise<typeof import("@repo/storage")> {
   if (!_storage) {
     const mod = await import("@repo/storage");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ESM default export workaround
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     _storage = (mod as any).default ?? mod;
   }
   return _storage!;
@@ -93,6 +95,28 @@ export async function nekoClientRoutes(app: FastifyInstance) {
         .header("X-Content-Type-Options", "nosniff")
         .removeHeader("X-Frame-Options") // Allow iframe embedding
         .send(cached.body);
+    }
+
+    // Try local file first (development), then S3 (production)
+    try {
+      const localPath = resolve(LOCAL_NEKO_DIR, filePath);
+      // Security: ensure resolved path is within LOCAL_NEKO_DIR
+      if (localPath.startsWith(LOCAL_NEKO_DIR)) {
+        const body = await readFile(localPath);
+        const contentType = getMimeType(filePath);
+        const etag = `"${Buffer.from(s3Key + body.length).toString("base64url")}"`;
+        fileCache.set(s3Key, { body, contentType, etag });
+        cacheTimestamps.set(s3Key, now);
+        return reply
+          .header("Content-Type", contentType)
+          .header("Cache-Control", "public, max-age=300")
+          .header("ETag", etag)
+          .header("X-Content-Type-Options", "nosniff")
+          .removeHeader("X-Frame-Options")
+          .send(body);
+      }
+    } catch {
+      // Local file not found — fall through to S3
     }
 
     try {

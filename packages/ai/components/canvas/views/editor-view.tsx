@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@repo/design-system/lib/utils";
-import { FileTextIcon } from "lucide-react";
-import { ShikiCodeBlock } from "./shiki-code-block";
+import { FileTextIcon, XIcon } from "lucide-react";
+import { MonacoWrapper } from "./monaco-wrapper";
 import { LanguageFileIcon } from "./file-icon";
 
 // ============================================================================
@@ -17,6 +17,14 @@ export interface EditorViewProps {
   content?: string;
   /** Language for syntax highlighting */
   language?: string;
+  /** Multi-file tabs */
+  fileTabs?: Array<{ id: string; name: string; path: string; isActive: boolean }>;
+  /** All file contents for tab switching */
+  allFileContents?: Record<string, string>;
+  /** Select a file tab */
+  onSelectTab?: (tabId: string) => void;
+  /** Close a file tab */
+  onCloseTab?: (tabId: string) => void;
 }
 
 // ============================================================================
@@ -34,34 +42,83 @@ function displayName(path?: string): string {
 }
 
 // ============================================================================
-// Component — Manus-style FileToolView
-// Simple: header (filename) + read-only syntax-highlighted code.
-// No file tree, no tabs, no IDE chrome.
+// Component — Manus-style FileToolView with multi-file tab support
+// Header with filename (single file) or tab bar (multiple files) +
+// read-only syntax-highlighted code.
 // ============================================================================
 
-export function EditorView({ filePath, content, language }: EditorViewProps) {
-  const name = displayName(filePath);
-  const fileName = filePath?.split("/").pop() ?? "file";
+export function EditorView({
+  filePath,
+  content,
+  language,
+  fileTabs,
+  allFileContents,
+  onSelectTab,
+  onCloseTab,
+}: EditorViewProps) {
+  const hasMultipleTabs = fileTabs && fileTabs.length > 1;
+  const activeTab = fileTabs?.find((t) => t.isActive);
+  const name = displayName(activeTab?.path ?? filePath);
+  const fileNameStr = (activeTab?.path ?? filePath)?.split("/").pop() ?? "file";
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header — Manus: h-[36px], centered filename, gray bg, border-b */}
-      <div className="flex h-9 items-center px-3 border-b border-border/10 bg-canvas-surface">
-        <div className="flex flex-1 items-center justify-center gap-2 min-w-0">
-          <LanguageFileIcon name={fileName} className="size-3.5 flex-shrink-0" />
-          <span className="max-w-[300px] truncate text-sm font-medium text-muted-foreground">
-            {name}
-          </span>
+      {/* Tab bar — shown when multiple files are open */}
+      {hasMultipleTabs ? (
+        <div className="flex h-9 items-center border-b border-border/10 bg-canvas-surface overflow-x-auto scrollbar-none">
+          {fileTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onSelectTab?.(tab.id)}
+              className={cn(
+                "group flex h-full items-center gap-1.5 border-r border-border/10 px-3 text-xs font-medium transition-colors min-w-0 shrink-0",
+                tab.isActive
+                  ? "bg-canvas-deep text-foreground"
+                  : "text-muted-foreground hover:bg-canvas-deep/50 hover:text-foreground"
+              )}
+            >
+              <LanguageFileIcon name={tab.name} className="size-3.5 flex-shrink-0" />
+              <span className="truncate max-w-[120px]">{tab.name}</span>
+              {onCloseTab && (
+                <span
+                  role="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab(tab.id);
+                  }}
+                  className={cn(
+                    "ml-1 rounded p-0.5 flex-shrink-0",
+                    tab.isActive
+                      ? "text-muted-foreground/60 hover:text-foreground hover:bg-muted/30"
+                      : "text-transparent group-hover:text-muted-foreground/40 hover:!text-foreground hover:bg-muted/30"
+                  )}
+                >
+                  <XIcon className="size-3" />
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-      </div>
+      ) : (
+        /* Single-file header — Manus: h-[36px], centered filename, gray bg */
+        <div className="flex h-9 items-center px-3 border-b border-border/10 bg-canvas-surface">
+          <div className="flex flex-1 items-center justify-center gap-2 min-w-0">
+            <LanguageFileIcon name={fileNameStr} className="size-3.5 flex-shrink-0" />
+            <span className="max-w-[300px] truncate text-sm font-medium text-muted-foreground">
+              {name}
+            </span>
+          </div>
+        </div>
+      )}
 
-      {/* Editor content — read-only, syntax highlighted */}
-      <div className="flex-1 overflow-auto bg-canvas-deep p-4">
+      {/* Editor content — Monaco editor, read-only, syntax highlighted */}
+      <div className="flex-1 overflow-hidden bg-canvas-deep">
         {content ? (
-          <ShikiCodeBlock
-            code={content}
+          <MonacoWrapper
+            content={content}
             language={language}
-            showLineNumbers
+            readOnly
           />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground/40">

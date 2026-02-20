@@ -31,6 +31,7 @@ const PersonalizationTab = dynamic(() => import("./tabs/personalization-tab").th
 const ScheduledTasksTab = dynamic(() => import("./tabs/scheduled-tasks-tab").then((m) => ({ default: m.ScheduledTasksTab })), { loading: TabLoading });
 const SettingsTabComponent = dynamic(() => import("./tabs/settings-tab").then((m) => ({ default: m.SettingsTab })), { loading: TabLoading });
 const SkillsTab = dynamic(() => import("./tabs/skills-tab").then((m) => ({ default: m.SkillsTab })), { loading: TabLoading });
+const SecretsTab = dynamic(() => import("./tabs/secrets-tab").then((m) => ({ default: m.SecretsTab })), { loading: TabLoading });
 const UsageTab = dynamic(() => import("./tabs/usage-tab").then((m) => ({ default: m.UsageTab })), { loading: TabLoading });
 
 type SettingsContentProps = {
@@ -69,6 +70,10 @@ const tabConfig: Record<
     title: "Integrations",
     description: "Webhooks and API connections",
   },
+  secrets: {
+    title: "Secrets",
+    description: "Environment variables injected into your sandbox",
+  },
   help: { title: "Get Help", description: "Documentation and support" },
 };
 
@@ -99,6 +104,8 @@ export function SettingsContent({ user, isPro = false }: SettingsContentProps) {
         return <SkillsTab />;
       case "integrations":
         return <IntegrationsTab />;
+      case "secrets":
+        return <SecretsTab />;
       case "help":
         return <HelpTab />;
       default: {

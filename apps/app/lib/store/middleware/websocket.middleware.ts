@@ -8,6 +8,7 @@ import {
   setLastPongTime,
   setTaskFinished,
   setContextLengthStatus,
+  appendLiveTerminalChunk,
 } from "../slices/websocket.slice";
 import {
   addExecution,
@@ -786,6 +787,16 @@ function handleWebSocketMessage(dispatch: Dispatch<UnknownAction>, event: WebSoc
           });
         }
         scheduleConflationFlush(dispatch);
+
+        // Also accumulate in liveTerminalChunks for canvas terminal view.
+        // Canvas reads this for real-time output during in-progress shell execution.
+        dispatch(
+          appendLiveTerminalChunk({
+            sessionId: event.data.sessionId as string,
+            terminalId: segId,
+            output: (event.data.output ?? "") as string,
+          })
+        );
       }
       break;
 

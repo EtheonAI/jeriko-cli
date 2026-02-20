@@ -73,11 +73,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Get RUNTIME_API_HOST
-	host := os.Getenv("RUNTIME_API_HOST")
-	if host == "" {
-		// Try internal port
-		host = "http://127.0.0.1:9330"
+	// Resolve presign URL — check env vars in priority order:
+	// 1. RUBIC_UPLOAD_URL — full presign URL set by orchestrator (preferred)
+	// 2. ORCHESTRATOR_URL — orchestrator base URL + /api/upload/presign
+	// 3. RUNTIME_API_HOST — legacy / fallback + /api/upload/presign
+	// 4. http://127.0.0.1:9330 — internal terminal server (last resort)
+	var presignURL string
+	if u := os.Getenv("RUBIC_UPLOAD_URL"); u != "" {
+		presignURL = u
+	} else if u := os.Getenv("ORCHESTRATOR_URL"); u != "" {
+		presignURL = strings.TrimRight(u, "/") + "/api/upload/presign"
+	} else if u := os.Getenv("RUNTIME_API_HOST"); u != "" {
+		presignURL = strings.TrimRight(u, "/") + "/api/upload/presign"
+	} else {
+		presignURL = "http://127.0.0.1:9330/api/upload/presign"
 	}
 
 	// Request presigned URL
@@ -91,7 +100,6 @@ func main() {
 	})
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	presignURL := fmt.Sprintf("%s/api/upload/presign", host)
 
 	req, err := http.NewRequest("POST", presignURL, bytes.NewReader(reqBody))
 	if err != nil {
@@ -99,7 +107,7 @@ func main() {
 		os.Exit(1)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-sandbox-token", token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := client.Do(req)
 	if err != nil {

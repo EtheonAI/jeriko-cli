@@ -701,7 +701,8 @@ export default defineConfig({
   const verifyPreview = useCallback(async (): Promise<string> => {
     const e2bId = e2bSandboxIdRef.current;
     if (!e2bId) throw new Error("No E2B sandbox ID");
-    const previewUrl = `https://3000-${e2bId}.e2b.dev`;
+    const sandboxDomain = process.env.NEXT_PUBLIC_SANDBOX_DOMAIN || "e2b.dev";
+    const previewUrl = `https://3000-${e2bId}.${sandboxDomain}`;
     setSandbox((prev) => ({ ...prev, previewUrl }));
 
     const sbx = sandboxIdRef.current;
@@ -782,7 +783,8 @@ export default defineConfig({
     // The reverse proxy in terminal-server.mjs handles code-server authentication
     // by logging in once, caching the session cookie, and injecting it for all requests.
     // No login page is ever shown to the user.
-    const csUrl = proxyUrl || `https://8330-${e2bId}.e2b.dev/cs/`;
+    const csDomain = process.env.NEXT_PUBLIC_SANDBOX_DOMAIN || "e2b.dev";
+    const csUrl = proxyUrl || `https://8330-${e2bId}.${csDomain}/cs/`;
     setSandbox((prev) => ({ ...prev, codeServerUrl: csUrl }));
 
     return [
@@ -1254,7 +1256,7 @@ export default defineConfig({
                   <MonitorIcon className="size-3 text-zinc-400" />
                 </div>
                 <div className="flex-1 rounded bg-zinc-800/50 px-3 py-1 text-[11px] text-zinc-500 font-mono">
-                  {sandbox.previewUrl || "https://3000-sandbox.e2b.dev"}
+                  {sandbox.previewUrl || "Waiting for preview..."}
                 </div>
                 <button
                   type="button"

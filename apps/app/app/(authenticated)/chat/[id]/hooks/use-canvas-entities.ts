@@ -268,12 +268,21 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   const pinnedViewType = pinnedTool ? (TOOL_VIEW_MAP[pinnedTool.toolName] as CanvasViewType | undefined) : undefined;
   // Manus parity: agentWorkspace.sidebarType serves as fallback when no tool has been called
   const sidebarViewType = agentWorkspaceSidebarType ? (SIDEBAR_TO_VIEW[agentWorkspaceSidebarType] as CanvasViewType | undefined) : undefined;
-  const effectiveViewType: CanvasViewType = pinnedViewType ?? viewOverride ?? latestToolViewType ?? sidebarViewType ?? "empty";
+  // Manus parity: WebDev IDE session lock — during an active webdev session, file and terminal
+  // operations should NOT switch away from the IDE view. Manus keeps the IDE throughout;
+  // file operations show in the Code tab, terminal runs in the IDE's terminal panel.
+  const isWebDevSession = availableViewsFromRedux.includes("webDevIDE");
+  const isFileOrTerminalDuringWebdev = isWebDevSession && !pinnedTool &&
+    (latestToolViewType === "editor" || latestToolViewType === "terminal");
+  const effectiveViewType: CanvasViewType = pinnedViewType ?? viewOverride ??
+    (isFileOrTerminalDuringWebdev ? "webDevIDE" : latestToolViewType) ?? sidebarViewType ?? "empty";
 
   const isActive = isStreaming && latestTool && (latestTool.state === "pending" || latestTool.state === "running");
-  // Browser-specific active state — only true when the latest tool is a BROWSER tool
-  // that's still executing. Prevents browser loading bar when terminal/editor tools run.
-  const isBrowserToolActive = isActive && TOOL_VIEW_MAP[latestTool!.toolName] === "browser";
+  // Manus parity: `live` ref in ToolPanel persists until explicitly changed.
+  // Show Neko live stream as long as latest tool is browser — no isStreaming check.
+  // Goes false only when: non-browser tool starts or user pins a historical tool.
+  // BrowserView guards on nekoUrl existence, so this is safe even after sandbox dies.
+  const isBrowserToolActive = latestTool && TOOL_VIEW_MAP[latestTool.toolName] === "browser";
   // Check if the latest tool is a search tool that's still running
   const isSearchRunning = isActive && SEARCH_TOOLS.has(latestTool!.toolName);
   const latestAction = latestTool ? TOOL_ACTION_MAP[latestTool.toolName]?.(latestTool.input) : undefined;
@@ -491,8 +500,8 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       state.browserScreenshot = browserScreenshot ?? latestBrowserScreenshot.screenshot;
       state.browserContent = browserContent ?? latestBrowserScreenshot.content;
       state.browserTitle = browserTitle ?? latestBrowserScreenshot.title;
-      // Loading only when a BROWSER tool is active — not terminal/editor tools
-      state.browserLoading = (isBrowserToolActive ?? false) || browserLoading;
+      // Loading bar only when a browser tool is actively executing, not between tools
+      state.browserLoading = ((isActive && TOOL_VIEW_MAP[latestTool!.toolName] === "browser") ?? false) || browserLoading;
       // When a new search is running, DON'T show stale results from previous search.
       // Instead show "Searching..." placeholder (loading=true + search:// URL).
       state.browserSearchResults = isSearchRunning ? undefined : searchResults;
@@ -510,7 +519,7 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
   if (effectiveViewType === "terminal" || availableViewsFromRedux.includes("terminal")) {
     if (pinnedTool && (pinnedTool.toolName.startsWith("shell_") || pinnedTool.toolName === "code_execute") && pinnedTool.output) {
       const cmd = (pinnedTool.input?.command as string) ?? "";
-      const rawOut = typeof pinnedTool.output === "string" ? pinnedTool.output : ((pinnedTool.output.stdout ?? JSON.stringify(pinnedTool.output, null, 2)) as string);
+      const rawOut = typeof pinnedTool.output === "string" ? pinnedTool.output : ((pinnedTool.output.output ?? pinnedTool.output.stdout ?? JSON.stringify(pinnedTool.output, null, 2)) as string);
       const outStr = typeof rawOut === "string" ? rawOut : String(rawOut);
       state.terminalOutput = cmd ? [`$ ${cmd}`, ...outStr.split("\n")] : outStr.split("\n");
       state.activeTerminalSession = (pinnedTool.input?.id as string) || (pinnedTool.input?.session as string) || "default";
@@ -524,8 +533,9 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
     state.onSelectTerminalSession = onSelectTerminalSession;
 
     // Manus parity: show currently running command BEFORE shell_exec returns.
-    // "pending" = input still streaming, "running" = input complete, tool executing (waiting 5s).
-    // Once it returns with status:"running", entity becomes "complete" and the selector takes over.
+    // The selectTerminalSessions selector now processes "pending"/"running" events
+    // and merges live terminal chunks from WebSocket. Only add "Running..." here
+    // if the selector didn't already include the command (edge case: no session data yet).
     if (!pinnedTool && latestTool && isActive &&
         (latestTool.toolName.startsWith("shell_") || latestTool.toolName === "code_execute") &&
         (latestTool.state === "pending" || latestTool.state === "running")) {
@@ -533,7 +543,11 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       const sessionIdForPending = (latestTool.input?.id as string) || (latestTool.input?.session as string) || "default";
       if (cmd) {
         const existingLines = state.terminalOutput ?? [];
-        state.terminalOutput = [...existingLines, `$ ${cmd}`, "  \u23F3 Running..."];
+        // Only add command if selector didn't already include it (from live chunks)
+        const alreadyHasCmd = existingLines.some((l) => l === `$ ${cmd}`);
+        if (!alreadyHasCmd) {
+          state.terminalOutput = [...existingLines, `$ ${cmd}`, "  \u23F3 Running..."];
+        }
         state.activeTerminalSession = sessionIdForPending;
       }
     }
@@ -558,17 +572,31 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       }
     } else if (Object.keys(mergedFileContents).length > 0) {
       const allPaths = Object.keys(mergedFileContents);
-      // Prefer codeViewer active tab, then agent path, then latest file
+      const openPaths = allPaths.filter((p) => !closedTabs.has(p));
+      // Prefer user selection, then codeViewer active tab, then agent path, then latest file
       const codeViewerActivePath = codeViewerActiveTabId && mergedFileContents[codeViewerActiveTabId] ? codeViewerActiveTabId : null;
-      const activePath = codeViewerActivePath ?? (agentPath && mergedFileContents[agentPath] ? agentPath : null) ?? allPaths[allPaths.length - 1] ?? null;
+      const activePath =
+        (userSelectedPath && mergedFileContents[userSelectedPath] ? userSelectedPath : null) ??
+        codeViewerActivePath ??
+        (agentPath && mergedFileContents[agentPath] ? agentPath : null) ??
+        (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ??
+        null;
       if (activePath) {
         // Use streaming content when the active path matches the streaming tool's target
         state.activeFileContent = (streamingEditorContent && agentPath === activePath)
           ? streamingEditorContent : mergedFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
-        state.fileTabs = [{ id: "0", name: activePath.split("/").pop() || activePath, path: activePath, isActive: true }];
       }
+      // Multi-file tabs from all open files
+      state.fileTabs = openPaths.map((p, i) => ({
+        id: String(i),
+        name: p.split("/").pop() || p,
+        path: p,
+        isActive: p === activePath,
+      }));
       state.allFileContents = mergedFileContents;
+      state.onSelectTab = onSelectTab;
+      state.onCloseTab = onCloseTab;
     } else if (streamingEditorContent) {
       // No allFileContents yet but streaming is active — show progressive content
       state.activeFileContent = streamingEditorContent;
@@ -631,12 +659,17 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
       const allPaths = Object.keys(mergedFileContents);
       const openPaths = allPaths.filter((p) => !closedTabs.has(p));
       const codeViewerActivePath = codeViewerActiveTabId && mergedFileContents[codeViewerActiveTabId] ? codeViewerActiveTabId : null;
+      // When a file tool runs during webdev session (view locked), follow the agent's active file
+      const agentPath = (activeTool?.input?.path ?? activeTool?.input?.file) as string | undefined;
       const activePath =
         (userSelectedPath && mergedFileContents[userSelectedPath] ? userSelectedPath : null) ??
         codeViewerActivePath ??
+        (agentPath && mergedFileContents[agentPath] ? agentPath : null) ??
         (openPaths.length > 0 ? openPaths[openPaths.length - 1] : allPaths[allPaths.length - 1]) ?? null;
       if (activePath) {
-        state.activeFileContent = mergedFileContents[activePath];
+        // Use streaming content when agent is actively writing a file
+        state.activeFileContent = (streamingEditorContent && agentPath === activePath)
+          ? streamingEditorContent : mergedFileContents[activePath];
         state.activeFileLanguage = getLanguage(activePath);
       }
       state.fileTree = codeViewerDirectoryList.length > 0
@@ -655,6 +688,7 @@ export function useCanvasFromEntities(sessionId: string, isStreaming: boolean): 
     }
     // Prefer webDev slice project previewUrl over raw tool event extraction
     state.previewUrl = webDevProject?.previewUrl ?? webdevPreviewUrl;
+    state.projectPath = webDevProject?.projectPath;
     state.allFileContents = Object.keys(codeViewerFileDataSource).length > 0
       ? { ...allFileContents, ...codeViewerFileDataSource }
       : allFileContents;

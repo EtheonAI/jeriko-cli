@@ -103,15 +103,146 @@ export const POST = async (req: Request) => {
         fetchBody = JSON.stringify({ sandboxId, userId: session.user.id });
         break;
 
+      case "webdev-publish":
+        url = `${ORCHESTRATOR_URL}/api/deploy/zip-upload`;
+        fetchBody = JSON.stringify({
+          sandboxId,
+          userId: session.user.id,
+          projectPath: payload.projectPath,
+          outputDir: payload.outputDir || "dist",
+          buildFirst: payload.buildFirst ?? true,
+          buildCommand: payload.buildCommand || "pnpm build",
+        });
+        break;
+
+      case "webdev-checkpoint":
+        url = `${ORCHESTRATOR_URL}/api/webdev/checkpoint`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-restart":
+        url = `${ORCHESTRATOR_URL}/api/webdev/restart`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-update-env":
+        url = `${ORCHESTRATOR_URL}/api/webdev/update-env`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-domain-add":
+        url = `${ORCHESTRATOR_URL}/api/webdev/domain/add`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-domain-remove":
+        url = `${ORCHESTRATOR_URL}/api/webdev/domain/remove`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-domain-verify":
+        url = `${ORCHESTRATOR_URL}/api/webdev/domain/verify`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-domain-list":
+        url = `${ORCHESTRATOR_URL}/api/webdev/domain/list`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id });
+        break;
+
+      case "webdev-analytics":
+        url = `${ORCHESTRATOR_URL}/api/webdev/analytics`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "deploy-static":
+        url = `${ORCHESTRATOR_URL}/api/deploy/static`;
+        fetchBody = JSON.stringify({
+          sandboxId,
+          userId: session.user.id,
+          projectPath: payload.projectPath,
+          projectName: payload.projectName,
+          outputDir: payload.outputDir || "dist",
+          buildFirst: payload.buildFirst ?? true,
+          buildCommand: payload.buildCommand || "pnpm build 2>&1 || npm run build 2>&1",
+          sessionId: payload.sessionId,
+        });
+        break;
+
+      case "deploy-list-sites": {
+        url = `${ORCHESTRATOR_URL}/api/deploy/sites/${encodeURIComponent(session.user.id)}`;
+        method = "GET";
+        break;
+      }
+
+      case "deploy-delete-site":
+        url = `${ORCHESTRATOR_URL}/api/deploy/sites/${encodeURIComponent(payload.deploymentId as string)}`;
+        method = "DELETE";
+        break;
+
+      case "webdev-debug-logs":
+        url = `${ORCHESTRATOR_URL}/api/webdev/debug-logs`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-apply-edits":
+        url = `${ORCHESTRATOR_URL}/api/webdev/apply-edits`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-setup-template":
+        url = `${ORCHESTRATOR_URL}/api/webdev/setup-imported-template`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-rollback":
+        url = `${ORCHESTRATOR_URL}/api/webdev/rollback`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-add-feature":
+        url = `${ORCHESTRATOR_URL}/api/webdev/add-feature`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-restore":
+        url = `${ORCHESTRATOR_URL}/api/webdev/restore`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "webdev-refresh-github-token":
+        url = `${ORCHESTRATOR_URL}/api/webdev/refresh-github-token`;
+        fetchBody = JSON.stringify({ sandboxId, userId: session.user.id, ...payload });
+        break;
+
+      case "usage-credits": {
+        const billingUrl = process.env.BILLING_SERVICE_URL || "http://localhost:4008";
+        url = `${billingUrl}/users/${encodeURIComponent(session.user.id)}/usage?limit=100`;
+        if (payload.sessionId) {
+          url += `&sessionId=${encodeURIComponent(payload.sessionId as string)}`;
+        }
+        method = "GET";
+        break;
+      }
+
+      case "usage-balance": {
+        const billingUrl2 = process.env.BILLING_SERVICE_URL || "http://localhost:4008";
+        url = `${billingUrl2}/users/${encodeURIComponent(session.user.id)}/credits`;
+        method = "GET";
+        break;
+      }
+
       default:
         return Response.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }
 
     const resp = await fetch(url, {
       method,
-      headers: method === "GET" ? { "x-user-id": session.user.id, "x-sandbox-id": sandboxId } : fetchHeaders,
-      body: method === "GET" ? undefined : fetchBody,
-      signal: AbortSignal.timeout(30_000),
+      headers: (method === "GET" || method === "DELETE") ? { "x-user-id": session.user.id, "x-sandbox-id": sandboxId } : fetchHeaders,
+      body: (method === "GET" || method === "DELETE") ? undefined : fetchBody,
+      signal: AbortSignal.timeout(
+        method === "POST" && (action === "deploy-static" || action === "webdev-publish") ? 300_000 : 30_000
+      ),
     });
 
     const text = await resp.text();

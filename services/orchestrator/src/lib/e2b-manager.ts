@@ -152,8 +152,7 @@ export async function getOrCreateSandbox(
     // Detects dead E2B sandboxes (timeout, crash) and evicts so a new one is created.
     const timeSinceLastUse = Date.now() - cached.lastUsedAt;
     if (timeSinceLastUse > HEALTH_CHECK_INTERVAL_MS && cached.e2bSandboxId) {
-      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-      const healthUrl = `https://8330-${cached.e2bSandboxId}.${domain}/healthz`;
+      const healthUrl = `${buildTerminalServerUrl(cached.e2bSandboxId)}/healthz`;
       try {
         const resp = await fetch(healthUrl, { signal: AbortSignal.timeout(3000) });
         if (!resp.ok) throw new Error("unhealthy");
@@ -254,7 +253,7 @@ export async function getOrCreateSandbox(
 
         // Re-initialize with new proxy token
         if (resumedE2bId) {
-          const env = buildSandboxEnv(proxyToken);
+          const env = await buildSandboxEnv(proxyToken, userId);
           initializeSandbox(resumedE2bId, sessionId, userId, proxyToken, env).catch((err) =>
             console.warn("[e2b-manager] reinit after resume failed:", err)
           );
@@ -274,7 +273,7 @@ export async function getOrCreateSandbox(
 
   // ── Step 3: Create new sandbox ──
   const proxyToken = generateProxyToken();
-  const env = buildSandboxEnv(proxyToken);
+  const env = await buildSandboxEnv(proxyToken, userId);
 
   // Create via sandbox service — defaults to 'desktop' template (Neko WebRTC)
   const resp = await fetch(`${SANDBOX_SERVICE_URL}/sandboxes`, {
@@ -307,7 +306,16 @@ export async function getOrCreateSandbox(
   };
   const sandboxId = data.data?.sandboxId || data.data?.id;
   const e2bSandboxId = data.data?.e2bSandboxId || null;
-  const nekoUrl = data.data?.nekoUrl || null;
+
+  // Build nekoUrl — serve autoconnect.html from our webrtc-media service (S3 proxy),
+  // passing the direct sandbox Neko URL as ?server= param. The autoconnect.html handles
+  // pre-auth, login, and loading the Neko Vue client inside an iframe.
+  // Also pass ?session= so autoconnect.html can use our proxy for auth + TURN when available.
+  const MEDIA_SERVICE_URL = process.env.MEDIA_SERVICE_URL || "http://localhost:4016";
+  const NEKO_CLIENT_BASE = process.env.NEKO_CLIENT_URL || `${MEDIA_SERVICE_URL}/neko-client`;
+  const nekoUrl = e2bSandboxId
+    ? `${NEKO_CLIENT_BASE}/autoconnect.html?server=${encodeURIComponent(buildNekoUrl(e2bSandboxId))}&session=${encodeURIComponent(sessionId)}`
+    : (data.data?.nekoUrl || null);
 
   if (!sandboxId) {
     throw new Error("Sandbox service returned no sandbox ID");
@@ -344,15 +352,45 @@ export async function getOrCreateSandbox(
     );
   }
 
+  // Register media session with webrtc-media service (fire-and-forget)
+  fetch(`${MEDIA_SERVICE_URL}/v1/media/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      sandboxId,
+      e2bSandboxId,
+      userId,
+      nekoHost: e2bSandboxId ? `8333-${e2bSandboxId}.${SANDBOX_DOMAIN}` : null,
+    }),
+  }).catch((err) => console.warn("[e2b-manager] Media session registration failed:", err));
+
   return { sandboxId, e2bSandboxId, nekoUrl };
 }
 
 /**
  * Build sandbox env vars (Manus Layer 4 pattern).
  * Extracted to a function so it can be reused for both create and resume flows.
+ *
+ * Now async — fetches user secrets from DB and merges them into the env.
+ * User secrets are injected FIRST so platform vars can override if needed.
  */
-function buildSandboxEnv(proxyToken: string): Record<string, string> {
+async function buildSandboxEnv(proxyToken: string, userId?: string): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
+
+  // ── Layer 2: User secrets from Settings → Secrets (Manus .user_env pattern) ──
+  if (userId) {
+    try {
+      const { getUserSecrets } = await import("./user-secrets.js");
+      const secrets = await getUserSecrets(userId);
+      // User secrets go first — platform vars below can override
+      Object.assign(env, secrets);
+    } catch (err) {
+      console.warn("[e2b-manager] Failed to load user secrets:", err);
+    }
+  }
+
+  // ── Layer 4: Platform env vars (override user secrets) ──
   env.OPENAI_API_KEY = proxyToken;
   if (LLM_PROXY_URL) {
     env.OPENAI_BASE_URL = LLM_PROXY_URL;
@@ -481,8 +519,7 @@ export function getSessionIdBySandboxId(sandboxId: string): string | null {
 export function getTerminalServerUrlBySandboxId(sandboxId: string): string | null {
   for (const [, info] of sandboxCache) {
     if (info.sandboxId === sandboxId && info.e2bSandboxId) {
-      const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-      return `https://8330-${info.e2bSandboxId}.${domain}`;
+      return buildTerminalServerUrl(info.e2bSandboxId);
     }
   }
   return null;
@@ -510,6 +547,76 @@ export function getDatabaseNameBySandboxId(sandboxId: string): string | null {
   return null;
 }
 
+// ── Centralized URL builders (Manus domain parity) ─────────────────────
+// All sandbox URL construction goes through these helpers.
+// Manus uses manus.computer for dev, manus.space for production.
+// Rubic uses SANDBOX_DOMAIN for dev, DEPLOY_DOMAIN for production.
+
+const SANDBOX_DOMAIN = process.env.SANDBOX_DOMAIN || "e2b.dev";
+const DEPLOY_DOMAIN = process.env.DEPLOY_DOMAIN || "";
+
+/**
+ * Build a URL for an E2B sandbox port.
+ * Pattern: https://{port}-{e2bSandboxId}.{domain}
+ *
+ * Manus equivalent: https://{port}-{sandbox-id}.us2.manus.computer
+ */
+export function buildSandboxPortUrl(e2bSandboxId: string, port: number): string {
+  const domain = CODE_SERVER_DOMAIN || SANDBOX_DOMAIN;
+  return `https://${port}-${e2bSandboxId}.${domain}`;
+}
+
+/**
+ * Build a preview URL for a webdev project.
+ * Priority: PROXY_DOMAIN → SANDBOX_PROXY_URL → direct E2B
+ *
+ * Used by webdev.ts and deploy.ts for consistent URL generation.
+ */
+export function buildPreviewUrl(e2bSandboxId: string | null, port = 3000): string | undefined {
+  if (!e2bSandboxId) return undefined;
+  const proxyDomain = process.env.PROXY_DOMAIN || "";
+  const sandboxProxyUrl = process.env.SANDBOX_PROXY_URL || "";
+
+  if (proxyDomain) {
+    return `https://${port}-${e2bSandboxId}.${proxyDomain}`;
+  }
+  if (sandboxProxyUrl) {
+    return `${sandboxProxyUrl}/proxy/${e2bSandboxId}/${port}`;
+  }
+  return `https://${port}-${e2bSandboxId}.${SANDBOX_DOMAIN}`;
+}
+
+/**
+ * Build a terminal server URL for a sandbox.
+ * Terminal server runs on port 8330.
+ */
+export function buildTerminalServerUrl(e2bSandboxId: string): string {
+  return buildSandboxPortUrl(e2bSandboxId, 8330);
+}
+
+/**
+ * Build a Neko WebRTC server URL.
+ * Neko runs on port 8333.
+ */
+export function buildNekoUrl(e2bSandboxId: string): string {
+  return buildSandboxPortUrl(e2bSandboxId, 8333);
+}
+
+/**
+ * Get the deployment domain (for production-deployed sites).
+ * Returns empty string if not configured.
+ */
+export function getDeployDomain(): string {
+  return DEPLOY_DOMAIN;
+}
+
+/**
+ * Get the sandbox domain (for dev preview URLs).
+ */
+export function getSandboxDomain(): string {
+  return SANDBOX_DOMAIN;
+}
+
 // Database cleanup callback — registered by webdev.ts to avoid circular imports
 let dbCleanupFn: ((dbName: string) => Promise<void>) | null = null;
 
@@ -532,8 +639,7 @@ async function initializeSandbox(
   proxyToken: string,
   env: Record<string, string>
 ): Promise<void> {
-  const domain = process.env.SANDBOX_DOMAIN || "e2b.dev";
-  const baseUrl = `https://8330-${e2bSandboxId}.${domain}`;
+  const baseUrl = buildTerminalServerUrl(e2bSandboxId);
 
   // Poll /healthz until sandbox runtime is ready (max 60s)
   const maxRetries = 30;

@@ -8,7 +8,6 @@ import { completionRoutes } from "./routes/completions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { llmProxyRoutes } from "./routes/llm-proxy.js";
 import { uploadRoutes } from "./routes/upload.js";
-import { nekoClientRoutes } from "./routes/neko-client.js";
 import { webdevRoutes } from "./routes/webdev.js";
 import { codeServerRoutes } from "./routes/code-server.js";
 import { forgeRoutes } from "./routes/forge.js";
@@ -21,6 +20,7 @@ import { slideRoutes } from "./routes/slides.js";
 import { skillRoutes } from "./routes/skills.js";
 import { sandboxManagerRoutes } from "./routes/sandbox-manager.js";
 import { apiProxyRoutes } from "./routes/apiproxy.js";
+import { oauthRoutes } from "./routes/oauth.js";
 import { startCleanupLoop, stopCleanupLoop } from "./lib/e2b-manager.js";
 import { initRsaSigning } from "./lib/rsa-auth.js";
 
@@ -69,7 +69,6 @@ export async function buildApp() {
   await app.register(mediaRoutes);
   await app.register(llmProxyRoutes);
   await app.register(uploadRoutes);
-  await app.register(nekoClientRoutes);
   await app.register(webdevRoutes);
   await app.register(codeServerRoutes);
   await app.register(forgeRoutes);
@@ -82,21 +81,13 @@ export async function buildApp() {
   await app.register(skillRoutes);
   await app.register(sandboxManagerRoutes);
   await app.register(apiProxyRoutes);
-
-  // Remove X-Frame-Options for neko-client routes — must be embeddable in iframes.
-  // Helmet sets headers on raw response, so we must override at that level.
-  app.addHook("onSend", async (request, reply) => {
-    if (request.url.startsWith("/neko-client/")) {
-      reply.raw.removeHeader("X-Frame-Options");
-      reply.raw.removeHeader("Cross-Origin-Opener-Policy");
-    }
-  });
+  await app.register(oauthRoutes);
 
   return { app, port, host };
 }
 
 async function main() {
-  // 19 route plugins + shutdown listeners exceeds default 10
+  // 20 route plugins + shutdown listeners exceeds default 10
   process.setMaxListeners(25);
 
   // Initialize RSA signing for sandbox API calls

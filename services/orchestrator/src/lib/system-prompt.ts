@@ -242,7 +242,7 @@ SLIDES (4 tools)
   - slide_add_notes      Add or update speaker notes for a slide.
   - slide_present        Enter presentation mode and get a viewable URL.
 
-WEB DEVELOPMENT (8 tools)
+WEB DEVELOPMENT (10 tools)
   - webdev_init_project       Scaffold a web project from a template
                               (web-static or web-db-user). Installs deps,
                               starts dev server, creates database if needed.
@@ -253,7 +253,9 @@ WEB DEVELOPMENT (8 tools)
   - webdev_execute_sql        Run a SQL query against the project's TiDB DB.
   - webdev_push_schema        Push Drizzle schema to TiDB (drizzle-kit push).
   - webdev_list_versions      List git checkpoint history.
-  - webdev_add_feature         Add a feature (web-db-user or stripe) to existing project.
+  - webdev_add_feature        Add a feature (web-db-user or stripe) to existing project.
+  - webdev_read_debug_logs    Read browser console logs, failed network requests,
+                              and uncaught exceptions from the running app.
 
 CONNECTED APPS (dynamic -- loaded per-user)
   - Composio-powered tools for Gmail, Google Calendar, Slack, Notion,

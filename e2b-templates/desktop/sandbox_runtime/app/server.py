@@ -19,6 +19,7 @@ from .logger import get_logger
 from .router import register_routes
 from .helpers.rsa_auth import init_rsa, is_rsa_enabled, verify_body_signature
 from .helpers.env_manager import set_env_vars, write_secret
+from .ws import ws_endpoint, create_otp_token
 from ..runtime_version import VERSION
 
 logger = get_logger("server")
@@ -30,7 +31,7 @@ _init_data: dict[str, Any] = {}
 # Paths that skip RSA auth (health/version/docs + user-facing pre-auth endpoints)
 # Manus pattern: /code-server/auth and /cs/* are "frontend direct-sends, no [RSA] auth"
 # They use token-based auth (pre_auth_token) + cookie injection instead.
-_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json", "/neko/pre-auth", "/vnc/pre-auth", "/code-server/auth"}
+_SKIP_AUTH_PATHS = {"/healthz", "/version", "/health", "/docs", "/openapi.json", "/neko/pre-auth", "/vnc/pre-auth", "/code-server/auth", "/ws/token"}
 
 # Path prefixes that skip RSA auth (browser iframe loads /cs/* directly)
 _SKIP_AUTH_PREFIXES = ("/cs/",)
@@ -74,7 +75,8 @@ class LoggingMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] not in ("http",):
+            # Pass through WebSocket and lifespan scopes without logging
             await self.app(scope, receive, send)
             return
 
@@ -172,6 +174,17 @@ def create_app(internal: bool = False) -> FastAPI:
             session_id, user_id,
         )
         return {"ok": True, "session_id": session_id}
+
+    # ── WebSocket endpoint for push-based terminal output ─────────
+    if not internal:
+        @app.websocket("/ws")
+        async def ws_route(websocket):
+            await ws_endpoint(websocket)
+
+        @app.get("/ws/token")
+        async def ws_token():
+            token = create_otp_token()
+            return {"token": token}
 
     # Register all tool routes
     register_routes(app)

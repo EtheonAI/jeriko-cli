@@ -592,6 +592,7 @@ async def _build_page_snapshot() -> dict[str, Any]:
 
 async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
     """Route browser action to appropriate handler."""
+    global _browser, _context, _page, _playwright_instance
 
     if action == "navigate":
         page = await _ensure_browser()
@@ -784,7 +785,6 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "screenshot": screenshot}
 
     elif action == "restart":
-        global _browser, _context, _page, _playwright_instance
         if _browser:
             try:
                 await _browser.close()
@@ -936,7 +936,6 @@ async def _handle_action(action: str, body: dict[str, Any]) -> dict[str, Any]:
 
     elif action == "close":
         # Close the browser (destroy Playwright instance without restarting)
-        global _browser, _context, _page, _playwright_instance
         if _browser:
             try:
                 await _browser.close()

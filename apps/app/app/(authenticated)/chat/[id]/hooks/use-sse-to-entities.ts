@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import type { UIMessage } from "ai";
 import type { AppDispatch } from "@/lib/store";
 import { useAppDispatch } from "@/lib/store/hooks";
-import { upsertToolEvent } from "@/lib/store/slices/websocket.slice";
+import { upsertToolEvent, clearLiveTerminalChunks } from "@/lib/store/slices/websocket.slice";
 import type { ToolEventEntity } from "@/lib/store/slices/websocket.slice";
 import { setWorkspaceSidebarType } from "@/lib/store/slices/agentWorkspace.slice";
 import type { WorkspaceSidebarType } from "@/lib/store/slices/agentWorkspace.slice";
@@ -112,6 +112,9 @@ const WEBDEV_TOOLS_SET = new Set([
   "webdev_restart_server", "webdev_rollback_checkpoint", "webdev_execute_sql",
   "webdev_push_schema", "webdev_list_versions", "webdev_add_feature",
 ]);
+
+// Deploy tools that may return a published URL
+const DEPLOY_TOOLS_SET = new Set(["deploy_apply_deployment", "deploy_expose_port"]);
 
 // Slide tools that should populate slideEditor slice (ALL 4 slide tools, not just present)
 const SLIDE_TOOLS_SET = new Set(["slide_present", "slide_init", "slide_modify", "slide_add_notes"]);
@@ -533,6 +536,19 @@ function processMessages(
         }
       }
 
+      // ── 3b. Clear live terminal chunks when shell tool completes ──
+      // The orchestrator emits sandbox.terminal.chunk WebSocket events during execution.
+      // When the tool finishes, clear the accumulated live chunks so the selector
+      // uses the final tool output instead.
+      if (
+        (part.state === "output-available" || part.state === "output-error") &&
+        (toolName === "shell_exec" || toolName === "shell_view" || toolName === "shell_wait" ||
+         toolName === "shell_write_to_process" || toolName === "shell_kill_process" || toolName === "code_execute")
+      ) {
+        const terminalId = (args.id as string) || (args.session as string) || "default";
+        dispatch(clearLiveTerminalChunks({ sessionId, terminalId }));
+      }
+
       // ── 4. codeViewer (file tree + tabs) ──
       if (part.state === "output-available" && output) {
         const filePath = extractFilePath(args);
@@ -609,10 +625,16 @@ function processMessages(
               // Init creates a new project — set full project state
               const project: WebDevProject = {
                 id: typeof output.projectId === "string" ? output.projectId : part.toolCallId,
-                name: typeof output.name === "string" ? output.name : (typeof args.name === "string" ? args.name : "Untitled"),
+                name: typeof output.name === "string" ? output.name
+                  : typeof output.app_name === "string" ? output.app_name
+                  : typeof args.app_name === "string" ? args.app_name
+                  : "Untitled",
                 description: typeof output.description === "string" ? output.description : undefined,
                 url: typeof output.url === "string" ? output.url : undefined,
-                previewUrl: typeof output.previewUrl === "string" ? output.previewUrl : undefined,
+                previewUrl: typeof output.previewUrl === "string" ? output.previewUrl
+                  : typeof output.devServerUrl === "string" ? output.devServerUrl : undefined,
+                projectPath: typeof output.directory === "string" ? output.directory
+                  : typeof output.projectPath === "string" ? output.projectPath : undefined,
                 status: "deployed",
                 framework: typeof output.framework === "string" ? output.framework : (typeof args.framework === "string" ? args.framework : undefined),
                 createdAt: new Date().toISOString(),
@@ -620,12 +642,17 @@ function processMessages(
               };
               dispatch(setProject(project));
             } else if (toolName === "webdev_check_status") {
-              // Status check → update project status
+              // Status check → update project status + URLs
               const status = typeof output.status === "string" ? output.status as WebDevProject["status"] : undefined;
               const updates: Partial<WebDevProject> = { updatedAt: new Date().toISOString() };
               if (status) updates.status = status;
               if (typeof output.url === "string") updates.url = output.url;
               if (typeof output.previewUrl === "string") updates.previewUrl = output.previewUrl;
+              else if (typeof output.devServerUrl === "string") updates.previewUrl = output.devServerUrl;
+              else if (typeof (output.devServer as Record<string, unknown>)?.url === "string") {
+                updates.previewUrl = (output.devServer as Record<string, unknown>).url as string;
+              }
+              if (typeof output.projectPath === "string") updates.projectPath = output.projectPath;
               dispatch(updateProject(updates));
             } else if (toolName === "webdev_restart_server") {
               dispatch(updateProject({ status: "building", updatedAt: new Date().toISOString() }));
@@ -639,6 +666,17 @@ function processMessages(
               // save_checkpoint, rollback_checkpoint, list_versions, add_feature
               dispatch(updateProject({ updatedAt: new Date().toISOString() }));
             }
+          }
+        }
+
+        // ── 7b. Deploy tools — capture published URL for preview persistence ──
+        if (DEPLOY_TOOLS_SET.has(toolName)) {
+          const deployUrl = typeof output.url === "string" ? output.url
+            : typeof output.deployedUrl === "string" ? output.deployedUrl
+            : typeof output.s3Url === "string" ? output.s3Url
+            : undefined;
+          if (deployUrl) {
+            dispatch(updateProject({ previewUrl: deployUrl, updatedAt: new Date().toISOString() }));
           }
         }
 

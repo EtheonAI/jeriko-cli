@@ -14,6 +14,7 @@ export interface WebDevProject {
   description?: string;
   url?: string;
   previewUrl?: string;
+  projectPath?: string;
   status: "building" | "deployed" | "failed" | "idle";
   framework?: string;
   createdAt: string;

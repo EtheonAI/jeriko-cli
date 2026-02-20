@@ -402,6 +402,7 @@ export function ChatClient({
               onSelectTab={canvasState.onSelectTab}
               onCloseTab={canvasState.onCloseTab}
               previewUrl={canvasState.previewUrl}
+              projectPath={canvasState.projectPath}
               fileContents={canvasState.allFileContents}
               terminalOutput={canvasState.terminalOutput}
               liveTerminalOutput={e2bTerminal.output}

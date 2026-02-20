@@ -134,6 +134,7 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.19",
+    "@monaco-editor/react": "^4.7.0",
     "@assistant-ui/react": "^0.12.9",
     "@repo/auth": "workspace:*",
     "@repo/design-system": "workspace:*",

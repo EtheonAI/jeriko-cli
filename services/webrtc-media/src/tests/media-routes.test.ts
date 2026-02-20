@@ -6,7 +6,7 @@ describe("webrtc-media routes", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = buildApp();
+    app = await buildApp();
     await app.ready();
   });
 
@@ -14,45 +14,28 @@ describe("webrtc-media routes", () => {
     await app.close();
   });
 
-  it("creates and fetches a media session", async () => {
-    const create = await app.inject({
-      method: "POST",
-      url: "/v1/media/sessions",
-      payload: {
-        sessionId: "sess_1",
-        sandboxId: "sbx_1",
-        provider: "neko",
-      },
-    });
-
-    expect(create.statusCode).toBe(201);
-    const created = create.json() as { streamUrl: string };
-    expect(created.streamUrl).toContain("session=sbx_1");
-
-    const get = await app.inject({
+  it("health check returns ok", async () => {
+    const resp = await app.inject({
       method: "GET",
-      url: "/v1/media/sessions/by-session/sess_1",
+      url: "/health",
     });
 
-    expect(get.statusCode).toBe(200);
-    const got = get.json() as { sessionId: string; sandboxId: string };
-    expect(got.sessionId).toBe("sess_1");
-    expect(got.sandboxId).toBe("sbx_1");
+    expect(resp.statusCode).toBe(200);
+    const body = resp.json() as { status: string; service: string };
+    expect(body.status).toBe("ok");
+    expect(body.service).toBe("webrtc-media");
   });
 
-  it("stops media session", async () => {
-    const del = await app.inject({
-      method: "DELETE",
-      url: "/v1/media/sessions/by-session/sess_1",
-    });
-
-    expect(del.statusCode).toBe(200);
-
-    const missing = await app.inject({
+  it("ICE servers endpoint returns iceServers array", async () => {
+    const resp = await app.inject({
       method: "GET",
-      url: "/v1/media/sessions/by-session/sess_1",
+      url: "/v1/media/ice-servers",
     });
 
-    expect(missing.statusCode).toBe(404);
+    expect(resp.statusCode).toBe(200);
+    const body = resp.json() as { iceServers: unknown[]; ttl: number };
+    expect(body.iceServers).toBeInstanceOf(Array);
+    expect(body.iceServers.length).toBeGreaterThan(0);
+    expect(body.ttl).toBeGreaterThan(0);
   });
 });

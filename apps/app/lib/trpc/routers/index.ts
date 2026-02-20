@@ -20,6 +20,7 @@ import { websiteBuilderRouter } from "./websiteBuilder.router";
 import { skillsRouter } from "./skills.router";
 import { communityRouter } from "./community.router";
 import { knowledgeRouter } from "./knowledge.router";
+import { secretsRouter } from "./secrets.router";
 
 /**
  * This is the primary router for your server.
@@ -58,6 +59,8 @@ export const appRouter = createTRPCRouter({
   community: communityRouter,
   // Knowledge base
   knowledge: knowledgeRouter,
+  // User secrets vault (Manus parity: env vars injected into sandbox)
+  secrets: secretsRouter,
 });
 
 // Export type definition of API

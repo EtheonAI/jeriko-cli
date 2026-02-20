@@ -356,3 +356,29 @@ export {
   type Deployment,
   type NewDeployment,
 } from "./websiteBuilder";
+
+// Media Session schemas
+export {
+  mediaSessions,
+  mediaSessionsRelations,
+  type MediaSession,
+  type NewMediaSession,
+} from "./mediaSessions";
+
+// User Secrets schemas (Manus parity: per-user env var vault)
+export {
+  userSecrets,
+  userSecretsRelations,
+  type UserSecret,
+  type NewUserSecret,
+} from "./userSecrets";
+
+// WebDev Domains schemas (persistent domain management)
+export {
+  webdevDomains,
+  webdevDomainsRelations,
+  domainStatuses,
+  type DomainStatus,
+  type WebdevDomain,
+  type NewWebdevDomain,
+} from "./webdevDomains";

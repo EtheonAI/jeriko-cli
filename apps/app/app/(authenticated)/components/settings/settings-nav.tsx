@@ -7,6 +7,7 @@ import {
   CreditCardIcon,
   DatabaseIcon,
   HelpCircleIcon,
+  KeyIcon,
   LinkIcon,
   MailIcon,
   PaletteIcon,
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { id: "personalization", label: "Personalization", icon: PaletteIcon },
   { id: "skills", label: "Skills", icon: SparklesIcon },
   { id: "integrations", label: "Integrations", icon: LinkIcon },
+  { id: "secrets", label: "Secrets", icon: KeyIcon },
   { id: "help", label: "Get help", icon: HelpCircleIcon },
 ];
 

@@ -12,7 +12,7 @@ export const projectStatuses = ["idle", "building", "deployed", "failed"] as con
 export type BuilderProjectStatus = (typeof projectStatuses)[number];
 
 // Deployment platform enum values
-export const deploymentPlatforms = ["vercel", "netlify"] as const;
+export const deploymentPlatforms = ["vercel", "netlify", "s3"] as const;
 export type DeploymentPlatform = (typeof deploymentPlatforms)[number];
 
 // Deployment status enum values
@@ -95,11 +95,14 @@ export const deployments = pgTable("deployments", {
     .primaryKey()
     .$defaultFn(() => createId()),
   projectId: text("project_id").notNull(),
+  userId: text("user_id"),
+  sessionId: text("session_id"),
 
   // Deployment info
   platform: text("platform").$type<DeploymentPlatform>().notNull().default("vercel"),
   status: text("status").$type<DeploymentStatus>().notNull().default("queued"),
   url: text("url"),
+  s3Prefix: text("s3_prefix"),
   buildLog: text("build_log"),
   environment: text("environment").default("preview"),
   commitHash: text("commit_hash"),
