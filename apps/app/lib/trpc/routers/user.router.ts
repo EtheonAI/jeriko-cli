@@ -67,7 +67,10 @@ export const userRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(1).max(100).optional(),
-        image: z.string().url().optional().nullable(),
+        image: z.string().url().max(2048).refine(
+          (v) => v.startsWith("https://") || v.startsWith("http://"),
+          "Only HTTP(S) URLs allowed — data URIs are not accepted",
+        ).optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {

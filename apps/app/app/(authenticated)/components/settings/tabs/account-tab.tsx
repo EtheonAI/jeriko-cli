@@ -109,22 +109,26 @@ export function AccountTab({ user }: AccountTabProps) {
       return;
     }
 
-    if (!["image/jpeg", "image/png", "image/gif"].includes(file.type)) {
-      toast.error("Only JPG, PNG, or GIF images are allowed");
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+      toast.error("Only JPG, PNG, GIF, or WebP images are allowed");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      try {
-        await updateProfile({ image: dataUrl }).unwrap();
-        toast.success("Avatar updated");
-      } catch (error: any) {
-        toast.error(error?.data || error?.message || "Failed to update avatar");
+    try {
+      // Upload to S3 first, then store the URL (not the raw data URI)
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/avatar/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Upload failed");
       }
-    };
-    reader.readAsDataURL(file);
+      const { url } = await res.json();
+      await updateProfile({ image: url }).unwrap();
+      toast.success("Avatar updated");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update avatar");
+    }
   }, [updateProfile]);
 
   const handleDeleteAccount = useCallback(async () => {
