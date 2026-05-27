@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "cd ../../packages/database && pnpm db:studio",
-    "clean": "git clean -xdf .cache .turbo dist node_modules",
-    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+    "clean": "git clean -xdf .cache .turbo dist node_modules"
   },
   "devDependencies": {
-    "@repo/database": "workspace:*"
+    "@repo/database": "workspace:*",
+    "typescript": "^6.0.3"
   }
 }

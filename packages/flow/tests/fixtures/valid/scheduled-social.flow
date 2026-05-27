@@ -1,0 +1,40 @@
+flow: "0.1"
+name: scheduled_social
+
+goal: |
+  Create daily social posts, ask before publishing,
+  and track publication artifacts.
+
+permissions:
+  auto:
+    - read_public_web
+    - create_drafts
+  ask:
+    - publish_social_post
+  block:
+    - delete_data
+    - transfer_money
+
+jobs:
+  daily_content:
+    trigger:
+      type: schedule
+      cron: "0 10 * * MON-FRI"
+      timezone: America/Los_Angeles
+      max_runs_per_day: 1
+      misfire_policy: run_once
+    tasks:
+      - id: research
+        type: ai_task
+        worker: researcher
+        uses: [web.search]
+        output: [artifacts/research.json]
+        if_fail: continue_degraded
+      - id: approval
+        type: human_review
+        depends_on: [research]
+      - id: publish
+        type: tool_call
+        uses: [instagram.publish]
+        depends_on: [approval]
+        requires_approval: true

@@ -1,38 +1,42 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+type SharedTestConfigOptions = {
+  readonly include?: string[];
+  readonly setupFiles?: string[];
+};
+
+type ReactTestConfigOptions = SharedTestConfigOptions & {
+  readonly rootDir: string;
+};
+
+const defaultExcludes = ["node_modules", "dist", ".next", "e2e"];
 
 /**
  * Shared Vitest config for React/Next.js apps.
- * Usage in app vitest.config.mts:
+ *
+ * Usage:
  *   import { createReactConfig } from "@repo/testing";
- *   export default createReactConfig(__dirname);
+ *   export default createReactConfig({ rootDir: import.meta.dirname });
  */
-export function createReactConfig(rootDir: string) {
+export function createReactConfig({
+  include = ["tests/**/*.test.{ts,tsx}", "tests/**/*.spec.{ts,tsx}"],
+  rootDir,
+  setupFiles = [],
+}: ReactTestConfigOptions) {
   return defineConfig({
     plugins: [react()],
     test: {
       environment: "jsdom",
       globals: true,
-      include: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
-      exclude: ["node_modules", "dist", ".next", "e2e"],
-      setupFiles: [],
+      include,
+      exclude: defaultExcludes,
+      setupFiles,
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "html", "lcov"],
-        exclude: [
-          "node_modules",
-          "dist",
-          ".next",
-          "e2e",
-          "**/*.d.ts",
-          "**/*.test.*",
-          "**/*.spec.*",
-          "**/*.config.*",
-        ],
+        exclude: [...defaultExcludes, "**/*.d.ts", "**/*.test.*", "**/*.spec.*", "**/*.config.*"],
       },
     },
     resolve: {
@@ -45,18 +49,23 @@ export function createReactConfig(rootDir: string) {
 }
 
 /**
- * Shared Vitest config for Node.js services.
- * Usage in service vitest.config.ts:
- *   import { createServiceConfig } from "@repo/testing";
- *   export default createServiceConfig();
+ * Shared Vitest config for Node.js packages.
+ *
+ * Usage:
+ *   import { createNodeConfig } from "@repo/testing";
+ *   export default createNodeConfig();
  */
-export function createServiceConfig() {
+export function createNodeConfig({
+  include = ["tests/**/*.test.ts", "tests/**/*.spec.ts"],
+  setupFiles = [],
+}: SharedTestConfigOptions = {}) {
   return defineConfig({
     test: {
       globals: true,
       environment: "node",
-      include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
+      include,
       exclude: ["node_modules", "dist"],
+      setupFiles,
       coverage: {
         provider: "v8",
         reporter: ["text", "json", "html", "lcov"],
@@ -80,19 +89,3 @@ export function createServiceConfig() {
     },
   });
 }
-
-// Re-export vitest default config for backwards compatibility
-const config = defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./"),
-      "@repo": path.resolve(__dirname, "../../packages"),
-    },
-  },
-});
-
-export default config;

@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
+import { withPayload } from "@payloadcms/next/withPayload";
 
-// This file is a stub for modifying the Next.js configuration.
-// It's handy for supplementing the default CMS configuration.
-export const withCMS = (config: NextConfig) => config;
+export const withCMS = (config: NextConfig) => withPayload(config);

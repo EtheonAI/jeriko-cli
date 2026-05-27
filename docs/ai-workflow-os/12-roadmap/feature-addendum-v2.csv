@@ -1,0 +1,37 @@
+Phase,Workstream,Task ID,Task,Description,Type,Priority,Complexity,Acceptance Criteria
+P0,Product Core,ADD-001,Permanent Idea Memory,Create canonical IDEA_MEMORY.md to preserve all architecture/product ideas.,Docs/Product,P0,S,IDEA_MEMORY.md exists and is linked in project pack.
+P1,Event Context,ADD-002,Event Context Packet,"Standard packet for app/worker/workflow events with artifact refs, routing hints, cost, quality, and causality.",Backend,P0,M,Every task/event can emit normalized EventContextPacket.
+P1,Event Context,ADD-003,Task Reports,Every worker/subagent returns structured TaskReport after task execution.,Backend,P0,M,Task reports stored and rendered in run side panel.
+P1,Event Context,ADD-004,Context Router,"Route event context to dependent tasks, workflows, UI, and main AI only when rules require.",Backend,P0,L,Events trigger correct dependent tasks without waking main AI unnecessarily.
+P1,Event Context,ADD-005,Run Reflection Packet,Create compressed run summary for main AI after issue/rejection/cost/completion triggers.,AI/Backend,P0,M,Main AI receives reflection packet only on configured triggers.
+P1,Event Context,ADD-006,Worker-to-worker events,"Enable workers to notify downstream workers using typed events, not freeform chat.",Backend,P0,M,Image worker can notify scheduler worker through artifact.image.generated event.
+P2,UX,ADD-007,Workflow Side Panel,"Right-side live panel showing jobs, tasks, subworkers, events, artifacts, approvals, issues, and cost.",Frontend,P0,L,User can watch workflow progress without main chat waking.
+P2,UX,ADD-008,Per-chat notifications,"Notification settings per chat/workflow: approvals, issues, completions, cost warnings, patch suggestions.",Frontend/Backend,P1,M,User can configure notification rules per workflow/chat.
+P2,UX,ADD-009,Workflow Pulse Feed,Activity feed for all workflow events and important updates.,Frontend,P1,M,Pulse feed shows key events across workflows.
+P2,UX,ADD-010,Issue Cards,"Failure UX card with impact, fallback, recommended actions, retry/patch controls.",Frontend/Backend,P0,M,"Failures show as issue cards, not raw logs."
+P2,UX,ADD-011,Approval Cards,Approval UI linked to artifacts and event context.,Frontend/Backend,P0,M,User can approve/reject/edit external actions from card.
+P2,UX,ADD-012,Artifact Viewer Expansion,"Render images, markdown, JSON, CSV, scripts, stdout/stderr, reports, and generated assets.",Frontend,P0,M,Artifacts display correctly in run side panel and artifact tab.
+P3,Versioning,ADD-013,Chat/workflow version selector,Top-bar version selector per chat/workflow with current version and quick rollback.,Frontend/Backend,P0,M,User can view active workflow version and revert.
+P3,Versioning,ADD-014,Workflow version diffs,"Diff .flow, imports, scripts, permissions, memory, and compiled runtime changes.",Frontend/Backend,P1,L,Version diff shown before activation/revert.
+P3,Versioning,ADD-015,Named checkpoints,Allow user to checkpoint a workflow/chat state before major changes.,Frontend/Backend,P1,M,Checkpoint can be created and restored.
+P3,Versioning,ADD-016,Share workflow version,Share a version/template/run report with redaction controls.,Frontend/Backend/Security,P1,L,Shared link hides secrets and respects ACL.
+P3,Versioning,ADD-017,Fork workflow version,Create a new workflow from an existing version.,Backend/Frontend,P2,M,User can fork without copying connected credentials.
+P4,Editing,ADD-018,.flow renderer,"Render .flow into editable cards: triggers, jobs, tasks, permissions, tools, imports, budgets, reflection.",Frontend/Backend,P0,XL,User can inspect workflow without raw .flow.
+P4,Editing,ADD-019,Visual task inspector,"Click a task to edit type, worker, input, output, failure policy, approvals, budget, routing.",Frontend,P0,L,Task changes create FlowPatch.
+P4,Editing,ADD-020,FlowPatch Engine,Typed patch system for all workflow/manual/AI edits.,Backend,P0,L,Patches validate and create new workflow versions.
+P4,Editing,ADD-021,Natural-language workflow edits,User says changes in chat; main AI proposes FlowPatch; user applies.,AI/Backend/Frontend,P1,L,NL edit becomes validated patch and diff.
+P4,Editing,ADD-022,Advanced raw .flow editor,"Raw .flow view with validation, diff, repair with AI, and dry run.",Frontend/Backend,P2,L,Power users can edit .flow safely.
+P5,Workers,ADD-023,Worker Registry,"Registry of workers/subagents with capabilities, model, cost, latency, quality, failure rate.",Backend,P1,M,Runtime can choose worker by task policy.
+P5,Workers,ADD-024,Worker performance metrics,"Track approval rate, edit distance, verifier pass rate, cost, latency, failure rate.",Backend/Data,P1,M,Metrics available for routing and analytics.
+P5,Workers,ADD-025,Worker routing policy,"Support static, cost-optimized, quality-optimized, and fallback routing.",Backend,P2,L,Runtime chooses workers within .flow policy.
+P6,Modes,ADD-026,Runtime-only mode,Execute without waking main AI except user asks or critical failures.,Backend/UX,P1,M,Low-cost mode works.
+P6,Modes,ADD-027,Reflection mode,Default mode: main AI receives reflection packets on configured triggers.,Backend/AI,P0,M,Main AI patches only when needed.
+P6,Modes,ADD-028,Live orchestration mode,Premium/debug mode where main AI can participate during run.,Backend/AI/Billing,P2,L,Can enable per run with cost warning.
+P7,Sharing,ADD-029,Share run report,"Share read-only run summary, artifacts, and issue cards with permission controls.",Frontend/Backend,P1,M,Shared run link works without exposing secrets.
+P7,Sharing,ADD-030,Team workflow library,Private/team library of saved flows/templates.,Frontend/Backend,P2,L,Team members can reuse approved workflows.
+P8,Notifications,ADD-031,Notification destinations,"In-app, email, Slack, SMS later, webhook later.",Backend/Frontend,P1,M,Per-chat notification routing works.
+P8,Notifications,ADD-032,Notification escalation,Escalate unresolved approvals/issues after timeout.,Backend,P2,M,Escalation rules trigger correctly.
+P8,Notifications,ADD-033,Notification digest,Daily/weekly digest per chat/workflow.,Backend/Frontend,P2,M,Digest summarizes runs and issues.
+P9,Future,ADD-034,Voice/calling worker,Future worker for calls/text-to-voice workflows.,AI/Integration,P3,XL,Research/build after core platform works.
+P9,Future,ADD-035,External workflow API,API/webhooks for external systems to start workflows or emit event context.,Backend/API,P2,L,External apps can trigger workflows safely.
+P9,Future,ADD-036,Internal ECP-like protocol,Internal Event Context Protocol for apps-to-workflows and worker-to-worker context packets.,Backend/Architecture,P2,XL,Internal protocol docs and SDK exist.

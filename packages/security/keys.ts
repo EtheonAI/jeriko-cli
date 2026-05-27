@@ -9,4 +9,5 @@ export const keys = () =>
     runtimeEnv: {
       ARCJET_KEY: process.env.ARCJET_KEY,
     },
+    emptyStringAsUndefined: true,
   });

@@ -9,4 +9,5 @@ export const keys = () =>
     runtimeEnv: {
       LIVEBLOCKS_SECRET: process.env.LIVEBLOCKS_SECRET,
     },
+    emptyStringAsUndefined: true,
   });

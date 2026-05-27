@@ -1,0 +1,13 @@
+# expected: FLOW_PARSE_UNTERMINATED_INLINE_LIST
+flow: "0.1"
+name: unclosed_inline_list
+goal: "Inline list does not close."
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task
+        uses: [web.search

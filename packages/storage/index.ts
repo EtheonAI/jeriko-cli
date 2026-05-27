@@ -12,6 +12,8 @@ import { getStorageConfig, type StorageConfig } from "./keys";
 
 export { getStorageConfig, type StorageConfig } from "./keys";
 
+const S3_DELETE_OBJECTS_LIMIT = 1000;
+
 let _client: S3Client | null = null;
 let _config: StorageConfig | null = null;
 
@@ -58,7 +60,10 @@ export function getVersionStorageKey(
 }
 
 /** Calculate SHA-256 checksum of file buffer */
-export function calculateChecksum(buffer: Buffer | Uint8Array, algorithm: string = "sha256"): string {
+export function calculateChecksum(
+  buffer: Buffer | Uint8Array,
+  algorithm: string = "sha256"
+): string {
   const hash = createHash(algorithm);
   hash.update(buffer);
   return hash.digest("hex");
@@ -95,13 +100,13 @@ export async function uploadFile(
 
 /**
  * Upload a file for permanent public hosting.
- * Uses public-read ACL when bucket supports it, immutable cache headers.
+ * Assumes public access is controlled by bucket policy or CDN configuration.
  * Returns the permanent public URL (CDN preferred, then direct S3 URL).
  */
 export async function uploadPublicFile(
   key: string,
   body: Buffer | Uint8Array,
-  contentType?: string,
+  contentType?: string
 ): Promise<string> {
   const client = getClient();
   const config = getConfig();
@@ -124,14 +129,14 @@ export async function uploadPublicFile(
 export function getPublicUrl(key: string): string {
   const config = getConfig();
   if (config.cdnUrl) {
-    return `${config.cdnUrl}/${key}`;
+    return joinUrlPath(config.cdnUrl, key);
   }
   if (config.endpoint) {
     return config.forcePathStyle
-      ? `${config.endpoint}/${config.bucket}/${key}`
-      : `${config.endpoint}/${key}`;
+      ? joinUrlPath(config.endpoint, config.bucket, key)
+      : joinUrlPath(config.endpoint, key);
   }
-  return `https://${config.bucket}.s3.${config.region}.amazonaws.com/${key}`;
+  return joinUrlPath(`https://${config.bucket}.s3.${config.region}.amazonaws.com`, key);
 }
 
 /** Get the raw storage config (for building URLs) */
@@ -148,13 +153,17 @@ export function getCdnUrl(key: string): string | null {
     _config = getStorageConfig();
   }
   if (_config.cdnUrl) {
-    return `${_config.cdnUrl}/${key}`;
+    return joinUrlPath(_config.cdnUrl, key);
   }
   return null;
 }
 
 /** Generate a presigned download URL or CDN URL for public files */
-export async function getPresignedUrl(key: string, expiresIn: number = 3600, isPublic: boolean = false): Promise<string> {
+export async function getPresignedUrl(
+  key: string,
+  expiresIn: number = 3600,
+  isPublic: boolean = false
+): Promise<string> {
   // For public files, prefer CDN URL if available
   if (isPublic) {
     const cdnUrl = getCdnUrl(key);
@@ -179,7 +188,7 @@ export async function getPresignedUrl(key: string, expiresIn: number = 3600, isP
 export async function getPresignedUploadUrl(
   key: string,
   contentType?: string,
-  expiresIn: number = 3600,
+  expiresIn: number = 3600
 ): Promise<string> {
   const client = getClient();
   return getSignedUrl(
@@ -208,14 +217,19 @@ export async function deleteFile(key: string): Promise<void> {
 export async function deleteFiles(keys: string[]): Promise<void> {
   if (keys.length === 0) return;
   const client = getClient();
-  await client.send(
-    new DeleteObjectsCommand({
-      Bucket: getBucket(),
-      Delete: {
-        Objects: keys.map((Key) => ({ Key })),
-      },
-    })
-  );
+  const bucket = getBucket();
+
+  for (let index = 0; index < keys.length; index += S3_DELETE_OBJECTS_LIMIT) {
+    const chunk = keys.slice(index, index + S3_DELETE_OBJECTS_LIMIT);
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: chunk.map((Key) => ({ Key })),
+        },
+      })
+    );
+  }
 }
 
 /** List files under a prefix */
@@ -223,21 +237,41 @@ export async function listFiles(
   prefix: string
 ): Promise<{ key: string; size: number; lastModified: Date }[]> {
   const client = getClient();
-  const result = await client.send(
-    new ListObjectsV2Command({
-      Bucket: getBucket(),
-      Prefix: prefix,
-    })
-  );
-  return (result.Contents ?? []).map((obj) => ({
-    key: obj.Key!,
-    size: obj.Size ?? 0,
-    lastModified: obj.LastModified ?? new Date(),
-  }));
+  const bucket = getBucket();
+  const files: { key: string; size: number; lastModified: Date }[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const result = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+      })
+    );
+
+    for (const obj of result.Contents ?? []) {
+      if (!obj.Key) {
+        continue;
+      }
+      files.push({
+        key: obj.Key,
+        size: obj.Size ?? 0,
+        lastModified: obj.LastModified ?? new Date(),
+      });
+    }
+
+    continuationToken = result.NextContinuationToken;
+  } while (continuationToken);
+
+  return files;
 }
 
 /** Fetch the first N bytes of a file directly from S3 (no presigned URL round-trip) */
-export async function getFileContentHead(key: string, maxBytes: number = 3072): Promise<string | null> {
+export async function getFileContentHead(
+  key: string,
+  maxBytes: number = 3072
+): Promise<string | null> {
   const client = getClient();
   try {
     const result = await client.send(
@@ -252,4 +286,22 @@ export async function getFileContentHead(key: string, maxBytes: number = 3072): 
   } catch {
     return null;
   }
+}
+
+function joinUrlPath(baseUrl: string, ...segments: string[]): string {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const encodedSegments = segments
+    .filter((segment) => segment.length > 0)
+    .map(encodeStorageKey)
+    .join("/");
+
+  return encodedSegments ? `${normalizedBaseUrl}/${encodedSegments}` : normalizedBaseUrl;
+}
+
+function encodeStorageKey(key: string): string {
+  return key
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join("/");
 }

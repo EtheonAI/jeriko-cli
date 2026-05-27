@@ -9,4 +9,5 @@ export const keys = () =>
     runtimeEnv: {
       DATABASE_URL: process.env.DATABASE_URL,
     },
+    emptyStringAsUndefined: true,
   });

@@ -1,10 +1,15 @@
-import { withLogtail } from "@logtail/next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withBetterStack } from "@logtail/next";
 import { keys } from "./keys";
 
-export const sentryConfig: Parameters<typeof withSentryConfig>[1] = {
-  org: keys().SENTRY_ORG,
-  project: keys().SENTRY_PROJECT,
+const observabilityEnv = keys();
+type WithSentryConfig = typeof import("@sentry/nextjs").withSentryConfig;
+type ObservabilityNextConfig = Parameters<WithSentryConfig>[0] & {
+  transpilePackages?: string[];
+};
+
+export const sentryConfig: Parameters<WithSentryConfig>[1] = {
+  org: observabilityEnv.SENTRY_ORG,
+  project: observabilityEnv.SENTRY_PROJECT,
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
@@ -37,13 +42,35 @@ export const sentryConfig: Parameters<typeof withSentryConfig>[1] = {
   automaticVercelMonitors: true,
 };
 
-export const withSentry = (sourceConfig: object): object => {
+export const withSentry = async (
+  sourceConfig: ObservabilityNextConfig
+): Promise<ObservabilityNextConfig> => {
+  const { withSentryConfig } = await import("@sentry/nextjs");
+  const existingTranspilePackages = sourceConfig.transpilePackages ?? [];
   const configWithTranspile = {
     ...sourceConfig,
-    transpilePackages: ["@sentry/nextjs"],
+    transpilePackages: Array.from(new Set([...existingTranspilePackages, "@sentry/nextjs"])),
   };
 
   return withSentryConfig(configWithTranspile, sentryConfig);
 };
 
-export const withLogging = (config: object): object => withLogtail(config);
+const hasBetterStackEndpoint = Boolean(
+  observabilityEnv.NEXT_PUBLIC_BETTER_STACK_CUSTOM_ENDPOINT ||
+  observabilityEnv.NEXT_PUBLIC_BETTER_STACK_INGESTING_URL ||
+  observabilityEnv.BETTER_STACK_INGESTING_URL ||
+  observabilityEnv.BETTER_STACK_INGEST_ENDPOINT ||
+  observabilityEnv.NEXT_PUBLIC_LOGTAIL_URL ||
+  observabilityEnv.LOGTAIL_URL
+);
+
+const hasBetterStackToken = Boolean(
+  observabilityEnv.NEXT_PUBLIC_BETTER_STACK_CUSTOM_ENDPOINT ||
+  observabilityEnv.NEXT_PUBLIC_BETTER_STACK_SOURCE_TOKEN ||
+  observabilityEnv.BETTER_STACK_SOURCE_TOKEN ||
+  observabilityEnv.NEXT_PUBLIC_LOGTAIL_SOURCE_TOKEN ||
+  observabilityEnv.LOGTAIL_SOURCE_TOKEN
+);
+
+export const withLogging = (config: ObservabilityNextConfig): ObservabilityNextConfig =>
+  hasBetterStackEndpoint && hasBetterStackToken ? withBetterStack(config) : config;

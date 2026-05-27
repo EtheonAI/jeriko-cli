@@ -1,0 +1,14 @@
+# expected: FLOW_PARSE_DUPLICATE_KEY
+flow: "0.1"
+name: duplicate_task_id
+goal: "Duplicate task IDs should fail."
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task
+      - id: draft
+        type: human_review

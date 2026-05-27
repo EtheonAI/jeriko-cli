@@ -8,6 +8,10 @@ let typesenseClient: Client | null = null;
 
 export function getTypesenseClient(): Client {
   if (!typesenseClient) {
+    if (!env.TYPESENSE_API_KEY) {
+      throw new Error("TYPESENSE_API_KEY is required to use search indexing.");
+    }
+
     typesenseClient = new Typesense.Client({
       nodes: [
         {

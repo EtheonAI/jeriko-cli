@@ -1,17 +1,5 @@
-# Architecture freeze during Rubic refactor (Phase 0-8)
-# All changes to architecture require approval from refactor team
-
-# Services - no new services, no architectural changes
-/services/ @refactor-2026-team
-
-# Packages - no new packages, no breaking changes
-/packages/ @refactor-2026-team
-
-# Redux slices - no new slices during refactor
-/apps/app/lib/store/slices/ @refactor-2026-team
-
-# API routes - no new endpoints during freeze
-/apps/app/app/api/ @refactor-2026-team
-
-# Database schema - no migrations during freeze
-/packages/database/src/schema/ @refactor-2026-team
+# CODEOWNERS intentionally has no active owners during the AI Workflow OS reset.
+#
+# The old Phase 0-8 refactor ownership team was removed with the legacy
+# refactor docs. Add concrete GitHub users or teams here when repo ownership is
+# finalized for the new platform.

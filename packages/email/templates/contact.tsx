@@ -1,14 +1,4 @@
-import {
-  Body,
-  Container,
-  Head,
-  Hr,
-  Html,
-  Preview,
-  Section,
-  Tailwind,
-  Text,
-} from "@react-email/components";
+import { Body, Container, Head, Hr, Html, Preview, Section, Tailwind, Text } from "react-email";
 
 type ContactTemplateProps = {
   readonly name: string;
@@ -16,11 +6,7 @@ type ContactTemplateProps = {
   readonly message: string;
 };
 
-export const ContactTemplate = ({
-  name,
-  email,
-  message,
-}: ContactTemplateProps) => (
+export const ContactTemplate = ({ name, email, message }: ContactTemplateProps) => (
   <Tailwind>
     <Html>
       <Head />

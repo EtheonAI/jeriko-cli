@@ -1,18 +1,21 @@
+import "server-only";
+
 import { cache } from "react";
 import { auth } from "@repo/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { env } from "@/env";
 
 /**
  * Cached session getter — deduplicates across layout + page in a single request.
  * Returns the session or null. Does NOT redirect.
  */
 export const getSession = cache(async () => {
-  if (process.env.E2E_AUTH_BYPASS === "true") {
+  if (env.E2E_AUTH_BYPASS === "true") {
     return {
       user: {
         id: "e2e-user",
-        email: "e2e@rubic.dev",
+        email: "e2e@jeriko.dev",
         name: "E2E User",
         image: null,
       },

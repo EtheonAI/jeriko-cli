@@ -66,7 +66,13 @@
     },
     {
       "description": "Group all testing updates",
-      "matchPackagePatterns": ["vitest", "@testing-library/*", "@vitejs/*", "jsdom", "@playwright/*"],
+      "matchPackagePatterns": [
+        "vitest",
+        "@testing-library/*",
+        "@vitejs/*",
+        "jsdom",
+        "@playwright/*"
+      ],
       "groupName": "Testing"
     },
     {
@@ -90,11 +96,6 @@
       "groupName": "GitHub Actions",
       "automerge": true,
       "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Pin Drizzle ORM to avoid breaking changes",
-      "matchPackageNames": ["drizzle-orm"],
-      "allowedVersions": "0.38.x"
     },
     {
       "description": "Pin Zod to v4.x",

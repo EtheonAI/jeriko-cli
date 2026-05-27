@@ -1,72 +1,90 @@
-import merge from "lodash.merge";
 import type { Metadata } from "next";
 
-type MetadataGenerator = Omit<Metadata, "description" | "title"> & {
+export type MetadataGenerator = Omit<
+  Metadata,
+  | "applicationName"
+  | "authors"
+  | "creator"
+  | "description"
+  | "openGraph"
+  | "publisher"
+  | "title"
+  | "twitter"
+> & {
   title: string;
   description: string;
   image?: string;
+  openGraph?: Metadata["openGraph"];
+  twitter?: Metadata["twitter"];
 };
 
-const applicationName = "next-forge";
+const applicationName = "Jeriko";
 const author: Metadata["authors"] = {
-  name: "Vercel",
-  url: "https://vercel.com/",
+  name: "Jeriko",
 };
-const publisher = "Vercel";
-const twitterHandle = "@vercel";
-const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+const publisher = "Jeriko";
 
 export const createMetadata = ({
   title,
   description,
   image,
+  openGraph,
+  twitter,
   ...properties
 }: MetadataGenerator): Metadata => {
   const parsedTitle = `${title} | ${applicationName}`;
-  const defaultMetadata: Metadata = {
+  const formatDetection =
+    typeof properties.formatDetection === "object" && properties.formatDetection !== null
+      ? properties.formatDetection
+      : {};
+  const appleWebApp =
+    typeof properties.appleWebApp === "object" && properties.appleWebApp !== null
+      ? properties.appleWebApp
+      : {};
+  const imageMetadata = image
+    ? [
+        {
+          alt: title,
+          height: 630,
+          url: image,
+          width: 1200,
+        },
+      ]
+    : undefined;
+
+  return {
+    ...properties,
     title: parsedTitle,
     description,
     applicationName,
-    metadataBase: productionUrl
-      ? new URL(`${protocol}://${productionUrl}`)
-      : undefined,
     authors: [author],
     creator: author.name,
     formatDetection: {
       telephone: false,
+      ...formatDetection,
     },
     appleWebApp: {
       capable: true,
       statusBarStyle: "default",
       title: parsedTitle,
+      ...appleWebApp,
     },
     openGraph: {
-      title: parsedTitle,
-      description,
       type: "website",
       siteName: applicationName,
       locale: "en_US",
+      ...openGraph,
+      title: parsedTitle,
+      description,
+      ...(imageMetadata ? { images: imageMetadata } : {}),
     },
     publisher,
     twitter: {
       card: "summary_large_image",
-      creator: twitterHandle,
+      ...twitter,
+      title: parsedTitle,
+      description,
+      ...(imageMetadata ? { images: imageMetadata } : {}),
     },
   };
-
-  const metadata: Metadata = merge(defaultMetadata, properties);
-
-  if (image && metadata.openGraph) {
-    metadata.openGraph.images = [
-      {
-        url: image,
-        width: 1200,
-        height: 630,
-        alt: title,
-      },
-    ];
-  }
-
-  return metadata;
 };

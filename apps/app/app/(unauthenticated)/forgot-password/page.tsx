@@ -1,77 +1,48 @@
-"use client";
-
-import { Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { Loader2, KeyRound } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import Link from "next/link";
+import { AuthPageShell } from "@/app/(unauthenticated)/_components/auth-page-shell";
+import { ForgotPasswordForm } from "./_components/forgot-password-form";
+import { getDefaultEmail } from "./_lib/default-email";
 
-import { ForgotPasswordForm } from "@/components/auth/forms";
-import { AuthHeader } from "../components/auth-header";
-import { AuthFooter } from "../components/auth-footer";
+type ForgotPasswordPageProps = {
+  searchParams: Promise<{
+    email?: string | string[];
+  }>;
+};
 
-function ForgotPasswordContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+export default async function ForgotPasswordPage({ searchParams }: ForgotPasswordPageProps) {
+  const { email } = await searchParams;
+  const defaultEmail = getDefaultEmail(email);
 
   return (
-    <div className="flex w-full max-w-sm flex-col gap-6">
-      {/* Icon */}
-      <div className="flex justify-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
-          <KeyRound className="h-8 w-8 text-white" />
+    <AuthPageShell>
+      <div className="flex w-full max-w-sm flex-col gap-6">
+        <div className="flex justify-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-800">
+            <KeyRound className="h-8 w-8 text-white" />
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            Forgot your password?
+          </h1>
+          <p className="text-sm text-neutral-400">
+            Enter your email address and we&apos;ll send you a link to reset your password.
+          </p>
+        </div>
+
+        <ForgotPasswordForm defaultEmail={defaultEmail} redirectTo="/reset-password" />
+
+        <div className="text-center">
+          <Link
+            className="text-sm text-neutral-400 transition-colors hover:text-white"
+            href="/login"
+          >
+            Back to sign in
+          </Link>
         </div>
       </div>
-
-      {/* Header */}
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Forgot your password?
-        </h1>
-        <p className="text-sm text-neutral-400">
-          Enter your email address and we'll send you a link to reset your
-          password.
-        </p>
-      </div>
-
-      {/* Form */}
-      <ForgotPasswordForm
-        redirectTo="/reset-password"
-        onSuccess={() => {
-          // The form handles showing success state
-        }}
-      />
-
-      {/* Back Link */}
-      <div className="text-center">
-        <Link
-          href="/login"
-          className="text-sm text-neutral-400 hover:text-white transition-colors"
-        >
-          Back to sign in
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-export default function ForgotPasswordPage() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <AuthHeader />
-
-      <main className="flex flex-1 flex-col items-center justify-center px-4 pb-24">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-white" />
-            </div>
-          }
-        >
-          <ForgotPasswordContent />
-        </Suspense>
-      </main>
-
-      <AuthFooter />
-    </div>
+    </AuthPageShell>
   );
 }

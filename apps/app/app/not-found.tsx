@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Page Not Found | Rubic",
+  title: "Page Not Found | Jeriko",
 };
 
 export default function NotFound() {
@@ -20,7 +20,7 @@ export default function NotFound() {
         </p>
       </div>
       <Button asChild variant="outline">
-        <Link href="/">Go home</Link>
+        <Link href="/">Go to dashboard</Link>
       </Button>
     </div>
   );

@@ -6,7 +6,13 @@ export const env = createEnv({
     TYPESENSE_HOST: z.string().default("localhost"),
     TYPESENSE_PORT: z.coerce.number().default(8108),
     TYPESENSE_PROTOCOL: z.enum(["http", "https"]).default("http"),
-    TYPESENSE_API_KEY: z.string().min(1),
+    TYPESENSE_API_KEY: z.string().min(1).optional(),
   },
-  experimental__runtimeEnv: {},
+  runtimeEnv: {
+    TYPESENSE_HOST: process.env.TYPESENSE_HOST,
+    TYPESENSE_PORT: process.env.TYPESENSE_PORT,
+    TYPESENSE_PROTOCOL: process.env.TYPESENSE_PROTOCOL,
+    TYPESENSE_API_KEY: process.env.TYPESENSE_API_KEY,
+  },
+  emptyStringAsUndefined: true,
 });

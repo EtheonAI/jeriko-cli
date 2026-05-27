@@ -1,0 +1,9 @@
+# expected: FLOW_PARSE_TAB_INDENT
+flow: "0.1"
+name: bad_tab_indent
+goal: "Tabs are not valid indentation."
+
+jobs:
+	main:
+	  trigger:
+	    type: manual

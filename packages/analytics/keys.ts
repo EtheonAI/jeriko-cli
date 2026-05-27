@@ -4,8 +4,8 @@ import { z } from "zod";
 export const keys = () =>
   createEnv({
     client: {
-      NEXT_PUBLIC_POSTHOG_KEY: z.string().startsWith("phc_"),
-      NEXT_PUBLIC_POSTHOG_HOST: z.string().url(),
+      NEXT_PUBLIC_POSTHOG_KEY: z.string().startsWith("phc_").optional(),
+      NEXT_PUBLIC_POSTHOG_HOST: z.string().url().default("https://us.i.posthog.com"),
       NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().startsWith("G-").optional(),
     },
     runtimeEnv: {
@@ -13,4 +13,5 @@ export const keys = () =>
       NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
     },
+    emptyStringAsUndefined: true,
   });

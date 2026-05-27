@@ -1,0 +1,477 @@
+AI Workflow OS
+Full Product + Technical Brief for Codex
+A .flow-based autonomous workflow runtime where AI creates, runs, monitors, adapts, and improves real workflows.
+
+
+Document purpose
+Audience
+Status
+Give Codex a complete understanding of the product concept, architecture, build plan, UX, and runtime behavior.
+Codex / engineering agent / full-stack implementer
+Strategy + architecture brief; not final production spec
+
+Core thesis: The user describes work. The main AI creates a persistent .flow operating file. A durable runtime executes the workflow with scoped workers, tools, scripts, events, approvals, artifacts, issue cards, and reflection packets. The system improves the workflow over time without waking the main AI for every deterministic step.
+
+Table of Contents
+1. Executive Summary
+2. The Product Concept
+3. Why This Is Different
+4. Business Thesis and Target Users
+5. The .flow Operating File
+6. Full Runtime Lifecycle
+7. Main AI, Workers, and Subagents
+8. Event Context Layer
+9. Task Reports, Issue Cards, and Reflection Packets
+10. Inngest, Vercel Sandbox, Tools, and App Integrations
+11. Custom Code Execution
+12. Storage, Database, Artifacts, and Versioning
+13. UX/UI: Chat, Side Panel, Notifications, and Sharing
+14. Billing, Credits, Cost Control, and Limits
+15. Security, Permissions, and Safety
+16. MVP Build Plan for Codex
+17. Example Workflows
+18. Implementation Checklist
+19. Open Questions and Final Notes
+
+1. Executive Summary
+AI Workflow OS is a new architecture for autonomous AI workflows. The product is not a chatbot, not a visual node builder, not a generic agent framework, and not a Manus clone. The product is a .flow-based runtime where the AI writes a persistent workflow operating file and the platform executes it safely, repeatedly, and observably.
+Main AI / Compiler: understands the user goal and creates or updates the .flow file.
+Runtime: executes the compiled .flow through Inngest and deterministic handlers.
+Workers/Subagents: perform scoped tasks such as research, writing, image generation, coding, verification, analytics, and memory patches.
+Tool Router: calls apps through Composio or direct APIs while enforcing permissions and approvals.
+Vercel Sandbox: runs generated code and file-processing scripts safely outside production.
+Event Context Layer: routes structured context between tasks, workflows, apps, workers, and the main AI only when needed.
+UX: chat for commands and a side panel for live workflow operations.
+The key product behavior: the workflow is workflow-aware, task-aware, event-aware, failure-aware, permission-aware, and improvement-aware. It can continue when optional tasks fail, raise issue cards, ask approval before risky actions, and propose patches after runs.
+2. The Product Concept
+The product turns a natural-language goal into a persistent autonomous workflow. The goal is not merely to make an AI use tools; the goal is to create a reusable operating contract that defines how work should be done over time.
+User prompt
+  → Main AI creates workflow.flow
+  → Parser validates it
+  → Compiler creates runtime JSON
+  → Inngest runs jobs/tasks durably
+  → Workers execute scoped tasks
+  → Tools/apps/scripts/artifacts/events connect the work
+  → Issue cards and approvals manage risk
+  → Reflection packets improve the workflow
+
+Old pattern
+New pattern
+Human builds workflow; AI executes inside it
+AI creates the workflow; runtime executes it safely
+One big agent reasons repeatedly
+.flow stores the plan; AI is used only where needed
+Failures hidden in logs
+Failures become issue cards with recovery actions
+Manual node debugging
+Task reports, event context, and reflection packets explain what happened
+Repeated context burn
+Persistent instructions/imports/scripts reduce repeated reasoning
+
+3. Why This Is Different
+The app should not be positioned as “better n8n” or “better Manus.” It should be positioned as an autonomous workflow operating runtime. Competitors have pieces: workflow builders, agent frameworks, tool connectors, durable execution, browser agents, AI assistants. The unique combination is the closed-loop architecture.
+AI-authored .flow operating contract.
+One generic executor, not custom code per customer workflow.
+Scoped workers instead of one free-roaming orchestrator.
+Typed Event Context Packets for task-to-task and workflow-to-workflow communication.
+Task Reports for every subagent/worker execution.
+Issue Cards for failures and degraded-mode operation.
+Reflection Packets routed back to the main AI only when needed.
+Workflow, memory, tool-routing, and instruction patches over time.
+Side panel that shows work live without waking the main AI constantly.
+Market category
+What they usually provide
+Our distinction
+Visual workflow tools
+Node/canvas automation, manual configuration
+AI writes .flow; runtime executes; issues/patches are first-class
+Agent frameworks
+Developer builds agents/tasks/graphs
+End-user prompt creates the operating workflow
+Tool connector layers
+App/tool access and auth
+Tool access is one layer; workflow state/recovery is ours
+Autonomous agents
+Broad agent loop and high token burn
+Compile once, scoped workers, deterministic runtime where possible
+AI assistants
+Assistant tasks and integrations
+Persistent workflow contracts, events, artifacts, issue cards, versioning
+
+4. Business Thesis and Target Users
+The business thesis is that people want autonomous work done, but current options are either too manual, too expensive, too black-box, too developer-heavy, or too brittle. The product should start focused, then expand horizontally once the runtime proves reliable.
+Initial wedge: founders, operators, agencies, solo developers, SMB teams who want recurring workflows without building nodes.
+Best early workflows: social/content operations, inbox drafting, lead generation, competitor monitoring, inventory/email/CRM workflows, weekly reports.
+Enterprise later: requires audit logs, SSO, strict RBAC, model governance, retention controls, and compliance evidence.
+Bootstrapped path: hard-capped free credits, $19–$99 individual tiers, team/business plans after proof.
+Plan
+Target
+Included concept
+Free beta
+Early testers
+20 credits, 1 workflow, manual runs, approval required
+Starter $19
+Solo users
+3 workflows, 150 credits, 1 scheduled workflow
+Pro $49
+Operators/founders
+10 workflows, 600 credits, scheduled runs, artifacts/history
+Operator $99
+Heavy users
+25 workflows, 1,500 credits, higher concurrency
+Team/Business
+Teams/agencies
+Shared workflows, team approvals, audit logs, shared credits
+
+5. The .flow Operating File
+.flow is a restricted YAML-like instruction file. The AI writes it, the platform parses and validates it, then the compiler converts it into runtime JSON. The runtime executes JSON, not raw text. The file extension gives the product identity, while the syntax stays AI-friendly.
+Restricted YAML-like surface syntax.
+Own vocabulary: goal, triggers, jobs, tasks, imports, permissions, tools, if_fail, emit, reflection, budget.
+Reject unsafe YAML features such as anchors, aliases, custom tags, multi-document YAML, unknown keys, unbounded loops, and external actions without approval.
+Use imported .md files for deep instructions: brand.md, memory.md, writer.md, platform.md, validation.md.
+Use scripts/ for deterministic custom code and artifacts/ for outputs.
+flow: "0.1"
+name: social_media_manager
+
+goal: |
+  Create daily social posts, generate image assets,
+  ask approval before publishing, track analytics,
+  and improve weekly.
+
+imports:
+  brand: brand.md
+  writer: instructions/writer.md
+  image: instructions/image.md
+  instagram: instructions/instagram.md
+
+permissions:
+  auto:
+    - read_public_web
+    - create_drafts
+    - write_internal_files
+    - run_sandbox_code
+  ask:
+    - publish_social_post
+    - send_email
+    - update_external_system
+  block:
+    - delete_data
+    - transfer_money
+    - expose_secrets
+    - change_security_settings
+
+jobs:
+  daily_content:
+    trigger:
+      type: schedule
+      cron: "0 10 * * MON-FRI"
+    tasks:
+      - id: research_topics
+        type: ai_task
+        worker: researcher
+        uses: [web.search, web.read]
+        output: [artifacts/trends.json]
+        required: false
+        if_fail: continue_degraded
+        emit: research.completed
+
+      - id: validate_posts
+        type: sandbox_command
+        run: python scripts/validate_posts.py
+        input: [artifacts/posts/, brand.md, memory.md]
+        output: [artifacts/validation_report.json]
+        if_fail: regenerate_once_then_ask
+
+6. Full Runtime Lifecycle
+User prompt: User describes the desired work in chat.
+Compile: Main AI creates workflow.flow, imports, and optionally generated scripts.
+Parse: The .flow parser loads the restricted YAML-like file.
+Validate: Structural and semantic validators check fields, references, tools, permissions, budgets, cycles, and bounded loops.
+Compile to runtime JSON: The normalized spec is stored as compiled_json.
+Trigger: Manual, schedule, webhook, app event, workflow event, or approval event starts a run.
+Execute: Inngest generic executor dispatches each task by type.
+Report: Each worker emits TaskReport, EventContextPacket, artifacts, and usage events.
+Display: Side panel streams events, tasks, artifacts, approvals, issues, and cost.
+Reflect: When configured triggers fire, a Run Reflection Packet is sent to the main AI.
+Patch: Main AI proposes FlowPatch, memory patch, instruction patch, or worker-routing update.
+Version: Accepted patches create a new workflow version. Running runs keep their original version.
+7. Main AI, Workers, and Subagents
+The main AI is the workflow architect. It should not execute every step. Workers execute scoped tasks. The runtime is the boss after the workflow exists.
+Role
+Responsibilities
+Should it see full workflow?
+Main AI / Compiler
+Create/repair/improve .flow; propose patches; answer user questions
+Yes, at creation/repair/reflection time
+Researcher
+Search, read, summarize, produce research artifacts
+No, only task inputs and instructions
+Writer
+Draft posts, emails, reports, responses
+No, only relevant imports/artifacts
+Image worker
+Generate image prompts/assets and image metadata
+No, only visual brief, brand, platform specs
+Code writer
+Create scripts for sandboxed deterministic work
+Partial, relevant task only
+Sandbox runner
+Run scripts and collect outputs
+No AI unless script repair needed
+Tool executor
+Call apps/APIs through Tool Router
+No
+Verifier
+Check output quality, schemas, claims, approvals, and safety
+Task-specific context
+Memory/patch worker
+Suggest changes to memory, instructions, workflow, or routing
+Reflection packet and relevant files only
+
+8. Event Context Layer
+The Event Context Layer is how apps, workflows, tasks, subagents, and the main AI share state without freeform agent chat. It is internal at first; it can become an ECP-style public/internal protocol later.
+EventContextPacket
+{
+  id: "ecp_123",
+  type: "artifact.image.generated",
+  workflow_id: "wf_social",
+  run_id: "run_456",
+  job_id: "daily_content",
+  task_id: "generate_images",
+  worker_id: "image_worker",
+  correlation_id: "corr_daily_2026_05_22",
+  causation_id: "event_post_draft_ready",
+  summary: "Generated Instagram and LinkedIn image assets.",
+  payload: { platforms: ["instagram", "linkedin"], approval_required: true },
+  artifacts: [
+    { path: "artifacts/images/instagram.png", related: "artifacts/posts/instagram.json" }
+  ],
+  quality: { confidence: 0.88, verifier_status: "passed" },
+  routing: { notify_tasks: ["approval", "publish"], notify_main_ai: false },
+  cost: { credits: 8 }
+}
+
+Workers do not freely chat with each other by default.
+Workers emit typed events and task reports.
+Context Router stores and routes events to dependent tasks/workflows/UI/main AI based on .flow rules.
+Main AI receives compressed reflection only when needed, not every raw event.
+9. Task Reports, Issue Cards, and Reflection Packets
+Object
+Purpose
+Contains
+TaskReport
+Structured result from every worker/task
+status, summary, inputs, outputs, cost, quality, issues, suggestions
+IssueCard
+User-facing failure/recovery object
+failure reason, impact, fallback, suggested actions, retry/skip/patch
+RunReflectionPacket
+Compressed run context for main AI
+summary, issues, costs, artifacts, user feedback, patch opportunities
+
+Reflection routing rules:
+route_to_main_ai when:
+  - run_completed_with_issues
+  - repeated_failure
+  - verifier_failed
+  - approval_rejected
+  - user_edited_output_heavily
+  - cost_exceeded_estimate
+  - workflow_stuck
+  - weekly_improvement_cycle
+
+do_not_route when:
+  - tool_call succeeded
+  - sandbox_command succeeded
+  - approval is only waiting
+  - normal scheduled run completed cleanly
+
+10. Inngest, Vercel Sandbox, Tools, and App Integrations
+Inngest is the durable execution substrate. It handles runs, retries, waits, signals, events, sub-workflows, schedules, concurrency, and monitoring. The product does not create custom Inngest functions per customer workflow; it creates a small set of reusable platform functions and one generic executor.
+Layer
+Use
+Inngest
+workflow.run, event_router, scheduler_tick, approval waits, retries, subworkflow invocation, concurrency control
+Vercel Sandbox
+execute custom scripts, generated code, CSV parsing, validation, report generation, file transformations
+Composio/direct APIs
+tool/app execution for Gmail, Slack, Shopify, Stripe, Twilio, social platforms, CRM, analytics
+Next.js/Vercel
+frontend, API routes, auth, side panel, run streaming, server actions, hosting
+Postgres/Drizzle
+workflow state, versions, events, reports, artifacts metadata, usage, billing
+Object storage
+scripts, artifacts, logs, generated images, reports, CSV files
+
+Generic executor model:
+workflow.run.requested
+  → load compiled_json
+  → create run
+  → resolve runnable tasks
+  → dispatch by type:
+      ai_task          → modelRouter.run()
+      tool_call        → toolRouter.execute()
+      sandbox_command  → sandboxRunner.run()
+      human_review     → approvalRunner.wait()
+      wait_for_event   → eventRunner.wait()
+      foreach/parallel → controlled fan-out
+      memory_patch     → patchWorker.propose()
+  → store reports/events/artifacts
+  → finalize or pause
+
+11. Custom Code Execution
+User workflows can include custom code, but the code is never deployed to production. It is saved as versioned workflow files and executed only in Vercel Sandbox.
+Generated scripts: scripts/generated/scraper.py, validate_csv.py, aggregate_metrics.py, validate_posts.py.
+Storage: script source stored in workflow_files and object storage with version, hash, creator, approval status.
+Execution: sandbox_command stages declared inputs and scripts, runs command with limits, captures stdout/stderr, saves declared outputs.
+Security: no OAuth tokens in sandbox; network disabled unless allowed; dangerous commands blocked; time and output size limits.
+12. Storage, Database, Artifacts, and Versioning
+Table / Store
+Purpose
+workflows
+Workflow metadata, status, project, owner, active version
+workflow_versions
+.flow source, compiled JSON, schema version, validation status
+workflow_files
+imports, memory, rules, scripts, config files
+workflow_triggers
+schedules, app events, webhooks, workflow events
+workflow_runs
+run status, current state, trigger payload, credits
+run_tasks
+per-task status, attempts, inputs, outputs, errors, duration
+workflow_events
+append-only event log with causation/correlation IDs
+task_reports
+structured worker/task outputs
+issue_cards
+failures and recovery actions
+artifacts
+metadata for outputs stored in blob/R2/S3
+approval_requests
+approval payloads, evidence refs, reviewer decisions
+tool_connections
+connected apps, scopes, status, token references
+tool_calls
+external action logs, idempotency keys, permission decisions
+sandbox_sessions
+commands, stdout/stderr refs, runtime, resource usage
+usage_events / credit_ledger
+billing, credits, model/tool/sandbox cost
+memory_patches / workflow_patches
+proposed/applied improvements
+
+Every workflow edit creates a new version.
+Running runs keep their original workflow version.
+New runs use the active version.
+Users can revert, fork, share, compare diffs, and run dry tests.
+13. UX/UI: Chat, Side Panel, Notifications, and Sharing
+The app should feel simple like ChatGPT but show real operational state like a workflow console. Chat is the control surface. The side panel is the live execution surface.
+Area
+Features
+Left sidebar
+New, Workflows, Runs, Approvals, Artifacts, Pulse, Connections, Billing, Settings
+Center chat
+Create workflow, ask questions, request edits, approve/reject, pause/resume, retry, explain issues
+Right side panel
+Jobs, tasks, workers, events, artifacts, approvals, issue cards, cost meter, reflection summary
+Top version bar
+Current version, revert, fork, share, diff, dry run, checkpoints
+Notifications per chat
+approval needed, issue created, run completed, cost warning, patch suggested, tool disconnected
+Sharing
+workflow template, version, run report, artifact, issue card, approval request, redacted public/team links
+
+14. Billing, Credits, Cost Control, and Limits
+Autonomous workflows can run many events, crons, apps, workers, and scripts. Billing and rate limiting must be core, not an afterthought.
+Charge by subscription plus workflow credits.
+Meter model tokens, image generation, tool calls, sandbox seconds, search calls, storage/artifacts, and event volume above limits.
+Every workflow has per-run, per-day, and per-month budgets.
+Before each task, estimate cost and check remaining budget and org credits.
+If budget is exceeded, pause and ask, or fail safely according to .flow policy.
+Never offer unlimited autonomous workflows.
+budget:
+  max_credits_per_run: 50
+  max_credits_per_day: 200
+  max_runtime_minutes: 45
+  max_tool_calls: 100
+  max_sandbox_seconds: 300
+  max_ai_tasks: 20
+  on_exceed: pause_and_ask
+
+15. Security, Permissions, and Safety
+Permission model: auto, ask, block.
+External actions: send email, publish post, update CRM, post Slack, create calendar invite require approval by default.
+Blocked by default: delete data, transfer money, expose secrets, change security settings, create fake accounts, bypass bot protection.
+Tool calls: validate args, enforce connected scopes, idempotency keys, approvals, logs.
+Sandbox: no OAuth tokens, limited files, timeout, network policy, dangerous command scanner, output limits.
+Event ingestion: verify signatures, dedupe IDs, rate-limit sources, pause on event storms.
+Prompt/tool safety: treat external content as untrusted; tool use must pass runtime permissions, not model suggestions.
+16. MVP Build Plan for Codex
+Phase
+Build
+Goal
+1. .flow Kernel
+.flow v0 vocabulary, parser, schema validator, semantic validator, compiled JSON
+Manual sample flows can compile safely
+2. Runtime
+Inngest generic executor, ai_task, tool_call mock, sandbox_command, human_review, event log
+Manual flow can execute end-to-end
+3. Sandbox + Artifacts
+Vercel Sandbox adapter, object storage, artifact viewer, stdout/stderr logs
+Custom scripts run safely and outputs are visible
+4. AI Compiler
+Prompt → .flow, repair loop, workflow preview, cost estimate
+User prompt creates executable workflow
+5. Event Context
+EventContextPacket, TaskReport, Context Router, side panel updates
+Workers/tasks share context through events
+6. Reflection
+RunReflectionPacket, issue cards, memory/workflow patches
+Workflows improve after runs
+7. Billing/Controls
+Credits, budgets, concurrency, rate limits, event storm controls
+Safe beta launch
+
+Start with one proof workflow: social content with image generation, approval, publish mock, artifact viewer, issue card, reflection packet.
+Do not build public marketplace, enterprise SSO, live orchestration mode, or custom tool builder in v0.
+Codex should implement the kernel first with manual .flow samples before AI compilation.
+17. Example Workflows
+Workflow
+Flow
+Social Content Operator
+Research trends → draft posts → generate images → validate → approval → schedule/publish → analytics → weekly improvement.
+Lead Generation Operator
+Research target profile → generate scraper script → run in Vercel Sandbox → validate CSV → dedupe → approve → email/SMS report.
+Shopify Inventory Operator
+Inventory event → threshold check → supplier email intake → reorder approval → CRM update → customer notification → weekly inventory report.
+Inbox Operator
+Read emails → classify → retrieve context → draft replies → suggest calendar slots → approval → send → learn from edits.
+Competitor Monitor
+Scheduled website checks → diff pages → screenshot → summarize changes → issue cards → Slack/email report.
+Report Generator
+Fetch analytics and app data → aggregate with scripts → generate report → approval/send → memory patch.
+
+18. Implementation Checklist
+Define .flow v0 vocabulary and examples.
+Implement parser/loader and safe subset rules.
+Implement schema validator and semantic validator.
+Implement compiled runtime JSON format.
+Implement Inngest workflow.run generic executor.
+Implement ai_task, tool_call, sandbox_command, human_review, foreach, wait_for_event, verify, memory_patch handlers.
+Implement Vercel Sandbox adapter with file staging and output collection.
+Implement Tool Router with permissions, approvals, idempotency, and logging.
+Implement event log, EventContextPacket, TaskReport, and issue cards.
+Implement side panel live timeline with SSE/polling.
+Implement artifact viewer and approval inbox.
+Implement reflection packets and patch proposals.
+Implement version control, FlowPatch engine, and revert/fork/share features.
+Implement billing/credit ledger and budget enforcement.
+Implement event storm, concurrency, and rate-limit controls.
+19. Open Questions and Final Notes
+Should .flow v0 use a YAML parser plus validator first, or a hand-written tolerant parser immediately? Recommendation: YAML-compatible parser first for speed, custom tolerant parser after proof.
+What expression language should be used for ${...}? Recommendation: tiny custom subset first, not full CEL/JMESPath initially.
+Which tools should be direct APIs versus Composio? Recommendation: direct for Gmail/Slack/Stripe/Shopify if needed; Composio for breadth.
+How much should main AI see? Recommendation: only creation, repair, user questions, and reflection packets triggered by rules.
+What is the first workflow proof? Recommendation: social content operator with image worker, scheduler, approval, issue card, and reflection patch.
+Final guiding principle: The workflow is the product. The .flow file is the AI operating contract. The runtime executes deterministically where possible. Events move context. Workers report. Issues surface. Reflection improves. Users stay in control through approvals, notifications, side panels, versioning, and sharing.

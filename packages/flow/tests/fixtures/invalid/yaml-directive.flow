@@ -1,0 +1,5 @@
+# expected: FLOW_PARSE_YAML_FEATURE_UNSUPPORTED
+%YAML 1.2
+flow: "0.1"
+name: bad_directive
+goal: "Directives are not supported."

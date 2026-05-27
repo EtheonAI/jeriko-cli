@@ -1,1 +1,1 @@
-npx lint-staged
+npx --no-install lint-staged --diff-filter=ACMR --concurrent=false --relative --max-arg-length=8000

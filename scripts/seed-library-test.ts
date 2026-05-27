@@ -8,39 +8,24 @@
  *   npx tsx scripts/seed-library-test.ts
  *
  * Prerequisites:
- *   - DATABASE_URL in packages/database/.env (auto-loaded below)
+ *   - DATABASE_URL set in the shell or provided by Vercel/env tooling
  *   - Run from the repo root so node_modules resolve correctly
  */
 
-import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { pgTable, text, timestamp, integer, jsonb, boolean as pgBoolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  integer,
+  jsonb,
+  boolean as pgBoolean,
+} from "drizzle-orm/pg-core";
+import { keys as databaseKeys } from "../packages/database/keys";
 
-// ---------------------------------------------------------------------------
-// 1. Load DATABASE_URL from packages/database/.env
-// ---------------------------------------------------------------------------
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, "../packages/database/.env");
-
-if (!process.env.DATABASE_URL) {
-  try {
-    const envContent = readFileSync(envPath, "utf-8");
-    for (const line of envContent.split("\n")) {
-      const match = line.match(/^DATABASE_URL\s*=\s*(.+)/);
-      if (match?.[1]) {
-        process.env.DATABASE_URL = match[1].trim();
-        break;
-      }
-    }
-  } catch {
-    console.error("Could not read .env — set DATABASE_URL manually");
-    process.exit(1);
-  }
-}
+const env = databaseKeys();
 
 console.log("Connecting to database...");
 
@@ -85,7 +70,7 @@ const files = pgTable("files", {
 // ---------------------------------------------------------------------------
 // 3. Connect
 // ---------------------------------------------------------------------------
-const sql = neon(process.env.DATABASE_URL!);
+const sql = neon(env.DATABASE_URL);
 const db = drizzle(sql);
 
 // Simple ID generator (cuid2 isn't hoisted to root)
@@ -245,9 +230,11 @@ async function main() {
   console.log(`\nInserted ${insertedFiles.length} files:`);
   for (const f of insertedFiles) {
     const sessionLabel = f.sessionId
-      ? insertedSessions.find((s) => s.id === f.sessionId)?.title ?? f.sessionId
+      ? (insertedSessions.find((s) => s.id === f.sessionId)?.title ?? f.sessionId)
       : "(no session)";
-    console.log(`  - [${f.id}] ${f.name}  (${f.mimeType}, ${f.size} bytes)  session: ${sessionLabel}`);
+    console.log(
+      `  - [${f.id}] ${f.name}  (${f.mimeType}, ${f.size} bytes)  session: ${sessionLabel}`
+    );
   }
 
   console.log("\nDone! Library page should now show these files.");

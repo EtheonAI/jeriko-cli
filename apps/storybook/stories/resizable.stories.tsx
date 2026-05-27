@@ -13,13 +13,13 @@ const meta: Meta<typeof ResizablePanelGroup> = {
   component: ResizablePanelGroup,
   tags: ["autodocs"],
   argTypes: {
-    onLayout: {
+    onLayoutChanged: {
       control: false,
     },
   },
   args: {
     className: "max-w-96 rounded-lg border",
-    direction: "horizontal",
+    orientation: "horizontal",
   },
   render: (args) => (
     <ResizablePanelGroup {...args}>
@@ -30,7 +30,7 @@ const meta: Meta<typeof ResizablePanelGroup> = {
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel defaultSize={50}>
-        <ResizablePanelGroup direction="vertical">
+        <ResizablePanelGroup orientation="vertical">
           <ResizablePanel defaultSize={25}>
             <div className="flex h-full items-center justify-center p-6">
               <span className="font-semibold">Two</span>

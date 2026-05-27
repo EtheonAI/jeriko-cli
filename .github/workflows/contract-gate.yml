@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "packages/contracts/**"
-      - "services/agent/**"
       - "services/gateway/**"
 
 jobs:
@@ -45,5 +44,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '## ❌ Breaking Contract Changes Detected\n\nYour PR contains breaking changes to the contract schemas. This is not allowed during the refactor freeze.\n\nPlease:\n1. Review the CI logs above\n2. Revert the breaking changes\n3. Get approval from @refactor-2026-team if changes are necessary'
+              body: '## ❌ Breaking Contract Changes Detected\n\nYour PR contains breaking changes to the contract schemas.\n\nPlease:\n1. Review the CI logs above\n2. Revert the breaking changes, or\n3. Add an accepted architecture decision and migration plan before merging'
             })

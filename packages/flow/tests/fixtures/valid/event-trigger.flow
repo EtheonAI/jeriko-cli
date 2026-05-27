@@ -1,0 +1,18 @@
+flow: "0.1"
+name: event_triggered_digest
+goal: "Summarize new research when an artifact event arrives."
+
+jobs:
+  digest:
+    trigger:
+      type: event
+      event: artifact.research.ready
+      match_rules:
+        org_id: current_org
+    tasks:
+      - id: summarize
+        type: ai_task
+        worker: analyst
+        input: [artifacts/research.json]
+        output: [artifacts/digest.md]
+        emits: [digest.ready]

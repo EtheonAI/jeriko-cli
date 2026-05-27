@@ -3,29 +3,27 @@ import "./styles.css";
 import { AnalyticsProvider } from "@repo/analytics/provider";
 import { DesignSystemProvider } from "@repo/design-system";
 import { fonts } from "@repo/design-system/lib/fonts";
-import { Toolbar } from "@repo/feature-flags/components/toolbar";
+import { Toolbar } from "@repo/feature-flags/toolbar";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: {
-    default: "Rubic",
-    template: "%s | Rubic",
+    default: "Jeriko",
+    template: "%s | Jeriko",
   },
-  description: "Your AI-powered assistant for everything",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
-  ),
+  description: "AI Workflow OS dashboard.",
+  metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
   openGraph: {
     type: "website",
-    siteName: "Rubic",
-    title: "Rubic",
-    description: "Your AI-powered assistant for everything",
+    siteName: "Jeriko",
+    title: "Jeriko",
+    description: "AI Workflow OS dashboard.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Rubic",
-    description: "Your AI-powered assistant for everything",
+    title: "Jeriko",
+    description: "AI Workflow OS dashboard.",
   },
   robots: {
     index: true,
@@ -51,16 +49,7 @@ const RootLayout = ({ children }: RootLayoutProperties) => (
   <html className={fonts} lang="en" suppressHydrationWarning>
     <body suppressHydrationWarning>
       <AnalyticsProvider>
-        <DesignSystemProvider
-          helpUrl={env.NEXT_PUBLIC_DOCS_URL}
-          privacyUrl={new URL(
-            "/legal/privacy",
-            env.NEXT_PUBLIC_WEB_URL
-          ).toString()}
-          termsUrl={new URL("/legal/terms", env.NEXT_PUBLIC_WEB_URL).toString()}
-        >
-          {children}
-        </DesignSystemProvider>
+        <DesignSystemProvider>{children}</DesignSystemProvider>
       </AnalyticsProvider>
       <Toolbar />
     </body>

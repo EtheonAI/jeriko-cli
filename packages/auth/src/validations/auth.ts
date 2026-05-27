@@ -9,17 +9,15 @@ export const passwordSchema = z
   .min(12, "Password must be at least 12 characters")
   .max(128, "Password must be less than 128 characters")
   .regex(/[a-zA-Z]/, "Password must contain at least 1 letter")
-  .regex(
-    /[!@#$%^&*(),.?":{}|<>]/,
-    "Password must contain at least 1 special character"
-  );
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Password must contain at least 1 special character");
 
 // Email validation
 export const emailSchema = z
   .string()
+  .trim()
+  .toLowerCase()
   .min(1, "Email is required")
-  .email("Please enter a valid email address")
-  .transform((email) => email.toLowerCase().trim());
+  .email("Please enter a valid email address");
 
 // Sign In Schema
 export const signInSchema = z.object({

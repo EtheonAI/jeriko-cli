@@ -37,7 +37,7 @@ export const deviceDefinitions = pgTable("device_definitions", {
   }).notNull(),
   platform: text("platform"), // e.g. "macOS", "Windows", "Linux", "iOS", "Android"
   setupInstructions: text("setup_instructions"), // markdown setup guide
-  agentCommand: text("agent_command"), // install command for the Rubic agent
+  agentCommand: text("agent_command"), // install command for the Jeriko agent
   capabilities: jsonb("capabilities").$type<string[]>(),
   requirements: jsonb("requirements").$type<string[]>(), // e.g. ["Node.js 18+", "macOS 12+"]
   isEnabled: boolean("is_enabled").default(true).notNull(),

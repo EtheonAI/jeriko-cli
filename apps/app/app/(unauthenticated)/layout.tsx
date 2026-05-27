@@ -1,42 +1,18 @@
-import type React from "react";
 import type { Metadata } from "next";
-import { GlowingStarsBackground } from "./components/ui/glowing-stars";
-import { StoreProvider } from "../providers";
+import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: {
-    default: "Rubic - Sign In",
-    template: "%s | Rubic",
+    default: "Jeriko - Sign In",
+    template: "%s | Jeriko",
   },
-  description:
-    "Sign in to Rubic — your AI-powered workspace for automation, smart home, and connected applications.",
-  icons: {
-    icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
-    apple: "/apple-icon.png",
-  },
+  description: "Sign in to Jeriko - your AI Workflow OS dashboard.",
 };
 
 export default function AuthLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
-  return (
-    <StoreProvider>
-      <GlowingStarsBackground>{children}</GlowingStarsBackground>
-    </StoreProvider>
-  );
+  return children;
 }

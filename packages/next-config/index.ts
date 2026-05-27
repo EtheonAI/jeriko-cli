@@ -1,5 +1,27 @@
-import withBundleAnalyzer from "@next/bundle-analyzer";
 import type { NextConfig } from "next";
+
+const isDevelopment = process.env.NODE_ENV !== "production";
+
+const scriptSrc = [
+  "'self'",
+  "'unsafe-inline'",
+  ...(isDevelopment ? ["'unsafe-eval'"] : []),
+  "https://us.i.posthog.com",
+  "https://us-assets.i.posthog.com",
+  "https://www.googletagmanager.com",
+  "https://www.google-analytics.com",
+];
+
+const connectSrc = [
+  "'self'",
+  "http://localhost:*",
+  "https://us.i.posthog.com",
+  "https://us-assets.i.posthog.com",
+  "https://*.sentry.io",
+  "https://www.google-analytics.com",
+  "https://analytics.google.com",
+  "https://*.knock.app",
+];
 
 const securityHeaders = [
   {
@@ -28,19 +50,18 @@ const securityHeaders = [
   },
   {
     key: "Permissions-Policy",
-    value:
-      "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+    value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
   },
   {
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://us-assets.i.posthog.com https://www.googletagmanager.com https://www.google-analytics.com",
+      `script-src ${scriptSrc.join(" ")}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' blob: data: https:",
       "font-src 'self' data:",
-      "connect-src 'self' http://localhost:* https://*.e2b.app https://us.i.posthog.com https://us-assets.i.posthog.com https://*.sentry.io wss: ws:",
-      "frame-src 'self' https://*.e2b.dev https://*.e2b.dev:* https://*.e2b.app https://*.e2b.app:* data:",
+      `connect-src ${connectSrc.join(" ")}`,
+      "frame-src 'self' data:",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -71,47 +92,23 @@ export const config: NextConfig = {
     "@neondatabase/serverless",
     // @repo/observability
     "@logtail/next",
-    // @repo/analytics
-    "posthog-node",
-    // @repo/notifications
-    "@knocklabs/node",
-    // @repo/collaboration
-    "@liveblocks/node",
     // @repo/security
     "@arcjet/next",
     "@nosecone/next",
-    // @repo/webhooks
-    "svix",
   ],
 
-  experimental: {
-    optimizePackageImports: [
-      "lucide-react",
-      "date-fns",
-      "lodash-es",
-      "@radix-ui/react-icons",
-      "react-icons",
-      "motion",
-      "react-markdown",
-      "shiki",
-    ],
-  },
-
-  // Transpile workspace packages and ai package for proper resolution
+  // Transpile only workspace packages imported by the reset app shell.
   transpilePackages: [
-    "@repo/ai",
-    "@repo/design-system",
+    "@repo/analytics",
     "@repo/auth",
     "@repo/database",
-    "@repo/observability",
-    "@repo/analytics",
+    "@repo/design-system",
+    "@repo/email",
     "@repo/feature-flags",
     "@repo/notifications",
-    "@repo/collaboration",
+    "@repo/observability",
+    "@repo/payments",
     "@repo/security",
-    "@repo/seo",
-    "@repo/webhooks",
-    "ai",
   ],
 
   images: {
@@ -152,6 +149,3 @@ export const config: NextConfig = {
   // This is required to support PostHog trailing slash API requests
   skipTrailingSlashRedirect: true,
 };
-
-export const withAnalyzer = (sourceConfig: NextConfig): NextConfig =>
-  withBundleAnalyzer()(sourceConfig);

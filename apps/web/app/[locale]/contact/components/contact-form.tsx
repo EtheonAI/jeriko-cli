@@ -4,15 +4,10 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Calendar } from "@repo/design-system/components/ui/calendar";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Label } from "@repo/design-system/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@repo/design-system/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@repo/design-system/components/ui/popover";
 import { cn } from "@repo/design-system/lib/utils";
-import type { getTranslations } from "@repo/internationalization";
 import { format } from "date-fns";
-import { CalendarIcon, Check, MoveRight } from "lucide-react";
+import { CalendarIcon, MoveRight } from "lucide-react";
 import { useState } from "react";
 import { contact } from "../actions/contact";
 
@@ -24,9 +19,13 @@ export const ContactForm = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
 
   const onSubmitEmail = async () => {
-    const emailSent = await contact("Khaleel Musleh", "khaleelmusleh@gmail.com", "Hi Khaleel, Welcome To Etheon")
-    console.log(emailSent, "HHI I AM EMAIL")
-  }
+    const emailSent = await contact(
+      "Khaleel Musleh",
+      "khaleelmusleh@gmail.com",
+      "Hi Khaleel, Welcome To Etheon"
+    );
+    console.log(emailSent, "HHI I AM EMAIL");
+  };
 
   return (
     <div className="w-full py-20 lg:py-40">
@@ -63,9 +62,7 @@ export const ContactForm = () => {
             <div className="flex max-w-sm flex-col gap-4 rounded-md border p-8">
               <p>I am khaleel</p>
               <div className="grid w-full max-w-sm items-center gap-1">
-                <Label htmlFor="picture">
-                  Bla
-                </Label>
+                <Label htmlFor="picture">Bla</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -76,39 +73,24 @@ export const ContactForm = () => {
                       variant="outline"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? (
-                        format(date, "PPP")
-                      ) : (
-                        <span>Date</span>
-                      )}
+                      {date ? format(date, "PPP") : <span>Date</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      initialFocus
-                      mode="single"
-                      onSelect={setDate}
-                      selected={date}
-                    />
+                    <Calendar autoFocus mode="single" onSelect={setDate} selected={date} />
                   </PopoverContent>
                 </Popover>
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
-                <Label htmlFor="firstname">
-                  NAme
-                </Label>
+                <Label htmlFor="firstname">NAme</Label>
                 <Input id="firstname" type="text" />
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
-                <Label htmlFor="lastname">
-                  Last
-                </Label>
+                <Label htmlFor="lastname">Last</Label>
                 <Input id="lastname" type="text" />
               </div>
               <div className="grid w-full max-w-sm items-center gap-1">
-                <Label htmlFor="picture">
-                  Resume
-                </Label>
+                <Label htmlFor="picture">Resume</Label>
                 <Input id="picture" type="file" />
               </div>
 

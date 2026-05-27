@@ -11,6 +11,7 @@
     "noEmit": true,
     "declaration": false,
     "declarationMap": false,
+    "types": ["node"],
     "paths": {
       "@/*": ["./*"],
       "@repo/*": ["../../packages/*"]

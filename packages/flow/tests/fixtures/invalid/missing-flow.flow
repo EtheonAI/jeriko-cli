@@ -1,0 +1,11 @@
+# expected: FLOW_PARSE_MISSING_REQUIRED_FIELD
+name: missing_flow
+goal: "Missing flow version should fail."
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task

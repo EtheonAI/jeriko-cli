@@ -1,8 +1,7 @@
 "use client";
 
-import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
+import { MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import {
   DropdownMenu,
@@ -19,36 +18,11 @@ const themes = [
 
 export const ModeToggle = () => {
   const { setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  // Prevent hydration mismatch by only rendering after mount
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Render a placeholder with same dimensions during SSR
-  if (!mounted) {
-    return (
-      <Button
-        className="shrink-0 text-foreground"
-        size="icon"
-        variant="ghost"
-        disabled
-      >
-        <SunIcon className="h-[1.2rem] w-[1.2rem]" />
-        <span className="sr-only">Toggle theme</span>
-      </Button>
-    );
-  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          className="shrink-0 text-foreground"
-          size="icon"
-          variant="ghost"
-        >
+        <Button className="shrink-0 text-foreground" size="icon" variant="ghost">
           <SunIcon className="dark:-rotate-90 h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:scale-0" />
           <MoonIcon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           <span className="sr-only">Toggle theme</span>

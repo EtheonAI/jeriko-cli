@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins/organization";
+import { after } from "next/server";
 import {
   db,
   users,
@@ -10,23 +12,30 @@ import {
   organizations,
   members,
   invitations,
-  apiKeys,
 } from "@repo/database";
-import crypto from "node:crypto";
-import {
-  sendEmail,
-  VerificationEmail,
-  PasswordResetEmail,
-  InvitationEmail,
-} from "@repo/email";
+import { sendEmail, VerificationEmail, PasswordResetEmail, InvitationEmail } from "@repo/email";
+import { keys } from "../keys";
+
+const authEnv = keys();
+const authBaseUrl = authEnv.BETTER_AUTH_URL;
+const hasGoogleProvider = !!(authEnv.GOOGLE_CLIENT_ID && authEnv.GOOGLE_CLIENT_SECRET);
+const hasGitHubProvider = !!(authEnv.GITHUB_CLIENT_ID && authEnv.GITHUB_CLIENT_SECRET);
+
+function queueAuthEmail(label: string, send: () => Promise<unknown>) {
+  after(async () => {
+    try {
+      await send();
+    } catch (error) {
+      console.error(`Failed to send ${label}:`, error);
+    }
+  });
+}
 
 // Better Auth configuration
 export const auth = betterAuth({
-  appName: "Rubic",
-  baseURL:
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000",
+  appName: "Jeriko",
+  baseURL: authBaseUrl,
+  secret: authEnv.BETTER_AUTH_SECRET,
 
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -47,57 +56,57 @@ export const auth = betterAuth({
     minPasswordLength: 12,
     maxPasswordLength: 128,
     requireEmailVerification: true,
+    revokeSessionsOnPasswordReset: true,
 
-    async sendVerificationEmail(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
-      await sendEmail({
-        to: data.user.email!,
-        subject: "Verify your email address - Rubic",
-        react: VerificationEmail({
-          userName: data.user.name || undefined,
-          verificationUrl: data.url,
-        }),
-      });
-    },
-
-    async sendResetPassword(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
-      await sendEmail({
-        to: data.user.email!,
-        subject: "Reset your password - Rubic",
-        react: PasswordResetEmail({
-          userName: data.user.name || undefined,
-          resetUrl: data.url,
-        }),
-      });
+    async sendResetPassword(data: {
+      user: { email?: string; name: string; [key: string]: unknown };
+      url: string;
+      [key: string]: unknown;
+    }) {
+      queueAuthEmail("password reset email", () =>
+        sendEmail({
+          to: data.user.email!,
+          subject: "Reset your password - Jeriko",
+          react: PasswordResetEmail({
+            userName: data.user.name || undefined,
+            resetUrl: data.url,
+          }),
+        })
+      );
     },
   },
 
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
-    async sendVerificationEmail(data: { user: { email?: string; name: string; [key: string]: unknown }; url: string; [key: string]: unknown }) {
-      await sendEmail({
-        to: data.user.email!,
-        subject: "Verify your email address - Rubic",
-        react: VerificationEmail({
-          userName: data.user.name || undefined,
-          verificationUrl: data.url,
-        }),
-      });
+    async sendVerificationEmail(data: {
+      user: { email?: string; name: string; [key: string]: unknown };
+      url: string;
+      [key: string]: unknown;
+    }) {
+      queueAuthEmail("verification email", () =>
+        sendEmail({
+          to: data.user.email!,
+          subject: "Verify your email address - Jeriko",
+          react: VerificationEmail({
+            userName: data.user.name || undefined,
+            verificationUrl: data.url,
+          }),
+        })
+      );
     },
   },
 
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      enabled: !!(
-        process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-      ),
+      clientId: authEnv.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: authEnv.GOOGLE_CLIENT_SECRET ?? "",
+      enabled: hasGoogleProvider,
     },
     github: {
-      clientId: process.env.GITHUB_ID || "",
-      clientSecret: process.env.GITHUB_SECRET || "",
-      enabled: !!(process.env.GITHUB_ID && process.env.GITHUB_SECRET),
+      clientId: authEnv.GITHUB_CLIENT_ID ?? "",
+      clientSecret: authEnv.GITHUB_CLIENT_SECRET ?? "",
+      enabled: hasGitHubProvider,
     },
   },
 
@@ -109,22 +118,23 @@ export const auth = betterAuth({
       membershipLimit: 100,
 
       async sendInvitationEmail(data) {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-        const inviteUrl = `${baseUrl}/accept-invitation/${data.id}`;
+        const inviteUrl = `${authBaseUrl}/accept-invitation/${data.id}`;
 
-        await sendEmail({
-          to: data.email,
-          subject: `You've been invited to join ${data.organization.name} - Rubic`,
-          react: InvitationEmail({
-            inviterName: data.inviter?.user?.name || data.email,
-            organizationName: String(data.organization.name || ""),
-            role: data.role,
-            inviteUrl,
-          }),
-        });
+        queueAuthEmail("organization invitation email", () =>
+          sendEmail({
+            to: data.email,
+            subject: `You've been invited to join ${data.organization.name} - Jeriko`,
+            react: InvitationEmail({
+              inviterName: data.inviter?.user?.name || data.email,
+              organizationName: String(data.organization.name || ""),
+              role: data.role,
+              inviteUrl,
+            }),
+          })
+        );
       },
     }),
+    nextCookies(),
   ],
 
   session: {
@@ -148,35 +158,7 @@ export const auth = betterAuth({
     max: 10,
   },
 
-  trustedOrigins: [
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    process.env.NEXT_PUBLIC_WEB_URL || "http://localhost:3001",
-  ].filter(Boolean),
-
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          // Auto-generate a default API key for every new user
-          try {
-            const random = crypto.randomBytes(24).toString("base64url");
-            const key = `rk_live_${random}`;
-            const prefix = key.slice(0, 12) + "...";
-
-            await db.insert(apiKeys).values({
-              id: crypto.randomBytes(12).toString("base64url"),
-              userId: user.id,
-              key,
-              keyPrefix: prefix,
-              name: "Default",
-            });
-          } catch {
-            // Non-fatal — user can create keys manually from Settings
-          }
-        },
-      },
-    },
-  },
+  trustedOrigins: [authBaseUrl],
 });
 
 // Type exports

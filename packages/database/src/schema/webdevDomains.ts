@@ -25,7 +25,7 @@ export const webdevDomains = pgTable("webdev_domains", {
   status: text("status").$type<DomainStatus>().notNull().default("pending"),
   /** CNAME target for DNS verification */
   cnameTarget: text("cname_target"),
-  /** Whether this domain was purchased through Rubic */
+  /** Whether this domain was purchased through Jeriko */
   purchasedVia: text("purchased_via"),
   /** Project path in sandbox */
   projectPath: text("project_path"),

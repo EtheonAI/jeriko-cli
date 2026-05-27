@@ -1,3 +1,4 @@
+import { env } from "@/env";
 import type { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
@@ -5,10 +6,10 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
-        disallow: ["/api/", "/chat/", "/settings/", "/files/"],
+        allow: ["/", "/login", "/forgot-password", "/reset-password", "/verify-email"],
+        disallow: ["/api/"],
       },
     ],
-    sitemap: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://rubic.dev"}/sitemap.xml`,
+    sitemap: `${env.NEXT_PUBLIC_APP_URL}/sitemap.xml`,
   };
 }

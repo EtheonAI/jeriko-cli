@@ -1,0 +1,23 @@
+Route,Name,Access,Purpose
+/,Marketing landing page,Public,Waitlist/pricing/product explanation
+/login,Auth page,Public,Sign in/sign up via better-auth
+/app,Dashboard redirect,Private,Redirect to /app/new or /app/workflows
+/app/new,New workflow prompt,Private,"Prompt input, examples, workflow preview"
+/app/library,Workflow library,Private,Templates by category
+/app/workflows,Workflow list,Private,Workflow status cards
+/app/workflows/[workflowId],Workflow detail,Private,Overview/runs/files/artifacts/versions/settings
+/app/runs/[runId],Run detail,Private,"Live timeline, logs, artifacts, approvals"
+/app/approvals,Approval inbox,Private,All pending approvals
+/app/projects,Projects,Private,Project grouping
+/app/pulse,Pulse,Private,Activity feed
+/app/analytics,Analytics,Private,Usage and performance
+/app/connections,Connections,Private,Connected apps/scopes
+/app/billing,Billing,Private,Plan and credits
+/app/settings,Settings,Private,Profile/org/members/notifications
+/api/workflows/compile,Compile workflow,API,Prompt to AST/YAML preview
+/api/workflows,Create/list workflows,API,CRUD
+/api/workflows/[id]/runs,Start/list runs,API,Start/cancel/retry
+/api/runs/[id]/events,Run events SSE,API,Live event stream
+/api/approvals/[id],Approval decision,API,Approve/reject/edit
+/api/connections,Connections API,API,Connect/disconnect apps
+/api/inngest,Inngest serve route,API,Durable functions

@@ -6,21 +6,20 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@repo/design-system/components/ui/carousel";
-import { getTranslations } from "@repo/internationalization/server";
+import { useTranslations } from "@repo/internationalization/client";
 import { useEffect, useState } from "react";
 
-
-export const Cases = async () => {
+export const Cases = () => {
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
-  const t = await getTranslations("web");
+  const t = useTranslations("web");
 
   useEffect(() => {
     if (!api) {
       return;
     }
 
-    setTimeout(() => {
+    const timeout = window.setTimeout(() => {
       if (api.selectedScrollSnap() + 1 === api.scrollSnapList().length) {
         setCurrent(0);
         api.scrollTo(0);
@@ -29,6 +28,8 @@ export const Cases = async () => {
         setCurrent(current + 1);
       }
     }, 1000);
+
+    return () => window.clearTimeout(timeout);
   }, [api, current]);
 
   return (
@@ -36,7 +37,7 @@ export const Cases = async () => {
       <div className="container mx-auto">
         <div className="flex flex-col gap-10">
           <h2 className="text-left font-regular text-xl tracking-tighter md:text-5xl lg:max-w-xl">
-            {t('home.cases.title')}
+            {t("home.cases.title")}
           </h2>
           <Carousel className="w-full" setApi={setApi}>
             <CarouselContent>

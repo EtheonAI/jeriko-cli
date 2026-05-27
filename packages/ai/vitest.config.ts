@@ -1,13 +1,15 @@
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [react()],
+  resolve: {
+    alias: {
+      "server-only": new URL("./tests/support/server-only.test-stub.ts", import.meta.url).pathname,
+    },
+  },
   test: {
-    environment: "jsdom",
+    environment: "node",
     globals: true,
-    include: ["**/__tests__/**/*.test.{ts,tsx}", "**/*.test.{ts,tsx}"],
+    include: ["tests/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", "dist"],
-    setupFiles: ["./vitest.setup.ts"],
   },
 });

@@ -1,0 +1,37 @@
+{
+  "name": "@jeriko/webrtc-media",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "dev:services": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/websocket": "^11.2.0",
+    "@repo/database": "workspace:*",
+    "@repo/service-utils": "workspace:*",
+    "@repo/storage": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "fastify": "^5.8.5",
+    "ws": "^8.21.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

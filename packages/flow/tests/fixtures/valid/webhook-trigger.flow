@@ -1,0 +1,14 @@
+flow: "0.1"
+name: webhook_intake
+goal: "Validate an inbound webhook and create a review artifact."
+
+jobs:
+  intake:
+    trigger:
+      type: webhook
+      path: /webhooks/intake
+      event: webhook.intake.received
+    tasks:
+      - id: review
+        type: human_review
+        input: [event.payload]

@@ -4,18 +4,27 @@
  * https://docs.sentry.io/platforms/javascript/guides/nextjs/
  */
 
-import * as Sentry from "@sentry/nextjs";
 import { keys } from "./keys";
 
-export const initializeSentry = (): ReturnType<typeof Sentry.init> =>
-  Sentry.init({
-    dsn: keys().NEXT_PUBLIC_SENTRY_DSN,
+type SentryInitResult = ReturnType<typeof import("@sentry/nextjs").init>;
+const tracesSampleRate = process.env.NODE_ENV === "development" ? 1 : 0.1;
+
+export const initializeSentry = async (): Promise<SentryInitResult | undefined> => {
+  const dsn = keys().NEXT_PUBLIC_SENTRY_DSN;
+
+  if (!dsn) {
+    return;
+  }
+
+  const Sentry = await import("@sentry/nextjs");
+
+  return Sentry.init({
+    dsn,
 
     // Enable logging
     enableLogs: true,
 
-    // Adjust this value in production, or use tracesSampler for greater control
-    tracesSampleRate: 1,
+    tracesSampleRate,
 
     // Setting this option to true will print useful information to the console while you're setting up Sentry.
     debug: false,
@@ -39,3 +48,4 @@ export const initializeSentry = (): ReturnType<typeof Sentry.init> =>
       Sentry.consoleLoggingIntegration({ levels: ["log", "error", "warn"] }),
     ],
   });
+};

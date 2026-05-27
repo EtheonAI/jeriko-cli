@@ -1,7 +1,7 @@
 "use server";
 
 import { resend } from "@repo/email";
-import { ContactTemplate } from "@repo/email/templates/contact";
+import { ContactTemplate } from "@repo/email/templates";
 import { parseError } from "@repo/observability/error";
 import { createRateLimiter, slidingWindow } from "@repo/rate-limit";
 import { headers } from "next/headers";
@@ -25,9 +25,7 @@ export const contact = async (
       const { success } = await rateLimiter.limit(`contact_form_${ip}`);
 
       if (!success) {
-        throw new Error(
-          "You have reached your request limit. Please try again later."
-        );
+        throw new Error("You have reached your request limit. Please try again later.");
       }
     }
 

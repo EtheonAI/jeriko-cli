@@ -1,0 +1,4 @@
+# expected: FLOW_PARSE_UNTERMINATED_STRING
+flow: "0.1"
+name: unclosed_string
+goal: "This string does not close

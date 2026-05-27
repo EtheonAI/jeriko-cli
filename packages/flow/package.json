@@ -1,0 +1,72 @@
+{
+  "name": "@repo/flow",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./source": {
+      "types": "./src/source/index.ts",
+      "default": "./src/source/index.ts"
+    },
+    "./parser": {
+      "types": "./src/parser/index.ts",
+      "default": "./src/parser/index.ts"
+    },
+    "./lexer": {
+      "types": "./src/lexer/index.ts",
+      "default": "./src/lexer/index.ts"
+    },
+    "./cst": {
+      "types": "./src/cst/index.ts",
+      "default": "./src/cst/index.ts"
+    },
+    "./ast": {
+      "types": "./src/ast/index.ts",
+      "default": "./src/ast/index.ts"
+    },
+    "./compiler": {
+      "types": "./src/compiler/index.ts",
+      "default": "./src/compiler/index.ts"
+    },
+    "./kernel": {
+      "types": "./src/kernel/index.ts",
+      "default": "./src/kernel/index.ts"
+    },
+    "./runtime": {
+      "types": "./src/runtime/index.ts",
+      "default": "./src/runtime/index.ts"
+    },
+    "./events": {
+      "types": "./src/events/index.ts",
+      "default": "./src/events/index.ts"
+    },
+    "./state": {
+      "types": "./src/state/index.ts",
+      "default": "./src/state/index.ts"
+    },
+    "./patch": {
+      "types": "./src/patch/index.ts",
+      "default": "./src/patch/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
+    }
+  },
+  "scripts": {
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "25.9.1",
+    "typescript": "^6.0.3"
+  }
+}

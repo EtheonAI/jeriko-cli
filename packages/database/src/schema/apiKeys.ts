@@ -4,7 +4,7 @@ import { relations } from "drizzle-orm";
 import { users } from "./users";
 
 // ============================================================
-// API Keys — per-user keys for authenticating with Rubic AI
+// API Keys — per-user keys for authenticating with Jeriko AI
 // ============================================================
 
 export const apiKeys = pgTable("api_keys", {

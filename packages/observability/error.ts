@@ -1,5 +1,19 @@
-import * as Sentry from "@sentry/nextjs";
+import { keys } from "./keys";
 import { log } from "./log";
+
+export const captureException = async (error: unknown): Promise<void> => {
+  if (!keys().NEXT_PUBLIC_SENTRY_DSN) {
+    return;
+  }
+
+  try {
+    const Sentry = await import("@sentry/nextjs");
+    Sentry.captureException(error);
+  } catch (captureError) {
+    const message = captureError instanceof Error ? captureError.message : String(captureError);
+    log.error(`Failed to capture exception: ${message}`);
+  }
+};
 
 export const parseError = (error: unknown): string => {
   let message = "An error occurred";
@@ -13,7 +27,7 @@ export const parseError = (error: unknown): string => {
   }
 
   try {
-    Sentry.captureException(error);
+    void captureException(error);
     log.error(`Parsing error: ${message}`);
   } catch (newError) {
     // biome-ignore lint/suspicious/noConsole: Need console here

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@repo/design-system/components/ui/button";
-import { captureException } from "@sentry/nextjs";
+import { captureException } from "@repo/observability/error";
 import { AlertCircle, RefreshCw, Home } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -11,12 +11,9 @@ type ErrorPageProps = {
   readonly reset: () => void;
 };
 
-export default function AuthenticatedErrorPage({
-  error,
-  reset,
-}: ErrorPageProps) {
+export default function AuthenticatedErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
-    captureException(error);
+    void captureException(error);
   }, [error]);
 
   return (
@@ -27,13 +24,10 @@ export default function AuthenticatedErrorPage({
         </div>
         <h2 className="text-xl font-semibold">Something went wrong</h2>
         <p className="max-w-md text-sm text-muted-foreground">
-          We encountered an error loading this page. Please try again or return
-          to the dashboard.
+          We encountered an error loading this page. Please try again or return to the dashboard.
         </p>
         {error.digest && (
-          <p className="font-mono text-xs text-muted-foreground">
-            Error ID: {error.digest}
-          </p>
+          <p className="font-mono text-xs text-muted-foreground">Error ID: {error.digest}</p>
         )}
       </div>
       <div className="flex gap-3">

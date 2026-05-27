@@ -1,6 +1,7 @@
+import { env } from "@/env";
 import type { MetadataRoute } from "next";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://rubic.dev";
+const BASE_URL = env.NEXT_PUBLIC_APP_URL;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
@@ -12,12 +13,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${BASE_URL}/login`,
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.8,
-    },
-    {
-      url: `${BASE_URL}/register`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.8,

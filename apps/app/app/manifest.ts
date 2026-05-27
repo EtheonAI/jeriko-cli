@@ -2,22 +2,22 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Rubic",
-    short_name: "Rubic",
-    description: "Your AI-powered assistant for everything",
+    name: "Jeriko",
+    short_name: "Jeriko",
+    description: "AI Workflow OS dashboard.",
     start_url: "/",
     display: "standalone",
     background_color: "#000000",
     theme_color: "#000000",
     icons: [
       {
-        src: "/static/favicon/icon-192.png",
-        sizes: "192x192",
+        src: "/icon.png",
+        sizes: "any",
         type: "image/png",
       },
       {
-        src: "/static/favicon/icon-512.png",
-        sizes: "512x512",
+        src: "/apple-icon.png",
+        sizes: "any",
         type: "image/png",
       },
     ],

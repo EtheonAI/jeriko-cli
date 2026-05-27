@@ -8,6 +8,9 @@ node_modules/
 # Turbo
 .turbo/
 
+# pnpm
+.pnpm-store/
+
 # Env
 .env
 .env.local
@@ -17,6 +20,7 @@ node_modules/
 
 # Build output
 **/dist/
+apps/email/.react-email/
 
 # Legacy Prisma generated
 packages/database/generated/
@@ -42,20 +46,18 @@ packages/database/generated/
 # IDE / Editor
 .cursor/
 .agents/
+.claude/
+skills/
 
-# RSA Keys (NEVER commit private keys)
-e2b-templates/desktop/keys/private.pem
-
-# E2B
-e2b-templates/desktop/.e2b/
-
-# Go build artifacts
-e2b-templates/desktop/rubic-mcp-cli/rubic-mcp-cli
-e2b-templates/desktop/rubic-upload-file/rubic-upload-file
+# Key material
+*.pem
+*.key
 
 # Nuitka build output
 sandbox_runtime.build/
 sandbox_runtime.dist/
 
 # Misc Folders/Files
-docs/
+docs/*
+!docs/ai-workflow-os/
+!docs/ai-workflow-os/**

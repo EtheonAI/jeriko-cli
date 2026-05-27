@@ -145,8 +145,8 @@ jobs:
           file: ./services/${{ matrix.service }}/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/rubic-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
-            ${{ steps.login-ecr.outputs.registry }}/rubic-${{ matrix.service }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/jeriko-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
+            ${{ steps.login-ecr.outputs.registry }}/jeriko-${{ matrix.service }}:latest
           cache-from: type=gha,scope=deploy-${{ matrix.service }}
           cache-to: type=gha,scope=deploy-${{ matrix.service }},mode=max
           provenance: true
@@ -188,8 +188,8 @@ jobs:
         run: |
           SERVICES=$(echo "$SERVICES_JSON" | jq -r '.[]')
           for SVC in $SERVICES; do
-            ECS_SERVICE="rubic-${SVC}-staging"
-            IMAGE="${ECR_REGISTRY}/rubic-${SVC}:${IMAGE_TAG}"
+            ECS_SERVICE="jeriko-${SVC}-staging"
+            IMAGE="${ECR_REGISTRY}/jeriko-${SVC}:${IMAGE_TAG}"
             echo "::group::Deploying ${ECS_SERVICE}"
 
             TASK_DEF=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
@@ -213,7 +213,7 @@ jobs:
           ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_STAGING }}
         run: |
           echo "Waiting for staging services to stabilize..."
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services rubic-gateway-staging rubic-agent-staging || true
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services jeriko-gateway-staging || true
           echo "Core services stable"
 
       - name: Smoke tests
@@ -265,8 +265,8 @@ jobs:
         run: |
           SERVICES=$(echo "$SERVICES_JSON" | jq -r '.[]')
           for SVC in $SERVICES; do
-            ECS_SERVICE="rubic-${SVC}-production"
-            IMAGE="${ECR_REGISTRY}/rubic-${SVC}:${IMAGE_TAG}"
+            ECS_SERVICE="jeriko-${SVC}-production"
+            IMAGE="${ECR_REGISTRY}/jeriko-${SVC}:${IMAGE_TAG}"
             echo "::group::Deploying ${ECS_SERVICE}"
 
             TASK_DEF=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text 2>/dev/null || echo "")
@@ -290,7 +290,7 @@ jobs:
           ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_PRODUCTION }}
         run: |
           echo "Waiting for production services to stabilize..."
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services rubic-gateway-production rubic-agent-production || true
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services jeriko-gateway-production || true
           echo "Core services stable"
 
       - name: Smoke tests

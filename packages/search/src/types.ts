@@ -1,126 +1,52 @@
-import type { SearchResponse } from "typesense/lib/Typesense/Documents";
+import type { CollectionCreateSchema } from "typesense/lib/Typesense/Collections";
+import type { SearchParams, SearchResponse } from "typesense/lib/Typesense/Documents";
 import type { MultiSearchResponse } from "typesense/lib/Typesense/MultiSearch";
 
-// Collection names
-export const COLLECTION_NAMES = {
-  FILES: "files",
-  SESSIONS: "sessions",
-  TASKS: "tasks",
-  PROJECTS: "projects",
-  ACTIONS: "actions",
-} as const;
+export type SearchCollectionName = string;
 
-export type CollectionName = (typeof COLLECTION_NAMES)[keyof typeof COLLECTION_NAMES];
-
-// Document types for each collection
-export interface FileDocument {
+export type SearchDocument = Record<string, unknown> & {
   id: string;
-  userId: string;
-  sessionId?: string;
+};
+
+export type SearchCollectionSchema = CollectionCreateSchema;
+
+export type SearchCollectionStats = {
   name: string;
-  path: string;
-  mimeType?: string;
-  size?: number;
-  isPublic: boolean;
-  createdAt: number; // Unix timestamp
-  updatedAt: number;
-}
+  numDocuments: number;
+  numMemoryBytesUsed: number;
+};
 
-export interface SessionDocument {
-  id: string;
-  userId: string;
-  title?: string;
-  status: "active" | "paused" | "completed" | "failed";
-  createdAt: number;
-  updatedAt: number;
-}
+export type BulkImportResult = {
+  success: number;
+  failed: number;
+};
 
-export interface TaskDocument {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  status: "pending" | "running" | "completed" | "failed" | "cancelled" | "paused";
-  taskType: "agent_run" | "report" | "sync" | "backup" | "custom";
-  scheduleType: "once" | "recurring" | "cron" | "trigger";
-  isEnabled: boolean;
-  nextRunAt?: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ProjectDocument {
-  id: string;
-  userId: string;
-  organizationId?: string;
-  name: string;
-  description?: string;
-  status: "active" | "archived" | "completed" | "paused";
-  visibility: "private" | "team" | "public";
-  isPinned: boolean;
-  tags?: string[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ActionDocument {
-  id: string;
-  userId: string;
-  agentId: string;
-  sessionId: string;
-  title: string;
-  description?: string;
-  status: "pending" | "in_progress" | "completed" | "failed" | "cancelled";
-  agentType: "orchestrator" | "researcher" | "coder" | "browser" | "file_manager" | "executor" | "analyst";
-  createdAt: number;
-  updatedAt: number;
-}
-
-// Search result types
-export type SearchResultType = "file" | "session" | "task" | "project" | "action";
-
-export interface SearchResultItem {
-  id: string;
-  type: SearchResultType;
-  title: string;
-  subtitle?: string;
-  description?: string;
-  icon?: string;
-  timestamp: number;
-  url?: string;
-  highlights?: {
-    field: string;
-    snippet: string;
-  }[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface SearchResults {
+export type SearchCollectionOptions = {
+  collection: SearchCollectionName;
   query: string;
-  totalFound: number;
-  results: SearchResultItem[];
-  facets?: {
-    type: Record<string, number>;
-    status?: Record<string, number>;
-  };
-  processingTimeMs: number;
-}
+  queryBy: string;
+  filterBy?: string;
+  sortBy?: string;
+  page?: number;
+  perPage?: number;
+  numTypos?: number;
+  highlightFields?: string;
+  includeFields?: string;
+  excludeFields?: string;
+};
 
-// Search options
-export interface SearchOptions {
-  query: string;
-  userId: string;
-  collections?: CollectionName[];
-  filters?: {
-    type?: SearchResultType[];
-    status?: string[];
-    dateFrom?: Date;
-    dateTo?: Date;
-  };
-  limit?: number;
-  offset?: number;
-  highlightFields?: boolean;
-}
+export type MultiSearchRequest = {
+  collection: SearchCollectionName;
+  q: string;
+  query_by: string;
+  filter_by?: string;
+  sort_by?: string;
+  page?: number;
+  per_page?: number;
+  num_typos?: number;
+  highlight_fields?: string;
+  include_fields?: string;
+  exclude_fields?: string;
+};
 
-// Export Typesense response types
-export type { SearchResponse, MultiSearchResponse };
+export type { SearchParams, SearchResponse, MultiSearchResponse };

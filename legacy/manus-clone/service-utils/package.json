@@ -1,0 +1,123 @@
+{
+  "name": "@repo/service-utils",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./types": {
+      "types": "./src/types/index.ts",
+      "import": "./src/types/index.ts"
+    },
+    "./database": {
+      "types": "./src/database/index.ts",
+      "import": "./src/database/index.ts"
+    },
+    "./redis": {
+      "types": "./src/redis/index.ts",
+      "import": "./src/redis/index.ts"
+    },
+    "./logger": {
+      "types": "./src/logger/index.ts",
+      "import": "./src/logger/index.ts"
+    },
+    "./auth": {
+      "types": "./src/auth/index.ts",
+      "import": "./src/auth/index.ts"
+    },
+    "./validation": {
+      "types": "./src/validation/index.ts",
+      "import": "./src/validation/index.ts"
+    },
+    "./errors": {
+      "types": "./src/errors/index.ts",
+      "import": "./src/errors/index.ts"
+    },
+    "./metrics": {
+      "types": "./src/metrics/index.ts",
+      "import": "./src/metrics/index.ts"
+    },
+    "./security": {
+      "types": "./src/security/index.ts",
+      "import": "./src/security/index.ts"
+    },
+    "./health": {
+      "types": "./src/health/index.ts",
+      "import": "./src/health/index.ts"
+    },
+    "./swagger": {
+      "types": "./src/swagger/index.ts",
+      "import": "./src/swagger/index.ts"
+    },
+    "./compression": {
+      "types": "./src/compression/index.ts",
+      "import": "./src/compression/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "import": "./src/testing/index.ts"
+    },
+    "./rate-limit": {
+      "types": "./src/rate-limit/index.ts",
+      "import": "./src/rate-limit/index.ts"
+    },
+    "./cors": {
+      "types": "./src/cors/index.ts",
+      "import": "./src/cors/index.ts"
+    },
+    "./webhooks": {
+      "types": "./src/webhooks/index.ts",
+      "import": "./src/webhooks/index.ts"
+    },
+    "./factory": {
+      "types": "./src/factory/index.ts",
+      "import": "./src/factory/index.ts"
+    },
+    "./schemas": {
+      "types": "./src/schemas/common.ts",
+      "import": "./src/schemas/common.ts"
+    },
+    "./circuit-breaker": {
+      "types": "./src/circuit-breaker/index.ts",
+      "import": "./src/circuit-breaker/index.ts"
+    },
+    "./events": {
+      "types": "./src/events/index.ts",
+      "import": "./src/events/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@repo/database": "workspace:*",
+    "@t3-oss/env-core": "^0.13.11",
+    "fastify": "^5.8.5",
+    "ioredis": "^5.10.1",
+    "jose": "^6.2.3",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

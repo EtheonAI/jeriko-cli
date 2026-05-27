@@ -1,0 +1,12 @@
+# expected: FLOW_PARSE_INVALID_FIELD_VALUE
+flow: "0.1"
+name: invalid_task_type
+goal: "Unknown task types should fail."
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: raw_node

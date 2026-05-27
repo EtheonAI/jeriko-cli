@@ -1,4 +1,52 @@
 packages:
   - "apps/*"
   - "packages/*"
-  - "services/*"
+
+registries:
+  default: https://registry.npmjs.org/
+
+preferOffline: false
+autoInstallPeers: true
+strictPeerDependencies: true
+dedupePeerDependents: true
+engineStrict: true
+nodeVersion: 22.22.1
+minimumReleaseAge: 0
+blockExoticSubdeps: true
+
+publicHoistPattern:
+  - better-auth
+  - drizzle-orm
+  - "@neondatabase/serverless"
+
+allowBuilds:
+  "@parcel/watcher": true
+  "@sentry/cli": true
+  "@swc/core": true
+  core-js: false
+  core-js-pure: false
+  esbuild: true
+  keytar: true
+  msw: false
+  protobufjs: true
+  puppeteer: false
+  sharp: true
+
+overrides:
+  react: "19.2.6"
+  react-dom: "19.2.6"
+
+packageExtensions:
+  "@hookform/resolvers":
+    peerDependencies:
+      zod: "*"
+
+peerDependencyRules:
+  allowedVersions:
+    "@mdx-js/react>react": "19.2.6"
+    "@mintlify/mdx>react": "19.2.6"
+    "@mintlify/mdx>react-dom": "19.2.6"
+    "ink>react": "19.2.6"
+    "ink-spinner>react": "19.2.6"
+    "next-mdx-remote-client>react": "19.2.6"
+    "next-mdx-remote-client>react-dom": "19.2.6"

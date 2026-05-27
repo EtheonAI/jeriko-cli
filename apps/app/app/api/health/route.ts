@@ -1,26 +1,21 @@
-import { NextResponse } from "next/server";
 import { db, sql } from "@repo/database";
 
-/**
- * GET /api/health — Liveness probe
- * Returns 200 if the process is alive.
- */
+type HealthStatus = "degraded" | "ok" | "ready";
+type CheckStatus = "fail" | "ok";
+
+export const dynamic = "force-dynamic";
+
 export async function GET() {
-  return NextResponse.json({
-    status: "ok",
+  return Response.json({
+    status: "ok" satisfies HealthStatus,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
 }
 
-/**
- * GET /api/health/ready — Readiness probe (separate route below)
- * Checks database connectivity.
- */
 export async function POST() {
-  const checks: Record<string, "ok" | "fail"> = {};
+  const checks: Record<string, CheckStatus> = {};
 
-  // Database check
   try {
     await db.execute(sql`SELECT 1`);
     checks.database = "ok";
@@ -30,9 +25,9 @@ export async function POST() {
 
   const allHealthy = Object.values(checks).every((v) => v === "ok");
 
-  return NextResponse.json(
+  return Response.json(
     {
-      status: allHealthy ? "ready" : "degraded",
+      status: (allHealthy ? "ready" : "degraded") satisfies HealthStatus,
       timestamp: new Date().toISOString(),
       checks,
     },

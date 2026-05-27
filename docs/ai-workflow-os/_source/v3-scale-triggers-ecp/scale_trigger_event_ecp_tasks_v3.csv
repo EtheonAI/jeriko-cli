@@ -1,0 +1,25 @@
+Phase,Workstream,Task ID,Task,Description,Type,Priority,Complexity,Acceptance Criteria
+P0,Scheduling,TRG-001,DB-backed trigger registry,Store all .flow schedule/app/workflow triggers as database rows instead of static cron jobs.,Backend,P0,M,workflow_triggers table exists and compile step writes trigger rows.
+P0,Scheduling,TRG-002,Inngest scheduler tick,Static scheduled Inngest function scans due trigger rows and emits workflow/run.requested events.,Backend/Inngest,P0,M,Due triggers run without creating one function per workflow.
+P0,Scheduling,TRG-003,Trigger misfire policy,"Support skip, run_once, catch_up_limited, ask_user for missed schedules.",Backend,P1,M,Missed schedules do not flood the system.
+P0,Scheduling,TRG-004,Trigger jitter,Spread scheduled runs across a jitter window to prevent load spikes.,Backend,P1,S,Scheduler applies jitter to trigger fire time.
+P0,Scheduling,TRG-005,Trigger dedupe keys,Use workflow_id + trigger_id + scheduled_for idempotency key.,Backend,P0,S,Duplicate scheduler ticks do not create duplicate runs.
+P0,Events,EVT-001,Event ingestion endpoint,Normalize Gmail/Stripe/Shopify/webhook events into EventContextPackets.,Backend/API,P0,M,External events can trigger workflows through one endpoint.
+P0,Events,EVT-002,Event router,Match EventContextPackets against workflow_triggers match_rules and trigger workflow jobs.,Backend/Inngest,P0,L,App and workflow events can start jobs.
+P0,Events,EVT-003,Internal ECP schema,"Define EventContextPacket schema for app, workflow, task, and worker context.",Backend/Architecture,P0,M,Workers and apps emit standard context packets.
+P0,Events,EVT-004,Task report schema,"Define TaskReport schema for subworkers to report outputs, issues, costs, and suggested patches.",Backend/Architecture,P0,M,Each task run stores a task report.
+P0,Events,EVT-005,Context Router,"Route events to tasks, UI, other workflows, and main AI according to .flow routing rules.",Backend,P1,L,Image worker can notify scheduler without waking main AI.
+P0,Events,EVT-006,Run Reflection Packet,Generate compressed context packets for main AI only when reflection rules trigger.,AI/Backend,P1,M,"Main AI receives compressed run summary, not raw logs."
+P1,Functions,FN-001,workflow.run generic executor,One Inngest function loads compiled .flow JSON and dispatches task types.,Backend/Inngest,P0,XL,All workflows run through same generic executor.
+P1,Functions,FN-002,workflow.approval.resume,Resume workflows waiting on human approval decisions.,Backend/Inngest,P0,M,Approval decisions wake waiting runs.
+P1,Functions,FN-003,workflow.worker.callback,Signed callback endpoint/function for async workers to return task reports and artifacts.,Backend/API,P1,M,Async worker callbacks become events/task reports.
+P1,Functions,FN-004,workflow.reflection,Generate reflection packets and patch proposals after issues or scheduled reviews.,AI/Backend,P1,L,Reflection runs only when configured.
+P1,Functions,FN-005,notification.dispatch,Dispatch per-chat workflow notifications to in-app/email/Slack/SMS/webhook.,Backend,P1,M,Notifications are routed by workflow settings.
+P1,Functions,FN-006,usage.rollup,Roll up usage events into credit ledger and billing records.,Backend/Billing,P0,M,Credit billing can be enforced.
+P1,Functions,FN-007,watchdog.stuck_runs,"Find stuck, timed-out, or unhealthy workflow runs and create issue cards.",Backend/Infra,P1,M,Stuck runs are surfaced.
+P2,Scale,SCL-001,Per-org concurrency limit,Limit active runs and steps per organization.,Backend/Inngest,P0,M,No org can overwhelm runtime.
+P2,Scale,SCL-002,Per-tool rate limits,Throttle tool calls by provider/account/org to respect API limits.,Backend/Tools,P0,M,External APIs are protected.
+P2,Scale,SCL-003,Event storm protection,Detect and pause webhook sources producing abnormal event volume.,Backend/Infra,P1,M,Event storms create issue cards instead of unlimited runs.
+P2,Scale,SCL-004,Bounded foreach,Every foreach must have max_items and max_parallelism.,Compiler/Backend,P0,M,Unbounded fanout is rejected by semantic validator.
+P2,Billing,BIL-001,Credit metering by primitive,"Meter run start, ai_task, tool_call, sandbox seconds, image generation, reflection, and event volume.",Backend/Billing,P0,L,Every task records usage events.
+P2,Billing,BIL-002,Trigger limits by plan,"Limit active triggers, min intervals, and runs per day by plan.",Billing/Backend,P0,M,Free/Starter users cannot create runaway schedules.

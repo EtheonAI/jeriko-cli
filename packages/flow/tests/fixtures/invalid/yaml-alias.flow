@@ -1,0 +1,12 @@
+# expected: FLOW_PARSE_YAML_FEATURE_UNSUPPORTED
+flow: "0.1"
+name: bad_alias
+goal: *shared_goal
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task

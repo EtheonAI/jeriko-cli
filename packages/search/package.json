@@ -29,15 +29,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@t3-oss/env-nextjs": "^0.13.8",
+    "@t3-oss/env-nextjs": "^0.13.11",
     "server-only": "^0.0.1",
-    "typesense": "^2.0.0",
-    "zod": "^3.24.1"
+    "typesense": "^3.0.6",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "24.9.1",
-    "typescript": "^5.9.3",
-    "vitest": "^3.1.4"
+    "@types/node": "25.9.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   }
 }

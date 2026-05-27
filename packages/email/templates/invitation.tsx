@@ -1,14 +1,4 @@
-import {
-  Body,
-  Button,
-  Container,
-  Head,
-  Html,
-  Preview,
-  Section,
-  Tailwind,
-  Text,
-} from "@react-email/components";
+import { Body, Button, Container, Head, Html, Preview, Section, Tailwind, Text } from "react-email";
 
 interface InvitationEmailProps {
   readonly inviterName: string;
@@ -27,9 +17,7 @@ export function InvitationEmail({
     <Tailwind>
       <Html>
         <Head />
-        <Preview>
-          You&apos;ve been invited to join {organizationName} on Rubic
-        </Preview>
+        <Preview>You&apos;ve been invited to join {organizationName} on Jeriko</Preview>
         <Body className="bg-neutral-50 font-sans">
           <Container className="mx-auto py-12 px-4">
             <Section className="rounded-lg bg-white p-8 shadow-sm">
@@ -38,8 +26,7 @@ export function InvitationEmail({
               </Text>
               <Text className="mb-6 text-base text-neutral-600">
                 <strong>{inviterName}</strong> has invited you to join{" "}
-                <strong>{organizationName}</strong> as a <strong>{role}</strong>
-                .
+                <strong>{organizationName}</strong> as a <strong>{role}</strong>.
               </Text>
               <Section className="mb-6">
                 <Button
@@ -50,8 +37,8 @@ export function InvitationEmail({
                 </Button>
               </Section>
               <Text className="mt-8 text-sm text-neutral-400">
-                This invitation will expire in 7 days. If you don&apos;t want to
-                join, you can safely ignore this email.
+                This invitation will expire in 7 days. If you don&apos;t want to join, you can
+                safely ignore this email.
               </Text>
             </Section>
           </Container>
@@ -65,7 +52,7 @@ InvitationEmail.PreviewProps = {
   inviterName: "Jane Smith",
   organizationName: "Acme Inc",
   role: "member",
-  inviteUrl: "https://rubic.app/accept-invitation/abc123",
+  inviteUrl: "https://jeriko.app/accept-invitation/abc123",
 } satisfies InvitationEmailProps;
 
 export default InvitationEmail;

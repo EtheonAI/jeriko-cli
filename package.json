@@ -1,5 +1,5 @@
 {
-  "name": "rubic",
+  "name": "jeriko",
   "version": "5.2.1",
   "bin": {
     "next-forge": "dist/index.js"
@@ -8,28 +8,42 @@
     "dist/index.js"
   ],
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "dev:services": "turbo dev:services --filter='./services/*' --concurrency=15",
-    "services:up": "docker compose -f docker-compose.services.yml up -d postgres redis",
-    "services:down": "docker compose -f docker-compose.services.yml down",
-    "services:logs": "docker compose -f docker-compose.services.yml logs -f",
+    "build": "turbo build --filter=app --filter=web",
+    "build:product": "turbo build --filter=app --filter=web",
+    "build:docs": "pnpm --filter docs lint",
+    "build:email": "turbo build --filter=email",
+    "build:storybook": "turbo build --filter=storybook",
+    "build:all": "turbo build",
+    "dev": "turbo dev --filter=app",
+    "dev:web": "turbo dev --filter=web",
+    "dev:docs": "turbo dev --filter=docs",
+    "dev:email": "turbo dev --filter=email",
+    "dev:storybook": "turbo dev --filter=storybook",
+    "dev:studio": "turbo dev --filter=studio",
+    "dev:frontend": "turbo dev --filter=app --filter=web",
+    "dev:all": "turbo dev",
+    "infra:up": "docker compose -f docker-compose.infra.yml up -d postgres redis typesense",
+    "infra:down": "docker compose -f docker-compose.infra.yml down",
+    "infra:logs": "docker compose -f docker-compose.infra.yml logs -f postgres redis typesense",
+    "lint": "eslint .",
+    "lint:docs": "pnpm --filter docs lint",
+    "typecheck": "turbo typecheck",
     "check": "npx ultracite@latest check",
     "fix": "npx ultracite@latest fix",
-    "test": "turbo test",
+    "test": "vitest run",
     "test:integration": "turbo test:integration",
     "test:security": "turbo test:security",
     "test:contract": "turbo test:contract",
     "test:coverage": "turbo test:coverage",
-    "test:a11y": "pnpm --filter app test:e2e -- --project=chromium e2e/accessibility/",
-    "test:visual": "pnpm --filter app test:e2e -- --project=visual-regression",
-    "test:smoke": "pnpm --filter app test:e2e -- --project=chromium e2e/features/smoke.spec.ts",
-    "test:agent": "cd services/agent && python -m pytest tests/ -v",
-    "test:all": "turbo test test:integration && pnpm test:agent",
+    "test:a11y": "echo \"apps/app e2e tests are intentionally removed during reset\"",
+    "test:visual": "echo \"apps/app visual tests are intentionally removed during reset\"",
+    "test:smoke": "vitest run --project app",
+    "test:all": "turbo test",
+    "test:all:integration": "turbo test test:integration",
     "analyze": "turbo analyze",
     "translate": "turbo translate",
     "boundaries": "turbo boundaries",
-    "boundaries:cruise": "depcruise --config .dependency-cruiser.cjs apps packages services",
+    "boundaries:cruise": "depcruise --config .dependency-cruiser.cjs apps packages",
     "lhci": "lhci autorun",
     "bump-deps": "npx npm-check-updates --deep -u -x recharts && pnpm install",
     "bump-ui": "npx shadcn@latest add --all --overwrite -c packages/design-system",
@@ -41,56 +55,39 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@auto-it/first-time-contributor": "^11.3.0",
-    "@changesets/changelog-github": "^0.5.2",
-    "@changesets/cli": "^2.29.8",
-    "@commitlint/cli": "^19.6.1",
-    "@commitlint/config-conventional": "^19.6.0",
+    "@auto-it/first-time-contributor": "^11.3.6",
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.0",
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
     "@lhci/cli": "^0.15.1",
-    "@next/eslint-plugin-next": "^16.1.6",
+    "@next/eslint-plugin-next": "^16.2.6",
     "@repo/typescript-config": "workspace:*",
-    "@turbo/gen": "^2.8.3",
-    "@types/node": "^24.9.1",
-    "dependency-cruiser": "^17.3.7",
-    "eslint": "^9.39.1",
-    "eslint-plugin-next": "^0.0.0",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "@turbo/gen": "^2.9.15",
+    "@types/node": "^25.9.1",
+    "dependency-cruiser": "^17.4.2",
+    "esbuild": "0.28.0",
+    "eslint": "^10.4.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.1.7",
-    "lint-staged": "^15.4.2",
-    "prettier": "^3.4.2",
-    "tsup": "^8.5.0",
-    "turbo": "^2.8.3",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.3",
-    "vitest": "^4.0.3"
+    "lint-staged": "^17.0.5",
+    "prettier": "^3.8.3",
+    "tsup": "^8.5.1",
+    "turbo": "^2.9.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^4.1.7"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.22.1",
+    "pnpm": ">=11.3.0 <12"
   },
-  "packageManager": "pnpm@10.19.0",
+  "packageManager": "pnpm@11.3.0",
   "dependencies": {
-    "@clack/prompts": "^0.11.0",
+    "@clack/prompts": "^1.4.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "commander": "^14.0.2",
-    "nanoid": "^5.1.6"
-  },
-  "pnpm": {
-    "overrides": {
-      "parse5": "^7.2.1",
-      "@types/react": "19.2.13",
-      "@types/react-dom": "19.2.3",
-      "ai": "6.0.77",
-      "drizzle-orm": "0.38.4",
-      "zod": "4.3.6"
-    },
-    "packageExtensions": {
-      "@hookform/resolvers": {
-        "peerDependencies": {
-          "zod": "*"
-        }
-      }
-    }
+    "commander": "^14.0.3",
+    "nanoid": "^5.1.11"
   },
   "type": "module"
 }

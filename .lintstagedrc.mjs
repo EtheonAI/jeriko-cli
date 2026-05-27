@@ -1,12 +1,35 @@
+import { existsSync } from "node:fs";
+
+const quote = (file) => JSON.stringify(file);
+const chunk = (files, size = 40) => {
+  const chunks = [];
+
+  for (let index = 0; index < files.length; index += size) {
+    chunks.push(files.slice(index, index + size));
+  }
+
+  return chunks;
+};
+
+const existingFiles = (files) => files.filter((file) => existsSync(file));
+const commandsFor = (command, args, files) =>
+  chunk(files).map((group) => `${command} ${args} ${group.map(quote).join(" ")}`);
+const isActiveWorkspaceFile = (file) =>
+  !file.startsWith("legacy/") &&
+  !file.includes("/legacy/") &&
+  !file.startsWith(".pnpm-store/") &&
+  !file.includes("e2b-templates/");
+const activeExistingFiles = (files) => existingFiles(files).filter(isActiveWorkspaceFile);
+
 export default {
   "*.{ts,tsx,js,jsx,mjs,cjs}": (files) => {
-    const filtered = files.filter((f) => !f.includes("e2b-templates/"));
+    const filtered = activeExistingFiles(files);
     if (filtered.length === 0) return [];
     return [
-      `eslint --fix ${filtered.map((f) => `"${f}"`).join(" ")}`,
-      `prettier --write ${filtered.map((f) => `"${f}"`).join(" ")}`,
+      ...commandsFor("eslint", "--fix", filtered),
+      ...commandsFor("prettier", "--write", filtered),
     ];
   },
-  "*.{json,md,yml,yaml}": (files) => [`prettier --write ${files.map((f) => `"${f}"`).join(" ")}`],
-  "*.go": ["gofmt -w"],
+  "*.{json,md,yml,yaml}": (files) => commandsFor("prettier", "--write", activeExistingFiles(files)),
+  "*.go": (files) => commandsFor("gofmt", "-w", activeExistingFiles(files)),
 };

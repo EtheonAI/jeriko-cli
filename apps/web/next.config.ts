@@ -1,20 +1,16 @@
+import { withToolbar } from "@repo/feature-flags/next-config";
+import createNextIntlPlugin from "@repo/internationalization/plugin";
 import { withCMS } from "@repo/cms/next-config";
-import { withToolbar } from "@repo/feature-flags/lib/toolbar";
-import createNextIntlPlugin from '@repo/internationalization/plugin';
-import { config, withAnalyzer } from "@repo/next-config";
+import { config } from "@repo/next-config";
 import { withLogging, withSentry } from "@repo/observability/next-config";
 import type { NextConfig } from "next";
 import { env } from "@/env";
 
-let nextConfig: NextConfig = withToolbar(withLogging(config));
 const withNextIntl = createNextIntlPlugin();
 
-nextConfig.images?.remotePatterns?.push({
-  protocol: "https",
-  hostname: "assets.basehub.com",
-});
+const nextConfig = async (): Promise<NextConfig> => {
+  let resolvedConfig: NextConfig = withToolbar(withLogging(config));
 
-if (process.env.NODE_ENV === "production") {
   const redirects: NextConfig["redirects"] = async () => [
     {
       source: "/legal",
@@ -23,15 +19,13 @@ if (process.env.NODE_ENV === "production") {
     },
   ];
 
-  nextConfig.redirects = redirects;
-}
+  resolvedConfig.redirects = redirects;
 
-if (env.VERCEL) {
-  nextConfig = withSentry(nextConfig);
-}
+  if (env.VERCEL) {
+    resolvedConfig = await withSentry(resolvedConfig);
+  }
 
-if (env.ANALYZE === "true") {
-  nextConfig = withAnalyzer(nextConfig);
-}
+  return withCMS(withNextIntl(resolvedConfig));
+};
 
-export default withNextIntl(withCMS(nextConfig));
+export default nextConfig;

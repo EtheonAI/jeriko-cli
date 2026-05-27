@@ -9,4 +9,5 @@ export const keys = () =>
     runtimeEnv: {
       FLAGS_SECRET: process.env.FLAGS_SECRET,
     },
+    emptyStringAsUndefined: true,
   });

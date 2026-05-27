@@ -1,12 +1,23 @@
+import "server-only";
+
 import { Resend } from "resend";
-import { render } from "@react-email/components";
+import { render } from "react-email";
 import { keys } from "./keys";
 
-// Initialize Resend client
-const resend = new Resend(keys().RESEND_TOKEN);
+let resendClient: Resend | null = null;
 
-// Email configuration
-const FROM_EMAIL = keys().RESEND_FROM;
+function getResendClient(): Resend {
+  if (!resendClient) {
+    const env = keys();
+    if (!env.RESEND_TOKEN) {
+      throw new Error("RESEND_TOKEN or RESEND_API_KEY is required to send email.");
+    }
+
+    resendClient = new Resend(env.RESEND_TOKEN);
+  }
+
+  return resendClient;
+}
 
 // Types
 export interface SendEmailOptions {
@@ -29,9 +40,10 @@ export async function sendEmail({
 }: SendEmailOptions): Promise<SendEmailResult> {
   try {
     const html = await render(react);
+    const env = keys();
 
-    const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
+    const { data, error } = await getResendClient().emails.send({
+      from: env.RESEND_FROM,
       to,
       subject,
       html,
@@ -51,8 +63,13 @@ export async function sendEmail({
   }
 }
 
-// Export Resend client for advanced usage
-export { resend };
+// Export a lazy Resend facade for advanced usage without constructing the
+// provider at module import time.
+export const resend: Pick<Resend, "emails"> = {
+  emails: {
+    send: (...args: Parameters<Resend["emails"]["send"]>) => getResendClient().emails.send(...args),
+  } as Resend["emails"],
+};
 
 // Export templates
 export * from "./templates";

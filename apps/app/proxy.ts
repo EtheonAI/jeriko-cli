@@ -1,66 +1,50 @@
+import { hasSessionCookie } from "@repo/auth/next";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { env } from "@/env";
 
-// Public routes that don't require authentication
-const publicRoutes = [
-  "/login",
-  "/login/password",
-  "/verify-email",
-  "/forgot-password",
-  "/reset-password",
-  "/register", // Keep for backwards compatibility
-  "/share", // Public session sharing — no auth required
-  "/app-auth", // OAuth portal for webdev project users
-];
+const PUBLIC_ROUTES = ["/login", "/verify-email", "/forgot-password", "/reset-password"] as const;
 
-// Auth-related paths that should redirect authenticated users
-const authPages = ["/login", "/register"];
+const PUBLIC_ROUTE_PREFIXES = ["/api/auth", "/api/health", "/.well-known/vercel/flags"] as const;
+
+const AUTH_PAGES = ["/login"] as const;
+
+const PUBLIC_FILE_PATTERN = /\.(?:avif|gif|ico|jpg|jpeg|png|svg|txt|webmanifest|webp|xml)$/i;
+
+function matchesRoute(pathname: string, routes: readonly string[]) {
+  return routes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+function isPublicPath(pathname: string) {
+  return (
+    matchesRoute(pathname, PUBLIC_ROUTES) ||
+    matchesRoute(pathname, PUBLIC_ROUTE_PREFIXES) ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/static") ||
+    PUBLIC_FILE_PATTERN.test(pathname)
+  );
+}
+
+function createLoginRedirect(request: NextRequest) {
+  const callbackUrl = encodeURIComponent(request.nextUrl.pathname + request.nextUrl.search);
+
+  return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}`, request.url));
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const e2eAuthBypass = process.env.E2E_AUTH_BYPASS === "true";
+  const e2eAuthBypass = env.E2E_AUTH_BYPASS === "true";
 
   if (e2eAuthBypass) {
     return NextResponse.next();
   }
 
-  // Allow all auth API routes
-  if (pathname.startsWith("/api/auth")) {
-    return NextResponse.next();
-  }
+  const isPublicRoute = isPublicPath(pathname);
+  const isAuthPage = matchesRoute(pathname, AUTH_PAGES);
 
-  // Allow OAuth callback route (Composio redirects here after OAuth popup completes)
-  if (pathname.startsWith("/api/connectors/callback")) {
-    return NextResponse.next();
-  }
-
-  // Allow OAuth proxy route (webdev apps call this for token exchange)
-  if (pathname.startsWith("/api/oauth-proxy")) {
-    return NextResponse.next();
-  }
-
-  // Allow static files and images
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/static") ||
-    pathname.includes(".")
-  ) {
-    return NextResponse.next();
-  }
-
-  // Check if the current path is a public route
-  const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
-
-  // Check if the current path is an auth page
-  const isAuthPage = authPages.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
-
-  // Get session from Better-Auth via cookie
-  const sessionCookie = request.cookies.get("better-auth.session_token");
-  const isLoggedIn = !!sessionCookie?.value;
+  // Optimistic redirect only. Authenticated layouts and APIs still validate
+  // the real session with Better Auth before serving protected data.
+  const isLoggedIn = hasSessionCookie(request);
 
   // Redirect authenticated users away from auth pages
   if (isLoggedIn && isAuthPage) {
@@ -69,19 +53,12 @@ export async function proxy(request: NextRequest) {
 
   // Redirect unauthenticated users to login
   if (!isLoggedIn && !isPublicRoute) {
-    const callbackUrl = encodeURIComponent(
-      pathname + request.nextUrl.search
-    );
-    return NextResponse.redirect(
-      new URL(`/login?callbackUrl=${callbackUrl}`, request.url)
-    );
+    return createLoginRedirect(request);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

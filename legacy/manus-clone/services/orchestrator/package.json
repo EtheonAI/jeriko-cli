@@ -1,0 +1,42 @@
+{
+  "name": "@jeriko/orchestrator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "dev:services": "tsx watch --env-file=.env src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.79",
+    "@ai-sdk/openai": "^3.0.65",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@repo/database": "workspace:*",
+    "@repo/service-utils": "workspace:*",
+    "@repo/storage": "workspace:*",
+    "ai": "6.0.191",
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^5.1.0",
+    "mysql2": "^3.22.3",
+    "nanoid": "^5.1.11",
+    "ws": "^8.21.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

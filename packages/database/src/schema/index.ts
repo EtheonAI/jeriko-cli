@@ -1,7 +1,6 @@
 // User & Auth schemas
 export {
   users,
-  usersRelations,
   accounts,
   accountsRelations,
   authSessions,
@@ -10,18 +9,14 @@ export {
   type UserPreferences,
 } from "./users";
 
+export { usersRelations, agentSessionsRelations } from "./coreRelations";
+
 // API Keys schemas
-export {
-  apiKeys,
-  apiKeysRelations,
-  type ApiKey,
-  type NewApiKey,
-} from "./apiKeys";
+export { apiKeys, apiKeysRelations, type ApiKey, type NewApiKey } from "./apiKeys";
 
 // Agent session schemas
 export {
   agentSessions,
-  agentSessionsRelations,
   messages,
   messagesRelations,
   votes,
@@ -327,11 +322,7 @@ export {
 } from "./agentMailboxes";
 
 // Skill schemas
-export {
-  skillDefinitions,
-  type SkillDefinition,
-  type NewSkillDefinition,
-} from "./skills";
+export { skillDefinitions, type SkillDefinition, type NewSkillDefinition } from "./skills";
 
 // Website Builder schemas
 export {

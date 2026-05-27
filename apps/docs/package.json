@@ -2,10 +2,13 @@
   "name": "docs",
   "private": true,
   "scripts": {
-    "dev": "mintlify dev --port 3004",
-    "lint": "mintlify broken-links"
+    "dev": "mint dev --port 3004",
+    "lint": "mint broken-links"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "mint": "^4.2.578",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "typescript": "^6.0.3"
   }
 }

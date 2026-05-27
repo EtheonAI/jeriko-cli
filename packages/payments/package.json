@@ -10,10 +10,6 @@
     "./keys": {
       "types": "./keys.ts",
       "default": "./keys.ts"
-    },
-    "./ai": {
-      "types": "./ai.ts",
-      "default": "./ai.ts"
     }
   },
   "scripts": {
@@ -21,14 +17,13 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@stripe/agent-toolkit": "^0.7.11",
-    "@t3-oss/env-nextjs": "^0.13.8",
+    "@t3-oss/env-nextjs": "^0.13.11",
     "server-only": "^0.0.1",
-    "stripe": "^19.1.0",
-    "zod": "^4.1.12"
+    "stripe": "^22.1.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   }
 }

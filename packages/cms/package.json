@@ -7,6 +7,22 @@
       "types": "./index.ts",
       "default": "./index.ts"
     },
+    "./access": {
+      "types": "./access.ts",
+      "default": "./access.ts"
+    },
+    "./collections": {
+      "types": "./collections/index.ts",
+      "default": "./collections/index.ts"
+    },
+    "./content": {
+      "types": "./content.ts",
+      "default": "./content.ts"
+    },
+    "./globals": {
+      "types": "./globals/index.ts",
+      "default": "./globals/index.ts"
+    },
     "./keys": {
       "types": "./keys.ts",
       "default": "./keys.ts"
@@ -14,26 +30,37 @@
     "./next-config": {
       "types": "./next-config.ts",
       "default": "./next-config.ts"
+    },
+    "./payload": {
+      "types": "./config.ts",
+      "default": "./config.ts"
     }
   },
   "scripts": {
-    "dev": "basehub dev",
-    "build": "basehub build",
-    "analyze": "basehub",
+    "build": "tsc --noEmit --emitDeclarationOnly false",
     "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@t3-oss/env-nextjs": "^0.13.8",
-    "basehub": "^9.5.2",
-    "react": "19.2.3",
-    "zod": "^4.1.12"
+    "@payloadcms/db-postgres": "3.85.0",
+    "@payloadcms/email-resend": "3.85.0",
+    "@payloadcms/next": "3.85.0",
+    "@payloadcms/richtext-lexical": "3.85.0",
+    "@payloadcms/storage-vercel-blob": "3.85.0",
+    "@t3-oss/env-nextjs": "^0.13.11",
+    "graphql": "16.14.0",
+    "payload": "3.85.0",
+    "server-only": "^0.0.1",
+    "sharp": "0.34.5",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "24.9.1",
-    "@types/react": "19.2.13",
-    "@types/react-dom": "19.2.3",
-    "next": "16.0.0"
+    "@types/node": "25.9.1",
+    "esbuild": "0.28.0",
+    "next": "16.2.6",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   }
 }

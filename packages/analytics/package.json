@@ -29,22 +29,23 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@next/third-parties": "16.1.5",
-    "@t3-oss/env-nextjs": "^0.13.8",
-    "@vercel/analytics": "^1.5.0",
-    "posthog-js": "^1.280.1",
-    "posthog-node": "^5.10.3",
-    "react": "19.2.3",
+    "@next/third-parties": "16.2.6",
+    "@t3-oss/env-nextjs": "^0.13.11",
+    "@vercel/analytics": "^2.0.1",
+    "posthog-js": "^1.376.2",
+    "posthog-node": "^5.35.4",
+    "react": "19.2.6",
     "server-only": "^0.0.1",
-    "zod": "^4.1.12"
+    "zod": "4.4.3"
   },
   "peerDependencies": {
     "next": ">=15.0.0"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "24.9.1",
-    "@types/react": "19.2.13",
-    "@types/react-dom": "19.2.3"
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "typescript": "^6.0.3"
   }
 }

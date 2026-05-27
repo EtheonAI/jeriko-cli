@@ -4,8 +4,8 @@ import type { Locale } from "./index";
 type Messages = typeof messages;
 
 declare module "next-intl" {
-    interface AppConfig {
-        Locale: Locale;
-        Messages: Messages;
-    }
+  interface AppConfig {
+    Locale: Locale;
+    Messages: Messages;
+  }
 }

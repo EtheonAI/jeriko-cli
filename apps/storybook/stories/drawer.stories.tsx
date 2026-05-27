@@ -13,13 +13,24 @@ import type { Meta, StoryObj } from "@storybook/react";
 /**
  * A drawer component for React.
  */
-const meta: Meta<typeof Drawer> = {
+const meta: Meta = {
   title: "ui/Drawer",
-  component: Drawer,
   tags: ["autodocs"],
-  argTypes: {},
-  render: (args) => (
-    <Drawer {...args}>
+  parameters: {
+    layout: "centered",
+  },
+};
+
+export default meta;
+
+type Story = StoryObj;
+
+/**
+ * The default form of the drawer.
+ */
+export const Default: Story = {
+  render: () => (
+    <Drawer>
       <DrawerTrigger>Open</DrawerTrigger>
       <DrawerContent>
         <DrawerHeader>
@@ -27,10 +38,7 @@ const meta: Meta<typeof Drawer> = {
           <DrawerDescription>This action cannot be undone.</DrawerDescription>
         </DrawerHeader>
         <DrawerFooter>
-          <button
-            className="rounded bg-primary px-4 py-2 text-primary-foreground"
-            type="button"
-          >
+          <button className="rounded bg-primary px-4 py-2 text-primary-foreground" type="button">
             Submit
           </button>
           <DrawerClose>
@@ -42,16 +50,4 @@ const meta: Meta<typeof Drawer> = {
       </DrawerContent>
     </Drawer>
   ),
-  parameters: {
-    layout: "centered",
-  },
 };
-
-export default meta;
-
-type Story = StoryObj<typeof meta>;
-
-/**
- * The default form of the drawer.
- */
-export const Default: Story = {};

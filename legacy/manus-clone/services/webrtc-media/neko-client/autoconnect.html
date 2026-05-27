@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jeriko Virtual Computer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; }
+    iframe { width: 100%; height: 100%; border: 0; }
+    #status {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #888; font-size: 14px;
+    }
+    #status.error { color: #e55; }
+    .spinner {
+      width: 24px; height: 24px; margin-right: 12px;
+      border: 2px solid #333; border-top-color: #888;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="status"><div class="spinner"></div>Connecting to virtual computer...</div>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      // server param = direct E2B sandbox Neko URL (e.g. https://8333-{id}.e2b.dev)
+      // session param = Jeriko session ID (enables proxy auth + TURN via webrtc-media service)
+      var serverOrigin = params.get('server') || '';
+      var sessionId = params.get('session') || '';
+      var nekoOrigin = serverOrigin || window.location.origin;
+
+      // Derive sandbox runtime origin (port 8330) from Neko origin (port 8333).
+      // E2B proxy format: https://8333-{sandboxId}.e2b.dev -> https://8330-{sandboxId}.e2b.dev
+      var runtimeOrigin = nekoOrigin.replace('8333-', '8330-');
+
+      // When loaded from webrtc-media service, use same origin for proxy endpoints
+      var proxyOrigin = (serverOrigin && window.location.origin !== serverOrigin)
+        ? window.location.origin
+        : null;
+
+      var maxRetries = 20;
+      var attempt = 0;
+
+      function setStatus(msg, isError) {
+        var el = document.getElementById('status');
+        el.className = isError ? 'error' : '';
+        el.innerHTML = isError ? msg : '<div class="spinner"></div>' + msg;
+      }
+
+      function loginWithToken(token) {
+        // Use "admin" as username -- Neko uses password to determine admin vs user access
+        fetch(nekoOrigin + '/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: serverOrigin ? 'include' : 'same-origin',
+          body: JSON.stringify({ username: 'admin', password: token })
+        })
+        .then(function(resp) {
+          if (resp.ok) {
+            // Login successful -- session cookie is set.
+            // Load the Neko Vue client which will auto-connect.
+            document.getElementById('status').style.display = 'none';
+            var iframe = document.createElement('iframe');
+            iframe.src = nekoOrigin + '/';
+            iframe.allow = 'clipboard-read; clipboard-write; autoplay; microphone; camera; display-capture';
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads';
+            document.body.appendChild(iframe);
+          } else if (resp.status === 401 || resp.status === 403) {
+            setStatus('Authentication failed -- token may have expired. Retrying...', false);
+            // Token might be stale (cached in sandbox runtime) -- retry pre-auth
+            setTimeout(fetchPreAuth, 2000);
+          } else {
+            // Neko server might not be ready yet -- retry
+            setStatus('Connecting to virtual computer (attempt ' + attempt + ')...', false);
+            setTimeout(fetchPreAuth, 2000);
+          }
+        })
+        .catch(function() {
+          // Network error -- Neko server not ready yet, retry
+          setStatus('Connecting to virtual computer (attempt ' + attempt + ')...', false);
+          setTimeout(fetchPreAuth, 2000);
+        });
+      }
+
+      function fetchPreAuth() {
+        attempt++;
+        if (attempt > maxRetries) {
+          setStatus('Failed to connect to virtual computer after ' + maxRetries + ' attempts.', true);
+          return;
+        }
+
+        setStatus('Connecting to virtual computer' + (attempt > 1 ? ' (attempt ' + attempt + ')...' : '...'), false);
+
+        // Try proxy auth first (if loaded from webrtc-media service with session param)
+        if (proxyOrigin && sessionId && attempt <= 3) {
+          fetch(proxyOrigin + '/v1/media/sessions/' + encodeURIComponent(sessionId) + '/auth')
+          .then(function(resp) {
+            if (resp.ok) return resp.json();
+            throw new Error('Proxy auth returned ' + resp.status);
+          })
+          .then(function(data) {
+            if (data && data.token) {
+              loginWithToken(data.token);
+            } else {
+              // Fall through to direct pre-auth
+              fetchDirectPreAuth();
+            }
+          })
+          .catch(function() {
+            // Proxy not available, fall through to direct
+            fetchDirectPreAuth();
+          });
+          return;
+        }
+
+        fetchDirectPreAuth();
+      }
+
+      function fetchDirectPreAuth() {
+        // Call sandbox runtime pre-auth endpoint to get actual Neko admin password.
+        // Port 8330 = sandbox runtime (RSA auth skipped for /neko/pre-auth).
+        // CORS is enabled on sandbox runtime (allow_origins=["*"]).
+        fetch(runtimeOrigin + '/neko/pre-auth', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        })
+        .then(function(resp) {
+          if (!resp.ok) {
+            // Runtime not ready yet -- retry
+            setTimeout(fetchPreAuth, 2000);
+            return;
+          }
+          return resp.json();
+        })
+        .then(function(data) {
+          if (!data) return;
+          if (data.ok && data.token) {
+            loginWithToken(data.token);
+          } else {
+            // Pre-auth returned but no token -- Neko might not have started yet
+            setTimeout(fetchPreAuth, 2000);
+          }
+        })
+        .catch(function() {
+          // Network error -- sandbox runtime not ready yet, retry
+          setTimeout(fetchPreAuth, 2000);
+        });
+      }
+
+      // Start pre-auth flow after a brief delay to let services boot
+      setTimeout(fetchPreAuth, 1000);
+    })();
+  </script>
+</body>
+</html>

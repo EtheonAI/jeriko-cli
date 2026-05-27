@@ -25,43 +25,33 @@ export const agentSessions = pgTable("agent_sessions", {
     .$onUpdate(() => new Date()),
 });
 
-export const agentSessionsRelations = relations(agentSessions, ({ one, many }) => ({
-  user: one(users, {
-    fields: [agentSessions.userId],
-    references: [users.id],
-  }),
-  messages: many(messages),
-  agents: many(agents),
-  files: many(files),
-  votes: many(votes),
-  documents: many(documents),
-}));
-
 // Messages in agent sessions
-export const messages = pgTable("messages", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  sessionId: text("session_id")
-    .notNull()
-    .references(() => agentSessions.id, { onDelete: "cascade" }),
-  role: text("role", {
-    enum: ["user", "assistant", "system", "tool"],
-  }).notNull(),
-  content: text("content").notNull(),
-  /** Full AI SDK UIMessage parts array — preserves tool calls, plans, step-starts for historical replay */
-  parts: jsonb("parts").$type<Record<string, unknown>[]>(),
-  metadata: jsonb("metadata").$type<{
-    toolName?: string;
-    toolCallId?: string;
-    model?: string;
-    tokens?: { input: number; output: number };
-    [key: string]: unknown;
-  }>(),
-  createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
-}, (table) => [
-  index("idx_messages_session_created").on(table.sessionId, table.createdAt),
-]);
+export const messages = pgTable(
+  "messages",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => agentSessions.id, { onDelete: "cascade" }),
+    role: text("role", {
+      enum: ["user", "assistant", "system", "tool"],
+    }).notNull(),
+    content: text("content").notNull(),
+    /** Full AI SDK UIMessage parts array — preserves tool calls, plans, step-starts for historical replay */
+    parts: jsonb("parts").$type<Record<string, unknown>[]>(),
+    metadata: jsonb("metadata").$type<{
+      toolName?: string;
+      toolCallId?: string;
+      model?: string;
+      tokens?: { input: number; output: number };
+      [key: string]: unknown;
+    }>(),
+    createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("idx_messages_session_created").on(table.sessionId, table.createdAt)]
+);
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   session: one(agentSessions, {
@@ -83,7 +73,7 @@ export const votes = pgTable(
     messageId: text("message_id").notNull(),
     rating: integer("rating").notNull(), // 1-5 stars
   },
-  (table) => [primaryKey({ columns: [table.chatId, table.messageId] })],
+  (table) => [primaryKey({ columns: [table.chatId, table.messageId] })]
 );
 
 export const votesRelations = relations(votes, ({ one }) => ({
@@ -135,7 +125,3 @@ export const documentsRelations = relations(documents, ({ one }) => ({
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
 export type DocumentKind = "text" | "code" | "image" | "sheet" | "html";
-
-// Forward declaration
-import { agents } from "./agents";
-import { files } from "./files";

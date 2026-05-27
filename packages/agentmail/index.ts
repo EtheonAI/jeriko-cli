@@ -8,6 +8,10 @@ let _client: AgentMailClient | null = null;
 function getClient(): AgentMailClient {
   if (!_client) {
     const env = keys();
+    if (!env.AGENTMAIL_API_KEY) {
+      throw new Error("AGENTMAIL_API_KEY is required to use AgentMail.");
+    }
+
     _client = new AgentMailClient({
       apiKey: env.AGENTMAIL_API_KEY,
     });

@@ -1,0 +1,14 @@
+# expected: FLOW_PARSE_UNKNOWN_TOP_LEVEL_KEY
+flow: "0.1"
+name: unknown_top_level_key
+goal: "Unknown top-level keys should fail."
+raw_dag:
+  nodes: []
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task

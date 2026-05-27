@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@repo/design-system/components/ui/button";
-import { captureException } from "@sentry/nextjs";
+import { captureException } from "@repo/observability/error";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 
@@ -12,7 +12,7 @@ type ErrorPageProps = {
 
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
-    captureException(error);
+    void captureException(error);
   }, [error]);
 
   return (
@@ -23,13 +23,10 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
         </div>
         <h2 className="text-xl font-semibold">Something went wrong</h2>
         <p className="max-w-md text-sm text-muted-foreground">
-          An unexpected error occurred. Our team has been notified and is working
-          on a fix.
+          An unexpected error occurred. Our team has been notified and is working on a fix.
         </p>
         {error.digest && (
-          <p className="font-mono text-xs text-muted-foreground">
-            Error ID: {error.digest}
-          </p>
+          <p className="font-mono text-xs text-muted-foreground">Error ID: {error.digest}</p>
         )}
       </div>
       <Button onClick={reset} variant="outline" className="gap-2">

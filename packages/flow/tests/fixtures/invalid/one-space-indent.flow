@@ -1,0 +1,9 @@
+# expected: FLOW_PARSE_BAD_INDENT
+flow: "0.1"
+name: bad_one_space_indent
+goal: "One-space indentation is not valid."
+
+jobs:
+ main:
+   trigger:
+     type: manual

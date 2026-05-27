@@ -11,4 +11,5 @@ export const keys = () =>
     runtimeEnv: {
       SVIX_TOKEN: process.env.SVIX_TOKEN,
     },
+    emptyStringAsUndefined: true,
   });

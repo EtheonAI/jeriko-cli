@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { blog, legal } from "@repo/cms";
 import type { MetadataRoute } from "next";
 import { env } from "@/env";
+import { getBlogPosts, getLegalPages } from "@/lib/content";
 
 const appFolders = fs.readdirSync("app", { withFileTypes: true });
 const pages = appFolders
@@ -9,11 +9,9 @@ const pages = appFolders
   .filter((folder) => !folder.name.startsWith("_"))
   .filter((folder) => !folder.name.startsWith("("))
   .map((folder) => folder.name);
-const blogs = (await blog.getPosts()).map((post) => post._slug);
-const legals = (await legal.getPosts()).map((post) => post._slug);
-const protocol = env.VERCEL_PROJECT_PRODUCTION_URL?.startsWith("https")
-  ? "https"
-  : "http";
+const blogs = (await getBlogPosts()).map((post) => post._slug);
+const legals = (await getLegalPages()).map((post) => post._slug);
+const protocol = env.VERCEL_PROJECT_PRODUCTION_URL?.startsWith("https") ? "https" : "http";
 const url = new URL(`${protocol}://${env.VERCEL_PROJECT_PRODUCTION_URL}`);
 
 const sitemap = async (): Promise<MetadataRoute.Sitemap> => [

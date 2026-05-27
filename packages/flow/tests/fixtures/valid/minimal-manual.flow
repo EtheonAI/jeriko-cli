@@ -1,0 +1,12 @@
+flow: "0.1"
+name: minimal_manual
+goal: "Run one manual task."
+
+jobs:
+  main:
+    trigger:
+      type: manual
+    tasks:
+      - id: draft
+        type: ai_task
+        worker: writer

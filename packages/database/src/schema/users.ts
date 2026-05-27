@@ -55,15 +55,6 @@ export const users = pgTable("users", {
   preferences: jsonb("preferences").$type<UserPreferences>(),
 });
 
-export const usersRelations = relations(users, ({ many }) => ({
-  accounts: many(accounts),
-  authSessions: many(authSessions),
-  agentSessions: many(agentSessions),
-  files: many(files),
-  members: many(members),
-  invitations: many(invitations),
-}));
-
 // Auth-related tables for Better-Auth
 export const accounts = pgTable("accounts", {
   id: text("id")
@@ -133,8 +124,3 @@ export const verifications = pgTable("verifications", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
-
-// Forward declarations for relations
-import { agentSessions } from "./sessions";
-import { files } from "./files";
-import { members, invitations } from "./organizations";

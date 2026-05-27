@@ -1,0 +1,5 @@
+# expected: FLOW_PARSE_YAML_FEATURE_UNSUPPORTED
+---
+flow: "0.1"
+name: bad_document_marker
+goal: "Document markers are not supported."

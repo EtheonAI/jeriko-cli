@@ -19,13 +19,14 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
-    "@t3-oss/env-nextjs": "^0.13.8",
-    "agentmail": "^0.2.11",
-    "zod": "^3.25.28"
+    "@t3-oss/env-nextjs": "^0.13.11",
+    "@x402/fetch": "^2.13.0",
+    "agentmail": "^0.5.3",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "24.9.1",
-    "typescript": "^5.9.3"
+    "@types/node": "25.9.1",
+    "typescript": "^6.0.3"
   }
 }

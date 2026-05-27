@@ -1,5 +1,3 @@
-import { auth } from "@repo/auth/server";
+import { authRouteHandlers } from "@repo/auth/next";
 
-const handler = auth.handler;
-
-export { handler as GET, handler as POST };
+export const { GET, POST } = authRouteHandlers;

@@ -38,25 +38,31 @@
     "./server": {
       "types": "./server.ts",
       "default": "./server.ts"
+    },
+    "./status": {
+      "types": "./status/index.tsx",
+      "default": "./status/index.tsx"
     }
   },
   "scripts": {
     "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
     "@logtail/next": "^0.3.1",
-    "@sentry/nextjs": "^10.22.0",
-    "@t3-oss/env-nextjs": "^0.13.8",
-    "react": "19.2.3",
+    "@sentry/nextjs": "^10.54.0",
+    "@t3-oss/env-nextjs": "^0.13.11",
+    "react": "19.2.6",
     "server-only": "^0.0.1",
-    "zod": "^4.1.12"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/node": "24.9.1",
-    "@types/react": "19.2.13",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   }
 }

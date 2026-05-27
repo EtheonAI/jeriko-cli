@@ -7,34 +7,6 @@
     ".": {
       "types": "./index.ts",
       "default": "./index.ts"
-    },
-    "./setup": {
-      "types": "./setup.ts",
-      "default": "./setup.ts"
-    },
-    "./factories": {
-      "types": "./src/factories/index.ts",
-      "default": "./src/factories/index.ts"
-    },
-    "./db": {
-      "types": "./src/db/test-db.ts",
-      "default": "./src/db/test-db.ts"
-    },
-    "./db/seed": {
-      "types": "./src/db/seed.ts",
-      "default": "./src/db/seed.ts"
-    },
-    "./helpers/trpc-caller": {
-      "types": "./src/helpers/trpc-caller.ts",
-      "default": "./src/helpers/trpc-caller.ts"
-    },
-    "./msw": {
-      "types": "./src/msw/index.ts",
-      "default": "./src/msw/index.ts"
-    },
-    "./msw/browser": {
-      "types": "./src/msw/browser.ts",
-      "default": "./src/msw/browser.ts"
     }
   },
   "scripts": {
@@ -42,13 +14,13 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.5.0",
-    "vitest": "^4.0.3"
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "25.9.1",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@faker-js/faker": "^10.3.0",
-    "msw": "^2.12.9",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
   }
 }

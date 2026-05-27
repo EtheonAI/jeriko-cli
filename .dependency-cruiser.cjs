@@ -37,6 +37,60 @@ module.exports = {
       to: { path: "^services/" },
     },
 
+    // ── Flow language contracts stay provider and app neutral ──
+    {
+      name: "no-flow-to-app-or-runtime-sdk",
+      severity: "error",
+      comment:
+        "@repo/flow owns source/parser/compiler/runtime contracts only; apps and provider SDKs belong behind adjacent packages.",
+      from: { path: "^packages/flow/" },
+      to: {
+        path: [
+          "^apps/",
+          "node_modules/@vercel/sandbox",
+          "node_modules/@vercel/workflow",
+          "node_modules/workflow",
+          "node_modules/e2b",
+          "node_modules/@e2b/",
+          "node_modules/ai",
+          "node_modules/@ai-sdk/",
+          "node_modules/better-auth",
+          "node_modules/drizzle-orm",
+          "node_modules/stripe",
+          "node_modules/resend",
+          "node_modules/typesense",
+        ],
+      },
+    },
+
+    // ── Sandbox providers are owned by @repo/sandbox ──
+    {
+      name: "no-direct-sandbox-provider-outside-sandbox",
+      severity: "error",
+      comment:
+        "Vercel Sandbox/E2B SDK imports must be isolated behind @repo/sandbox, never app-local or unrelated package-local.",
+      from: {
+        path: ["^apps/", "^packages/(?!sandbox/)"],
+      },
+      to: {
+        path: ["node_modules/@vercel/sandbox", "node_modules/e2b", "node_modules/@e2b/"],
+      },
+    },
+
+    // ── Connector providers are owned by @repo/connectors ──
+    {
+      name: "no-direct-composio-provider-outside-connectors",
+      severity: "error",
+      comment:
+        "Composio SDK imports must be isolated behind @repo/connectors; apps and unrelated packages consume @repo/connectors instead.",
+      from: {
+        path: ["^apps/", "^packages/(?!connectors/)"],
+      },
+      to: {
+        path: ["node_modules/@composio/", "node_modules/composio-core"],
+      },
+    },
+
     // ── Services cannot import from other services ──
     {
       name: "no-cross-service",
@@ -82,6 +136,7 @@ module.exports = {
           "\\.test\\.", // Test files
           "\\.spec\\.", // Spec files
           "\\.stories\\.", // Storybook stories
+          "(^|/)tests/(support|fixtures)/", // Test-only support files
           "seed", // Seed files
         ],
       },
@@ -99,6 +154,7 @@ module.exports = {
           "\\.spec\\.",
           "\\.stories\\.",
           "(^|/)test/",
+          "(^|/)tests/(support|fixtures)/",
           "(^|/)__tests__/",
           "(^|/)e2e/",
           "vitest\\.config",
