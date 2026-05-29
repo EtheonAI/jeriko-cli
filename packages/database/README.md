@@ -23,6 +23,12 @@ Future workflow-native persistence must be designed under `MADR-096` before work
 
 Browser refresh/tab close must not cancel a workflow run. Cancellation must be explicit and persisted.
 
+## Flow Persistence Plan
+
+Package-local plan:
+
+`packages/database/FLOW_PERSISTENCE_PLAN.md`
+
 ## Boundaries
 
 This package must not own:

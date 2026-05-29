@@ -879,3 +879,65 @@ Large reset commits become more deterministic, generated local store files canno
 ### Alternatives considered
 
 Bypass hooks; disable lint-staged stash/revert; run full repo lint in pre-commit; replace local tooling during the commit fix.
+
+## MADR-097: Adopt Flow Runtime Pack v0.1 as blueprint, not active runtime code
+
+**Status:** Accepted
+
+### Context
+
+The downloaded `flow_language_runtime_pack_v0_1` is a valuable end-to-end research pack for `.flow`, compiler stages, semantic validation, Inngest runtime sketches, ECP, TaskReports, FlowPatch, permissions, storage, billing, and database tables. Its implementation also mixes YAML parsing, Inngest, runtime placeholders, and provider concerns inside one package.
+
+### Decision
+
+Copy the pack into `docs/ai-workflow-os/_source/flow-language-runtime-pack-v0-1`, adopt its concepts and checklists, and do not import its active implementation into `@repo/flow`.
+
+`@repo/flow` remains provider-neutral and must not import YAML, Inngest, AI SDK, Vercel Sandbox, database clients, Next.js, or UI code.
+
+### Consequences
+
+The repo keeps the pack as stable evidence while implementation proceeds through the existing package boundaries: `@repo/flow`, `@repo/ai`, `@repo/connectors`, `@repo/sandbox`, `@repo/database`, app/server runtime adapters, and `apps/app`.
+
+### Alternatives considered
+
+Import the pack directly; use the pack's YAML parser first; leave the pack only in Downloads; split the pack into many packages immediately.
+
+## MADR-098: Build `.flow` end-to-end runtime through package phases
+
+**Status:** Accepted
+
+### Context
+
+The target platform needs prompt-to-`.flow` generation, compiler semantics, workflow persistence, durable runtime execution, AI SDK workers, policy-wrapped tools/connectors/sandbox, and resumable app UI. Current code has only foundations.
+
+### Decision
+
+Finish `@repo/flow` first, then `@repo/database`, runtime adapter/Inngest, `@repo/ai`, tools/connectors/sandbox, and finally `apps/app` workflow UI/API.
+
+### Consequences
+
+Prevents app routes from becoming the runtime and keeps provider boundaries testable before product UI work.
+
+### Alternatives considered
+
+Build app UI first; import the runtime pack directly; put Inngest inside `@repo/flow`; let main chat orchestrate everything.
+
+## MADR-099: Use AI SDK subagents with Gateway-first model routing
+
+**Status:** Accepted
+
+### Context
+
+The platform needs a model and subagent architecture for `.flow` that supports orchestration, worker delegation, text/research/code/image/voice/video work, streaming progress, durable reports, cost control, and provider flexibility.
+
+### Decision
+
+Use Vercel AI Gateway first behind `@repo/ai` model aliases and policy. Use AI SDK subagents for scoped worker execution when context isolation or specialist tools justify the overhead. Keep OpenRouter as a secondary adapter and direct provider keys as a controlled escape hatch.
+
+### Consequences
+
+Model choice becomes policy-driven instead of hardcoded. Gateway gives native AI SDK/Vercel integration and zero-markup paid-tier economics. OpenRouter/direct providers remain available without leaking provider SDKs into app routes.
+
+### Alternatives considered
+
+Gateway only; OpenRouter first; direct provider keys everywhere; custom subagent loop without AI SDK.

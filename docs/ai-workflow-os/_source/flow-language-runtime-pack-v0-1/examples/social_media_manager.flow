@@ -1,0 +1,247 @@
+flow: "0.1"
+name: social_media_manager
+goal: |
+  Create daily social posts, generate images, ask approval before publishing,
+  track analytics, send weekly reports, and improve future content.
+
+mode: supervised
+
+imports:
+  brand: brand.md
+  writer: instructions/writer.md
+  image: instructions/image.md
+  analytics: instructions/analytics.md
+
+files:
+  memory: memory.md
+  state: state.json
+  events: events.jsonl
+  artifacts: artifacts/
+  scripts: scripts/
+
+permissions:
+  auto:
+    - read_public_web
+    - create_drafts
+    - write_internal_files
+    - run_sandbox_code
+    - analyze_metrics
+  ask:
+    - publish_social_post
+    - send_email
+    - post_slack_message
+  block:
+    - delete_data
+    - transfer_money
+    - expose_secrets
+    - change_security_settings
+
+tools:
+  - web.search
+  - web.read
+  - instagram.publish
+  - linkedin.publish
+  - x.publish
+  - google_analytics.query
+  - gmail.send
+  - slack.post
+  - sandbox.python
+
+workers:
+  researcher:
+    type: ai
+    capabilities: [research, summarize]
+    model_policy: balanced
+  writer:
+    type: ai
+    capabilities: [write_content, brand_voice]
+    model_policy: quality
+  image_worker:
+    type: image
+    capabilities: [image_prompt, image_generation]
+    model_policy: quality
+  verifier:
+    type: verifier
+    capabilities: [schema_check, policy_check]
+    model_policy: cheap
+
+budgets:
+  max_credits_per_run: 50
+  max_runtime_minutes: 45
+  max_tool_calls: 100
+  max_ai_tasks: 20
+  max_sandbox_seconds: 300
+  on_exceed: pause_and_ask
+
+triggers:
+  - id: weekday_morning
+    type: schedule
+    cron: "0 10 * * MON-FRI"
+    timezone: "America/Los_Angeles"
+    jitter: "5m"
+    misfire: run_once
+
+  - id: weekly_report
+    type: schedule
+    cron: "0 16 * * FRI"
+    timezone: "America/Los_Angeles"
+    jitter: "10m"
+    misfire: run_once
+
+jobs:
+  daily_content:
+    trigger: weekday_morning
+    tasks:
+      - id: research_topics
+        type: ai_task
+        worker: researcher
+        uses: [web.search, web.read]
+        output:
+          - artifacts/trends.json
+        required: false
+        if_fail: continue_degraded
+        emit: research.completed
+
+      - id: draft_per_platform
+        type: foreach
+        items: [x, instagram, linkedin]
+        as: platform
+        max_parallelism: 3
+        max_items: 3
+        body:
+          - id: draft
+            type: ai_task
+            worker: writer
+            input:
+              - artifacts/trends.json
+              - brand.md
+              - memory.md
+              - instructions/{{platform}}.md
+            output:
+              - artifacts/posts/{{platform}}.json
+            emit: post.draft.ready
+
+      - id: generate_images
+        type: foreach
+        items: [instagram, linkedin]
+        as: platform
+        max_parallelism: 2
+        max_items: 2
+        body:
+          - id: image
+            type: ai_task
+            worker: image_worker
+            input:
+              - artifacts/posts/{{platform}}.json
+              - instructions/image.md
+            output:
+              - artifacts/images/{{platform}}.png
+            emit: artifact.image.generated
+            notify:
+              ui: true
+              tasks: [approval, publish_per_platform]
+              main_ai: false
+
+      - id: validate_assets
+        type: sandbox_command
+        run: python scripts/validate_social_assets.py
+        input:
+          - artifacts/posts/
+          - artifacts/images/
+          - brand.md
+        output:
+          - artifacts/validation_report.json
+        if_fail: regenerate_once_then_ask
+        emit: validation.completed
+
+      - id: approval
+        type: human_review
+        review:
+          - artifacts/posts/
+          - artifacts/images/
+          - artifacts/validation_report.json
+
+      - id: publish_per_platform
+        type: foreach
+        items: [x, instagram, linkedin]
+        as: platform
+        max_parallelism: 1
+        max_items: 3
+        body:
+          - id: publish
+            type: tool_call
+            uses: "{{platform}}.publish"
+            requires_approval: true
+            input:
+              - artifacts/posts/{{platform}}.json
+              - artifacts/images/{{platform}}.png
+            emit: post.published
+
+  weekly_report:
+    trigger: weekly_report
+    tasks:
+      - id: fetch_analytics
+        type: tool_call
+        uses: google_analytics.query
+        output:
+          - artifacts/analytics.json
+
+      - id: aggregate_metrics
+        type: sandbox_command
+        run: python scripts/aggregate_metrics.py
+        input:
+          - artifacts/analytics.json
+        output:
+          - artifacts/weekly_metrics.json
+
+      - id: analyze_performance
+        type: ai_task
+        worker_policy:
+          require: [research, summarize]
+          optimize_for: quality
+        input:
+          - artifacts/weekly_metrics.json
+          - memory.md
+        output:
+          - artifacts/weekly_report.md
+          - artifacts/memory_patch.json
+
+      - id: send_report
+        type: tool_call
+        uses: gmail.send
+        requires_approval: true
+        input:
+          - artifacts/weekly_report.md
+
+      - id: post_slack_summary
+        type: tool_call
+        uses: slack.post
+        requires_approval: true
+        input:
+          - artifacts/weekly_report.md
+
+      - id: improve_memory
+        type: memory_patch
+        target: memory.md
+        input:
+          - artifacts/memory_patch.json
+        requires_approval: true
+
+reflection:
+  mode: on_triggers
+  send_to_main_ai:
+    when:
+      - completed_with_issues
+      - repeated_failure
+      - approval_rejected
+      - cost_exceeded
+      - weekly_review
+    include:
+      - run_summary
+      - task_reports
+      - issue_cards
+      - artifact_summaries
+      - cost_summary
+    exclude:
+      - raw_logs
+      - hidden_reasoning

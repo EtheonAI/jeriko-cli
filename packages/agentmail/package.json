@@ -21,7 +21,7 @@
   "dependencies": {
     "@t3-oss/env-nextjs": "^0.13.11",
     "@x402/fetch": "^2.13.0",
-    "agentmail": "^0.5.3",
+    "agentmail": "^0.5.4",
     "zod": "4.4.3"
   },
   "devDependencies": {

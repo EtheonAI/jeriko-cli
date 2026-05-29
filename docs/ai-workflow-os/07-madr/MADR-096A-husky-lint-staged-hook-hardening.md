@@ -17,7 +17,7 @@ Keep Husky and lint-staged at the root because the installed versions are curren
 - `husky@9.1.7`
 - `lint-staged@17.0.5`
 - `node >=22.22.1`
-- `pnpm@11.3.0`
+- `pnpm@11.4.0`
 
 Use a minimal Husky hook that delegates to local lint-staged:
 
@@ -28,7 +28,7 @@ npx --no-install lint-staged --diff-filter=ACMR --concurrent=false --relative --
 Use `.lintstagedrc.mjs` for repo-aware command generation:
 
 - filter to existing files before passing paths to tools;
-- skip deleted files, `legacy/` reference files, `.pnpm-store/`, and stale generated E2B template payloads;
+- skip deleted files, `legacy/` reference files, vendored `docs/ai-workflow-os/_source/` research snapshots, `.pnpm-store/`, and stale generated E2B template payloads;
 - chunk file arguments to avoid command-line length failures;
 - run ESLint fixes before Prettier for JS/TS files;
 - run Prettier for structured docs/config files;

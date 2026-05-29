@@ -15,6 +15,18 @@
         "dist/**"
       ]
     },
+    "@repo/cms#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@repo/database#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@repo/search#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },

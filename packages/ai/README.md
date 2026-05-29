@@ -65,6 +65,18 @@ Use these features through AI SDK directly or this package's focused subpaths:
 - Advanced streaming: always forward `req.signal`; do not implement eager producer loops that ignore backpressure or cancellation.
 - Resume/reconnect: AI SDK resumable chat streams are a transport feature, not the workflow runtime. Durable workflow execution must live behind persisted runs/events and a runtime adapter. Browser disconnect must not be interpreted as run cancellation.
 
+## Flow Integration Plan
+
+Package-local plan:
+
+`packages/ai/FLOW_AI_SDK_INTEGRATION_PLAN.md`
+
+Subagent/model-routing plan:
+
+`packages/ai/SUBAGENTS_GATEWAY_MODEL_ROUTING_PLAN.md`
+
+This package is not the `.flow` runtime. It will provide the flow architect/repair agents, worker router, subagent task runner, model policy, scoped tool resolution, and TaskReport/ECP mapping after `@repo/flow` produces stable execution plans.
+
 ## Rules
 
 - Use AI SDK v6 APIs directly where possible.

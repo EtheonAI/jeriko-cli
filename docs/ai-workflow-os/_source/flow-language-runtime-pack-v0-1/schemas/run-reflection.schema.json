@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuest.ai/schemas/run-reflection.schema.json",
+  "title": "RunReflectionPacket v0.1",
+  "type": "object",
+  "required": [
+    "workflow_id",
+    "run_id",
+    "status",
+    "summary"
+  ],
+  "properties": {
+    "workflow_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "completed_tasks": {
+      "type": "integer"
+    },
+    "failed_tasks": {
+      "type": "integer"
+    },
+    "fallbacks_used": {
+      "type": "integer"
+    },
+    "approvals_pending": {
+      "type": "integer"
+    },
+    "artifacts_created": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "cost": {
+      "type": "object"
+    },
+    "worker_metrics": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "patch_opportunities": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

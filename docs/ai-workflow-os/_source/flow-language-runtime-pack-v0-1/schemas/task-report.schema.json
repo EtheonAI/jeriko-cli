@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuest.ai/schemas/task-report.schema.json",
+  "title": "TaskReport v0.1",
+  "type": "object",
+  "required": [
+    "task_id",
+    "status",
+    "summary"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "worker_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "skipped",
+        "degraded",
+        "waiting"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "inputs_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs_created": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "emitted_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tools_used": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "model_used": {
+      "type": "string"
+    },
+    "cost": {
+      "type": "object"
+    },
+    "quality": {
+      "type": "object"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "suggested_patches": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@
 ## Principles
 
 - Use relational tables for ownership, workflows, runs, approvals, artifacts, and billing.
-- Store `compiled_ast` and YAML-derived structured data as `jsonb`.
+- Store `compiled_ast`, compiled plans, and `.flow`-derived structured data as `jsonb`.
 - Store artifact file contents in object storage; store metadata in Postgres.
 - Append-only execution events power timeline, audit, pulse, and debugging.
 - Every table with org-owned data has `org_id`.
@@ -73,7 +73,7 @@
 - workflow_id uuid fk workflows.id
 - org_id uuid fk organizations.id
 - version_number int
-- yaml_source text
+- flow_source text
 - compiled_ast jsonb
 - schema_version text
 - files_manifest jsonb

@@ -44,6 +44,7 @@ This folder will hold the phase-by-phase audit of the existing Jeriko codebase.
 - [`seo-p3-3-audit-2026-05-27.md`](./seo-p3-3-audit-2026-05-27.md): P3.3 `@repo/seo` Next Metadata helper audit, stale branding/env/dependency verdict, and web metadata blocker.
 - [`apps-web-contact-calendar-unblock-2026-05-27.md`](./apps-web-contact-calendar-unblock-2026-05-27.md): web contact Calendar DayPicker v10 `initialFocus` to `autoFocus` unblock and validation.
 - [`flow-p4-1-audit-2026-05-27.md`](./flow-p4-1-audit-2026-05-27.md): P4.1 `@repo/flow` package audit, no-YAML parser gate, custom `.flow` grammar checklist, and validation plan.
+- [`flow-end-to-end-readiness-audit-2026-05-27.md`](./flow-end-to-end-readiness-audit-2026-05-27.md): end-to-end readiness matrix for `@repo/flow`, `@repo/ai`, `@repo/connectors`, `@repo/sandbox`, `@repo/database`, runtime adapter, and `apps/app`.
 - [`resumable-runs-current-state-audit-2026-05-27.md`](./resumable-runs-current-state-audit-2026-05-27.md): current code evidence for Manus-style resume/reconnect, missing workflow-native runtime/API/UI pieces, and required implementation gate.
 - [`active-package-viability-verdict-2026-05-26.md`](./active-package-viability-verdict-2026-05-26.md): verdict on whether the active packages/features should stay core, gated, replaced, or removed.
 - [`../01-architecture/monorepo-target-architecture.md`](../01-architecture/monorepo-target-architecture.md): active app/package classification, legacy service deactivation, and target frontend/backend ownership.

@@ -20,7 +20,7 @@
     "@repo/auth": "workspace:*",
     "@t3-oss/env-nextjs": "^0.13.11",
     "server-only": "^0.0.1",
-    "svix": "^1.94.0",
+    "svix": "^1.95.1",
     "zod": "4.4.3"
   },
   "devDependencies": {

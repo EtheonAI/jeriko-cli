@@ -132,3 +132,11 @@ Server-only exports:
 - Do not expose hosted MCP URLs, session IDs, connected-account IDs, or provider tokens to the client unless a route-specific security review permits a safe reference.
 - Composio workbench is a connector/provider feature, not our workflow sandbox. Keep Vercel Sandbox semantics in `@repo/sandbox`.
 - Direct provider connectors must be justified by product criticality, latency, observability, idempotency, scopes, or UX requirements.
+
+## Flow Integration Follow-Up
+
+Package-local plan:
+
+- `packages/connectors/FLOW_CONNECTORS_INTEGRATION_PLAN.md`
+
+Connector actions must become workflow-visible only through `@repo/ai/tools` platform manifests. Raw Composio/direct actions are not `.flow` tools until permission, approval, idempotency, audit, billing, and event normalization are resolved.

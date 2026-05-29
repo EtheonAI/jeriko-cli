@@ -199,7 +199,7 @@ Allowed now:
 
 Not allowed now unless explicitly moved into a new phase:
 
-- implement `.flow` parser/runtime;
+- implement `.flow` parser/runtime outside the active `@repo/flow` package phase, MADR, research, and validation plan;
 - redesign the whole app UI;
 - migrate sandbox provider;
 - rewrite auth from scratch;

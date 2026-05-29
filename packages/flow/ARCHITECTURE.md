@@ -107,6 +107,8 @@ Implemented now:
 
 - source contracts;
 - token/CST contracts;
+- custom lexer behavior;
+- custom CST parser behavior;
 - AST schemas;
 - compiler contract;
 - kernel vocabulary;
@@ -120,14 +122,59 @@ Implemented now:
 
 Not implemented yet:
 
-- full lexer behavior;
-- full parser behavior;
+- AST normalization from parsed CST;
 - AST normalization from source;
 - symbol table builder;
 - semantic validation;
 - execution planner;
 - runtime interpreter;
 - provider runtime adapter.
+
+## Flow Runtime Pack v0.1 Review
+
+Local source snapshot:
+
+- `docs/ai-workflow-os/_source/flow-language-runtime-pack-v0-1`
+
+Audit result:
+
+- 48 files copied.
+- 5,226 lines inventoried.
+- The pack is accepted as a blueprint, not active implementation.
+
+Decision:
+
+- `docs/ai-workflow-os/07-madr/MADR-097-flow-runtime-pack-v0-1-blueprint-adoption.md`
+
+Package-local memory:
+
+- `packages/flow/FLOW_RUNTIME_PACK_V0_1.md`
+
+What `@repo/flow` keeps from the pack:
+
+- `.flow` source language and compiler pipeline.
+- EventContextPackets.
+- TaskReports.
+- IssueCards.
+- RunReflectionPackets.
+- FlowPatch.
+- permission modes.
+- symbol table and semantic validation phase list.
+- provider-neutral execution plan requirements.
+
+What `@repo/flow` rejects from the pack:
+
+- YAML parser dependency.
+- direct Inngest import.
+- direct AI SDK import.
+- direct Vercel Sandbox import.
+- database client or migration ownership.
+- runtime placeholder execution as production code.
+- substring-based permission enforcement.
+
+Implementation rule:
+
+- Use the pack examples as fixture candidates only after cleaning their interpolation, scoped task IDs, tool manifests, event payloads, and artifact/import references.
 
 ## Resumable Run Requirement
 

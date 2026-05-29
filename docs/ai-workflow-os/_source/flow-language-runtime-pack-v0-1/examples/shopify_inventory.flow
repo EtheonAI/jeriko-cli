@@ -1,0 +1,188 @@
+flow: "0.1"
+name: shopify_inventory_operator
+goal: |
+  Monitor Shopify inventory, supplier emails, CRM updates, reorder approvals,
+  and weekly operations reporting.
+
+mode: supervised
+
+imports:
+  inventory_rules: instructions/inventory_rules.md
+  supplier_rules: instructions/supplier_email.md
+  customer_rules: instructions/customer_backorder.md
+  crm_rules: instructions/crm_update.md
+
+permissions:
+  auto:
+    - read_shopify
+    - read_gmail
+    - read_crm
+    - write_internal_files
+    - run_sandbox_code
+  ask:
+    - send_email
+    - update_crm
+    - create_purchase_order
+    - notify_customer
+    - post_slack_message
+  block:
+    - delete_customer_data
+    - charge_customer
+    - refund_order
+    - change_store_settings
+    - transfer_money
+
+tools:
+  - shopify.inventory.read
+  - shopify.orders.read
+  - gmail.read
+  - gmail.send
+  - crm.contact.upsert
+  - crm.deal.update
+  - slack.post
+  - sandbox.python
+
+workers:
+  classifier:
+    type: ai
+    capabilities: [classify_email, extract_fields]
+    model_policy: cheap
+  writer:
+    type: ai
+    capabilities: [write_email, summarize]
+    model_policy: balanced
+  verifier:
+    type: verifier
+    capabilities: [policy_check, schema_check]
+    model_policy: cheap
+
+triggers:
+  - id: shopify_inventory_updated
+    type: app_event
+    event: shopify.inventory.updated
+
+  - id: supplier_email_received
+    type: app_event
+    event: gmail.email_received
+    match:
+      from_domain: supplier.com
+
+  - id: weekly_ops
+    type: schedule
+    cron: "0 16 * * FRI"
+    timezone: "America/Los_Angeles"
+
+jobs:
+  inventory_monitor:
+    trigger: shopify_inventory_updated
+    tasks:
+      - id: normalize_inventory_event
+        type: sandbox_command
+        run: python scripts/normalize_shopify_event.py
+        input:
+          - event.payload
+        output:
+          - artifacts/inventory_event.json
+
+      - id: check_thresholds
+        type: sandbox_command
+        run: python scripts/check_thresholds.py
+        input:
+          - artifacts/inventory_event.json
+          - instructions/inventory_rules.md
+        output:
+          - artifacts/stock_status.json
+
+      - id: emit_low_stock
+        type: condition
+        if: stock_status.low_stock == true
+        then:
+          - id: low_stock_event
+            type: emit_event
+            event: inventory.low_stock
+
+  supplier_email_intake:
+    trigger: supplier_email_received
+    tasks:
+      - id: classify_email
+        type: ai_task
+        worker: classifier
+        input:
+          - event.email
+          - instructions/supplier_email.md
+        output:
+          - artifacts/supplier_email_classification.json
+
+      - id: extract_update
+        type: ai_task
+        worker: classifier
+        input:
+          - event.email
+        output:
+          - artifacts/supplier_update.json
+        if_fail: ask_user
+
+      - id: emit_supplier_update
+        type: emit_event
+        event: supplier.update_received
+
+  reorder_approval:
+    trigger:
+      id: low_stock
+      type: workflow_event
+      event: inventory.low_stock
+    tasks:
+      - id: calculate_reorder
+        type: sandbox_command
+        run: python scripts/calculate_reorder_quantity.py
+        input:
+          - event.payload
+          - instructions/inventory_rules.md
+        output:
+          - artifacts/reorder_plan.json
+
+      - id: draft_supplier_email
+        type: ai_task
+        worker: writer
+        input:
+          - artifacts/reorder_plan.json
+          - instructions/supplier_email.md
+        output:
+          - artifacts/reorder_email_draft.json
+
+      - id: approval
+        type: human_review
+        review:
+          - artifacts/reorder_plan.json
+          - artifacts/reorder_email_draft.json
+
+      - id: send_reorder_email
+        type: tool_call
+        uses: gmail.send
+        requires_approval: true
+        input:
+          - artifacts/reorder_email_draft.json
+
+  weekly_report:
+    trigger: weekly_ops
+    tasks:
+      - id: aggregate_inventory_events
+        type: sandbox_command
+        run: python scripts/aggregate_inventory_events.py
+        output:
+          - artifacts/weekly_inventory_report.json
+
+      - id: write_report
+        type: ai_task
+        worker: writer
+        input:
+          - artifacts/weekly_inventory_report.json
+        output:
+          - artifacts/weekly_ops_report.md
+
+      - id: post_slack
+        type: tool_call
+        uses: slack.post
+        requires_approval: true
+        input:
+          - artifacts/weekly_ops_report.md

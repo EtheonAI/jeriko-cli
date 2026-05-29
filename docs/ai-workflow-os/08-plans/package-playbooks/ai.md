@@ -83,6 +83,13 @@ Use these AI SDK features for the platform:
 | `https://ai-sdk.dev/docs/ai-sdk-core/transcription`                                         | Official docs           |   2026-05-26 | Transcription supports audio, bounded downloads, abort signals/timeouts, headers, and errors.                                                                                   |
 | `https://ai-sdk.dev/docs/agents/workflows`                                                  | Official docs           |   2026-05-26 | Agent workflows include sequential, parallel, feedback, orchestration, and routing patterns; use them as primitives under `.flow`.                                              |
 | `https://ai-sdk.dev/docs/agents/subagents`                                                  | Official docs           |   2026-05-26 | Subagents can isolate context/tool access, stream preliminary progress, and summarize output for the parent.                                                                    |
+| `https://ai-sdk.dev/llms.txt`                                                               | Official docs index     |   2026-05-28 | AI SDK publishes an agent-readable docs index; use targeted current docs before package changes.                                                                                |
+| `https://ai-sdk.dev/docs/agents/subagents`                                                  | Official docs           |   2026-05-28 | Subagents are parent-agent tool delegation with isolated context/tools and `toModelOutput` summary control; preliminary results are progress only.                              |
+| `https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling`                                | Official docs           |   2026-05-28 | New code should use `inputSchema` and generation/agent-level `toolApproval`; old `needsApproval` is deprecated.                                                                 |
+| `https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway`                                  | Official docs           |   2026-05-28 | AI Gateway is part of AI SDK, supports plain `provider/model` strings, dynamic model discovery, pricing metadata, and generation info.                                          |
+| `https://vercel.com/docs/ai-gateway/pricing`                                                | Official docs           |   2026-05-28 | AI Gateway paid tier uses provider-list-price rates with no markup; BYOK has no Gateway markup/fee.                                                                             |
+| `https://openrouter.ai/pricing`                                                             | Official docs           |   2026-05-28 | OpenRouter has no inference markup but pay-as-you-go credit purchases carry a 5.5% platform fee; BYOK has free request limits then a 5% fee.                                    |
+| [`MADR-099`](../../07-madr/MADR-099-ai-sdk-subagents-and-gateway-first-model-routing.md)    | Repo decision           |   2026-05-28 | Use Gateway first, OpenRouter secondary, direct provider keys as escape hatches, and AI SDK subagents behind `.flow` worker policy.                                             |
 | `https://ai-sdk.dev/docs/agents/loop-control`                                               | Official docs           |   2026-05-26 | Agent loops stop on non-tool finish, missing execute, approval requirement, or explicit stop condition.                                                                         |
 | `https://ai-sdk.dev/cookbook/next/human-in-the-loop`                                        | Official cookbook       |   2026-05-26 | Approval-requested states and `addToolApprovalResponse` drive human-in-the-loop UI.                                                                                             |
 | `https://ai-sdk.dev/docs/advanced/stopping-streams`                                         | Official docs           |   2026-05-26 | Active AI SDK streams should forward abort signals and handle abort cleanup; abort and resume semantics conflict.                                                               |
@@ -126,6 +133,12 @@ Use these AI SDK features for the platform:
 - [ ] Add `.flow` subagent/reporting mode schema and compiler validation.
 - [ ] Add Inngest cancellation/progress event contracts.
 - [ ] Add app-local tool renderer registry for normalized internal and connector tool manifests.
+- [ ] Build `@repo/ai` flow worker runtime from `packages/ai/FLOW_AI_SDK_INTEGRATION_PLAN.md` after `@repo/flow` execution plan shape stabilizes.
+- [ ] Add flow architect and repair agents that generate `.flow` source and support files, not runtime JSON.
+- [ ] Add worker registry/router, scoped tool resolver, TaskReport mapper, and ECP mapper.
+- [ ] Build `@repo/ai/models` aliases and Gateway-first resolver from `packages/ai/SUBAGENTS_GATEWAY_MODEL_ROUTING_PLAN.md`.
+- [ ] Add OpenRouter only as a secondary adapter after Gateway-first tests pass.
+- [ ] Keep direct provider SDKs behind package-local adapters and out of `apps/app`.
 
 ## Validation
 

@@ -14,11 +14,11 @@ const chunk = (files, size = 40) => {
 const existingFiles = (files) => files.filter((file) => existsSync(file));
 const commandsFor = (command, args, files) =>
   chunk(files).map((group) => `${command} ${args} ${group.map(quote).join(" ")}`);
+const inactivePrefixes = ["legacy/", ".pnpm-store/", "docs/ai-workflow-os/_source/"];
+const inactiveSegments = ["/legacy/", "e2b-templates/"];
 const isActiveWorkspaceFile = (file) =>
-  !file.startsWith("legacy/") &&
-  !file.includes("/legacy/") &&
-  !file.startsWith(".pnpm-store/") &&
-  !file.includes("e2b-templates/");
+  !inactivePrefixes.some((prefix) => file.startsWith(prefix)) &&
+  !inactiveSegments.some((segment) => file.includes(segment));
 const activeExistingFiles = (files) => existingFiles(files).filter(isActiveWorkspaceFile);
 
 export default {

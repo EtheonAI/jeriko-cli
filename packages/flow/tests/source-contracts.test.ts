@@ -2,10 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import { flowCstDocumentSchema, flowCstNodeSchema } from "../src/cst/index.js";
 import {
+  flowReservedFailurePolicies,
+  flowReservedTaskTypes,
+  flowTaskTypeSchema,
+  isFlowKnownFailurePolicy,
+  isFlowKnownTaskType,
+  isFlowReservedFailurePolicy,
+  isFlowReservedTaskType,
+} from "../src/kernel/index.js";
+import {
   flowTokenSchema,
   flowTokenStreamSchema,
   flowYamlReservedTokenKindSchema,
 } from "../src/lexer/index.js";
+import {
+  createUnsupportedReservedFailurePolicyDiagnostic,
+  createUnsupportedReservedTaskTypeDiagnostic,
+  flowDiagnosticCodeSchema,
+} from "../src/parser/index.js";
 
 const span = {
   start: {
@@ -74,6 +88,68 @@ describe("@repo/flow source contracts", () => {
       "YAML_ALIAS",
       "YAML_MERGE_KEY",
     ]);
+  });
+
+  it("keeps pack-derived future task types reserved until implementation phases support them", () => {
+    expect(flowReservedTaskTypes).toEqual([
+      "sleep",
+      "foreach",
+      "parallel",
+      "condition",
+      "verify",
+      "emit_event",
+      "invoke_workflow",
+      "memory_patch",
+      "flow_patch",
+      "issue_card",
+    ]);
+
+    for (const taskType of flowReservedTaskTypes) {
+      expect(isFlowReservedTaskType(taskType)).toBe(true);
+      expect(isFlowKnownTaskType(taskType)).toBe(true);
+      expect(flowTaskTypeSchema.safeParse(taskType).success).toBe(false);
+    }
+  });
+
+  it("keeps pack-derived future failure policies reserved until semantic/runtime support exists", () => {
+    expect(flowReservedFailurePolicies).toEqual([
+      "retry_then_stop",
+      "retry_then_ask",
+      "use_cached",
+      "fallback",
+      "create_issue_card",
+      "regenerate_once_then_ask",
+      "skip_optional",
+    ]);
+
+    for (const failurePolicy of flowReservedFailurePolicies) {
+      expect(isFlowReservedFailurePolicy(failurePolicy)).toBe(true);
+      expect(isFlowKnownFailurePolicy(failurePolicy)).toBe(true);
+    }
+  });
+
+  it("provides explicit diagnostics for reserved future vocabulary", () => {
+    expect(flowDiagnosticCodeSchema.options).toContain("FLOW_PARSE_RESERVED_TASK_TYPE_UNSUPPORTED");
+    expect(flowDiagnosticCodeSchema.options).toContain(
+      "FLOW_PARSE_RESERVED_FAILURE_POLICY_UNSUPPORTED"
+    );
+
+    const taskDiagnostic = createUnsupportedReservedTaskTypeDiagnostic("foreach", {
+      path: ["jobs", "daily_content", "tasks", "0", "type"],
+      span,
+    });
+    const failurePolicyDiagnostic = createUnsupportedReservedFailurePolicyDiagnostic(
+      "retry_then_ask",
+      {
+        path: ["jobs", "daily_content", "tasks", "0", "if_fail"],
+        span,
+      }
+    );
+
+    expect(taskDiagnostic.code).toBe("FLOW_PARSE_RESERVED_TASK_TYPE_UNSUPPORTED");
+    expect(taskDiagnostic.severity).toBe("error");
+    expect(failurePolicyDiagnostic.code).toBe("FLOW_PARSE_RESERVED_FAILURE_POLICY_UNSUPPORTED");
+    expect(failurePolicyDiagnostic.severity).toBe("error");
   });
 
   it("validates recursive CST documents with source spans and token references", () => {

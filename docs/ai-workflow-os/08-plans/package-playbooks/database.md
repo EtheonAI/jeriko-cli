@@ -132,3 +132,11 @@ Latest validation:
 - Current `agent_sessions.activeStreamId` and `messages.parts` are resume-related hints, but they are not a complete workflow resume model.
 - Future workflow-native persistence must satisfy MADR-096 with `workflow_runs`, `run_events`, task events, artifacts, active stream/run mapping, cursors, and cancellation records.
 - Better Auth schema conformance and joins need a later focused pass.
+
+## Flow Persistence Follow-Up
+
+Package-local plan:
+
+- `packages/database/FLOW_PERSISTENCE_PLAN.md`
+
+Do not start `apps/app` workflow UI until `@repo/database` has workflow-native persistence for versions, triggers, runs, event cursors, task reports, approvals, artifacts, tool calls, sandbox sessions, and usage linkage.

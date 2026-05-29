@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuest.ai/schemas/flow.schema.json",
+  "title": ".flow Runtime Schema v0.1",
+  "type": "object",
+  "required": [
+    "flow",
+    "name",
+    "goal",
+    "jobs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "flow": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "draft_only",
+        "supervised",
+        "auto",
+        "live_orchestration"
+      ],
+      "default": "supervised"
+    },
+    "imports": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "permissions": {
+      "$ref": "#/$defs/permissions"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "workers": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/worker"
+      }
+    },
+    "budgets": {
+      "$ref": "#/$defs/budgets"
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trigger"
+      }
+    },
+    "jobs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/job"
+      }
+    },
+    "reflection": {
+      "$ref": "#/$defs/reflection"
+    },
+    "notifications": {
+      "type": "object"
+    },
+    "exports": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ask": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "block": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "ai",
+            "image",
+            "voice",
+            "code",
+            "tool",
+            "sandbox",
+            "verifier",
+            "analytics",
+            "memory",
+            "router",
+            "system"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "model_policy": {
+          "type": "string"
+        },
+        "allowed_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "max_credits_per_run": {
+          "type": "number"
+        },
+        "max_credits_per_day": {
+          "type": "number"
+        },
+        "max_runtime_minutes": {
+          "type": "number"
+        },
+        "max_tool_calls": {
+          "type": "integer"
+        },
+        "max_ai_tasks": {
+          "type": "integer"
+        },
+        "max_sandbox_seconds": {
+          "type": "integer"
+        },
+        "max_events_per_minute": {
+          "type": "integer"
+        },
+        "on_exceed": {
+          "type": "string",
+          "enum": [
+            "pause_and_ask",
+            "stop_run",
+            "continue_degraded",
+            "notify_only"
+          ]
+        }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "schedule",
+            "app_event",
+            "workflow_event",
+            "webhook",
+            "approval_event"
+          ]
+        },
+        "cron": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "jitter": {
+          "type": "string"
+        },
+        "misfire": {
+          "type": "string",
+          "enum": [
+            "skip",
+            "run_once",
+            "catch_up_limited",
+            "ask_user"
+          ]
+        },
+        "event": {
+          "type": "string"
+        },
+        "match": {
+          "type": "object"
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": [
+        "tasks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/trigger"
+            }
+          ]
+        },
+        "budget": {
+          "type": "object"
+        },
+        "concurrency": {
+          "type": "object"
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "emit": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "ai_task",
+            "tool_call",
+            "sandbox_command",
+            "human_review",
+            "wait_for_event",
+            "sleep",
+            "foreach",
+            "parallel",
+            "condition",
+            "verify",
+            "emit_event",
+            "invoke_workflow",
+            "memory_patch",
+            "flow_patch",
+            "issue_card"
+          ]
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "worker": {
+          "type": "string"
+        },
+        "worker_policy": {
+          "type": "object"
+        },
+        "uses": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "run": {
+          "type": "string"
+        },
+        "input": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "after": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "requires_approval": {
+          "type": "boolean"
+        },
+        "if_fail": {
+          "type": "string",
+          "enum": [
+            "stop",
+            "retry",
+            "retry_then_stop",
+            "retry_then_ask",
+            "continue_degraded",
+            "use_cached",
+            "fallback",
+            "create_issue_card",
+            "regenerate_once_then_ask",
+            "ask_user",
+            "skip_optional"
+          ]
+        },
+        "failure": {
+          "type": "object"
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "retries": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "object"
+            }
+          ]
+        },
+        "emit": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "notify": {
+          "type": "object"
+        },
+        "verify": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget": {
+          "type": "object"
+        },
+        "items": {
+          "type": "array"
+        },
+        "as": {
+          "type": "string"
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "branches": {
+          "type": "array"
+        },
+        "if": {
+          "type": "string"
+        },
+        "then": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "else": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "event": {
+          "type": "string"
+        },
+        "match": {
+          "type": "object"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "workflow": {
+          "type": "string"
+        },
+        "review": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "max_parallelism": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_items": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "tool_call"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "uses"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "sandbox_command"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "run"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "foreach"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "items",
+              "body",
+              "max_parallelism"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "wait_for_event"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "event"
+            ]
+          }
+        }
+      ]
+    },
+    "reflection": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "on_triggers",
+            "always"
+          ]
+        },
+        "send_to_main_ai": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

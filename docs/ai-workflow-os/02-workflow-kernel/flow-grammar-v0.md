@@ -2,7 +2,7 @@
 
 Date: 2026-05-27
 
-Status: draft design gate for `@repo/flow`; no parser implementation yet
+Status: draft design gate for `@repo/flow`; lexer and CST parser exist, AST normalization and compiler implementation are still pending
 
 ## Decision Boundary
 
@@ -19,6 +19,7 @@ It is not YAML, and it must not be parsed by a YAML parser. YAML is useful resea
 - YAML test suite repository: `https://github.com/yaml/yaml-test-suite`
 - `eemeli/yaml` parser docs/source: `https://eemeli.org/yaml/` and `https://github.com/eemeli/yaml`
 - Local `yaml-main` source audit: [`2026-05-27-yaml-main-parser-architecture-reverse-engineering.md`](../09-research/2026-05-27-yaml-main-parser-architecture-reverse-engineering.md)
+- Local `flow_language_runtime_pack_v0_1` source audit: [`2026-05-27-flow-language-runtime-pack-v0-1-reverse-engineering.md`](../09-research/2026-05-27-flow-language-runtime-pack-v0-1-reverse-engineering.md)
 - GitHub Actions workflow syntax: `https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax`
 - Local full brief: `/Users/khaleelmusleh/Downloads/AI_Workflow_OS_Full_Brief_for_Codex.docx`
 - Local v3 scale/trigger/ECP notes: `/Users/khaleelmusleh/Downloads/ai_workflow_os_docs_v3_scale_triggers_ecp`
@@ -266,6 +267,23 @@ Current task types:
 - `human_review`
 - `wait_for_event`
 - `subflow`
+
+Pack-derived future task types:
+
+- `sleep`
+- `foreach`
+- `parallel`
+- `condition`
+- `verify`
+- `emit_event`
+- `invoke_workflow`
+- `memory_patch`
+- `flow_patch`
+- `issue_card`
+
+Rule:
+
+- Future task types are documented as reserved vocabulary until parser, AST, semantic validation, execution plan, and fixture tests explicitly accept them.
 
 Current task fields:
 

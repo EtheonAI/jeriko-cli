@@ -89,6 +89,9 @@ This folder stores Markdown Architecture Decision Records for AI Workflow OS.
 - [`MADR-095-flow-parser-and-compiler-v0.md`](./MADR-095-flow-parser-and-compiler-v0.md)
 - [`MADR-096-resumable-workflow-runs-and-ui-reconnect.md`](./MADR-096-resumable-workflow-runs-and-ui-reconnect.md)
 - [`MADR-096A-husky-lint-staged-hook-hardening.md`](./MADR-096A-husky-lint-staged-hook-hardening.md)
+- [`MADR-097-flow-runtime-pack-v0-1-blueprint-adoption.md`](./MADR-097-flow-runtime-pack-v0-1-blueprint-adoption.md)
+- [`MADR-098-end-to-end-flow-runtime-package-boundaries.md`](./MADR-098-end-to-end-flow-runtime-package-boundaries.md)
+- [`MADR-099-ai-sdk-subagents-and-gateway-first-model-routing.md`](./MADR-099-ai-sdk-subagents-and-gateway-first-model-routing.md)
 
 ## Decision Rule
 

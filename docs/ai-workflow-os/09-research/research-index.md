@@ -73,6 +73,11 @@ This folder is for source-backed research. Do not mix assumptions with verified 
 - [`2026-05-27-yaml-main-parser-architecture-reverse-engineering.md`](./2026-05-27-yaml-main-parser-architecture-reverse-engineering.md)
 - [`2026-05-27-resumable-workflow-runs-and-ui-reconnect.md`](./2026-05-27-resumable-workflow-runs-and-ui-reconnect.md)
 - [`2026-05-27-husky-lint-staged-hook-hardening.md`](./2026-05-27-husky-lint-staged-hook-hardening.md)
+- [`2026-05-27-flow-language-runtime-pack-v0-1-reverse-engineering.md`](./2026-05-27-flow-language-runtime-pack-v0-1-reverse-engineering.md)
+- [`2026-05-27-flow-end-to-end-runtime-integration-research.md`](./2026-05-27-flow-end-to-end-runtime-integration-research.md)
+- [`2026-05-28-ai-sdk-subagents-gateway-openrouter-model-routing.md`](./2026-05-28-ai-sdk-subagents-gateway-openrouter-model-routing.md)
+- [`2026-05-29-latest-dependency-refresh-corepack.md`](./2026-05-29-latest-dependency-refresh-corepack.md)
+- [`2026-05-29-turbopack-payload-transitive-deprecation-cleanup.md`](./2026-05-29-turbopack-payload-transitive-deprecation-cleanup.md)
 
 ## Evidence Rule
 

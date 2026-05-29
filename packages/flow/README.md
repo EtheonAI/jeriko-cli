@@ -46,6 +46,8 @@ The package now has the first provider-neutral runtime foundation:
 
 - logical `.flow` trigger contracts;
 - custom `.flow` token and CST contracts;
+- custom `.flow` lexer behavior with source spans and YAML-only rejection diagnostics;
+- custom `.flow` CST parser behavior with comments, order, spans, token IDs, sequences, inline lists, and block literals;
 - trigger registry row contracts;
 - scheduler tick and scheduler decision contracts;
 - workflow run request contracts;
@@ -60,6 +62,14 @@ Parser, semantic validation, symbol resolution, execution planning, database per
 Package-local architecture memory:
 
 `packages/flow/ARCHITECTURE.md`
+
+Flow runtime pack source review:
+
+`packages/flow/FLOW_RUNTIME_PACK_V0_1.md`
+
+End-to-end build plan:
+
+`packages/flow/END_TO_END_BUILD_PLAN.md`
 
 Current parser gate:
 

@@ -29,7 +29,8 @@ export type CreatePayloadConfigOptions = {
   serverURL?: string;
 };
 
-const getGeneratedPath = (fileName: string) => path.resolve(process.cwd(), fileName);
+const getGeneratedPath = (fileName: string) =>
+  path.resolve(/* turbopackIgnore: true */ process.cwd(), fileName);
 
 export const createPayloadConfig = ({
   blobReadWriteToken,

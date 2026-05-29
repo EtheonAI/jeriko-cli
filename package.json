@@ -55,15 +55,14 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@auto-it/first-time-contributor": "^11.3.6",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
-    "@commitlint/cli": "^21.0.1",
-    "@commitlint/config-conventional": "^21.0.1",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@lhci/cli": "^0.15.1",
     "@next/eslint-plugin-next": "^16.2.6",
     "@repo/typescript-config": "workspace:*",
-    "@turbo/gen": "^2.9.15",
+    "@turbo/gen": "^2.9.16",
     "@types/node": "^25.9.1",
     "dependency-cruiser": "^17.4.2",
     "esbuild": "0.28.0",
@@ -73,20 +72,20 @@
     "lint-staged": "^17.0.5",
     "prettier": "^3.8.3",
     "tsup": "^8.5.1",
-    "turbo": "^2.9.15",
+    "turbo": "^2.9.16",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
     "vitest": "^4.1.7"
   },
   "engines": {
     "node": ">=22.22.1",
-    "pnpm": ">=11.3.0 <12"
+    "pnpm": ">=11.4.0 <12"
   },
-  "packageManager": "pnpm@11.3.0",
+  "packageManager": "pnpm@11.4.0+sha512.f0febc7e37552ab485494a914241b338e0b3580b93d54ce31f00933015880863129038a1b4ae4e414a0ee63ac35bf21197e990172c4a68256450b5636310968f",
   "dependencies": {
     "@clack/prompts": "^1.4.0",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "nanoid": "^5.1.11"
   },
   "type": "module"

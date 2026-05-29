@@ -20,21 +20,59 @@ export const flowEventNameSchema = z
   .min(1)
   .regex(/^[a-zA-Z0-9_.:/-]+$/);
 
-export const flowTaskTypeSchema = z.enum([
+export const flowAcceptedTaskTypes = [
   "ai_task",
   "tool_call",
   "sandbox_command",
   "human_review",
   "wait_for_event",
   "subflow",
-]);
+] as const;
 
-export const flowFailurePolicySchema = z.enum([
+export const flowReservedTaskTypes = [
+  "sleep",
+  "foreach",
+  "parallel",
+  "condition",
+  "verify",
+  "emit_event",
+  "invoke_workflow",
+  "memory_patch",
+  "flow_patch",
+  "issue_card",
+] as const;
+
+export const flowTaskTypeSchema = z.enum(flowAcceptedTaskTypes);
+
+export const flowReservedTaskTypeSchema = z.enum(flowReservedTaskTypes);
+
+export const flowKnownTaskTypeSchema = z.union([flowTaskTypeSchema, flowReservedTaskTypeSchema]);
+
+export const flowAcceptedFailurePolicies = [
   "stop",
   "retry",
   "continue_degraded",
   "ask_user",
   "emit_issue",
+] as const;
+
+export const flowReservedFailurePolicies = [
+  "retry_then_stop",
+  "retry_then_ask",
+  "use_cached",
+  "fallback",
+  "create_issue_card",
+  "regenerate_once_then_ask",
+  "skip_optional",
+] as const;
+
+export const flowFailurePolicySchema = z.enum(flowAcceptedFailurePolicies);
+
+export const flowReservedFailurePolicySchema = z.enum(flowReservedFailurePolicies);
+
+export const flowKnownFailurePolicySchema = z.union([
+  flowFailurePolicySchema,
+  flowReservedFailurePolicySchema,
 ]);
 
 export const flowMisfirePolicySchema = z.enum(["skip", "run_once", "catch_up_limited", "ask_user"]);
@@ -118,9 +156,37 @@ export type FlowPermissionMode = z.infer<typeof flowPermissionModeSchema>;
 export type FlowPermissionSet = z.infer<typeof flowPermissionSetSchema>;
 export type FlowEventName = z.infer<typeof flowEventNameSchema>;
 export type FlowTaskType = z.infer<typeof flowTaskTypeSchema>;
+export type FlowReservedTaskType = z.infer<typeof flowReservedTaskTypeSchema>;
+export type FlowKnownTaskType = z.infer<typeof flowKnownTaskTypeSchema>;
 export type FlowFailurePolicy = z.infer<typeof flowFailurePolicySchema>;
+export type FlowReservedFailurePolicy = z.infer<typeof flowReservedFailurePolicySchema>;
+export type FlowKnownFailurePolicy = z.infer<typeof flowKnownFailurePolicySchema>;
 export type FlowMisfirePolicy = z.infer<typeof flowMisfirePolicySchema>;
 export type FlowMatchRules = z.infer<typeof flowMatchRulesSchema>;
 export type FlowTrigger = z.infer<typeof flowTriggerSchema>;
 export type FlowTask = z.infer<typeof flowTaskSchema>;
 export type FlowJob = z.infer<typeof flowJobSchema>;
+
+export function isFlowAcceptedTaskType(value: string): value is FlowTaskType {
+  return flowAcceptedTaskTypes.includes(value as FlowTaskType);
+}
+
+export function isFlowReservedTaskType(value: string): value is FlowReservedTaskType {
+  return flowReservedTaskTypes.includes(value as FlowReservedTaskType);
+}
+
+export function isFlowKnownTaskType(value: string): value is FlowKnownTaskType {
+  return isFlowAcceptedTaskType(value) || isFlowReservedTaskType(value);
+}
+
+export function isFlowAcceptedFailurePolicy(value: string): value is FlowFailurePolicy {
+  return flowAcceptedFailurePolicies.includes(value as FlowFailurePolicy);
+}
+
+export function isFlowReservedFailurePolicy(value: string): value is FlowReservedFailurePolicy {
+  return flowReservedFailurePolicies.includes(value as FlowReservedFailurePolicy);
+}
+
+export function isFlowKnownFailurePolicy(value: string): value is FlowKnownFailurePolicy {
+  return isFlowAcceptedFailurePolicy(value) || isFlowReservedFailurePolicy(value);
+}

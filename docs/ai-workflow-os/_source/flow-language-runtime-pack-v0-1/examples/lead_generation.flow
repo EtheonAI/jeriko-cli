@@ -1,0 +1,133 @@
+flow: "0.1"
+name: lead_generation_operator
+goal: |
+  Research leads weekly, generate and run scraping scripts in sandbox,
+  produce CSV outputs, dedupe against the master list, and notify by email/SMS.
+
+mode: supervised
+
+imports:
+  lead_profile: instructions/lead_profile.md
+  outreach_rules: instructions/outreach.md
+
+permissions:
+  auto:
+    - read_public_web
+    - write_internal_files
+    - run_sandbox_code
+    - create_drafts
+  ask:
+    - send_email
+    - send_sms
+    - update_crm
+  block:
+    - bypass_captcha
+    - mass_spam
+    - fake_accounts
+    - expose_secrets
+
+tools:
+  - web.search
+  - web.read
+  - gmail.send
+  - twilio.send_sms
+  - sandbox.python
+
+workers:
+  researcher:
+    type: ai
+    capabilities: [research, qualify_leads]
+    model_policy: balanced
+  code_worker:
+    type: code
+    capabilities: [write_python, debug_script]
+    model_policy: strong
+  verifier:
+    type: verifier
+    capabilities: [schema_check, csv_check]
+    model_policy: cheap
+
+budgets:
+  max_credits_per_run: 80
+  max_runtime_minutes: 60
+  max_tool_calls: 200
+  max_ai_tasks: 30
+  max_sandbox_seconds: 600
+  on_exceed: pause_and_ask
+
+triggers:
+  - id: weekly_scrape
+    type: schedule
+    cron: "0 8 * * MON"
+    timezone: "America/Los_Angeles"
+    jitter: "10m"
+    misfire: run_once
+
+jobs:
+  weekly_leads:
+    trigger: weekly_scrape
+    tasks:
+      - id: research_target_profile
+        type: ai_task
+        worker: researcher
+        uses: [web.search, web.read]
+        input:
+          - instructions/lead_profile.md
+        output:
+          - artifacts/target_profile.json
+
+      - id: generate_scraper
+        type: ai_task
+        worker: code_worker
+        input:
+          - artifacts/target_profile.json
+          - instructions/lead_profile.md
+        output:
+          - scripts/generated/scraper.py
+
+      - id: run_scraper
+        type: sandbox_command
+        run: python scripts/generated/scraper.py
+        input:
+          - artifacts/target_profile.json
+        output:
+          - artifacts/leads_raw.csv
+        if_fail: retry_then_ask
+
+      - id: validate_csv
+        type: sandbox_command
+        run: python scripts/validate_csv.py
+        input:
+          - artifacts/leads_raw.csv
+        output:
+          - artifacts/leads_validated.csv
+          - artifacts/csv_validation_report.json
+        if_fail: ask_user
+
+      - id: dedupe
+        type: sandbox_command
+        run: python scripts/dedupe_leads.py
+        input:
+          - artifacts/leads_validated.csv
+          - artifacts/leads_master.csv
+        output:
+          - artifacts/new_leads.csv
+          - artifacts/leads_master_updated.csv
+
+      - id: approval
+        type: human_review
+        review:
+          - artifacts/new_leads.csv
+          - artifacts/csv_validation_report.json
+
+      - id: notify_email
+        type: tool_call
+        uses: gmail.send
+        requires_approval: true
+        input:
+          - artifacts/new_leads.csv
+
+      - id: notify_sms
+        type: tool_call
+        uses: twilio.send_sms
+        requires_approval: true

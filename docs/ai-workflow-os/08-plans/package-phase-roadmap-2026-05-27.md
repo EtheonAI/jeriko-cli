@@ -449,18 +449,18 @@ Documentation:
 | P3.3A | `apps/web`                   | Unblock contact Calendar for DayPicker v10.                                      | MADR-094A accepted/implemented         | web unblock audit                                                                      | web/design-system typecheck, root tests                    |
 |  P4.1 | `@repo/flow`                 | Custom `.flow` grammar/parser/runtime-neutral kernel; no YAML parser dependency. | MADR-095 accepted/no-YAML parser gate  | `package-playbooks/flow.md`                                                            | flow tests/typecheck/root tests                            |
 | Cross | resumable workflow runs      | Durable run execution and UI reconnect after refresh/tab close.                  | MADR-096 accepted                      | `resumable-workflow-runs-checklist.md`                                                 | reconnect/replay/cancel tests                              |
-|  P4.2 | `@repo/ai`                   | AI SDK capability layer and platform tools.                                      | MADR-097                               | `package-playbooks/ai.md`                                                              | ai tests/typecheck/boundaries                              |
-|  P4.3 | `@repo/sandbox`              | Vercel Sandbox provider behind neutral boundary.                                 | MADR-098                               | `package-playbooks/sandbox.md`                                                         | sandbox tests/typecheck                                    |
-|  P4.4 | `@repo/connectors`           | Composio/direct connector sessions/tools/triggers.                               | MADR-099                               | `package-playbooks/connectors.md`                                                      | connectors tests/typecheck                                 |
-|  P4.5 | `@repo/search`               | Typesense generic workflow/artifact search boundary.                             | MADR-100                               | `package-playbooks/search.md`                                                          | search tests/typecheck                                     |
-|  P4.6 | `@repo/storage`              | Artifact/object storage boundary.                                                | MADR-101                               | `package-playbooks/storage.md`                                                         | storage typecheck/tests if added                           |
-|  P4.7 | `@repo/notifications`        | Workflow approvals/issues/digests provider boundary.                             | MADR-102                               | `package-playbooks/notifications.md`                                                   | notifications typecheck/app shell                          |
-|  P5.1 | `@repo/payments`             | Stripe billing/usage boundary, no API version downgrade.                         | MADR-103                               | `package-playbooks/payments.md`                                                        | payments typecheck                                         |
-|  P5.2 | `@repo/feature-flags`        | Active flags only, optional env.                                                 | MADR-104                               | `package-playbooks/feature-flags.md`                                                   | flags/app tests                                            |
-|  P5.3 | `@repo/analytics`            | Optional analytics provider package.                                             | MADR-105                               | `package-playbooks/analytics.md`                                                       | analytics typecheck                                        |
-|  P5.4 | `@repo/webhooks`             | Workflow trigger/webhook boundary.                                               | MADR-106                               | `package-playbooks/webhooks.md`                                                        | webhooks typecheck                                         |
-|  P5.5 | `@repo/agentmail`            | Decide optional later agent inbox package.                                       | MADR-107                               | `package-playbooks/agentmail.md`                                                       | agentmail typecheck                                        |
-|  P5.6 | `@repo/collaboration`        | Gate Liveblocks until `.flow` collaboration is needed.                           | MADR-108                               | `package-playbooks/collaboration.md`                                                   | collaboration typecheck                                    |
+|  P4.2 | `@repo/ai`                   | AI SDK capability layer, platform tools, subagents, and model routing.           | MADR-074..078, MADR-099 accepted       | `package-playbooks/ai.md`, `../../packages/ai/SUBAGENTS_GATEWAY_MODEL_ROUTING_PLAN.md` | ai tests/typecheck/boundaries                              |
+|  P4.3 | `@repo/sandbox`              | Vercel Sandbox provider behind neutral boundary.                                 | MADR-068 accepted                      | `package-playbooks/sandbox.md`                                                         | sandbox tests/typecheck                                    |
+|  P4.4 | `@repo/connectors`           | Composio/direct connector sessions/tools/triggers.                               | MADR-070, MADR-072 accepted            | `package-playbooks/connectors.md`                                                      | connectors tests/typecheck                                 |
+|  P4.5 | `@repo/search`               | Typesense generic workflow/artifact search boundary.                             | Existing P2 search cleanup             | `package-playbooks/search.md`                                                          | search tests/typecheck                                     |
+|  P4.6 | `@repo/storage`              | Artifact/object storage boundary.                                                | Existing P2 storage cleanup            | `package-playbooks/storage.md`                                                         | storage typecheck/tests if added                           |
+|  P4.7 | `@repo/notifications`        | Workflow approvals/issues/digests provider boundary.                             | TBD                                    | `package-playbooks/notifications.md`                                                   | notifications typecheck/app shell                          |
+|  P5.1 | `@repo/payments`             | Stripe billing/usage boundary, no API version downgrade.                         | TBD                                    | `package-playbooks/payments.md`                                                        | payments typecheck                                         |
+|  P5.2 | `@repo/feature-flags`        | Active flags only, optional env.                                                 | Existing P3 flags cleanup              | `package-playbooks/feature-flags.md`                                                   | flags/app tests                                            |
+|  P5.3 | `@repo/analytics`            | Optional analytics provider package.                                             | TBD                                    | `package-playbooks/analytics.md`                                                       | analytics typecheck                                        |
+|  P5.4 | `@repo/webhooks`             | Workflow trigger/webhook boundary.                                               | TBD                                    | `package-playbooks/webhooks.md`                                                        | webhooks typecheck                                         |
+|  P5.5 | `@repo/agentmail`            | Decide optional later agent inbox package.                                       | TBD                                    | `package-playbooks/agentmail.md`                                                       | agentmail typecheck                                        |
+|  P5.6 | `@repo/collaboration`        | Gate Liveblocks until `.flow` collaboration is needed.                           | TBD                                    | `package-playbooks/collaboration.md`                                                   | collaboration typecheck                                    |
 
 ## Sub-MADR Checklist
 
@@ -483,18 +483,15 @@ These MADRs are intentionally scheduled before implementation. A package phase m
 - [x] MADR-094A: `apps/web` contact Calendar DayPicker v10 unblock
 - [x] MADR-095: `@repo/flow`
 - [x] MADR-096: resumable workflow runs and UI reconnect
-- [ ] MADR-097: `@repo/ai`
-- [ ] MADR-098: `@repo/sandbox`
-- [ ] MADR-099: `@repo/connectors`
-- [ ] MADR-100: `@repo/search`
-- [ ] MADR-101: `@repo/storage`
-- [ ] MADR-102: `@repo/notifications`
-- [ ] MADR-103: `@repo/payments`
-- [ ] MADR-104: `@repo/feature-flags`
-- [ ] MADR-105: `@repo/analytics`
-- [ ] MADR-106: `@repo/webhooks`
-- [ ] MADR-107: `@repo/agentmail`
-- [ ] MADR-108: `@repo/collaboration`
+- [x] MADR-097: flow runtime pack blueprint adoption
+- [x] MADR-098: end-to-end `.flow` runtime package boundaries
+- [x] MADR-099: AI SDK subagents and Gateway-first model routing
+- [ ] TBD: `@repo/notifications`
+- [ ] TBD: `@repo/payments`
+- [ ] TBD: `@repo/analytics`
+- [ ] TBD: `@repo/webhooks`
+- [ ] TBD: `@repo/agentmail`
+- [ ] TBD: `@repo/collaboration`
 
 ## CMS Package Notes
 

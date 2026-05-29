@@ -109,3 +109,11 @@ Latest validation:
 - Browser automation dependencies may require snapshots and should not be mixed into the base package contract.
 - Persistent workspace/file sync needs a separate artifact/storage design.
 - The old E2B UI/hook names still live mostly in `@repo/ai`; they should be handled during the AI package phase, not hidden inside this package.
+
+## Flow Integration Follow-Up
+
+Package-local plan:
+
+- `packages/sandbox/FLOW_SANDBOX_TASK_PLAN.md`
+
+`sandbox_command` execution must be invoked by the workflow runtime through this package, with explicit timeout, IO, env, network policy, artifact handling, and cancellation semantics. `@repo/flow` and `apps/app` must not import `@vercel/sandbox` directly.
