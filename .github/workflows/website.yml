@@ -20,7 +20,7 @@ jobs:
     name: Build Website
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-bun
 
       - name: Build Next.js
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Deploy
         run: echo "Website deploy target not yet configured. See docs/SECRETS-SETUP.md"
