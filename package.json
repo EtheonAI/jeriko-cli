@@ -94,7 +94,7 @@
   "dependencies": {
     "@clack/prompts": "^1.1.0",
     "@whiskeysockets/baileys": "^6.7.16",
-    "chalk": "^5.4.0",
+    "chalk": "^6.0.0",
     "croner": "^10.0.1",
     "drizzle-orm": "^0.45.2",
     "grammy": "^1.35.0",
