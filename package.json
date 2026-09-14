@@ -111,7 +111,7 @@
   "devDependencies": {
     "@stripe/ui-extension-sdk": "^9.1.0",
     "@types/bun": "latest",
-    "@types/node": "^25.3.2",
+    "@types/node": "^26.5.1",
     "@types/react": "^19.0.2",
     "@types/ws": "^8.5.0",
     "drizzle-kit": "^0.31.10",
